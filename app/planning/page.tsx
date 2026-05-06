@@ -15,6 +15,8 @@ import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
+import { startTimer, stopTimer, getActiveTimer, totalMinutesForProject, onTimerUpdate, fmtMinutes } from '@/lib/timerStore'
+import { logActivity }   from '@/lib/activityLog'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -405,7 +407,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[] }>) => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const team    = teamData.members
@@ -415,13 +417,30 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
   const [estHours,  setEstHours]  = useState(String(project.estHours ?? 0))
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
+  const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
+  const [newEntry,  setNewEntry]  = useState('')
+  const [timerTick, setTimerTick] = useState(0)
+  useEffect(() => onTimerUpdate(() => setTimerTick(t => t + 1)), [])
+  const activeTimer = getActiveTimer()
+  const isTimingThis = activeTimer?.projectId === project.id
+  const workedMin    = totalMinutesForProject(project.id) // re-evaluated each render
+  void timerTick // touch state so the value is recomputed
 
   useEffect(() => {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
     setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
+    setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
+    setNewEntry('')
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function save() { onUpdate(project, startDate || null, endDate || null, { estHours: parseFloat(estHours) || 0, notes }) }
+  function save() { onUpdate(project, startDate || null, endDate || null, { estHours: parseFloat(estHours) || 0, notes, journal }) }
+  function addEntry() {
+    const text = newEntry.trim()
+    if (!text) return
+    setJournal(j => [...j, { id: Date.now().toString(), ts: new Date().toISOString(), text }])
+    setNewEntry('')
+  }
+  function deleteEntry(id: string) { setJournal(j => j.filter(x => x.id !== id)) }
   const owners = team.filter(m => project.ownerIds.includes(m.id))
 
   return (
@@ -468,9 +487,64 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
           </div>
         </Row>
+        <Row label="Tijd">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {isTimingThis ? (
+              <button onClick={() => stopTimer()}
+                style={{ ...cancelBtn, background: '#e2445c', color: '#fff', border: 'none', fontWeight: 700 }}>
+                ■ Stop timer
+              </button>
+            ) : (
+              <button onClick={() => startTimer(project.id, project.name)}
+                style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700 }}>
+                ▶ Start timer
+              </button>
+            )}
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Gewerkt: <strong style={{ color: 'var(--text-secondary)' }}>{fmtMinutes(workedMin)}</strong>
+              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{estHours}u</strong>
+            </span>
+          </div>
+        </Row>
         <Row label="Notes">
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Notities…"
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+        </Row>
+        <Row label="Journaal">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {journal.length === 0 && (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Nog geen entries.</span>
+            )}
+            {journal.slice().reverse().map(e => {
+              const d = new Date(e.ts)
+              return (
+                <div key={e.id} style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '6px 8px', position: 'relative' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
+                    {d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} · {d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e.text}</div>
+                  <button onClick={() => deleteEntry(e.id)}
+                    style={{ position: 'absolute', top: 2, right: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', padding: '2px 4px' }}
+                    onMouseEnter={ev => (ev.currentTarget.style.color = '#e2445c')}
+                    onMouseLeave={ev => (ev.currentTarget.style.color = 'var(--text-muted)')}
+                    title="Verwijderen">×</button>
+                </div>
+              )
+            })}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={newEntry} onChange={e => setNewEntry(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addEntry() }}
+                placeholder="+ Voeg entry toe…"
+                style={{ flex: 1, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+              <button onClick={addEntry} disabled={!newEntry.trim()}
+                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
+                  background: newEntry.trim() ? color : 'var(--bg-hover)',
+                  color: newEntry.trim() ? '#fff' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 600, cursor: newEntry.trim() ? 'pointer' : 'not-allowed' }}>
+                +
+              </button>
+            </div>
+          </div>
         </Row>
       </div>
       <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
@@ -670,10 +744,11 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     }
     apply(newStart, newEnd)
+    logActivity('Datums bijgewerkt', project.name, `${prevStart ?? '—'} → ${newStart ?? '—'} / ${prevEnd ?? '—'} → ${newEnd ?? '—'}`)
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     pushUndo(() => apply(prevStart, prevEnd))
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[] }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     const groups = (allGroups[boardName] ?? []).map(g => ({
@@ -681,6 +756,7 @@ export default function PlanningPage() {
     }))
     saveGroups(boardName, groups)
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
+    logActivity('Project opgeslagen', project.name)
     setDetailProject(null)
   }
 
