@@ -18,6 +18,13 @@ export type ColumnDef = {
   width: number
 }
 
+export type JournalEntry = {
+  id:        string
+  ts:        string  // ISO datetime
+  text:      string
+  authorId?: string
+}
+
 export type BoardItem = {
   id:             string
   name:           string
@@ -34,6 +41,7 @@ export type BoardItem = {
   framelink?:     string
   nummers?:       number
   subitems?:      SubItem[]
+  journal?:       JournalEntry[]
   [key: string]:  unknown
 }
 
