@@ -46,6 +46,14 @@ function fmtDate(iso: string) {
   const d = new Date(iso)
   return `${d.getDate()} ${NL_MONTHS[d.getMonth()]}`
 }
+function deadlineColor(iso: string | null): { bg: string; fg: string } | null {
+  if (!iso) return null
+  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
+  if (days < 0)  return { bg: 'rgba(196,69,58,0.15)',  fg: '#C4453A' }
+  if (days <= 3) return { bg: 'rgba(196,69,58,0.15)',  fg: '#C4453A' }
+  if (days <= 7) return { bg: 'rgba(255,123,36,0.15)', fg: '#ff7b24' }
+  return null
+}
 function fmtRelative(iso: string) {
   const now = Date.now(), then = new Date(iso).getTime()
   const diff = Math.floor((now - then) / 60000)
@@ -279,13 +287,23 @@ export default function HomePage() {
         <div style={{ padding: '6px 0 8px' }}>
           {lopendItems.length === 0 ? (
             <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen lopende projecten</p>
-          ) : lopendItems.map((item, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-              {item.endDate && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtDate(item.endDate)}</span>}
-            </div>
-          ))}
+          ) : lopendItems.map((item, i) => {
+            const dc = deadlineColor(item.endDate)
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                {item.endDate && (
+                  <span style={{ fontSize: 11, fontWeight: dc ? 700 : 400,
+                    color: dc?.fg ?? 'var(--text-muted)',
+                    background: dc?.bg ?? 'transparent',
+                    padding: dc ? '2px 7px' : 0, borderRadius: 6, flexShrink: 0 }}>
+                    {fmtDate(item.endDate)}
+                  </span>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
     ),

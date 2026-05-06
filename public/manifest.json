@@ -1,0 +1,14 @@
+{
+  "name": "Yoko Planner",
+  "short_name": "Yoko",
+  "description": "Studio Yoko planning tool",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F6F3",
+  "theme_color": "#C8A028",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
