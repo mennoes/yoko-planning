@@ -1,0 +1,124 @@
+{
+  "groups": [
+    {
+      "id": "vl-s09",
+      "name": "Vlaanderen S09",
+      "color": "#ff7a00",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "vl-comm",
+          "name": "Week 5 t/m 8: Communicatie",
+          "ownerIds": ["menno"],
+          "status": "",
+          "startDate": "2026-01-26",
+          "endDate": "2026-02-22",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 0.5,
+          "contactpersoon": "",
+          "framelink": ""
+        },
+        {
+          "id": "vl-social-templates",
+          "name": "Social Templates",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2026-02-23",
+          "endDate": "2026-02-27",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 2.5,
+          "contactpersoon": "",
+          "framelink": ""
+        },
+        {
+          "id": "vl-slides-1-8",
+          "name": "Slides college 1/8",
+          "ownerIds": ["menno"],
+          "status": "",
+          "startDate": "2026-04-06",
+          "endDate": "2026-04-24",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "contactpersoon": "",
+          "framelink": ""
+        },
+        {
+          "id": "vl-week10-11",
+          "name": "Week 10 + 11",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2026-03-02",
+          "endDate": "2026-03-13",
+          "deadline": null,
+          "estHours": 2,
+          "dagen": 0.25,
+          "contactpersoon": "",
+          "framelink": ""
+        },
+        {
+          "id": "vl-slides-9-12",
+          "name": "Slides colleges 9/12",
+          "ownerIds": ["menno"],
+          "status": "",
+          "startDate": "2026-04-24",
+          "endDate": "2026-04-30",
+          "deadline": "2026-05-01",
+          "estHours": 20,
+          "dagen": 2.5,
+          "contactpersoon": "",
+          "framelink": ""
+        },
+        {
+          "id": "vl-trailer-uvvl",
+          "name": "Trailer UvVL",
+          "ownerIds": ["menno"],
+          "status": "",
+          "startDate": "2026-03-26",
+          "endDate": "2026-04-30",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "",
+          "framelink": ""
+        },
+        {
+          "id": "vl-thumbs",
+          "name": "Thumbs colleges 1/12",
+          "ownerIds": ["menno"],
+          "status": "",
+          "startDate": "2026-05-06",
+          "endDate": "2026-05-22",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "",
+          "framelink": ""
+        }
+      ]
+    },
+    {
+      "id": "done-s09",
+      "name": "Done S09",
+      "color": "#00c875",
+      "collapsed": true,
+      "items": []
+    },
+    {
+      "id": "done-oud",
+      "name": "Done oud",
+      "color": "#00c875",
+      "collapsed": true,
+      "items": []
+    },
+    {
+      "id": "dag-wetenschap",
+      "name": "Dag van de wetenschap",
+      "color": "#9c7ee8",
+      "collapsed": true,
+      "items": []
+    }
+  ]
+}

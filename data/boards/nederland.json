@@ -1,0 +1,163 @@
+{
+  "groups": [
+    {
+      "id": "s11-colleges",
+      "name": "(S11) Nederland colleges",
+      "color": "#9c7ee8",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "nl-fos",
+          "name": "UVNL Faces of Science",
+          "ownerIds": ["menno", "odette"],
+          "status": "",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "fay@pnpmedia.nl",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-news",
+          "name": "UvNL NEWS",
+          "ownerIds": [],
+          "status": "",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "fay@pnpmedia.nl",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-e33",
+          "name": "NL College S04 E33 (Ultrabewerkt eten)",
+          "ownerIds": ["menno", "odette"],
+          "status": "",
+          "startDate": "2026-05-06",
+          "endDate": "2026-05-12",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-e34",
+          "name": "NL College S04 E34 (Autisme)",
+          "ownerIds": ["odette"],
+          "status": "",
+          "startDate": "2026-05-11",
+          "endDate": "2026-05-18",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "julia@universiteitvannederland.nl",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-heyu",
+          "name": "HEY U E10 ADHD",
+          "ownerIds": ["menno", "odette"],
+          "status": "",
+          "startDate": "2026-05-19",
+          "endDate": "2026-05-20",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-e35",
+          "name": "NL College S04 E35 (PFAS in schuim)",
+          "ownerIds": ["menno", "odette"],
+          "status": "",
+          "startDate": "2026-05-26",
+          "endDate": "2026-05-29",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl",
+          "uitzenddag": null
+        }
+      ]
+    },
+    {
+      "id": "overige",
+      "name": "Overige",
+      "color": "#579bfc",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "nl-quantum3",
+          "name": "UvNL Quantum 3 afleveringen",
+          "ownerIds": ["menno"],
+          "status": "Working on...",
+          "startDate": null,
+          "endDate": null,
+          "deadline": "2026-04-14",
+          "estHours": 0,
+          "dagen": 0,
+          "contactpersoon": "josephine@universiteitvannederland.nl",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-artis",
+          "name": "Artis",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2026-03-16",
+          "endDate": "2026-05-12",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "contactpersoon": "",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-rv",
+          "name": "RV",
+          "ownerIds": [],
+          "status": "",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "contactpersoon": "",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-fos-titels",
+          "name": "Faces of Science – logoanimatie/titels",
+          "ownerIds": ["menno", "odette"],
+          "status": "",
+          "startDate": "2026-04-13",
+          "endDate": "2026-04-26",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "contactpersoon": "",
+          "uitzenddag": null
+        },
+        {
+          "id": "nl-news-titels",
+          "name": "NEWS – leader/titels",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2026-05-18",
+          "endDate": "2026-05-31",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 0,
+          "contactpersoon": "",
+          "uitzenddag": null
+        }
+      ]
+    }
+  ]
+}

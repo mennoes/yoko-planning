@@ -1,26 +1,148 @@
 @import "tailwindcss";
 
+/* ── Studio Yoko palette ──────────────────────────────────────────────────────
+   Primary accent: golden yellow #C8A028
+   Design: minimal, clean, mostly white/light
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Light theme (default) ─────────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  --accent:       #C8A028;
+  --accent-hover: #B08C20;
+  --accent-light: #C8A02818;
+  --accent-mid:   #C8A02840;
+
+  --bg-base:    #F7F6F3;
+  --bg-sidebar: #FFFFFF;
+  --bg-card:    #FFFFFF;
+  --bg-hover:   rgba(0,0,0,0.04);
+
+  --border:       #E4E0D4;
+  --border-light: #EDEAE2;
+
+  --text-primary:   #1A1714;
+  --text-secondary: #4A4540;
+  --text-muted:     #9A9590;
+
+  --green:  #5A8A6A;
+  --red:    #C4453A;
+  --yellow: #C8A028;
+  --blue:   #6B8EC8;
+  --sage:   #8FA99A;
+
+  --overlay-hover:      rgba(0,0,0,0.035);
+  --overlay-subtle:     rgba(0,0,0,0.025);
+  --overlay-faint:      rgba(0,0,0,0.012);
+  --overlay-medium:     rgba(0,0,0,0.06);
+  --overlay-sub:        rgba(0,0,0,0.04);
+  --overlay-sub-header: rgba(0,0,0,0.05);
+  --overlay-sub-border: rgba(0,0,0,0.06);
+
+  --scrollbar:       #D8D4C8;
+  --scrollbar-hover: #B8B4A8;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Dark theme ─────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --accent:       #D4AC30;
+  --accent-hover: #C49C24;
+  --accent-light: #D4AC3018;
+  --accent-mid:   #D4AC3040;
+
+  --bg-base:    #18170F;
+  --bg-sidebar: #111008;
+  --bg-card:    #201E14;
+  --bg-hover:   rgba(255,255,255,0.06);
+
+  --border:       #2E2C20;
+  --border-light: #262418;
+
+  --text-primary:   #F0ECD8;
+  --text-secondary: #B8B4A0;
+  --text-muted:     #706C58;
+
+  --green:  #6AAA7A;
+  --red:    #D45A50;
+  --yellow: #D4AC30;
+  --blue:   #8AAEDC;
+  --sage:   #9AB9AA;
+
+  --overlay-hover:      rgba(255,255,255,0.04);
+  --overlay-subtle:     rgba(255,255,255,0.03);
+  --overlay-faint:      rgba(255,255,255,0.015);
+  --overlay-medium:     rgba(255,255,255,0.08);
+  --overlay-sub:        rgba(0,0,0,0.2);
+  --overlay-sub-header: rgba(0,0,0,0.25);
+  --overlay-sub-border: rgba(0,0,0,0.15);
+
+  --scrollbar:       #3A3820;
+  --scrollbar-hover: #5A5830;
 }
 
+/* ── Auto: follow system ────────────────────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --accent:       #D4AC30;
+    --accent-hover: #C49C24;
+    --accent-light: #D4AC3018;
+    --accent-mid:   #D4AC3040;
+    --bg-base:    #18170F;
+    --bg-sidebar: #111008;
+    --bg-card:    #201E14;
+    --bg-hover:   rgba(255,255,255,0.06);
+    --border:       #2E2C20;
+    --border-light: #262418;
+    --text-primary:   #F0ECD8;
+    --text-secondary: #B8B4A0;
+    --text-muted:     #706C58;
+    --green:  #6AAA7A;
+    --red:    #D45A50;
+    --yellow: #D4AC30;
+    --blue:   #8AAEDC;
+    --sage:   #9AB9AA;
+    --overlay-hover:      rgba(255,255,255,0.04);
+    --overlay-subtle:     rgba(255,255,255,0.03);
+    --overlay-faint:      rgba(255,255,255,0.015);
+    --overlay-medium:     rgba(255,255,255,0.08);
+    --overlay-sub:        rgba(0,0,0,0.2);
+    --overlay-sub-header: rgba(0,0,0,0.25);
+    --overlay-sub-border: rgba(0,0,0,0.15);
+    --scrollbar:       #3A3820;
+    --scrollbar-hover: #5A5830;
   }
 }
 
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; padding: 0; }
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-size: 15.4px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+/* Selection */
+::selection { background: var(--accent-mid); color: var(--text-primary); }

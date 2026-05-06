@@ -1,0 +1,67 @@
+{
+  "groups": [
+    {
+      "id": "yoko",
+      "name": "Yoko",
+      "color": "#579bfc",
+      "contacts": [
+        { "id": "vincent",    "name": "Vincent Wijnbergen",   "role": "Motion designer",      "email": "vincent@studioyoko.nl",    "phone": "+31 6 23096491" },
+        { "id": "marieke",    "name": "Marieke van der Burg",  "role": "2D animator",           "email": "",                         "phone": "06 21411195" },
+        { "id": "anne-fleur", "name": "Anne-Fleur Zoodsma",   "role": "Illustrator + 2D anim", "email": "",                         "phone": "+31 6 3908830" },
+        { "id": "menno",      "name": "Menno Wisselink",       "role": "Motion designer",       "email": "menno@studioyoko.nl",      "phone": "06 13387465" },
+        { "id": "clemens",    "name": "Clemens la Lau",        "role": "Financials",            "email": "clemens@studioyoko.nl",    "phone": "06 83049898" },
+        { "id": "odette",     "name": "Odette Slotboom",       "role": "Motion designer",       "email": "odette@studioyoko.nl",     "phone": "" }
+      ]
+    },
+    {
+      "id": "pnp",
+      "name": "PnP / UvNL",
+      "color": "#e2445c",
+      "contacts": [
+        { "id": "roel",     "name": "Roel Bellinga",         "role": "Baas",                  "email": "roel@pnpmedia.nl",         "phone": "" },
+        { "id": "djoeke",   "name": "Djoeke Oeij",           "role": "Producer",              "email": "djoeke@pnpmedia.nl",       "phone": "06 18832725" },
+        { "id": "merijn",   "name": "Merijn Doggen",         "role": "Eindredacteur",         "email": "",                         "phone": "" },
+        { "id": "maurice",  "name": "Maurice van Wardragen", "role": "Baas",                  "email": "",                         "phone": "" },
+        { "id": "david",    "name": "David de la Mar",       "role": "Producer",              "email": "david@pnpmedia.nl",        "phone": "06 54650003" },
+        { "id": "margriet", "name": "Margriet Vellinga",     "role": "Management Assistent",  "email": "margriet@pnpmedia.nl",     "phone": "06 41861934" }
+      ]
+    },
+    {
+      "id": "freelancers-actief",
+      "name": "Active freelancers",
+      "color": "#00c875",
+      "contacts": [
+        { "id": "joeri",   "name": "Joeri Teijma",        "role": "3D",                    "email": "",                         "phone": "" },
+        { "id": "fokke",   "name": "Fokke Mars",           "role": "3D",                    "email": "",                         "phone": "" },
+        { "id": "marcus",  "name": "Marcus Driessen",      "role": "3D",                    "email": "",                         "phone": "" },
+        { "id": "kars",    "name": "Kars van Geenen",      "role": "2D",                    "email": "",                         "phone": "" },
+        { "id": "michel",  "name": "Michel Wijdemans",     "role": "2D",                    "email": "michel.wijdemans@...",     "phone": "" },
+        { "id": "kees",    "name": "Kees Klein Hemmink",   "role": "Designer, motion",      "email": "",                         "phone": "" },
+        { "id": "jordi",   "name": "Jordi van Putten",     "role": "2D",                    "email": "",                         "phone": "" },
+        { "id": "take",    "name": "Take Lijzenga",        "role": "2D",                    "email": "studio@jongensd...",       "phone": "" },
+        { "id": "gergo",   "name": "Gergo Varga",          "role": "2D",                    "email": "",                         "phone": "" }
+      ]
+    },
+    {
+      "id": "freelancers",
+      "name": "Freelancers",
+      "color": "#9aadbd",
+      "contacts": [
+        { "id": "stolen-goods", "name": "Stolen Goods",          "role": "Shiraz",  "email": "",                         "phone": "" },
+        { "id": "tessa",        "name": "Tessa van Balen",        "role": "",        "email": "",                         "phone": "" },
+        { "id": "basten",       "name": "Basten Moorman",         "role": "",        "email": "",                         "phone": "" },
+        { "id": "huig",         "name": "Huig van den Hoofddakker","role": "",       "email": "",                         "phone": "" },
+        { "id": "koert",        "name": "Koert Roelfsema",        "role": "",        "email": "",                         "phone": "" },
+        { "id": "mina",         "name": "Mina Stojanovic",        "role": "",        "email": "info@minastojan...",       "phone": "" },
+        { "id": "joris",        "name": "Joris van der Vorst",    "role": "",        "email": "",                         "phone": "" },
+        { "id": "jurjen",       "name": "Jurjen Bosklopper",      "role": "",        "email": "",                         "phone": "" },
+        { "id": "tim",          "name": "Tim Bootsma",            "role": "",        "email": "",                         "phone": "" },
+        { "id": "ruth",         "name": "Ruth Taylor",            "role": "",        "email": "",                         "phone": "" },
+        { "id": "elloreen",     "name": "Elloreen Leupen",        "role": "",        "email": "",                         "phone": "" },
+        { "id": "mitchel",      "name": "Mitchel Tan",            "role": "",        "email": "mitcheltan@gmail.com",     "phone": "+31 6 2048218" },
+        { "id": "nick",         "name": "Nick Olijslager",        "role": "",        "email": "",                         "phone": "" },
+        { "id": "remko",        "name": "Remko Scheffer",         "role": "",        "email": "remko@evermore...",        "phone": "" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "groups": [
+    {
+      "id": "pnp-actief",
+      "name": "PnP",
+      "color": "#e2445c",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "pnp-bloedheet",
+          "name": "Bloedheet en Tranen S...",
+          "ownerIds": ["odette"],
+          "status": "",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 60,
+          "dagen": 7.5,
+          "contactpersoon": ""
+        },
+        {
+          "id": "pnp-nmi2",
+          "name": "NMI video 2",
+          "ownerIds": ["odette"],
+          "status": "",
+          "startDate": "2026-03-26",
+          "endDate": "2026-03-26",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "contactpersoon": ""
+        }
+      ]
+    },
+    {
+      "id": "mantis",
+      "name": "Mantis",
+      "color": "#9c7ee8",
+      "collapsed": false,
+      "items": []
+    },
+    {
+      "id": "done",
+      "name": "Done",
+      "color": "#00c875",
+      "collapsed": true,
+      "items": []
+    }
+  ]
+}

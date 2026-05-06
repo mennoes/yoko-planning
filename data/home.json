@@ -1,0 +1,24 @@
+{
+  "intro": "Hoi, welkom bij studio yoko! Hier vind je alle belangrijke info, maar eerst: wie zijn we eigenlijk?",
+  "sections": [
+    {
+      "id": "algemeen",
+      "title": "Algemeen",
+      "links": [
+        { "id": "1", "label": "🏢 Kantoor", "href": "/kantoor" },
+        { "id": "2", "label": "🧑‍🤝‍🧑 Team", "href": "/team" },
+        { "id": "3", "label": "🔑 Accounts", "href": "/accounts" },
+        { "id": "4", "label": "🛠 Tools", "href": "#" },
+        { "id": "5", "label": "❤️ Samenwerkingen", "href": "#" }
+      ]
+    },
+    {
+      "id": "lopend",
+      "title": "Lopend",
+      "links": [
+        { "id": "6", "label": "✅ To do's", "href": "/todos" },
+        { "id": "7", "label": "📅 Planning", "href": "/planning" }
+      ]
+    }
+  ]
+}

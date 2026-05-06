@@ -1,0 +1,86 @@
+{
+  "sections": [
+    {
+      "id": "komend",
+      "title": "Komend",
+      "emoji": "🗓",
+      "items": [
+        { "id": "1", "text": "UvNL Quantum eind feb", "done": false },
+        { "id": "2", "text": "UvNL: NEWS", "done": false },
+        { "id": "3", "text": "Evi S02: Femsplainers", "done": false }
+      ]
+    },
+    {
+      "id": "ideeen",
+      "title": "Ideeën",
+      "emoji": "💡",
+      "items": [
+        { "id": "4", "text": "Website & socials updaten", "done": false },
+        { "id": "5", "text": "UvNL", "done": false },
+        { "id": "6", "text": "Strippenkaart?", "done": false },
+        { "id": "7", "text": "Stagiair erbij? Nancy (via Danny)", "done": false },
+        { "id": "8", "text": "Creatief werk aanboren / yoko meer op de kaart zetten", "done": false },
+        { "id": "9", "text": "NAS server opslag?", "done": false }
+      ]
+    },
+    {
+      "id": "menno",
+      "title": "Menno",
+      "emoji": "🧑",
+      "items": [
+        { "id": "10", "text": "Rewind reminden", "done": true },
+        { "id": "11", "text": "z!n social & budget", "done": true },
+        { "id": "12", "text": "UvVL social pakket", "done": true },
+        { "id": "13", "text": "KNRM interactieve hotspotkaart", "done": true },
+        { "id": "14", "text": "Witte Man", "done": true },
+        { "id": "15", "text": "Renderbot slidedeck", "done": false },
+        { "id": "16", "text": "Salesplan", "done": false },
+        { "id": "17", "text": "yoko niet meer op webflow (Alexander)", "done": false }
+      ]
+    },
+    {
+      "id": "vincent",
+      "title": "Vincent",
+      "emoji": "🧑",
+      "items": [
+        { "id": "18", "text": "Faces of Science eindkaart", "done": false },
+        { "id": "19", "text": "Noes brieven. Emoties sturen FEM", "done": false },
+        { "id": "20", "text": "UvVL trailer", "done": false },
+        { "id": "21", "text": "The Wall", "done": false },
+        { "id": "22", "text": "Dropbox back-uppen", "done": false },
+        { "id": "23", "text": "Creative Cloud samenvoegen?", "done": false }
+      ]
+    },
+    {
+      "id": "odette",
+      "title": "Odette Slotboom",
+      "emoji": "🧑",
+      "items": [
+        { "id": "24", "text": "NMI", "done": true },
+        { "id": "25", "text": "Wonen Zuid", "done": true },
+        { "id": "26", "text": "VL", "done": false },
+        { "id": "27", "text": "NL College", "done": false },
+        { "id": "28", "text": "Socials", "done": false },
+        { "id": "29", "text": "Tutorial kijken (cursus uitzoeken)", "done": false }
+      ]
+    },
+    {
+      "id": "kars",
+      "title": "Kars",
+      "emoji": "🧑",
+      "items": [
+        { "id": "30", "text": "Rewind incheck?", "done": false }
+      ]
+    },
+    {
+      "id": "anne-fleur",
+      "title": "Anne-Fleur Zoodsma",
+      "emoji": "🧑",
+      "items": [
+        { "id": "31", "text": "Illustratie Hooghiemstra Steven", "done": false },
+        { "id": "32", "text": "HEYU!", "done": false },
+        { "id": "33", "text": "UMC SAS", "done": false }
+      ]
+    }
+  ]
+}

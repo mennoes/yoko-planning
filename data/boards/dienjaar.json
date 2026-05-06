@@ -1,0 +1,130 @@
+{
+  "groups": [
+    {
+      "id": "gepland",
+      "name": "GEPLAND – (niet factureren)",
+      "color": "#9c7ee8",
+      "collapsed": true,
+      "items": []
+    },
+    {
+      "id": "productie-yoko",
+      "name": "Productie uren yoko",
+      "color": "#00c875",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "dj-w40",
+          "name": "Week 40",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2025-09-29",
+          "endDate": "2025-10-05",
+          "deadline": null,
+          "estHours": 3,
+          "dagen": 0.375,
+          "nummers": 0
+        },
+        {
+          "id": "dj-w46",
+          "name": "Week 46",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2025-11-10",
+          "endDate": "2025-11-16",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 1.5,
+          "nummers": 0
+        },
+        {
+          "id": "dj-w45",
+          "name": "Week 45",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2025-11-03",
+          "endDate": "2025-11-09",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "nummers": 0
+        },
+        {
+          "id": "dj-w41",
+          "name": "Week 41",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2025-10-06",
+          "endDate": "2025-10-12",
+          "deadline": null,
+          "estHours": 1,
+          "dagen": 0.125,
+          "nummers": 0
+        },
+        {
+          "id": "dj-w39",
+          "name": "Week 39",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2025-09-22",
+          "endDate": "2025-09-28",
+          "deadline": null,
+          "estHours": 3,
+          "dagen": 0.375,
+          "nummers": 0
+        },
+        {
+          "id": "dj-w48",
+          "name": "Week 48",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2025-11-24",
+          "endDate": "2025-11-30",
+          "deadline": null,
+          "estHours": 6,
+          "dagen": 0.75,
+          "nummers": 0
+        },
+        {
+          "id": "dj-nwt",
+          "name": "Nwt aanpassing",
+          "ownerIds": ["menno"],
+          "status": "",
+          "startDate": "2026-03-30",
+          "endDate": "2026-04-07",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "nummers": 0
+        }
+      ]
+    },
+    {
+      "id": "ontwikkeling-yoko",
+      "name": "Ontwikkeling yoko",
+      "color": "#579bfc",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "dj-ontw-w20",
+          "name": "Ontwikkeling week 20",
+          "ownerIds": [],
+          "status": "",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "nummers": 0
+        }
+      ]
+    },
+    {
+      "id": "productie-kars",
+      "name": "Productie uren Kars",
+      "color": "#00c875",
+      "collapsed": false,
+      "items": []
+    }
+  ]
+}
