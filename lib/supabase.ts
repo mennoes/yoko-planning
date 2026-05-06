@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? ''
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+const url    = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? ''
+const key    = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+const bypass = process.env.NEXT_PUBLIC_BYPASS_AUTH === 'true'
 
-export const hasSupabase = !!(url && key)
+export const hasSupabase = !bypass && !!(url && key)
 export const supabase    = hasSupabase
   ? createClient(url, key, { auth: { flowType: 'implicit' } })
   : null
