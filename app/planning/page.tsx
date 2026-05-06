@@ -14,6 +14,7 @@ import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type 
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
+import { downloadIcs }   from '@/lib/ical'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -716,6 +717,12 @@ export default function PlanningPage() {
             <button onClick={() => setAgendasOpen(true)} title="Agenda's"
               style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
               Agenda&apos;s
+            </button>
+
+            {/* iCal export */}
+            <button onClick={() => downloadIcs(projects)} title="Download als iCal voor Google/Apple Agenda"
+              style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
+              📅 iCal
             </button>
 
             {/* Mensen filter popup trigger */}

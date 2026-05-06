@@ -6,12 +6,19 @@ export const metadata: Metadata = {
   title: 'Yoko Planner',
   description: 'Studio Yoko planning tool',
   icons: { icon: '/favicon.svg' },
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    title: 'Yoko',
+    statusBarStyle: 'default',
+  },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  themeColor: '#C8A028',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
