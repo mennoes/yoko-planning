@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useProfile } from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useMemberPopup } from '@/components/MemberPopup'
+import { useIsMobile } from '@/lib/useIsMobile'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
@@ -65,6 +66,7 @@ export default function HomePage() {
   const { getPhoto }   = useTeamPhotos()
   const { showMember } = useMemberPopup()
   const router         = useRouter()
+  const isMobile       = useIsMobile()
 
   const [recentPages,  setRecentPages]  = useState<PageDoc[]>([])
   const [myTodos,      setMyTodos]      = useState<TodoItem[]>([])
@@ -161,33 +163,33 @@ export default function HomePage() {
   if (!hydrated) return null
 
   return (
-    <div style={{ maxWidth: 1160, padding: '48px 40px 100px' }}>
+    <div style={{ maxWidth: 1160, padding: isMobile ? '20px 16px 60px' : '48px 40px 100px' }}>
 
       {/* ── Greeting ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 40 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18, marginBottom: isMobile ? 24 : 40 }}>
         {memberId && (
           photo ? (
             <img src={photo} alt="" onClick={e => showMember(memberId, e)}
-              style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', flexShrink: 0 }} />
+              style={{ width: isMobile ? 48 : 60, height: isMobile ? 48 : 60, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', flexShrink: 0 }} />
           ) : (
             <div onClick={e => showMember(memberId, e)}
-              style={{ width: 60, height: 60, borderRadius: '50%', background: (member?.color ?? '#888') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: member?.color ?? '#888', cursor: 'pointer', flexShrink: 0 }}>
+              style={{ width: isMobile ? 48 : 60, height: isMobile ? 48 : 60, borderRadius: '50%', background: (member?.color ?? '#888') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 18 : 22, fontWeight: 700, color: member?.color ?? '#888', cursor: 'pointer', flexShrink: 0 }}>
               {firstName.charAt(0)}
             </div>
           )
         )}
         <div>
-          <h1 style={{ fontSize: 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
             {greeting}{firstName ? `, ${firstName}` : ''}
           </h1>
-          <p style={{ margin: 0, fontSize: 15, color: 'var(--text-muted)' }}>
+          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>
       </div>
 
       {/* ── Top row: Taken + Werkdruk ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 14 : 18, marginBottom: isMobile ? 14 : 18 }}>
 
         {/* Jouw taken */}
         <div style={card}>
@@ -250,7 +252,7 @@ export default function HomePage() {
       </div>
 
       {/* ── Main row: Documenten (groot) + Lopend/Algemeen ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? 14 : 18, alignItems: 'start' }}>
 
         {/* Documenten */}
         <div style={card}>
