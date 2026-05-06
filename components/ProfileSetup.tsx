@@ -325,9 +325,6 @@ export default function ProfileSetup() {
                     {m.name}
                   </span>
                   {active && <span style={{ color: m.color, fontSize: 12 }}>✓</span>}
-                  {!active && profile?.memberId === m.id && (
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--overlay-medium)', borderRadius: 4, padding: '1px 5px' }}>jij</span>
-                  )}
                 </button>
               )
             })}

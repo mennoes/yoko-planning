@@ -187,7 +187,6 @@ function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
       }} />
     )
   }
-  // Try static /team/ photo (e.g. anne-fleur.jpg)
   return (
     <span title={m.name} style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
@@ -305,16 +304,14 @@ function RangeCalendar({
   const [vm, setVm] = useState(initD.getMonth())
   const [selA, setSelA] = useState<string | null>(startDate)
   const [selB, setSelB] = useState<string | null>(endDate)
-  const [phase, setPhase] = useState<'A' | 'B'>('A') // A=first click, B=second click
+  const [phase, setPhase] = useState<'A' | 'B'>('A')
   const [hov,   setHov]   = useState<string | null>(null)
 
   const today = new Date().toISOString().split('T')[0]
 
-  // Ordered start / end for display
   const ordA = selA && selB ? (selA <= selB ? selA : selB) : selA
   const ordB = selA && selB ? (selA <= selB ? selB : selA) : selB
 
-  // Preview range while hovering (phase B)
   const prevA = phase === 'B' && selA && hov ? (selA <= hov ? selA : hov) : null
   const prevB = phase === 'B' && selA && hov ? (selA <= hov ? hov : selA) : null
   const effA = prevA ?? ordA
@@ -343,7 +340,6 @@ function RangeCalendar({
       borderRadius: 12, padding: 16, minWidth: 290,
       boxShadow: '0 10px 36px rgba(0,0,0,0.4)',
     }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Datums instellen</span>
         {days !== null && (
@@ -353,7 +349,6 @@ function RangeCalendar({
         )}
       </div>
 
-      {/* Date inputs */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 14 }}>
         <input type="date" value={selA ?? ''}
           onChange={e => { setSelA(e.target.value || null); if (selB) onChange(e.target.value || null, selB) }}
@@ -364,7 +359,6 @@ function RangeCalendar({
           style={{ ...editInput, flex: 1 }} />
       </div>
 
-      {/* Month nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <button onClick={prevMonth} style={navBtnStyle}>◀</button>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -373,14 +367,12 @@ function RangeCalendar({
         <button onClick={nextMonth} style={navBtnStyle}>▶</button>
       </div>
 
-      {/* Day headers */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 3 }}>
         {NL_DAYS_SHORT.map(d => (
           <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', padding: '2px 0' }}>{d}</div>
         ))}
       </div>
 
-      {/* Day grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
         {cells.map((cell, i) => {
           if (!cell) return <div key={`e-${i}`} style={{ height: 30 }} />
@@ -412,7 +404,6 @@ function RangeCalendar({
         })}
       </div>
 
-      {/* Footer */}
       <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={() => { setSelA(null); setSelB(null); setPhase('A'); onChange(null, null) }}
           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: 0 }}
@@ -640,7 +631,6 @@ function BoardRow({ item, cols, gridTemplate, onUpdate, onDelete }: {
       }}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
 
-        {/* Naam */}
         <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
           <button onClick={() => setExpanded(e => !e)}
             title={hasSubitems ? `${subitems.length} subitems` : 'Subitems toevoegen'}
@@ -738,12 +728,10 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, onUpdateGroup
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderLeft: `4px solid ${group.color}`, background: 'var(--overlay-subtle)' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
 
-          {/* Collapse toggle */}
           <button onClick={() => setCollapsed(c => !c)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
             {collapsed ? '▶' : '▼'}
           </button>
 
-          {/* Kleur-knop */}
           <button ref={colorBtnRef} onClick={e => { e.stopPropagation(); setColorPicker(o => !o) }}
             title="Kleur wijzigen"
             style={{ width: 14, height: 14, borderRadius: 3, background: group.color, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0 }} />
@@ -765,7 +753,6 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, onUpdateGroup
             </PortalDropdown>
           )}
 
-          {/* Groepsnaam — klikbaar om te bewerken */}
           {editName ? (
             <input autoFocus value={nameDraft}
               onChange={e => setNameDraft(e.target.value)}
@@ -784,7 +771,6 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, onUpdateGroup
             {group.items.length} items
           </span>
 
-          {/* Groep verwijderen */}
           {headerHover && !editName && (
             <button onClick={onDeleteGroup} title="Groep verwijderen"
               style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 4px', borderRadius: 3 }}
@@ -952,7 +938,6 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
     onChange(groups.map(orig => {
       if (orig.id !== updatedGroup.id) return orig
       const filteredItems = filteredGroups.find(fg => fg.id === orig.id)?.items ?? []
-      const filteredIds   = new Set(filteredItems.map(i => i.id))
       const updatedById   = new Map(updatedGroup.items.map(i => [i.id, i]))
       const removedIds    = new Set(filteredItems.filter(i => !updatedById.has(i.id)).map(i => i.id))
       return {

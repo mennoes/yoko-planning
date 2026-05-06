@@ -535,6 +535,8 @@ export default function PlanningPage() {
     return (v === 'dag' || v === 'week' || v === 'maand') ? v : 'week'
   })
   const gridRef = useRef<HTMLDivElement>(null)
+  const dragScrollRef = useRef<{ startX: number; scrollLeft: number } | null>(null)
+  const [isDragScrolling, setIsDragScrolling] = useState(false)
 
   useEffect(() => {
     const loaded: Record<string, BoardGroup[]> = {}
@@ -548,6 +550,32 @@ export default function PlanningPage() {
   useEffect(() => { localStorage.setItem('planning-zoom', zoom) }, [zoom])
   useEffect(() => { localStorage.setItem('planning-showHours', String(showHours)) }, [showHours])
   useEffect(() => { localStorage.setItem('planning-colOffset', String(colOffset)) }, [colOffset])
+
+  // ─── Drag-to-scroll ───────────────────────────────────────────────────────────
+  function onGridMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    // Only plain left click (not on interactive children that handle their own drag)
+    const target = e.target as HTMLElement
+    if (target.closest('[draggable="true"]') || target.closest('button') || target.closest('input') || target.closest('a')) return
+    if (e.button !== 0) return
+    e.preventDefault()
+    const el = gridRef.current
+    if (!el) return
+    dragScrollRef.current = { startX: e.clientX, scrollLeft: el.scrollLeft }
+    setIsDragScrolling(true)
+    function onMove(ev: MouseEvent) {
+      if (!dragScrollRef.current || !el) return
+      const dx = ev.clientX - dragScrollRef.current.startX
+      el.scrollLeft = dragScrollRef.current.scrollLeft - dx
+    }
+    function onUp() {
+      dragScrollRef.current = null
+      setIsDragScrolling(false)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   const projects = useMemo(
     () => Object.entries(allGroups).flatMap(([n, g]) => groupsToProjects(n, g)),
@@ -699,7 +727,8 @@ export default function PlanningPage() {
       </div>
 
       {/* ── Grid — only this scrolls (both axes) ── */}
-      <div ref={gridRef} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div ref={gridRef} onMouseDown={onGridMouseDown}
+        style={{ flex: 1, overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
         <div style={{ minWidth: totalWidth }}>
 
           {/* Month grouping row (only for week/day zoom) */}

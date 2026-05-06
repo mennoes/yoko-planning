@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell([System.IO.Directory]::GetFileSystemEntries\\(\"D:\\\\Dropbox\\\\studio yoko\\\\Website\\\\Planning tool\"\\) | ForEach-Object { Get-Item $_ -Force })",
+      "Bash(dir \"D:\\\\Dropbox\\\\studio yoko\\\\Website\\\\Planning tool\")",
+      "Bash(npm run *)",
+      "Bash(node_modules/.bin/next dev *)",
+      "PowerShell($files = [System.IO.Directory]::GetFiles\\(\"D:\\\\Dropbox\\\\studio yoko\\\\Website\\\\Planning tool\\\\yoko-planner\\\\node_modules\\\\.bin\"\\); $files[0..9])",
+      "PowerShell($count = [System.IO.Directory]::GetFiles\\(\"D:\\\\Dropbox\\\\studio yoko\\\\Website\\\\Planning tool\\\\yoko-planner\\\\node_modules\\\\.bin\"\\).Count; Write-Output \"Count: $count\")"
+    ]
+  }
+}
