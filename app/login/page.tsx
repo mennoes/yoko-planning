@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 type Mode = 'magic' | 'password'
 
 export default function LoginPage() {
-  const [mode,     setMode]     = useState<Mode>('magic')
+  const [mode,     setMode]     = useState<Mode>('password')
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [isNew,    setIsNew]    = useState(false)
