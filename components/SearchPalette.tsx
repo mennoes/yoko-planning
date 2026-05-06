@@ -72,6 +72,8 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
     all.push({ id: 'nav-todos',    title: "Todo's",   subtitle: 'Pagina',  href: '/todos',    emoji: '✅' })
     all.push({ id: 'nav-team',     title: 'Team',     subtitle: 'Pagina',  href: '/team',     emoji: '👥' })
     all.push({ id: 'nav-kantoor',  title: 'Kantoor',  subtitle: 'Pagina',  href: '/kantoor',  emoji: '🏢' })
+    all.push({ id: 'nav-activity', title: 'Activiteit', subtitle: 'Pagina', href: '/activity', emoji: '📜' })
+    all.push({ id: 'nav-accounts', title: 'Accounts', subtitle: 'Pagina',  href: '/accounts', emoji: '🔑' })
 
     setData(all)
   }, [open])

@@ -218,6 +218,11 @@ export default function HomePage() {
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 10 }}>
                 <span style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>{weekHours}</span>
                 <span style={{ fontSize: 15, color: 'var(--text-muted)' }}>/ {weekCapacity} uur</span>
+                {weekCapacity > 0 && weekHours > weekCapacity && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#C4453A', background: 'rgba(196,69,58,0.15)', padding: '2px 8px', borderRadius: 10, marginLeft: 'auto' }}>
+                    ⚠ Overbelast
+                  </span>
+                )}
               </div>
               <div style={{ height: 7, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', marginBottom: 12 }}>
                 <div style={{ height: '100%', width: `${pct * 100}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
