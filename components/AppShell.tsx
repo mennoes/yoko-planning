@@ -9,6 +9,7 @@ import { UndoProvider } from './UndoContext'
 import Sidebar from './Sidebar'
 import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
+import TimerIndicator from './TimerIndicator'
 import { hasSupabase } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 
@@ -85,6 +86,7 @@ function Inner({ children }: { children: ReactNode }) {
       )}
 
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <TimerIndicator />
 
       <main style={{
         flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,

@@ -15,6 +15,8 @@ import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
+import { startTimer, stopTimer, getActiveTimer, totalMinutesForProject, onTimerUpdate, fmtMinutes } from '@/lib/timerStore'
+import { logActivity }   from '@/lib/activityLog'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -417,6 +419,12 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
   const [newEntry,  setNewEntry]  = useState('')
+  const [timerTick, setTimerTick] = useState(0)
+  useEffect(() => onTimerUpdate(() => setTimerTick(t => t + 1)), [])
+  const activeTimer = getActiveTimer()
+  const isTimingThis = activeTimer?.projectId === project.id
+  const workedMin    = totalMinutesForProject(project.id) // re-evaluated each render
+  void timerTick // touch state so the value is recomputed
 
   useEffect(() => {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
@@ -477,6 +485,25 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input type="number" value={estHours} onChange={e => setEstHours(e.target.value)} style={{ ...dateInput, width: 64 }} />
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
+          </div>
+        </Row>
+        <Row label="Tijd">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {isTimingThis ? (
+              <button onClick={() => stopTimer()}
+                style={{ ...cancelBtn, background: '#e2445c', color: '#fff', border: 'none', fontWeight: 700 }}>
+                ■ Stop timer
+              </button>
+            ) : (
+              <button onClick={() => startTimer(project.id, project.name)}
+                style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700 }}>
+                ▶ Start timer
+              </button>
+            )}
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Gewerkt: <strong style={{ color: 'var(--text-secondary)' }}>{fmtMinutes(workedMin)}</strong>
+              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{estHours}u</strong>
+            </span>
           </div>
         </Row>
         <Row label="Notes">
@@ -717,6 +744,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     }
     apply(newStart, newEnd)
+    logActivity('Datums bijgewerkt', project.name, `${prevStart ?? '—'} → ${newStart ?? '—'} / ${prevEnd ?? '—'} → ${newEnd ?? '—'}`)
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     pushUndo(() => apply(prevStart, prevEnd))
   }
@@ -728,6 +756,7 @@ export default function PlanningPage() {
     }))
     saveGroups(boardName, groups)
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
+    logActivity('Project opgeslagen', project.name)
     setDetailProject(null)
   }
 
