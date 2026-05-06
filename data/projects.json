@@ -1,0 +1,169 @@
+{
+  "projects": [
+    {
+      "id": "yoko-witteman",
+      "name": "Witte Man",
+      "board": "yoko",
+      "group": "Losse projecten",
+      "ownerIds": ["menno", "anne-fleur"],
+      "startDate": null,
+      "endDate": null,
+      "estHours": 176,
+      "status": "active"
+    },
+    {
+      "id": "yoko-sas-icu",
+      "name": "SAS-ICU",
+      "board": "yoko",
+      "group": "Losse projecten",
+      "ownerIds": [],
+      "startDate": "2026-05-04",
+      "endDate": "2026-07-03",
+      "estHours": 140,
+      "status": "active"
+    },
+    {
+      "id": "yoko-bedrijvencentrum",
+      "name": "Bedrijvencentrum U illustraties",
+      "board": "yoko",
+      "group": "Losse projecten",
+      "ownerIds": ["menno", "odette"],
+      "startDate": "2026-04-21",
+      "endDate": "2026-05-03",
+      "estHours": 16,
+      "status": "active"
+    },
+    {
+      "id": "yoko-rewind-apr",
+      "name": "Rewind april",
+      "board": "yoko",
+      "group": "Rewind",
+      "ownerIds": ["menno"],
+      "startDate": "2026-04-01",
+      "endDate": "2026-04-30",
+      "estHours": 16,
+      "status": "active"
+    },
+    {
+      "id": "pnp-bloedheet",
+      "name": "Bloedheet en Tranen S...",
+      "board": "pnp",
+      "group": "PnP",
+      "ownerIds": ["odette"],
+      "startDate": null,
+      "endDate": null,
+      "estHours": 60,
+      "status": "active"
+    },
+    {
+      "id": "nl-fos-titels",
+      "name": "Faces of Science – logoanimatie/titels",
+      "board": "nederland",
+      "group": "Overige",
+      "ownerIds": ["menno", "odette"],
+      "startDate": "2026-04-13",
+      "endDate": "2026-04-26",
+      "estHours": 32,
+      "status": "active"
+    },
+    {
+      "id": "nl-e33",
+      "name": "NL College S04 E33 (Ultrabewerkt eten)",
+      "board": "nederland",
+      "group": "(S11) Nederland colleges",
+      "ownerIds": ["menno", "odette"],
+      "startDate": "2026-05-06",
+      "endDate": "2026-05-12",
+      "estHours": 24,
+      "status": "active"
+    },
+    {
+      "id": "nl-e34",
+      "name": "NL College S04 E34 (Autisme)",
+      "board": "nederland",
+      "group": "(S11) Nederland colleges",
+      "ownerIds": ["odette"],
+      "startDate": "2026-05-11",
+      "endDate": "2026-05-18",
+      "estHours": 24,
+      "status": "active"
+    },
+    {
+      "id": "nl-heyu",
+      "name": "HEY U E10 ADHD",
+      "board": "nederland",
+      "group": "(S11) Nederland colleges",
+      "ownerIds": ["menno", "odette"],
+      "startDate": "2026-05-19",
+      "endDate": "2026-05-20",
+      "estHours": 16,
+      "status": "active"
+    },
+    {
+      "id": "nl-e35",
+      "name": "NL College S04 E35 (PFAS in schuim)",
+      "board": "nederland",
+      "group": "(S11) Nederland colleges",
+      "ownerIds": ["menno", "odette"],
+      "startDate": "2026-05-26",
+      "endDate": "2026-05-29",
+      "estHours": 24,
+      "status": "active"
+    },
+    {
+      "id": "nl-news-titels",
+      "name": "NEWS – leader/titels",
+      "board": "nederland",
+      "group": "Overige",
+      "ownerIds": ["menno"],
+      "startDate": "2026-05-18",
+      "endDate": "2026-05-31",
+      "estHours": 12,
+      "status": "active"
+    },
+    {
+      "id": "vl-slides-1-8",
+      "name": "Slides college 1/8",
+      "board": "vlaanderen",
+      "group": "Vlaanderen S09",
+      "ownerIds": ["menno"],
+      "startDate": "2026-04-06",
+      "endDate": "2026-04-24",
+      "estHours": 32,
+      "status": "active"
+    },
+    {
+      "id": "vl-slides-9-12",
+      "name": "Slides colleges 9/12",
+      "board": "vlaanderen",
+      "group": "Vlaanderen S09",
+      "ownerIds": ["menno"],
+      "startDate": "2026-04-24",
+      "endDate": "2026-04-30",
+      "estHours": 20,
+      "status": "active"
+    },
+    {
+      "id": "vl-trailer-uvvl",
+      "name": "Trailer UvVL",
+      "board": "vlaanderen",
+      "group": "Vlaanderen S09",
+      "ownerIds": ["menno"],
+      "startDate": "2026-03-26",
+      "endDate": "2026-04-30",
+      "estHours": 16,
+      "status": "active"
+    },
+    {
+      "id": "vl-thumbs",
+      "name": "Thumbs colleges 1/12",
+      "board": "vlaanderen",
+      "group": "Vlaanderen S09",
+      "ownerIds": ["menno"],
+      "startDate": "2026-05-06",
+      "endDate": "2026-05-22",
+      "estHours": 16,
+      "status": "active"
+    }
+  ]
+}

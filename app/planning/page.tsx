@@ -1,0 +1,823 @@
+'use client'
+
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { useMemberPopup } from '@/components/MemberPopup'
+import { useUndo } from '@/components/UndoContext'
+import teamData          from '@/data/team.json'
+import yokoRaw           from '@/data/boards/yoko.json'
+import pnpRaw            from '@/data/boards/pnp.json'
+import nederlandRaw      from '@/data/boards/nederland.json'
+import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
+import dienjaarRaw       from '@/data/boards/dienjaar.json'
+import { loadGroups, saveGroups, addDays } from '@/lib/boardStore'
+import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type TeamMember } from '@/lib/workload'
+import { useProfile }    from '@/components/ProfileContext'
+import { useTeamPhotos } from '@/components/TeamPhotosContext'
+import type { BoardGroup } from '@/lib/boards'
+
+const RAW: Record<string, { groups: unknown[] }> = {
+  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
+  vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
+}
+
+const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type ViewSize  = 'compact' | 'large'
+type ZoomLevel = 'dag' | 'week' | 'maand'
+
+type Col = {
+  key: string
+  rangeStart: Date
+  rangeEnd:   Date
+  label1:     string
+  label2:     string
+  widthPx:    number
+  isCurrent:  boolean
+}
+
+// ─── Static layout constants ──────────────────────────────────────────────────
+const NAME_W   = 196
+const NAME_PAD = 28
+const BAR_H    = 22
+const BAR_GAP  = 3
+const HANDLE_W = 8
+
+// ─── View-size presets ────────────────────────────────────────────────────────
+function vc(vs: ViewSize) {
+  return vs === 'large'
+    ? { cs: 78, or: 35, hh: 110, av: 46 }
+    : { cs: 46, or: 20, hh:  60, av: 32 }
+}
+// Column widths per zoom
+const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 28, week: 104, maand: 120 }
+// Column counts per zoom
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 90, week: 56, maand: 18 }
+
+// ─── Column generators ────────────────────────────────────────────────────────
+function getWeekCols(from: Date, count: number, colW: number): Col[] {
+  return getWeeks(from, count).map(ws => {
+    const we  = new Date(ws); we.setDate(ws.getDate() + 6); we.setHours(23,59,59,999)
+    const lbl = getWeekLabel(ws)
+    return { key: ws.toISOString(), rangeStart: ws, rangeEnd: we,
+      label1: lbl.weekNum, label2: lbl.range, widthPx: colW, isCurrent: lbl.isCurrentWeek }
+  })
+}
+
+function getMonthCols(from: Date, count: number, colW: number): Col[] {
+  const cols: Col[] = []
+  const d = new Date(from.getFullYear(), from.getMonth(), 1)
+  const now = new Date()
+  for (let i = 0; i < count; i++) {
+    const ms = new Date(d)
+    const me = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999)
+    cols.push({ key: ms.toISOString(), rangeStart: ms, rangeEnd: me,
+      label1: NL_MON[ms.getMonth()].toUpperCase(),
+      label2: String(ms.getFullYear()),
+      widthPx: colW,
+      isCurrent: now >= ms && now <= me })
+    d.setMonth(d.getMonth() + 1)
+  }
+  return cols
+}
+
+function getDayCols(from: Date, count: number, colW: number): Col[] {
+  const cols: Col[] = []
+  const today = new Date(); today.setHours(0,0,0,0)
+  for (let i = 0; i < count; i++) {
+    const ds = new Date(from); ds.setDate(from.getDate() + i); ds.setHours(0,0,0,0)
+    const de = new Date(ds); de.setHours(23,59,59,999)
+    cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: de,
+      label1: String(ds.getDate()),
+      label2: NL_MON[ds.getMonth()],
+      widthPx: colW,
+      isCurrent: ds.getTime() === today.getTime() })
+  }
+  return cols
+}
+
+function buildCols(zoom: ZoomLevel, from: Date, colW: number): Col[] {
+  const count = ZOOM_COUNT[zoom]
+  if (zoom === 'maand') return getMonthCols(from, count, colW)
+  if (zoom === 'dag')   return getDayCols(from, count, colW)
+  return getWeekCols(from, count, colW)
+}
+
+// ─── Month grouping row (for week/day zoom) ───────────────────────────────────
+function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; widthPx: number }[] {
+  const groups: { label: string; count: number; widthPx: number }[] = []
+  for (const col of cols) {
+    const d     = col.rangeStart
+    const label = `${NL_MON[d.getMonth()].toUpperCase()}. ${d.getFullYear()}`
+    const last  = groups[groups.length - 1]
+    if (last?.label === label) { last.count++; last.widthPx += col.widthPx }
+    else groups.push({ label, count: 1, widthPx: col.widthPx })
+  }
+  return groups
+}
+
+// ─── Hours in arbitrary range ─────────────────────────────────────────────────
+function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): number {
+  if (!project.ownerIds.includes(memberId)) return 0
+  if (project.estHours === 0 || !project.startDate || !project.endDate) return 0
+  const pS = new Date(project.startDate)
+  const pE = new Date(project.endDate); pE.setHours(23,59,59,999)
+  if (re < pS || rs > pE) return 0
+  const oS = rs > pS ? rs : pS
+  const oE = re < pE ? re : pE
+  const totalMs   = pE.getTime() - pS.getTime()
+  const overlapMs = oE.getTime() - oS.getTime()
+  const fraction  = overlapMs / totalMs
+  const hpp       = project.estHours / Math.max(project.ownerIds.length, 1)
+  return Math.round(fraction * hpp * 10) / 10
+}
+
+function memberHoursInCol(projects: Project[], memberId: string, col: Col) {
+  return projects
+    .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd) }))
+    .filter(c => c.hours > 0)
+}
+
+// ─── Convert board groups → Project list ──────────────────────────────────────
+function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
+  return groups.flatMap(g =>
+    g.items
+      .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
+      .map(i => ({
+        id: `${boardName}__${i.id}`, name: i.name, board: boardName, group: g.name,
+        ownerIds:  i.ownerIds  as string[],
+        startDate: i.startDate as string | null,
+        endDate:   i.endDate   as string | null,
+        estHours:  (i.estHours as number) ?? 0,
+        status:    (i.status as string) === 'Done' ? 'done' : 'active',
+      } satisfies Project))
+  )
+}
+
+function fmtIso(iso: string | null) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return `${d.getDate()} ${NL_MON[d.getMonth()]}.`
+}
+
+// ─── Member avatar ────────────────────────────────────────────────────────────
+function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
+  const { profile }   = useProfile()
+  const { getPhoto }  = useTeamPhotos()
+  const { showMember } = useMemberPopup()
+  const isMe     = profile?.memberId === member.id
+  const photo    = isMe ? (profile?.photo ?? getPhoto(member.id)) : getPhoto(member.id)
+  const fallback = `/team/${member.id}.jpg`
+  const initials = member.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+
+  const inner = photo ? (
+    <img src={photo} alt={member.name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />
+  ) : (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: member.color + '22',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.36, fontWeight: 700, color: member.color, position: 'relative', overflow: 'hidden' }}>
+      <img src={fallback} alt={member.name}
+        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+      {initials}
+    </span>
+  )
+  return (
+    <span onClick={e => showMember(member.id, e)} title="Klik voor profiel" style={{ cursor: 'pointer', display: 'inline-flex', flexShrink: 0 }}>
+      {inner}
+    </span>
+  )
+}
+
+// ─── Workload circle ──────────────────────────────────────────────────────────
+function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; or: number }) {
+  const cx    = cs / 2, cy = cs / 2
+  const color = pct > 1 ? '#e2445c' : '#579bfc'
+  const fillR = pct > 0 ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * Math.sqrt(Math.min(pct, 1)))) : 0
+  const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.06) : fillR
+  return (
+    <svg width={cs} height={cs} viewBox={`0 0 ${cs} ${cs}`} style={{ display: 'block' }}>
+      <circle cx={cx} cy={cy} r={outerR} fill={color + '25'} />
+      {pct > 0 && <circle cx={cx} cy={cy} r={aFillR} fill={color} />}
+    </svg>
+  )
+}
+
+// ─── Workload cell ────────────────────────────────────────────────────────────
+type Contrib = { project: Project; hours: number }
+function WorkloadCell({ contribs, total, capacity, showHours, cs, or: outerR, zoom }: {
+  contribs: Contrib[]; total: number; capacity: number; showHours: boolean
+  cs: number; or: number; zoom: ZoomLevel
+}) {
+  const [open, setOpen] = useState(false)
+  const pct = capacity > 0 ? total / capacity : 0
+
+  // For day zoom: show a thin bar instead of a circle
+  if (zoom === 'dag') {
+    const barH  = 6
+    const color = pct > 1 ? '#e2445c' : '#579bfc'
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', padding: '0 2px 4px' }}>
+        <div style={{ width: '100%', height: barH, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+          {pct > 0 && <div style={{ height: '100%', width: `${Math.min(pct, 1) * 100}%`, background: color, borderRadius: 3 }} />}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}
+      onMouseLeave={() => setOpen(false)}>
+      <button onClick={() => total > 0 && setOpen(o => !o)} style={{
+        background: 'none', border: 'none', cursor: total > 0 ? 'pointer' : 'default',
+        padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+      }}>
+        <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
+        {showHours && total > 0 && (
+          <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
+            {total}u
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', zIndex: 200, top: '100%', left: '50%',
+          transform: 'translateX(-50%)', marginTop: 4,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '10px 14px', minWidth: 210,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>
+            {total}u / {capacity}u ({Math.round(pct * 100)}%)
+          </div>
+          {contribs.map(({ project, hours }) => (
+            <div key={project.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-light)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[project.board] ?? '#888', flexShrink: 0 }} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</span>
+              <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{hours}u</span>
+            </div>
+          ))}
+          <button onClick={() => setOpen(false)} style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>sluiten</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Capacity editor ──────────────────────────────────────────────────────────
+function CapacityEditor({ member, onUpdate }: { member: TeamMember; onUpdate: (id: string, n: number) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal]         = useState(member.weeklyCapacity.toString())
+  if (!editing) return (
+    <span onClick={() => setEditing(true)} title="Klik" style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline dotted' }}>
+      {member.weeklyCapacity}u/w
+    </span>
+  )
+  return (
+    <input autoFocus type="number" value={val} onChange={e => setVal(e.target.value)}
+      onBlur={() => { onUpdate(member.id, parseInt(val) || member.weeklyCapacity); setEditing(false) }}
+      onKeyDown={e => { if (e.key === 'Enter') { onUpdate(member.id, parseInt(val) || member.weeklyCapacity); setEditing(false) } if (e.key === 'Escape') setEditing(false) }}
+      style={{ width: 44, background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, color: 'var(--text-primary)', fontSize: 11, padding: '1px 4px', outline: 'none' }}
+    />
+  )
+}
+
+// ─── Draggable timeline bar ───────────────────────────────────────────────────
+type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; origStart: string | null; origEnd: string | null }
+
+function DraggableBar({ project, left, width, colW, onDragMove, onDragEnd, onClick }: {
+  project: Project; left: number; width: number; colW: number
+  onDragMove: (s: string | null, e: string | null) => void
+  onDragEnd:  (s: string | null, e: string | null) => void
+  onClick:    () => void
+}) {
+  const color   = BOARD_COLORS[project.board] ?? '#888'
+  const dragRef = useRef<DragInfo | null>(null)
+  const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
+  const didDrag = useRef(false)
+  const dpx = 7 / colW
+
+  function startDrag(e: React.MouseEvent, mode: DragInfo['mode']) {
+    e.preventDefault(); e.stopPropagation()
+    didDrag.current = false
+    dragRef.current = { mode, startX: e.clientX, origStart: project.startDate, origEnd: project.endDate }
+    setGhost({ left, width })
+
+    function onMove(ev: MouseEvent) {
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.startX
+      const ddays = Math.round(dx * dpx)
+      if (Math.abs(ddays) > 0) didDrag.current = true
+      const { mode, origStart, origEnd } = dragRef.current
+      let newL = left, newW = width
+      if (mode === 'move')       { newL = left + ddays * (colW / 7) }
+      else if (mode === 'start') { const dl = ddays * (colW / 7); newL = left + dl; newW = Math.max(colW / 7, width - dl) }
+      else                       { newW = Math.max(colW / 7, width + ddays * (colW / 7)) }
+      setGhost({ left: newL, width: newW })
+      let ss = origStart, se = origEnd
+      if (mode === 'move')       { ss = origStart ? addDays(origStart, ddays) : null; se = origEnd ? addDays(origEnd, ddays) : null }
+      else if (mode === 'start') { ss = origStart ? addDays(origStart, ddays) : null; if (ss && se && ss > se) ss = se }
+      else                       { se = origEnd ? addDays(origEnd, ddays) : null; if (ss && se && se < ss) se = ss }
+      onDragMove(ss, se)
+    }
+
+    function onUp(ev: MouseEvent) {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      onDragMove(project.startDate, project.endDate)
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.startX
+      const ddays = Math.round(dx * dpx)
+      const { mode, origStart, origEnd } = dragRef.current
+      dragRef.current = null; setGhost(null)
+      let ns = origStart, ne = origEnd
+      if (mode === 'move')       { ns = origStart ? addDays(origStart, ddays) : null; ne = origEnd ? addDays(origEnd, ddays) : null }
+      else if (mode === 'start') { ns = origStart ? addDays(origStart, ddays) : null; if (ns && ne && ns > ne) ns = ne }
+      else                       { ne = origEnd ? addDays(origEnd, ddays) : null; if (ns && ne && ne < ns) ne = ns }
+      onDragEnd(ns, ne)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  const g = ghost ?? { left, width }
+  return (
+    <>
+      {ghost && <div style={{ position: 'absolute', top: BAR_GAP, left: ghost.left + 2, width: ghost.width, height: BAR_H, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
+      <div
+        onMouseDown={e => startDrag(e, 'move')}
+        onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
+        style={{ position: 'absolute', top: BAR_GAP, left: g.left + 2, width: g.width, height: BAR_H,
+          background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
+          overflow: 'hidden', fontSize: 10.5, fontWeight: 600, color: '#fff',
+          cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
+          zIndex: ghost ? 1 : 'auto' }}>
+        <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
+          style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
+        </div>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4 }}>
+          {project.name}{project.group ? ` | ${project.group}` : ''}
+        </span>
+        <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'end') }}
+          style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Timeline bars row ────────────────────────────────────────────────────────
+function TimelineBars({ memberId, projects, cols, colW, onDragMove, onDragEnd, onBarClick }: {
+  memberId: string; projects: Project[]; cols: Col[]; colW: number
+  onDragMove: (p: Project, s: string | null, e: string | null) => void
+  onDragEnd:  (p: Project, s: string | null, e: string | null) => void
+  onBarClick: (p: Project) => void
+}) {
+  const gridStart   = cols[0].rangeStart
+  const gridStartMs = gridStart.getTime()
+  const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
+  const totalWidth  = cols.reduce((s, c) => s + c.widthPx, 0)
+  const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
+
+  const bars = projects
+    .filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
+    .map(p => {
+      const s = p.startDate ? new Date(p.startDate).getTime() : gridStartMs
+      const e = p.endDate   ? new Date(p.endDate).getTime() + 86400000 : gridEndMs
+      if (e < gridStartMs || s > gridEndMs) return null
+      const cs = Math.max(s, gridStartMs)
+      const ce = Math.min(e, gridEndMs)
+      const left  = (cs - gridStartMs) / msPerPx
+      const width = Math.max((ce - cs) / msPerPx - 2, 6)
+      return { p, left, width }
+    })
+    .filter(Boolean) as { p: Project; left: number; width: number }[]
+
+  if (bars.length === 0) return null
+  const height = bars.length * (BAR_H + BAR_GAP) + BAR_GAP + 6
+  return (
+    <div style={{ position: 'relative', height, overflow: 'visible' }}>
+      {cols.map((col, i) => (
+        <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border)', pointerEvents: 'none' }} />
+      ))}
+      {bars.map(({ p, left, width }, i) => (
+        <div key={p.id} style={{ position: 'absolute', top: i * (BAR_H + BAR_GAP), left: 0, right: 0, height: BAR_H + BAR_GAP }}>
+          <DraggableBar project={p} left={left} width={width} colW={colW}
+            onDragMove={(s, e) => onDragMove(p, s, e)}
+            onDragEnd={(s, e) => onDragEnd(p, s, e)}
+            onClick={() => onBarClick(p)} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Detail panel ─────────────────────────────────────────────────────────────
+function DetailPanel({ project, allGroups, onClose, onUpdate }: {
+  project: Project
+  allGroups: Record<string, BoardGroup[]>
+  onClose: () => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string }>) => void
+}) {
+  const color   = BOARD_COLORS[project.board] ?? '#888'
+  const team    = teamData.members
+  const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => `${project.board}__${i.id}` === project.id)
+
+  const [startDate, setStartDate] = useState(project.startDate ?? '')
+  const [endDate,   setEndDate]   = useState(project.endDate ?? '')
+  const [estHours,  setEstHours]  = useState(String(project.estHours ?? 0))
+  const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
+
+  useEffect(() => {
+    setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
+    setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
+  }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function save() { onUpdate(project, startDate || null, endDate || null, { estHours: parseFloat(estHours) || 0, notes }) }
+  const owners = team.filter(m => project.ownerIds.includes(m.id))
+
+  return (
+    <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 380, zIndex: 300,
+      background: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.35)' }}>
+      <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 4 }}>{project.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              in → <span style={{ color, fontWeight: 600 }}>{project.board}</span>{project.group ? <> · {project.group}</> : null}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+        <Row label="Owner">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {owners.length > 0 ? owners.map(m => (
+              <span key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: m.color, background: m.color + '18', borderRadius: 20, padding: '3px 10px', border: `1px solid ${m.color}44` }}>
+                <span style={{ width: 18, height: 18, borderRadius: '50%', background: m.color + '30', border: `1.5px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700 }}>{m.name.charAt(0)}</span>
+                {m.name}
+              </span>
+            )) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>}
+          </div>
+        </Row>
+        <Row label="Status"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{project.status === 'done' ? '✅ Done' : rawItem?.status as string || '—'}</span></Row>
+        <Row label="Timeline">
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={dateInput} />
+            <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={dateInput} />
+          </div>
+          {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
+        </Row>
+        {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
+        <Row label="Est Time">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="number" value={estHours} onChange={e => setEstHours(e.target.value)} style={{ ...dateInput, width: 64 }} />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
+          </div>
+        </Row>
+        <Row label="Notes">
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Notities…"
+            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+        </Row>
+      </div>
+      <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button onClick={onClose} style={cancelBtn}>Sluiten</button>
+        <button onClick={save} style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700 }}>Opslaan</button>
+      </div>
+    </div>
+  )
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, alignItems: 'start', marginBottom: 14 }}>
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, paddingTop: 3 }}>{label}</span>
+      <div>{children}</div>
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function PlanningPage() {
+  const { pushUndo }   = useUndo()
+  const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
+  const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
+  const [colOffset,    setColOffset]    = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const v = parseInt(localStorage.getItem('planning-colOffset') ?? '0')
+    return isNaN(v) ? 0 : v
+  })
+  const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
+  const [detailProject, setDetailProject] = useState<Project | null>(null)
+  const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
+  const [showHours, setShowHours] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    const v = localStorage.getItem('planning-showHours')
+    return v === null ? true : v === 'true'
+  })
+  const [viewSize, setViewSize] = useState<ViewSize>(() => {
+    if (typeof window === 'undefined') return 'compact'
+    const v = localStorage.getItem('planning-viewSize') as ViewSize
+    return (v === 'compact' || v === 'large') ? v : 'compact'
+  })
+  const [zoom, setZoom] = useState<ZoomLevel>(() => {
+    if (typeof window === 'undefined') return 'week'
+    const v = localStorage.getItem('planning-zoom') as ZoomLevel
+    return (v === 'dag' || v === 'week' || v === 'maand') ? v : 'week'
+  })
+  const gridRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const loaded: Record<string, BoardGroup[]> = {}
+    for (const [name, raw] of Object.entries(RAW)) {
+      loaded[name] = loadGroups(name, raw.groups as BoardGroup[])
+    }
+    setAllGroups(loaded)
+  }, [])
+
+  useEffect(() => { localStorage.setItem('planning-viewSize', viewSize) }, [viewSize])
+  useEffect(() => { localStorage.setItem('planning-zoom', zoom) }, [zoom])
+  useEffect(() => { localStorage.setItem('planning-showHours', String(showHours)) }, [showHours])
+  useEffect(() => { localStorage.setItem('planning-colOffset', String(colOffset)) }, [colOffset])
+
+  const projects = useMemo(
+    () => Object.entries(allGroups).flatMap(([n, g]) => groupsToProjects(n, g)),
+    [allGroups]
+  )
+
+  const effectiveProjects = useMemo(() => {
+    if (!shadowDrag) return projects
+    return projects.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
+  }, [projects, shadowDrag])
+
+  // Compute view constants
+  const { cs, or, hh, av } = vc(viewSize)
+  const colW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : (viewSize === 'large' ? 130 : 104)
+
+  // Compute from-date based on zoom and offset
+  const now   = new Date()
+  const baseFrom: Date = useMemo(() => {
+    if (zoom === 'dag') {
+      const d = new Date(now); d.setDate(d.getDate() - 7 + colOffset); d.setHours(0,0,0,0); return d
+    }
+    if (zoom === 'maand') {
+      const d = new Date(now.getFullYear(), now.getMonth() - 2 + colOffset, 1); return d
+    }
+    // week
+    const ws = getWeekStart(now)
+    const d  = new Date(ws); d.setDate(d.getDate() - 4 * 7 + colOffset * 7); return d
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, colOffset])
+
+  const cols = useMemo(() => buildCols(zoom, baseFrom, colW), [zoom, baseFrom, colW])
+
+  // Capacity in the right unit per zoom
+  function colCapacity(weeklyCapacity: number): number {
+    if (zoom === 'dag')   return Math.round((weeklyCapacity / 5) * 10) / 10
+    if (zoom === 'maand') return Math.round((weeklyCapacity * 4.33) * 10) / 10
+    return weeklyCapacity
+  }
+
+  function toggleExpand(id: string) {
+    setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function updateCapacity(memberId: string, capacity: number) {
+    setTeam(prev => prev.map(m => m.id === memberId ? { ...m, weeklyCapacity: capacity } : m))
+  }
+  function handleDragMove(project: Project, s: string | null, e: string | null) {
+    setShadowDrag({ projectId: project.id, start: s, end: e })
+  }
+  function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
+    setShadowDrag(null)
+    const boardName  = project.board
+    const origItemId = project.id.slice(boardName.length + 2)
+    const prevStart  = project.startDate
+    const prevEnd    = project.endDate
+    const apply = (s: string | null, e: string | null) => {
+      const groups = (allGroups[boardName] ?? []).map(g => ({
+        ...g, items: g.items.map(i => i.id === origItemId ? { ...i, startDate: s, endDate: e } : i),
+      }))
+      saveGroups(boardName, groups)
+      setAllGroups(prev => ({ ...prev, [boardName]: groups }))
+    }
+    apply(newStart, newEnd)
+    if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
+    pushUndo(() => apply(prevStart, prevEnd))
+  }
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string }>) {
+    const boardName  = project.board
+    const origItemId = project.id.slice(boardName.length + 2)
+    const groups = (allGroups[boardName] ?? []).map(g => ({
+      ...g, items: g.items.map(i => i.id === origItemId ? { ...i, startDate: newStart, endDate: newEnd, ...(extra ?? {}) } : i),
+    }))
+    saveGroups(boardName, groups)
+    setAllGroups(prev => ({ ...prev, [boardName]: groups }))
+    setDetailProject(null)
+  }
+
+  const totalWidth  = NAME_W + NAME_PAD + cols.reduce((s, c) => s + c.widthPx, 0)
+  const monthGroups = zoom !== 'maand' ? getMonthGroupsFromCols(cols) : null
+  const stickyBg    = 'var(--bg-base)'
+
+  // Navigation step
+  function stepBack()    { setColOffset(o => o - 1) }
+  function stepForward() { setColOffset(o => o + 1) }
+  function jumpBack()    { setColOffset(o => o - ZOOM_COUNT[zoom]) }
+  function jumpForward() { setColOffset(o => o + ZOOM_COUNT[zoom]) }
+  function goToday()     { setColOffset(0) }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+
+      {/* ── Fixed header (never scrolls) ── */}
+      <div style={{ flexShrink: 0, padding: '24px 32px 0' }}>
+        {/* Title row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>📅 Planning</h1>
+
+            {/* Uren toggle */}
+            <button onClick={() => setShowHours(h => !h)} title="Uren tonen/verbergen"
+              style={{ ...navBtn, background: showHours ? 'var(--accent)' : 'var(--bg-card)', color: showHours ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: 12, marginLeft: 6 }}>
+              Uren
+            </button>
+
+            {/* View size toggle */}
+            <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden', marginLeft: 4 }}>
+              {(['compact', 'large'] as ViewSize[]).map(v => (
+                <button key={v} onClick={() => setViewSize(v)}
+                  style={{ padding: '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
+                    background: viewSize === v ? 'var(--accent)' : 'transparent',
+                    color: viewSize === v ? '#fff' : 'var(--text-secondary)' }}>
+                  {v === 'compact' ? 'Compact' : 'Groot'}
+                </button>
+              ))}
+            </div>
+
+            {/* Zoom level */}
+            <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
+              {(['dag', 'week', 'maand'] as ZoomLevel[]).map(z => (
+                <button key={z} onClick={() => { setZoom(z); setColOffset(0) }}
+                  style={{ padding: '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
+                    background: zoom === z ? 'var(--text-primary)' : 'transparent',
+                    color: zoom === z ? 'var(--bg-base)' : 'var(--text-secondary)',
+                    textTransform: 'capitalize' }}>
+                  {z.charAt(0).toUpperCase() + z.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={jumpBack}    style={navBtn}>‹‹</button>
+            <button onClick={stepBack}    style={navBtn}>‹</button>
+            <button onClick={goToday}     style={{ ...navBtn, color: 'var(--accent)', fontWeight: 700 }}>Vandaag</button>
+            <button onClick={stepForward} style={navBtn}>›</button>
+            <button onClick={jumpForward} style={navBtn}>››</button>
+          </div>
+        </div>
+
+        {/* Board legend */}
+        <div style={{ display: 'flex', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
+          {Object.entries(BOARD_COLORS).map(([b, c]) => (
+            <span key={b} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block', flexShrink: 0 }} />
+              {b}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Grid — only this scrolls (both axes) ── */}
+      <div ref={gridRef} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+        <div style={{ minWidth: totalWidth }}>
+
+          {/* Month grouping row (only for week/day zoom) */}
+          {monthGroups && (
+            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
+              <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, background: stickyBg }} />
+              {monthGroups.map(({ label, widthPx }) => (
+                <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '5px 10px', fontSize: 11, fontWeight: 700,
+                  color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                  borderLeft: '1px solid var(--border)', background: stickyBg }}>
+                  {label}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Column header row */}
+          <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 26 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border)' }}>
+            <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg }} />
+            {cols.map(col => (
+              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '6px 2px', textAlign: 'center',
+                borderLeft: '1px solid var(--border)',
+                background: col.isCurrent ? 'rgba(108,99,255,0.1)' : stickyBg }}>
+                <div style={{ fontSize: zoom === 'dag' ? 9 : 11, fontWeight: 700, color: col.isCurrent ? 'var(--accent)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.label1}</div>
+                {zoom !== 'dag' && <div style={{ fontSize: 9.5, color: 'var(--text-muted)', marginTop: 1 }}>{col.label2}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* Member rows */}
+          {team.map((member, mIdx) => {
+            const isExp = expanded.has(member.id)
+            const cap   = colCapacity(member.weeklyCapacity)
+            const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
+
+            return (
+              <div key={member.id} style={{ borderBottom: '1px solid var(--border)', background: mIdx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.012)' }}>
+                {/* Capacity row */}
+                <div style={{ display: 'flex' }}>
+                  {/* Sticky name cell */}
+                  <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+                    background: mIdx % 2 === 0 ? stickyBg : stickyBg,
+                    display: 'flex', alignItems: 'center',
+                    padding: `0 12px 0 ${NAME_PAD}px`, height: hh, borderRight: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, width: '100%' }}>
+                      <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
+                      <MemberAvatar member={member} size={av} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
+                        <CapacityEditor member={member} onUpdate={updateCapacity} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Week/day/month cells */}
+                  {cols.map(col => {
+                    const contribs = memberHoursInCol(effectiveProjects, member.id, col)
+                    const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+                    return (
+                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border)', padding: 2,
+                        background: col.isCurrent ? 'rgba(108,99,255,0.04)' : 'transparent', position: 'relative' }}>
+                        <WorkloadCell contribs={contribs} total={total} capacity={cap} showHours={showHours} cs={cs} or={or} zoom={zoom} />
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Timeline bars (expanded) */}
+                {isExp && memberProjects.length > 0 && (
+                  <div style={{ display: 'flex' }}>
+                    <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
+                      <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW}
+                        onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)} />
+                    </div>
+                  </div>
+                )}
+                {isExp && memberProjects.length === 0 && (
+                  <div style={{ display: 'flex' }}>
+                    <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+        </div>
+
+        {/* Footer info */}
+        <div style={{ padding: '10px 32px', fontSize: 11.5, color: 'var(--text-muted)' }}>
+          {projects.length} items uit {Object.keys(BOARD_COLORS).length} borden ·
+          klik ▼ voor tijdlijn · sleep bar om datums aan te passen · klik bar voor details
+        </div>
+      </div>
+
+      {detailProject && (
+        <DetailPanel project={detailProject} allGroups={allGroups}
+          onClose={() => setDetailProject(null)} onUpdate={handleDetailUpdate} />
+      )}
+    </div>
+  )
+}
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
+const navBtn: React.CSSProperties = {
+  background: 'var(--bg-card)', border: '1px solid var(--border)',
+  borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer',
+  padding: '5px 10px', fontSize: 13,
+}
+const dateInput: React.CSSProperties = {
+  background: 'var(--bg-hover)', border: '1px solid var(--border)',
+  borderRadius: 5, padding: '5px 8px', color: 'var(--text-primary)',
+  fontSize: 12, outline: 'none', boxSizing: 'border-box',
+}
+const cancelBtn: React.CSSProperties = {
+  padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)',
+  background: 'var(--bg-hover)', color: 'var(--text-secondary)',
+  cursor: 'pointer', fontSize: 13,
+}
