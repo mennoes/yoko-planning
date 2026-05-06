@@ -26,8 +26,8 @@ const RAW: Record<string, { groups: unknown[] }> = {
 
 type TodoItem = { id: string; text: string; done: boolean }
 
-type SectionId = 'taken' | 'werkdruk' | 'agenda' | 'documenten' | 'lopend' | 'algemeen'
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'agenda', 'documenten', 'lopend', 'algemeen']
+type SectionId = 'taken' | 'werkdruk' | 'documenten' | 'lopend' | 'algemeen'
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'documenten', 'lopend', 'algemeen']
 
 const NL_MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
@@ -78,7 +78,6 @@ export default function HomePage() {
   const [weekItems,    setWeekItems]    = useState<{ name: string; board: string; hours: number }[]>([])
   const [lopendItems,  setLopendItems]  = useState<{ name: string; board: string; endDate: string | null }[]>([])
   const [algemeenTodos, setAlgemeenTodos] = useState<TodoItem[]>([])
-  const [boardStats,   setBoardStats]   = useState<{ board: string; total: number; done: number; working: number; stuck: number; notStarted: number }[]>([])
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
@@ -115,21 +114,6 @@ export default function HomePage() {
     }
     const cap = teamData.members.find(m => m.id === memberId)?.weeklyCapacity ?? 40
     setWeekCapacity(cap)
-
-    // Board stats per board
-    const stats = Object.entries(RAW).map(([name, raw]) => {
-      const groups = loadGroups(name, raw.groups as BoardGroup[])
-      const items  = groups.flatMap(g => g.items)
-      return {
-        board:      name,
-        total:      items.length,
-        done:       items.filter(i => i.status === 'Done').length,
-        working:    items.filter(i => i.status === 'Working on...').length,
-        stuck:      items.filter(i => i.status === 'Stuck').length,
-        notStarted: items.filter(i => i.status === 'Not started').length,
-      }
-    })
-    setBoardStats(stats)
 
     // Lopend: active projects spanning today
     const today = new Date(); today.setHours(0,0,0,0)
@@ -247,64 +231,6 @@ export default function HomePage() {
           ) : (
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Stel je profiel in om werkdruk te zien.</p>
           )}
-        </div>
-      </div>
-    ),
-    agenda: (
-      <div style={card}>
-        <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📊 Agenda overzicht</h2>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? 14 : 13 }}>
-            <thead>
-              <tr style={{ background: 'var(--overlay-faint)' }}>
-                {['Board','Totaal','Done','Bezig','Stuck','Voortgang'].map((h, i) => (
-                  <th key={h} style={{
-                    padding: i === 0 || i === 5 ? '8px 20px' : '8px 14px',
-                    textAlign: i === 0 || i === 5 ? 'left' : 'center',
-                    fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em',
-                    borderBottom: '1px solid var(--border)',
-                    color: i === 2 ? '#00c875' : i === 3 ? '#ff7b24' : i === 4 ? 'var(--red)' : 'var(--text-secondary)',
-                    minWidth: i === 5 ? 160 : undefined,
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {boardStats.map(s => {
-                const sPct = s.total > 0 ? Math.round(s.done / s.total * 100) : 0
-                return (
-                  <tr key={s.board} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                    <td style={{ padding: '10px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: 3, background: BOARD_COLORS[s.board] ?? 'var(--accent)', flexShrink: 0, display: 'inline-block' }} />
-                        <a href={`/projects/${s.board}`} style={{ color: 'var(--text-primary)', fontWeight: 600, textDecoration: 'none' }}
-                          onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-primary)')}>
-                          {s.board}
-                        </a>
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 600 }}>{s.total}</td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#00c875', fontWeight: 600 }}>{s.done}</td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#ff7b24', fontWeight: 600 }}>{s.working}</td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--red)', fontWeight: 600 }}>{s.stuck}</td>
-                    <td style={{ padding: '10px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--overlay-medium)', overflow: 'hidden', display: 'flex' }}>
-                          <div style={{ width: `${s.done / s.total * 100}%`, background: '#00c875' }} />
-                          <div style={{ width: `${s.working / s.total * 100}%`, background: '#ff7b24' }} />
-                          <div style={{ width: `${s.stuck / s.total * 100}%`, background: 'var(--red)' }} />
-                        </div>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, flexShrink: 0, minWidth: 28 }}>{sPct}%</span>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
         </div>
       </div>
     ),
@@ -440,7 +366,6 @@ export default function HomePage() {
             {sections.taken}
             {sections.werkdruk}
           </div>
-          <div style={{ marginBottom: 18 }}>{sections.agenda}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start' }}>
             {sections.documenten}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
