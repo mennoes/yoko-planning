@@ -5,6 +5,7 @@ import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile } from '@/components/ProfileContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
+import { useIsMobile } from '@/lib/useIsMobile'
 import initialData from '@/data/todos.json'
 import teamData    from '@/data/team.json'
 
@@ -54,18 +55,45 @@ function MemberAvatar({ memberId, size = 28 }: { memberId: string; size?: number
   )
 }
 
+// ─── Reorder arrow button style ───────────────────────────────────────────────
+function reorderArrowBtn(disabled: boolean): React.CSSProperties {
+  return {
+    background: 'var(--bg-hover)', border: '1px solid var(--border)',
+    color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: 12, fontWeight: 700, lineHeight: 1,
+    padding: '4px 9px', borderRadius: 5, flexShrink: 0,
+    opacity: disabled ? 0.4 : 1,
+    minHeight: 28, minWidth: 28,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  }
+}
+
 // ─── Todo card ─────────────────────────────────────────────────────────────────
 function TodoCard({
   section, isMember, onUpdate,
+  editOrder, isFirstCard, isLastCard, onMoveCard,
 }: {
   section: Section
   isMember: boolean
   onUpdate: (s: Section, prev?: Section) => void
+  editOrder: boolean
+  isFirstCard: boolean
+  isLastCard: boolean
+  onMoveCard: (dir: -1 | 1) => void
 }) {
   const [newText, setNewText] = useState('')
   const [editId,  setEditId]  = useState<string | null>(null)
   const [editTxt, setEditTxt] = useState('')
   const member = teamData.members.find(m => m.id === section.id)
+
+  function moveItem(idx: number, dir: -1 | 1) {
+    const next = idx + dir
+    if (next < 0 || next >= section.items.length) return
+    const items = [...section.items]
+    items[idx] = items[next]; items[next] = section.items[idx]
+    onUpdate({ ...section, items })
+  }
 
   function toggle(id: string) {
     const prev = { ...section, items: [...section.items] }
@@ -103,24 +131,39 @@ function TodoCard({
         <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1 }}>
           {section.title}
         </h2>
-        {open.length > 0 && (
+        {editOrder ? (
+          <>
+            <button onClick={() => onMoveCard(-1)} disabled={isFirstCard} title="Omhoog"
+              style={reorderArrowBtn(isFirstCard)}>↑</button>
+            <button onClick={() => onMoveCard(1)} disabled={isLastCard} title="Omlaag"
+              style={reorderArrowBtn(isLastCard)}>↓</button>
+          </>
+        ) : open.length > 0 && (
           <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', borderRadius: 10, padding: '1px 7px' }}>{open.length}</span>
         )}
       </div>
 
       {/* Open items */}
       <ul style={{ listStyle: 'none', padding: '6px 0 0', margin: 0 }}>
-        {open.map(item => (
-          <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
-            editing={editId === item.id} editTxt={editTxt}
-            onToggle={() => toggle(item.id)}
-            onRemove={() => remove(item.id)}
-            onEditStart={() => { setEditId(item.id); setEditTxt(item.text) }}
-            onEditChange={setEditTxt}
-            onEditSave={() => saveEdit(item.id)}
-            onEditCancel={() => setEditId(null)}
-          />
-        ))}
+        {open.map((item, openIdx) => {
+          const itemIdx = section.items.findIndex(i => i.id === item.id)
+          return (
+            <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
+              editing={editId === item.id} editTxt={editTxt}
+              editOrder={editOrder}
+              isFirstItem={openIdx === 0}
+              isLastItem={openIdx === open.length - 1}
+              onMoveUp={() => moveItem(itemIdx, -1)}
+              onMoveDown={() => moveItem(itemIdx, 1)}
+              onToggle={() => toggle(item.id)}
+              onRemove={() => remove(item.id)}
+              onEditStart={() => { setEditId(item.id); setEditTxt(item.text) }}
+              onEditChange={setEditTxt}
+              onEditSave={() => saveEdit(item.id)}
+              onEditCancel={() => setEditId(null)}
+            />
+          )
+        })}
       </ul>
 
       {/* Done items (collapsed) */}
@@ -133,6 +176,8 @@ function TodoCard({
             {done.map(item => (
               <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
                 editing={false} editTxt=""
+                editOrder={false} isFirstItem={true} isLastItem={true}
+                onMoveUp={() => {}} onMoveDown={() => {}}
                 onToggle={() => toggle(item.id)} onRemove={() => remove(item.id)}
                 onEditStart={() => {}} onEditChange={() => {}} onEditSave={() => {}} onEditCancel={() => {}}
               />
@@ -157,9 +202,13 @@ function TodoCard({
   )
 }
 
-function TodoRow({ item, isMember, memberId, editing, editTxt, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel }: {
+function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirstItem, isLastItem, onMoveUp, onMoveDown, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel }: {
   item: TodoItem; isMember: boolean; memberId: string
   editing: boolean; editTxt: string
+  editOrder: boolean
+  isFirstItem: boolean
+  isLastItem: boolean
+  onMoveUp: () => void; onMoveDown: () => void
   onToggle: () => void; onRemove: () => void
   onEditStart: () => void; onEditChange: (v: string) => void; onEditSave: () => void; onEditCancel: () => void
 }) {
@@ -180,12 +229,19 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, onToggle, onRemov
             onKeyDown={e => { if (e.key === 'Enter') onEditSave(); if (e.key === 'Escape') onEditCancel() }}
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 13.5, outline: 'none' }} />
         ) : (
-          <span onDoubleClick={onEditStart} style={{ fontSize: 13.5, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: 'text', display: 'block', lineHeight: 1.4 }}>
+          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 13.5, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', display: 'block', lineHeight: 1.4 }}>
             {item.text}
           </span>
         )}
       </div>
-      <button className="del-btn" onClick={onRemove} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px', opacity: 0, flexShrink: 0 }}>×</button>
+      {editOrder ? (
+        <>
+          <button onClick={onMoveUp} disabled={isFirstItem} title="Omhoog" style={reorderArrowBtn(isFirstItem)}>↑</button>
+          <button onClick={onMoveDown} disabled={isLastItem} title="Omlaag" style={reorderArrowBtn(isLastItem)}>↓</button>
+        </>
+      ) : (
+        <button className="del-btn" onClick={onRemove} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px', opacity: 0, flexShrink: 0 }}>×</button>
+      )}
     </li>
   )
 }
@@ -193,8 +249,10 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, onToggle, onRemov
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function TodosPage() {
   const { pushUndo } = useUndo()
+  const isMobile     = useIsMobile()
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
+  const [editOrder, setEditOrder] = useState(false)
 
   useEffect(() => {
     setSections(loadSections())
@@ -214,21 +272,54 @@ export default function TodosPage() {
     }
   }
 
+  function moveCard(sectionId: string, dir: -1 | 1) {
+    const idx = sections.findIndex(s => s.id === sectionId)
+    if (idx < 0) return
+    const target = sections[idx]
+    const isMember = MEMBER_IDS.has(target.id)
+    // Find neighbour within the same group (general vs personal)
+    const groupIndices = sections
+      .map((s, i) => ({ i, member: MEMBER_IDS.has(s.id) }))
+      .filter(x => x.member === isMember)
+      .map(x => x.i)
+    const posInGroup = groupIndices.indexOf(idx)
+    const nextPos    = posInGroup + dir
+    if (nextPos < 0 || nextPos >= groupIndices.length) return
+    const swapWith = groupIndices[nextPos]
+    const next = [...sections]
+    next[idx] = sections[swapWith]; next[swapWith] = target
+    setSections(next)
+    saveSections(next)
+  }
+
   const general  = sections.filter(s => !MEMBER_IDS.has(s.id))
   const personal = sections.filter(s =>  MEMBER_IDS.has(s.id))
 
   if (!hydrated) return null
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '44px 36px 80px' }}>
-      <h1 style={{ fontSize: 32, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 32px', letterSpacing: '-0.04em' }}>
-        ✅ To do&apos;s
-      </h1>
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '44px 36px 80px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 20 : 32 }}>
+        <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', flex: 1 }}>
+          ✅ To do&apos;s
+        </h1>
+        <button onClick={() => setEditOrder(o => !o)}
+          style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
+            background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
+            color: editOrder ? '#fff' : 'var(--text-secondary)',
+            fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+          {editOrder ? 'Klaar' : 'Volgorde'}
+        </button>
+      </div>
 
       {/* General */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start', marginBottom: 28 }}>
-        {general.map(s => (
-          <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection} />
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start', marginBottom: 28 }}>
+        {general.map((s, i) => (
+          <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
+            editOrder={editOrder}
+            isFirstCard={i === 0}
+            isLastCard={i === general.length - 1}
+            onMoveCard={dir => moveCard(s.id, dir)} />
         ))}
       </div>
 
@@ -242,9 +333,13 @@ export default function TodosPage() {
       )}
 
       {/* Personal */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start' }}>
-        {personal.map(s => (
-          <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection} />
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start' }}>
+        {personal.map((s, i) => (
+          <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
+            editOrder={editOrder}
+            isFirstCard={i === 0}
+            isLastCard={i === personal.length - 1}
+            onMoveCard={dir => moveCard(s.id, dir)} />
         ))}
       </div>
     </div>
