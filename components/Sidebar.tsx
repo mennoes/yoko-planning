@@ -262,6 +262,91 @@ function SectionBlock({
   )
 }
 
+// ─── Settings popup ───────────────────────────────────────────────────────────
+function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }: {
+  onClose: () => void
+  profile: ReturnType<typeof useProfile>['profile']
+  openEdit: () => void
+  theme: Theme
+  setTheme: (t: Theme) => void
+  signOut: () => void
+}) {
+  return (
+    <>
+      <div onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.4)' }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 251, background: 'var(--bg-card)',
+        border: '1px solid var(--border)', borderRadius: 14,
+        padding: '16px 20px 18px', width: 360, maxWidth: '92vw',
+        maxHeight: '85vh', overflowY: 'auto',
+        boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Instellingen</h3>
+          <button onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, lineHeight: 1, color: 'var(--text-muted)', padding: '0 4px' }}>×</button>
+        </div>
+
+        {/* Profile */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Profiel</div>
+          <button onClick={openEdit}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', textAlign: 'left' }}>
+            {profile?.photo ? (
+              <img src={profile.photo} alt="" style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+            ) : profile ? (
+              <span style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: profile.color }}>
+                {profile.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+              </span>
+            ) : (
+              <span style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: 'var(--text-muted)' }}>?</span>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {profile?.name ?? 'Profiel instellen'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Tik om te bewerken</div>
+            </div>
+          </button>
+        </div>
+
+        {/* Theme */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Thema</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {THEMES.map(t => (
+              <button key={t.value} onClick={() => setTheme(t.value)}
+                style={{ padding: '10px 6px', borderRadius: 8,
+                  border: `1px solid ${theme === t.value ? 'var(--accent)' : 'var(--border)'}`,
+                  background: theme === t.value ? 'var(--accent-light)' : 'var(--bg-hover)',
+                  color: theme === t.value ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 18 }}>{t.icon}</span>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Sign out */}
+        {hasSupabase && (
+          <button onClick={() => { onClose(); signOut() }}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+              border: '1px solid var(--border)', background: 'var(--bg-hover)',
+              color: 'var(--red)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+            <span>↪</span> Uitloggen
+          </button>
+        )}
+      </div>
+    </>
+  )
+}
+
 // ─── Reorder arrow button style ───────────────────────────────────────────────
 function reorderArrowBtn(disabled: boolean): React.CSSProperties {
   return {
@@ -301,6 +386,7 @@ export default function Sidebar({
   const [addingFolder,  setAddingFolder]  = useState(false)
   const [folderName,    setFolderName]    = useState('')
   const [editOrder,     setEditOrder]     = useState(false)
+  const [settingsOpen,  setSettingsOpen]  = useState(false)
   const resizingRef   = useRef(false)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -407,7 +493,7 @@ export default function Sidebar({
 
   const containerStyle: React.CSSProperties = isMobile
     ? {
-        width: 280, minWidth: 280, maxWidth: 280,
+        width: 320, minWidth: 320, maxWidth: 320,
         position: 'fixed', top: 0, left: 0, height: '100vh',
         transform: open ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.22s ease',
@@ -430,10 +516,23 @@ export default function Sidebar({
         }}
       >
 
+        {/* Mobile close button (top-right inside drawer) */}
+        {isMobile && onClose && (
+          <button onClick={onClose} aria-label="Menu sluiten"
+            style={{ position: 'absolute', top: 12, right: 12, zIndex: 5,
+              width: 36, height: 36, borderRadius: 8,
+              background: 'var(--bg-hover)', border: '1px solid var(--border)',
+              color: 'var(--text-primary)', fontSize: 20, lineHeight: 1,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 0 }}>
+            ✕
+          </button>
+        )}
+
         {/* Logo — bigger, clickable to home */}
         <Link href="/"
           onClick={e => { if (editOrder) e.preventDefault() }}
-          style={{ padding: '20px 18px 16px', borderBottom: '1px solid var(--border)', textDecoration: 'none', display: 'block' }}
+          style={{ padding: isMobile ? '20px 60px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', textDecoration: 'none', display: 'block' }}
           onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
           onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
           <svg width="100" height="18" viewBox="0 0 323 57" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', color: 'var(--text-primary)' }}>
@@ -552,40 +651,28 @@ export default function Sidebar({
           </div>
         </nav>
 
-        {/* Footer */}
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={openEdit} title="Profiel bewerken" style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 6, padding: '3px 4px', textAlign: 'left', minWidth: 0 }}
+        {/* Footer — single settings button */}
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)' }}>
+          <button onClick={() => setSettingsOpen(true)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '8px 10px', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            {profile?.photo ? (
-              <img src={profile.photo} alt="" style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
-            ) : profile ? (
-              <span style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: profile.color }}>
-                {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
-              </span>
-            ) : (
-              <span style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-muted)' }}>?</span>
-            )}
-            <span style={{ fontSize: 12, color: profile ? 'var(--text-secondary)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {profile?.name ?? 'Profiel instellen'}
-            </span>
+            <span style={{ fontSize: 18 }}>⚙</span>
+            <span style={{ fontSize: 13.5, color: 'var(--text-secondary)', fontWeight: 500 }}>Instellingen</span>
           </button>
-
-          <button onClick={cycleTheme} title={`Thema: ${themeInfo.label}`} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 7px', borderRadius: 5, flexShrink: 0, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-            <span style={{ fontSize: 13 }}>{themeInfo.icon}</span>
-          </button>
-
-          {hasSupabase && (
-            <button onClick={signOut} title="Uitloggen" style={{ display: 'flex', alignItems: 'center', padding: '4px 7px', borderRadius: 5, flexShrink: 0, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-              ↪
-            </button>
-          )}
         </div>
       </aside>
+
+      {settingsOpen && (
+        <SettingsPopup
+          onClose={() => setSettingsOpen(false)}
+          profile={profile}
+          openEdit={() => { setSettingsOpen(false); openEdit() }}
+          theme={theme}
+          setTheme={(t) => { setTheme(t); applyTheme(t); localStorage.setItem('theme', t) }}
+          signOut={signOut}
+        />
+      )}
 
       {/* Resize handle (desktop only) */}
       {!isMobile && (
