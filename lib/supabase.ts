@@ -4,7 +4,9 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? ''
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 export const hasSupabase = !!(url && key)
-export const supabase    = hasSupabase ? createClient(url, key) : null
+export const supabase    = hasSupabase
+  ? createClient(url, key, { auth: { flowType: 'implicit' } })
+  : null
 
 export type DbProfile = {
   id:              string
