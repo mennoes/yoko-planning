@@ -532,6 +532,7 @@ export default function PlanningPage() {
   const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
   const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
+  const [editOrder,    setEditOrder]    = useState(false)
   const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -553,7 +554,29 @@ export default function PlanningPage() {
       loaded[name] = loadGroups(name, raw.groups as BoardGroup[])
     }
     setAllGroups(loaded)
+
+    // Restore team order from localStorage
+    try {
+      const saved = localStorage.getItem('planning-team-order')
+      if (saved) {
+        const order = JSON.parse(saved) as string[]
+        const byId  = new Map(teamData.members.map(m => [m.id, m]))
+        const ordered: TeamMember[] = []
+        for (const id of order) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
+        for (const m of byId.values()) ordered.push(m)
+        if (ordered.length === teamData.members.length) setTeam(ordered)
+      }
+    } catch {}
   }, [])
+
+  function moveTeamMember(idx: number, dir: -1 | 1) {
+    const next = idx + dir
+    if (next < 0 || next >= team.length) return
+    const updated = [...team]
+    updated[idx] = updated[next]; updated[next] = team[idx]
+    setTeam(updated)
+    localStorage.setItem('planning-team-order', JSON.stringify(updated.map(m => m.id)))
+  }
 
   useEffect(() => { localStorage.setItem('planning-viewSize', viewSize) }, [viewSize])
   useEffect(() => { localStorage.setItem('planning-zoom', zoom) }, [zoom])
@@ -695,6 +718,15 @@ export default function PlanningPage() {
               Agenda&apos;s
             </button>
 
+            {/* Team reorder toggle */}
+            <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden"
+              style={{ ...navBtn,
+                background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
+                color: editOrder ? '#fff' : 'var(--text-secondary)',
+                padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
+              {editOrder ? '✓ Klaar' : '↕'}
+            </button>
+
             {/* View size toggle (desktop only) */}
             {!isMobile && (
               <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
@@ -810,12 +842,32 @@ export default function PlanningPage() {
                     display: 'flex', alignItems: 'center',
                     padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, width: '100%' }}>
-                      <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
+                      {!editOrder && (
+                        <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
+                      )}
                       <MemberAvatar member={member} size={av} />
-                      <div style={{ minWidth: 0 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
                       </div>
+                      {editOrder && (
+                        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                          <button onClick={() => moveTeamMember(mIdx, -1)} disabled={mIdx === 0}
+                            title="Omhoog"
+                            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                              color: mIdx === 0 ? 'var(--text-muted)' : 'var(--text-primary)',
+                              cursor: mIdx === 0 ? 'not-allowed' : 'pointer',
+                              fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                              opacity: mIdx === 0 ? 0.4 : 1, minHeight: 24, minWidth: 24 }}>↑</button>
+                          <button onClick={() => moveTeamMember(mIdx, 1)} disabled={mIdx === team.length - 1}
+                            title="Omlaag"
+                            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                              color: mIdx === team.length - 1 ? 'var(--text-muted)' : 'var(--text-primary)',
+                              cursor: mIdx === team.length - 1 ? 'not-allowed' : 'pointer',
+                              fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                              opacity: mIdx === team.length - 1 ? 0.4 : 1, minHeight: 24, minWidth: 24 }}>↓</button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
