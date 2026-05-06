@@ -43,8 +43,8 @@ function Inner({ children }: { children: ReactNode }) {
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 55 }} />
       )}
 
-      {isMobile && (
-        <button onClick={() => setDrawerOpen(o => !o)} aria-label="Menu"
+      {isMobile && !drawerOpen && (
+        <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
           style={{
             position: 'fixed', top: 12, left: 12, zIndex: 70,
             width: 40, height: 40, borderRadius: 8,
@@ -53,7 +53,7 @@ function Inner({ children }: { children: ReactNode }) {
             cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             color: 'var(--text-primary)', fontSize: 18, padding: 0,
           }}>
-          {drawerOpen ? '✕' : '☰'}
+          ☰
         </button>
       )}
 

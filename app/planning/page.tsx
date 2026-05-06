@@ -522,17 +522,16 @@ export default function PlanningPage() {
   const { pushUndo }   = useUndo()
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
-  const [colOffset,    setColOffset]    = useState<number>(() => {
-    if (typeof window === 'undefined') return 0
-    const v = parseInt(localStorage.getItem('planning-colOffset') ?? '0')
-    return isNaN(v) ? 0 : v
-  })
+  // Always start at this week (don't persist colOffset between sessions)
+  const [colOffset,    setColOffset]    = useState<number>(0)
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
   const [detailProject, setDetailProject] = useState<Project | null>(null)
   const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
   const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
+  const [peopleOpen,   setPeopleOpen]   = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
+  const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
   const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -580,7 +579,6 @@ export default function PlanningPage() {
 
   useEffect(() => { localStorage.setItem('planning-viewSize', viewSize) }, [viewSize])
   useEffect(() => { localStorage.setItem('planning-zoom', zoom) }, [zoom])
-  useEffect(() => { localStorage.setItem('planning-colOffset', String(colOffset)) }, [colOffset])
 
   // ─── Drag-to-scroll ───────────────────────────────────────────────────────────
   function onGridMouseDown(e: React.MouseEvent<HTMLDivElement>) {
@@ -622,18 +620,20 @@ export default function PlanningPage() {
   const { cs, or, hh, av } = vc(viewSize)
   const colW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : (viewSize === 'large' ? 130 : 104)
 
-  // Compute from-date based on zoom and offset
+  // Compute from-date based on zoom and offset.
+  // Default (offset 0): today / this week / this month at the LEFT edge.
+  // User can scroll back via colOffset (negative) or forward (positive).
   const now   = new Date()
   const baseFrom: Date = useMemo(() => {
     if (zoom === 'dag') {
-      const d = new Date(now); d.setDate(d.getDate() - 7 + colOffset); d.setHours(0,0,0,0); return d
+      const d = new Date(now); d.setDate(d.getDate() + colOffset); d.setHours(0,0,0,0); return d
     }
     if (zoom === 'maand') {
-      const d = new Date(now.getFullYear(), now.getMonth() - 2 + colOffset, 1); return d
+      const d = new Date(now.getFullYear(), now.getMonth() + colOffset, 1); return d
     }
     // week
     const ws = getWeekStart(now)
-    const d  = new Date(ws); d.setDate(d.getDate() - 4 * 7 + colOffset * 7); return d
+    const d  = new Date(ws); d.setDate(d.getDate() + colOffset * 7); return d
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, colOffset])
 
@@ -718,6 +718,15 @@ export default function PlanningPage() {
               Agenda&apos;s
             </button>
 
+            {/* Mensen filter popup trigger */}
+            <button onClick={() => setPeopleOpen(true)} title="Filter op mensen"
+              style={{ ...navBtn,
+                background: filterMembers.size > 0 ? 'var(--accent-light)' : 'var(--bg-card)',
+                color: filterMembers.size > 0 ? 'var(--accent)' : 'var(--text-secondary)',
+                padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
+              Mensen{filterMembers.size > 0 ? ` (${filterMembers.size})` : ''}
+            </button>
+
             {/* Team reorder toggle */}
             <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden"
               style={{ ...navBtn,
@@ -794,6 +803,45 @@ export default function PlanningPage() {
         </Popup>
       )}
 
+      {/* ── Mensen filter popup ── */}
+      {peopleOpen && (
+        <Popup title="Filter op mensen" onClose={() => setPeopleOpen(false)}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {filterMembers.size === 0 ? 'Iedereen zichtbaar' : `${filterMembers.size} geselecteerd`}
+            </span>
+            {filterMembers.size > 0 && (
+              <button onClick={() => setFilterMembers(new Set())}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>
+                Reset
+              </button>
+            )}
+          </div>
+          {team.map(m => {
+            const checked = filterMembers.size === 0 || filterMembers.has(m.id)
+            return (
+              <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={checked}
+                  onChange={() => {
+                    setFilterMembers(prev => {
+                      const next = new Set(prev)
+                      // first interaction with empty set = start picking
+                      if (next.size === 0) { team.forEach(t => next.add(t.id)) }
+                      if (next.has(m.id)) next.delete(m.id); else next.add(m.id)
+                      // if all selected, treat as "no filter"
+                      if (next.size === team.length) return new Set()
+                      return next
+                    })
+                  }}
+                  style={{ width: 18, height: 18, accentColor: m.color, cursor: 'pointer', flexShrink: 0 }} />
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
+              </label>
+            )
+          })}
+        </Popup>
+      )}
+
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
         style={{ flex: 1, overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
@@ -826,8 +874,10 @@ export default function PlanningPage() {
             ))}
           </div>
 
-          {/* Member rows */}
-          {team.map((member, mIdx) => {
+          {/* Member rows (filtered by people-picker if active) */}
+          {team
+            .filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
+            .map((member, mIdx) => {
             const isExp = expanded.has(member.id)
             const cap   = colCapacity(member.weeklyCapacity)
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
@@ -850,24 +900,27 @@ export default function PlanningPage() {
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
                       </div>
-                      {editOrder && (
-                        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                          <button onClick={() => moveTeamMember(mIdx, -1)} disabled={mIdx === 0}
-                            title="Omhoog"
-                            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
-                              color: mIdx === 0 ? 'var(--text-muted)' : 'var(--text-primary)',
-                              cursor: mIdx === 0 ? 'not-allowed' : 'pointer',
-                              fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                              opacity: mIdx === 0 ? 0.4 : 1, minHeight: 24, minWidth: 24 }}>↑</button>
-                          <button onClick={() => moveTeamMember(mIdx, 1)} disabled={mIdx === team.length - 1}
-                            title="Omlaag"
-                            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
-                              color: mIdx === team.length - 1 ? 'var(--text-muted)' : 'var(--text-primary)',
-                              cursor: mIdx === team.length - 1 ? 'not-allowed' : 'pointer',
-                              fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                              opacity: mIdx === team.length - 1 ? 0.4 : 1, minHeight: 24, minWidth: 24 }}>↓</button>
-                        </div>
-                      )}
+                      {editOrder && (() => {
+                        const realIdx  = team.findIndex(t => t.id === member.id)
+                        const isFirst  = realIdx === 0
+                        const isLast   = realIdx === team.length - 1
+                        return (
+                          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                            <button onClick={() => moveTeamMember(realIdx, -1)} disabled={isFirst} title="Omhoog"
+                              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                                color: isFirst ? 'var(--text-muted)' : 'var(--text-primary)',
+                                cursor: isFirst ? 'not-allowed' : 'pointer',
+                                fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                                opacity: isFirst ? 0.4 : 1, minHeight: 24, minWidth: 24 }}>↑</button>
+                            <button onClick={() => moveTeamMember(realIdx, 1)} disabled={isLast} title="Omlaag"
+                              style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                                color: isLast ? 'var(--text-muted)' : 'var(--text-primary)',
+                                cursor: isLast ? 'not-allowed' : 'pointer',
+                                fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                                opacity: isLast ? 0.4 : 1, minHeight: 24, minWidth: 24 }}>↓</button>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
 
