@@ -194,7 +194,7 @@ export default function HomePage() {
         {/* Jouw taken */}
         <div style={card}>
           <div style={cardHeader}>
-            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>✅ Jouw taken</h2>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>✅ Jouw taken</h2>
             <Link href="/todos" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Alle →</Link>
           </div>
           {memberId ? (
@@ -217,7 +217,7 @@ export default function HomePage() {
         {/* Werkdruk */}
         <div style={card}>
           <div style={cardHeader}>
-            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>📅 Werkdruk deze week</h2>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📅 Werkdruk deze week</h2>
             <Link href="/planning" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Planning →</Link>
           </div>
           <div style={{ padding: '16px 20px 14px' }}>
@@ -251,95 +251,13 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Main row: Documenten (groot) + Lopend/Algemeen ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? 14 : 18, alignItems: 'start' }}>
-
-        {/* Documenten */}
-        <div style={card}>
-          <div style={cardHeader}>
-            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>📄 Meest recente documenten</h2>
-            <button onClick={createNewPage} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Nieuw</button>
-          </div>
-          {recentPages.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center' }}>
-              <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 14px' }}>Nog geen documenten.</p>
-              <button onClick={createNewPage} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📄 Nieuw document</button>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 0 }}>
-              {recentPages.map(page => (
-                <Link key={page.id} href={`/pages/${page.id}`}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 12px', textDecoration: 'none', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <span style={{ fontSize: 22 }}>{page.emoji}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page.title || 'Naamloos'}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtRelative(page.updatedAt)}</span>
-                </Link>
-              ))}
-              <button onClick={createNewPage}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-muted)', minHeight: 90 }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}
-              >
-                <span style={{ fontSize: 22 }}>+</span>
-                <span style={{ fontSize: 12 }}>Nieuw document</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Right column: Lopend + Algemeen */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-          {/* Lopend */}
-          <div style={card}>
-            <div style={cardHeader}>
-              <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>🚀 Lopend</h2>
-              <Link href="/planning" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Planning →</Link>
-            </div>
-            <div style={{ padding: '6px 0 8px' }}>
-              {lopendItems.length === 0 ? (
-                <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen lopende projecten</p>
-              ) : lopendItems.map((item, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                  {item.endDate && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtDate(item.endDate)}</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Algemeen todos */}
-          <div style={card}>
-            <div style={cardHeader}>
-              <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>📋 Algemeen</h2>
-              <Link href="/todos" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Alle →</Link>
-            </div>
-            <div style={{ padding: '6px 0 8px' }}>
-              {algemeenTodos.length === 0 ? (
-                <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen open algemene taken</p>
-              ) : algemeenTodos.map(t => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '5px 18px' }}>
-                  <div style={{ width: 13, height: 13, borderRadius: 3, border: '2px solid var(--border)', flexShrink: 0, marginTop: 3 }} />
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t.text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
-      </div>
-
       {/* ── Agenda overzicht ── */}
-      <div style={{ ...card, marginTop: 18 }}>
+      <div style={{ ...card, marginBottom: isMobile ? 14 : 18 }}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>📊 Agenda overzicht</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📊 Agenda overzicht</h2>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? 14 : 13 }}>
             <thead>
               <tr style={{ background: 'var(--overlay-faint)' }}>
                 {['Board','Totaal','Done','Bezig','Stuck','Voortgang'].map((h, i) => (
@@ -388,6 +306,88 @@ export default function HomePage() {
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ── Main row: Documenten (groot) + Lopend/Algemeen ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: isMobile ? 14 : 18, alignItems: 'start' }}>
+
+        {/* Documenten */}
+        <div style={card}>
+          <div style={cardHeader}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📄 Meest recente documenten</h2>
+            <button onClick={createNewPage} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Nieuw</button>
+          </div>
+          {recentPages.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center' }}>
+              <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 14px' }}>Nog geen documenten.</p>
+              <button onClick={createNewPage} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📄 Nieuw document</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 0 }}>
+              {recentPages.map(page => (
+                <Link key={page.id} href={`/pages/${page.id}`}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 12px', textDecoration: 'none', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ fontSize: 22 }}>{page.emoji}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page.title || 'Naamloos'}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtRelative(page.updatedAt)}</span>
+                </Link>
+              ))}
+              <button onClick={createNewPage}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-muted)', minHeight: 90 }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}
+              >
+                <span style={{ fontSize: 22 }}>+</span>
+                <span style={{ fontSize: 12 }}>Nieuw document</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right column: Lopend + Algemeen */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+          {/* Lopend */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>🚀 Lopend</h2>
+              <Link href="/planning" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Planning →</Link>
+            </div>
+            <div style={{ padding: '6px 0 8px' }}>
+              {lopendItems.length === 0 ? (
+                <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen lopende projecten</p>
+              ) : lopendItems.map((item, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                  {item.endDate && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtDate(item.endDate)}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Algemeen todos */}
+          <div style={card}>
+            <div style={cardHeader}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📋 Algemeen</h2>
+              <Link href="/todos" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Alle →</Link>
+            </div>
+            <div style={{ padding: '6px 0 8px' }}>
+              {algemeenTodos.length === 0 ? (
+                <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen open algemene taken</p>
+              ) : algemeenTodos.map(t => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '5px 18px' }}>
+                  <div style={{ width: 13, height: 13, borderRadius: 3, border: '2px solid var(--border)', flexShrink: 0, marginTop: 3 }} />
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
 
