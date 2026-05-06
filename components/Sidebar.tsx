@@ -54,12 +54,17 @@ function useReorder<T>(items: T[], setItems: (items: T[]) => void) {
 // ─── Single section ───────────────────────────────────────────────────────────
 function SectionBlock({
   section, allSections, setAllSections, pathname, onDelete,
+  editOrder, isFirstSection, isLastSection, onMoveSection,
 }: {
-  section:       SidebarSection
-  allSections:   SidebarSection[]
-  setAllSections:(s: SidebarSection[]) => void
-  pathname:      string
-  onDelete:      () => void
+  section:        SidebarSection
+  allSections:    SidebarSection[]
+  setAllSections: (s: SidebarSection[]) => void
+  pathname:       string
+  onDelete:       () => void
+  editOrder:      boolean
+  isFirstSection: boolean
+  isLastSection:  boolean
+  onMoveSection:  (dir: -1 | 1) => void
 }) {
   const [open,          setOpen]          = useState(section.items.some(i => pathname.startsWith(i.href)))
   const [addingItem,    setAddingItem]    = useState(false)
@@ -88,6 +93,13 @@ function SectionBlock({
     const updated = allSections.map(s => s.id === section.id ? { ...s, items } : s)
     setAllSections(updated)
     saveSections(updated)
+  }
+  function moveItem(idx: number, dir: -1 | 1) {
+    const next = idx + dir
+    if (next < 0 || next >= section.items.length) return
+    const items = [...section.items]
+    items[idx] = items[next]; items[next] = section.items[idx]
+    updateItems(items)
   }
   function saveName(name: string) {
     const updated = allSections.map(s => s.id === section.id ? { ...s, name } : s)
@@ -135,12 +147,23 @@ function SectionBlock({
           </span>
         )}
 
-        <button onClick={() => { setOpen(true); setAddingItem(true) }} title="Toevoegen"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>+</button>
+        {!editOrder && (
+          <button onClick={() => { setOpen(true); setAddingItem(true) }} title="Toevoegen"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>+</button>
+        )}
 
-        {section.type === 'folder' && (
+        {editOrder && (
+          <>
+            <button onClick={() => onMoveSection(-1)} disabled={isFirstSection} title="Omhoog"
+              style={reorderArrowBtn(isFirstSection)}>↑</button>
+            <button onClick={() => onMoveSection(1)} disabled={isLastSection} title="Omlaag"
+              style={reorderArrowBtn(isLastSection)}>↓</button>
+          </>
+        )}
+
+        {!editOrder && section.type === 'folder' && (
           <button className="sec-del" onClick={onDelete} title="Map verwijderen"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, padding: '0 2px', opacity: 0, flexShrink: 0 }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
@@ -185,14 +208,16 @@ function SectionBlock({
                     style={{ flex: 1, margin: '2px 4px 2px 14px', background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '3px 7px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
                   />
                 ) : (
-                  <Link href={item.href} style={{
-                    display: 'flex', alignItems: 'center', gap: 7, flex: 1,
-                    padding: section.type === 'projects' ? '6px 6px' : '6px 10px 6px 14px',
-                    borderRadius: 6, marginBottom: 1,
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    background: active ? 'var(--bg-hover)' : 'transparent',
-                    textDecoration: 'none', fontSize: 13, fontWeight: active ? 600 : 400, minWidth: 0,
-                  }}
+                  <Link href={item.href}
+                    onClick={e => { if (editOrder) e.preventDefault() }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7, flex: 1,
+                      padding: section.type === 'projects' ? '6px 6px' : '6px 10px 6px 14px',
+                      borderRadius: 6, marginBottom: 1,
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      background: active ? 'var(--bg-hover)' : 'transparent',
+                      textDecoration: 'none', fontSize: 13, fontWeight: active ? 600 : 400, minWidth: 0,
+                    }}
                     onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
                     onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
                   >
@@ -201,9 +226,18 @@ function SectionBlock({
                   </Link>
                 )}
 
-                {!editing && <button className="row-action" onClick={e => { e.stopPropagation(); setEditingItemId(item.id) }} title="Naam wijzigen"
+                {editOrder && !editing && (
+                  <>
+                    <button onClick={e => { e.stopPropagation(); moveItem(idx, -1) }} disabled={idx === 0}
+                      title="Omhoog" style={reorderArrowBtn(idx === 0)}>↑</button>
+                    <button onClick={e => { e.stopPropagation(); moveItem(idx, 1) }} disabled={idx === section.items.length - 1}
+                      title="Omlaag" style={reorderArrowBtn(idx === section.items.length - 1)}>↓</button>
+                  </>
+                )}
+
+                {!editOrder && !editing && <button className="row-action" onClick={e => { e.stopPropagation(); setEditingItemId(item.id) }} title="Naam wijzigen"
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: '2px 3px', opacity: 0, flexShrink: 0 }}>✎</button>}
-                {!editing && <button className="row-action" onClick={() => removeItem(item.id)} title="Verwijderen"
+                {!editOrder && !editing && <button className="row-action" onClick={() => removeItem(item.id)} title="Verwijderen"
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '2px 4px', opacity: 0, flexShrink: 0 }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>}
@@ -226,6 +260,20 @@ function SectionBlock({
       )}
     </div>
   )
+}
+
+// ─── Reorder arrow button style ───────────────────────────────────────────────
+function reorderArrowBtn(disabled: boolean): React.CSSProperties {
+  return {
+    background: 'var(--bg-hover)', border: '1px solid var(--border)',
+    color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: 12, fontWeight: 700, lineHeight: 1,
+    padding: '2px 7px', borderRadius: 4, flexShrink: 0,
+    opacity: disabled ? 0.4 : 1,
+    minHeight: 26, minWidth: 26,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  }
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
@@ -252,6 +300,7 @@ export default function Sidebar({
   const [editingMainId, setEditingMainId] = useState<string | null>(null)
   const [addingFolder,  setAddingFolder]  = useState(false)
   const [folderName,    setFolderName]    = useState('')
+  const [editOrder,     setEditOrder]     = useState(false)
   const resizingRef   = useRef(false)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -312,6 +361,23 @@ export default function Sidebar({
     setSections(sections.filter(s => s.id !== id))
   }
 
+  function moveMainNav(idx: number, dir: -1 | 1) {
+    const next = idx + dir
+    if (next < 0 || next >= mainNav.length) return
+    const items = [...mainNav]
+    items[idx] = items[next]; items[next] = mainNav[idx]
+    setMainNavRaw(items)
+    localStorage.setItem('sidebar-main-nav', JSON.stringify(items))
+  }
+
+  function moveSection(idx: number, dir: -1 | 1) {
+    const next = idx + dir
+    if (next < 0 || next >= sections.length) return
+    const updated = [...sections]
+    updated[idx] = updated[next]; updated[next] = sections[idx]
+    setSections(updated)
+  }
+
   function cycleTheme() {
     const idx  = THEMES.findIndex(t => t.value === theme)
     const next = THEMES[(idx + 1) % THEMES.length].value
@@ -358,14 +424,16 @@ export default function Sidebar({
     <div style={containerStyle}>
       <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}
         onClick={e => {
-          if (!isMobile || !onClose) return
+          if (!isMobile || !onClose || editOrder) return
           const target = e.target as HTMLElement
           if (target.closest('a')) onClose()
         }}
       >
 
         {/* Logo — bigger, clickable to home */}
-        <Link href="/" style={{ padding: '20px 18px 16px', borderBottom: '1px solid var(--border)', textDecoration: 'none', display: 'block' }}
+        <Link href="/"
+          onClick={e => { if (editOrder) e.preventDefault() }}
+          style={{ padding: '20px 18px 16px', borderBottom: '1px solid var(--border)', textDecoration: 'none', display: 'block' }}
           onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
           onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
           <svg width="100" height="18" viewBox="0 0 323 57" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', color: 'var(--text-primary)' }}>
@@ -377,16 +445,29 @@ export default function Sidebar({
         {/* Nav */}
         <nav style={{ padding: '8px 8px', flex: 1 }}>
 
+          {/* Reorder toggle */}
+          <div style={{ padding: '2px 4px 6px' }}>
+            <button onClick={() => setEditOrder(o => !o)}
+              style={{ width: '100%', padding: '6px 10px', borderRadius: 6,
+                border: '1px solid var(--border)',
+                background: editOrder ? 'var(--accent)' : 'transparent',
+                color: editOrder ? '#fff' : 'var(--text-muted)',
+                fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              {editOrder ? '✓ Klaar met sorteren' : '↕ Volgorde aanpassen'}
+            </button>
+          </div>
+
           {/* Main nav */}
           {mainNav.map((item, idx) => {
             const active  = pathname === item.href
             const editing = editingMainId === item.id
             return (
-              <div key={item.id} draggable
+              <div key={item.id} draggable={!editOrder}
                 onDragStart={() => mainDS(idx)}
                 onDragOver={e => mainDO(e, idx)}
                 onDragEnd={mainDE}
-                style={{ display: 'flex', alignItems: 'center', marginBottom: 1, position: 'relative' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 1, position: 'relative' }}
                 onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.mn-action').forEach(b => (b.style.opacity = '1')) }}
                 onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.mn-action').forEach(b => (b.style.opacity = '0')) }}
               >
@@ -397,13 +478,15 @@ export default function Sidebar({
                     style={{ flex: 1, margin: '1px 4px', background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '5px 8px', color: 'var(--text-primary)', fontSize: 13.5, outline: 'none', boxSizing: 'border-box' }}
                   />
                 ) : (
-                  <Link href={item.href} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, flex: 1,
-                    padding: '7px 10px', borderRadius: 6,
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    background: active ? 'var(--bg-hover)' : 'transparent',
-                    textDecoration: 'none', fontSize: 13.5, fontWeight: active ? 600 : 400,
-                  }}
+                  <Link href={item.href}
+                    onClick={e => { if (editOrder) e.preventDefault() }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, flex: 1,
+                      padding: '7px 10px', borderRadius: 6,
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      background: active ? 'var(--bg-hover)' : 'transparent',
+                      textDecoration: 'none', fontSize: 13.5, fontWeight: active ? 600 : 400,
+                    }}
                     onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
                     onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
                   >
@@ -411,7 +494,15 @@ export default function Sidebar({
                     <span>{item.label}</span>
                   </Link>
                 )}
-                {!editing && (
+                {editOrder && !editing && (
+                  <>
+                    <button onClick={() => moveMainNav(idx, -1)} disabled={idx === 0} title="Omhoog"
+                      style={reorderArrowBtn(idx === 0)}>↑</button>
+                    <button onClick={() => moveMainNav(idx, 1)} disabled={idx === mainNav.length - 1} title="Omlaag"
+                      style={reorderArrowBtn(idx === mainNav.length - 1)}>↓</button>
+                  </>
+                )}
+                {!editOrder && !editing && (
                   <button className="mn-action" onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingMainId(item.id) }}
                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: '2px 5px', opacity: 0, flexShrink: 0, position: 'absolute', right: 0 }}>✎</button>
                 )}
@@ -421,7 +512,7 @@ export default function Sidebar({
 
           {/* Dynamic sections — draggable */}
           {hydrated && sections.map((section, idx) => (
-            <div key={section.id} draggable
+            <div key={section.id} draggable={!editOrder}
               onDragStart={() => secDS(idx)}
               onDragOver={e => secDO(e, idx)}
               onDragEnd={secDE}
@@ -432,6 +523,10 @@ export default function Sidebar({
                 setAllSections={setSections}
                 pathname={pathname}
                 onDelete={() => deleteSection(section.id)}
+                editOrder={editOrder}
+                isFirstSection={idx === 0}
+                isLastSection={idx === sections.length - 1}
+                onMoveSection={dir => moveSection(idx, dir)}
               />
             </div>
           ))}
