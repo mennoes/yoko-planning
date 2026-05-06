@@ -773,90 +773,149 @@ export default function PlanningPage() {
   function jumpForward() { setColOffset(o => o + ZOOM_COUNT[zoom]) }
   function goToday()     { setColOffset(0) }
 
+  // ─── KPIs (this week) ───────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    const weekStart = getWeekStart(new Date())
+    const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7); weekEnd.setHours(0,0,0,0)
+    let totalHours = 0, totalCap = 0, overbooked = 0, deadlinesThis = 0
+    const activeIds = new Set<string>()
+    for (const m of team) {
+      const cap = m.weeklyCapacity
+      totalCap += cap
+      let memberHours = 0
+      for (const p of projects) {
+        if (!p.ownerIds.includes(m.id)) continue
+        if (!p.startDate || !p.endDate) continue
+        const pS = new Date(p.startDate).getTime()
+        const pE = new Date(p.endDate).getTime() + 86400000
+        if (pE < weekStart.getTime() || pS > weekEnd.getTime()) continue
+        const oS = Math.max(pS, weekStart.getTime())
+        const oE = Math.min(pE, weekEnd.getTime())
+        const fraction = (oE - oS) / (pE - pS)
+        const hpp = p.estHours / Math.max(p.ownerIds.length, 1)
+        memberHours += fraction * hpp
+        if (p.status !== 'done') activeIds.add(p.id)
+      }
+      memberHours = Math.round(memberHours * 10) / 10
+      totalHours += memberHours
+      if (memberHours > cap) overbooked += 1
+    }
+    // Deadlines this week
+    for (const groups of Object.values(allGroups)) {
+      for (const g of groups) for (const item of g.items) {
+        const dl = item.deadline as string | null
+        if (!dl) continue
+        const t = new Date(dl).getTime()
+        if (t >= weekStart.getTime() && t < weekEnd.getTime()) deadlinesThis += 1
+      }
+    }
+    const pctUsed = totalCap > 0 ? Math.round((totalHours / totalCap) * 100) : 0
+    return { totalHours: Math.round(totalHours * 10) / 10, totalCap, pctUsed, overbooked, activeProjects: activeIds.size, deadlinesThis }
+  }, [team, projects, allGroups])
+
+  // ─── "Now" indicator position ───────────────────────────────────────────────
+  const nowOffset = useMemo(() => {
+    const ms = Date.now()
+    let acc = nameW + namePad
+    for (const col of cols) {
+      const start = col.rangeStart.getTime()
+      const end   = col.rangeEnd.getTime() + 1
+      if (ms < start) return null
+      if (ms <= end) {
+        const frac = (ms - start) / (end - start)
+        return acc + col.widthPx * frac
+      }
+      acc += col.widthPx
+    }
+    return null
+  }, [cols, nameW, namePad])
+
+  // Formatted current date for header subtitle
+  const today = new Date()
+  const todayLabel = today.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
       {/* ── Fixed header (never scrolls) ── */}
-      <div style={{ flexShrink: 0, padding: isMobile ? '12px 14px 0' : '24px 32px 0' }}>
-        {/* Title row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 10 : 14, gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>📅 Planning</h1>
+      <header style={{ flexShrink: 0, padding: isMobile ? '14px 14px 0' : '24px 32px 0' }}>
 
-            {/* Uren popup trigger */}
-            <button onClick={() => setUrenOpen(true)} title="Capaciteit per persoon"
-              style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
-              Uren
-            </button>
-
-            {/* Agenda's popup trigger */}
-            <button onClick={() => setAgendasOpen(true)} title="Agenda's"
-              style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
-              Agenda&apos;s
-            </button>
-
-            {/* iCal export */}
-            <button onClick={() => downloadIcs(projects)} title="Download als iCal voor Google/Apple Agenda"
-              style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
-              📅 iCal
-            </button>
-
-            {/* Mensen filter popup trigger */}
-            <button onClick={() => setPeopleOpen(true)} title="Filter op mensen"
-              style={{ ...navBtn,
-                background: filterMembers.size > 0 ? 'var(--accent-light)' : 'var(--bg-card)',
-                color: filterMembers.size > 0 ? 'var(--accent)' : 'var(--text-secondary)',
-                padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
-              Mensen{filterMembers.size > 0 ? ` (${filterMembers.size})` : ''}
-            </button>
-
-            {/* Team reorder toggle */}
-            <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden"
-              style={{ ...navBtn,
-                background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
-                color: editOrder ? '#fff' : 'var(--text-secondary)',
-                padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
-              {editOrder ? '✓ Klaar' : '↕'}
-            </button>
-
-            {/* View size toggle (desktop only) */}
-            {!isMobile && (
-              <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
-                {(['compact', 'large'] as ViewSize[]).map(v => (
-                  <button key={v} onClick={() => setViewSize(v)}
-                    style={{ padding: '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
-                      background: viewSize === v ? 'var(--accent)' : 'transparent',
-                      color: viewSize === v ? '#fff' : 'var(--text-secondary)' }}>
-                    {v === 'compact' ? 'Compact' : 'Groot'}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Zoom level */}
-            <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
-              {(['dag', 'week', 'maand'] as ZoomLevel[]).map(z => (
-                <button key={z} onClick={() => { setZoom(z); setColOffset(0) }}
-                  style={{ padding: isMobile ? '4px 9px' : '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
-                    background: zoom === z ? 'var(--text-primary)' : 'transparent',
-                    color: zoom === z ? 'var(--bg-base)' : 'var(--text-secondary)',
-                    textTransform: 'capitalize' }}>
-                  {z.charAt(0).toUpperCase() + z.slice(1)}
-                </button>
-              ))}
+        {/* Title + nav */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 10 : 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ fontSize: isMobile ? 22 : 30, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em', lineHeight: 1 }}>
+              Planning
+            </h1>
+            <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+              {todayLabel}
             </div>
           </div>
-
-          {/* Navigation */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6 }}>
-            {!isMobile && <button onClick={jumpBack} style={navBtn}>‹‹</button>}
-            <button onClick={stepBack}    style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>‹</button>
-            <button onClick={goToday}     style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13, color: 'var(--accent)', fontWeight: 700 }}>Vandaag</button>
-            <button onClick={stepForward} style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>›</button>
-            {!isMobile && <button onClick={jumpForward} style={navBtn}>››</button>}
+          <div style={segGroup}>
+            {!isMobile && <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug">‹‹</button>}
+            <button onClick={stepBack} style={segBtn(false)}>‹</button>
+            <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
+            <button onClick={stepForward} style={segBtn(false)}>›</button>
+            {!isMobile && <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit">››</button>}
           </div>
         </div>
-      </div>
+
+        {/* Toolbar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap', marginBottom: isMobile ? 12 : 16 }}>
+          {/* Zoom */}
+          <div style={segGroup}>
+            {(['dag', 'week', 'maand'] as ZoomLevel[]).map(z => (
+              <button key={z} onClick={() => { setZoom(z); setColOffset(0) }}
+                style={segBtn(zoom === z)}>
+                {z === 'dag' ? 'Dag' : z === 'week' ? 'Week' : 'Maand'}
+              </button>
+            ))}
+          </div>
+
+          {!isMobile && <span style={separator} />}
+
+          {/* Filters */}
+          <button onClick={() => setPeopleOpen(true)}
+            style={ghostBtn(filterMembers.size > 0)}>
+            Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
+          </button>
+          <button onClick={() => setAgendasOpen(true)} style={ghostBtn(false)}>
+            Agenda&apos;s
+          </button>
+
+          {!isMobile && <span style={separator} />}
+
+          {/* Actions */}
+          <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
+            Capaciteit
+          </button>
+          <button onClick={() => downloadIcs(projects)} title="Exporteer als iCal" style={ghostBtn(false)}>
+            Exporteer
+          </button>
+          <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden"
+            style={ghostBtn(editOrder)}>
+            {editOrder ? '✓ Klaar' : 'Sorteren'}
+          </button>
+        </div>
+
+        {/* KPI strip */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gap: isMobile ? 8 : 12,
+          paddingBottom: isMobile ? 12 : 18,
+          borderBottom: '1px solid var(--border-light)',
+        }}>
+          <KpiCard label="Capaciteit deze week" value={`${kpis.pctUsed}%`}
+            sub={`${kpis.totalHours} / ${kpis.totalCap} uur`}
+            tone={kpis.pctUsed > 100 ? 'red' : kpis.pctUsed > 85 ? 'amber' : 'normal'} />
+          <KpiCard label="Overbelast" value={String(kpis.overbooked)}
+            sub={kpis.overbooked === 0 ? 'iedereen onder cap' : kpis.overbooked === 1 ? 'persoon' : 'personen'}
+            tone={kpis.overbooked > 0 ? 'red' : 'normal'} />
+          <KpiCard label="Actieve projecten" value={String(kpis.activeProjects)} sub="lopen deze week" />
+          <KpiCard label="Deadlines" value={String(kpis.deadlinesThis)} sub="deze week"
+            tone={kpis.deadlinesThis > 0 ? 'amber' : 'normal'} />
+        </div>
+      </header>
 
       {/* ── Uren popup ── */}
       {urenOpen && (
@@ -928,16 +987,32 @@ export default function PlanningPage() {
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
         style={{ flex: 1, overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
-        <div style={{ minWidth: totalWidth }}>
+        <div style={{ minWidth: totalWidth, position: 'relative' }}>
+
+          {/* "Now" indicator: vertical accent line at today's exact position */}
+          {nowOffset !== null && (
+            <div aria-hidden style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: nowOffset, width: 0,
+              borderLeft: '2px solid var(--accent)',
+              opacity: 0.55, pointerEvents: 'none', zIndex: 6,
+            }}>
+              <div style={{
+                position: 'absolute', top: 0, left: -4,
+                width: 10, height: 10, borderRadius: '50%',
+                background: 'var(--accent)',
+              }} />
+            </div>
+          )}
 
           {/* Month grouping row (only for week/day zoom) */}
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
               <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, background: stickyBg }} />
               {monthGroups.map(({ label, widthPx }) => (
-                <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '5px 10px', fontSize: 11, fontWeight: 700,
-                  color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                  borderLeft: '1px solid var(--border)', background: stickyBg }}>
+                <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
+                  color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
+                  borderLeft: '1px solid var(--border-light)', background: stickyBg }}>
                   {label}
                 </div>
               ))}
@@ -945,14 +1020,14 @@ export default function PlanningPage() {
           )}
 
           {/* Column header row */}
-          <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 26 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg }} />
+          <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-light)' }}>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
             {cols.map(col => (
-              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '6px 2px', textAlign: 'center',
-                borderLeft: '1px solid var(--border)',
-                background: col.isCurrent ? 'rgba(108,99,255,0.1)' : stickyBg }}>
-                <div style={{ fontSize: zoom === 'dag' ? 9 : 11, fontWeight: 700, color: col.isCurrent ? 'var(--accent)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.label1}</div>
-                {zoom !== 'dag' && <div style={{ fontSize: 9.5, color: 'var(--text-muted)', marginTop: 1 }}>{col.label2}</div>}
+              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
+                borderLeft: '1px solid var(--border-light)',
+                background: col.isCurrent ? 'var(--accent-light)' : stickyBg }}>
+                <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--accent)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>{col.label1}</div>
+                {zoom !== 'dag' && <div style={{ fontSize: 9.5, color: 'var(--text-muted)', marginTop: 2, letterSpacing: '0.04em' }}>{col.label2}</div>}
               </div>
             ))}
           </div>
@@ -966,14 +1041,14 @@ export default function PlanningPage() {
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
 
             return (
-              <div key={member.id} style={{ borderBottom: '1px solid var(--border)', background: mIdx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.012)' }}>
+              <div key={member.id} style={{ borderBottom: '1px solid var(--border-light)', background: 'transparent' }}>
                 {/* Capacity row */}
                 <div style={{ display: 'flex' }}>
                   {/* Sticky name cell */}
                   <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
-                    background: mIdx % 2 === 0 ? stickyBg : stickyBg,
+                    background: stickyBg,
                     display: 'flex', alignItems: 'center',
-                    padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border)' }}>
+                    padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border-light)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, width: '100%' }}>
                       {!editOrder && (
                         <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
@@ -1012,8 +1087,8 @@ export default function PlanningPage() {
                     const contribs = memberHoursInCol(effectiveProjects, member.id, col)
                     const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                     return (
-                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border)', padding: 2,
-                        background: col.isCurrent ? 'rgba(108,99,255,0.04)' : 'transparent', position: 'relative' }}>
+                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-light)', padding: 2,
+                        background: col.isCurrent ? 'var(--accent-light)' : 'transparent', position: 'relative' }}>
                         <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} />
                       </div>
                     )
@@ -1043,9 +1118,9 @@ export default function PlanningPage() {
         </div>
 
         {/* Footer info */}
-        <div style={{ padding: '10px 32px', fontSize: 11.5, color: 'var(--text-muted)' }}>
-          {projects.length} items uit {Object.keys(BOARD_COLORS).length} borden ·
-          klik ▼ voor tijdlijn · sleep bar om datums aan te passen · klik bar voor details
+        <div style={{ padding: isMobile ? '10px 14px 24px' : '12px 32px 24px', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
+          {projects.length} items · {team.length} teamleden · {Object.keys(BOARD_COLORS).length} agenda&apos;s
+          {!isMobile && <> · sleep een balk om datums te verschuiven · klik voor details</>}
         </div>
       </div>
 
@@ -1062,6 +1137,61 @@ const navBtn: React.CSSProperties = {
   background: 'var(--bg-card)', border: '1px solid var(--border)',
   borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer',
   padding: '5px 10px', fontSize: 13,
+}
+
+// ─── Refined toolbar primitives ───────────────────────────────────────────────
+const segGroup: React.CSSProperties = {
+  display: 'inline-flex',
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border-light)',
+  borderRadius: 8, overflow: 'hidden',
+}
+function segBtn(active: boolean, color?: string, weight?: number): React.CSSProperties {
+  return {
+    padding: '6px 12px',
+    fontSize: 12.5, fontWeight: weight ?? (active ? 600 : 500),
+    border: 'none', cursor: 'pointer',
+    background: active ? 'var(--text-primary)' : 'transparent',
+    color: active ? 'var(--bg-base)' : (color ?? 'var(--text-secondary)'),
+    transition: 'background 0.15s, color 0.15s',
+  }
+}
+function ghostBtn(active: boolean): React.CSSProperties {
+  return {
+    padding: '6px 11px',
+    fontSize: 12.5, fontWeight: 500,
+    borderRadius: 7,
+    border: `1px solid ${active ? 'var(--accent)' : 'var(--border-light)'}`,
+    background: active ? 'var(--accent-light)' : 'var(--bg-card)',
+    color: active ? 'var(--accent)' : 'var(--text-secondary)',
+    cursor: 'pointer',
+    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+  }
+}
+const separator: React.CSSProperties = {
+  width: 1, height: 22, background: 'var(--border-light)', display: 'inline-block', margin: '0 2px',
+}
+
+// ─── KPI card ─────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, sub, tone = 'normal' }: {
+  label: string; value: string; sub?: string; tone?: 'normal' | 'amber' | 'red'
+}) {
+  const valueColor = tone === 'red' ? '#C4453A' : tone === 'amber' ? '#B27500' : 'var(--text-primary)'
+  return (
+    <div style={{
+      padding: '10px 14px',
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border-light)',
+      borderRadius: 10,
+    }}>
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: valueColor, marginTop: 4, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+        {value}
+      </div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
 }
 const dateInput: React.CSSProperties = {
   background: 'var(--bg-hover)', border: '1px solid var(--border)',
