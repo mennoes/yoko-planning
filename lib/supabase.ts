@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 
 const url    = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? ''
 const key    = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
-const bypass = process.env.NEXT_PUBLIC_BYPASS_AUTH === 'true'
+// Auth temporarily bypassed — set NEXT_PUBLIC_BYPASS_AUTH=false in Vercel to re-enable
+const bypass = process.env.NEXT_PUBLIC_BYPASS_AUTH !== 'false'
 
 export const hasSupabase = !bypass && !!(url && key)
 export const supabase    = hasSupabase
