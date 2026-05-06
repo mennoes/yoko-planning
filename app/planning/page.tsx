@@ -13,6 +13,7 @@ import { loadGroups, saveGroups, addDays } from '@/lib/boardStore'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type TeamMember } from '@/lib/workload'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
+import { useIsMobile }   from '@/lib/useIsMobile'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -205,8 +206,8 @@ function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; o
 
 // ─── Workload cell ────────────────────────────────────────────────────────────
 type Contrib = { project: Project; hours: number }
-function WorkloadCell({ contribs, total, capacity, showHours, cs, or: outerR, zoom }: {
-  contribs: Contrib[]; total: number; capacity: number; showHours: boolean
+function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom }: {
+  contribs: Contrib[]; total: number; capacity: number
   cs: number; or: number; zoom: ZoomLevel
 }) {
   const [open, setOpen] = useState(false)
@@ -233,7 +234,7 @@ function WorkloadCell({ contribs, total, capacity, showHours, cs, or: outerR, zo
         padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
       }}>
         <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
-        {showHours && total > 0 && (
+        {total > 0 && (
           <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
             {total}u
           </span>
@@ -262,24 +263,6 @@ function WorkloadCell({ contribs, total, capacity, showHours, cs, or: outerR, zo
         </div>
       )}
     </div>
-  )
-}
-
-// ─── Capacity editor ──────────────────────────────────────────────────────────
-function CapacityEditor({ member, onUpdate }: { member: TeamMember; onUpdate: (id: string, n: number) => void }) {
-  const [editing, setEditing] = useState(false)
-  const [val, setVal]         = useState(member.weeklyCapacity.toString())
-  if (!editing) return (
-    <span onClick={() => setEditing(true)} title="Klik" style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline dotted' }}>
-      {member.weeklyCapacity}u/w
-    </span>
-  )
-  return (
-    <input autoFocus type="number" value={val} onChange={e => setVal(e.target.value)}
-      onBlur={() => { onUpdate(member.id, parseInt(val) || member.weeklyCapacity); setEditing(false) }}
-      onKeyDown={e => { if (e.key === 'Enter') { onUpdate(member.id, parseInt(val) || member.weeklyCapacity); setEditing(false) } if (e.key === 'Escape') setEditing(false) }}
-      style={{ width: 44, background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, color: 'var(--text-primary)', fontSize: 11, padding: '1px 4px', outline: 'none' }}
-    />
   )
 }
 
@@ -506,6 +489,34 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
+// ─── Generic centered popup ───────────────────────────────────────────────────
+function Popup({ title, onClose, children }: {
+  title: string; onClose: () => void; children: React.ReactNode
+}) {
+  return (
+    <>
+      <div onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.35)' }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 251, background: 'var(--bg-card)',
+        border: '1px solid var(--border)', borderRadius: 12,
+        padding: '14px 18px', minWidth: 280, maxWidth: '92vw', width: 360,
+        maxHeight: '80vh', overflowY: 'auto',
+        boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
+          <button onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: 'var(--text-muted)', padding: '0 4px' }}>×</button>
+        </div>
+        {children}
+      </div>
+    </>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function PlanningPage() {
   const { pushUndo }   = useUndo()
@@ -519,11 +530,9 @@ export default function PlanningPage() {
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
   const [detailProject, setDetailProject] = useState<Project | null>(null)
   const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
-  const [showHours, setShowHours] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true
-    const v = localStorage.getItem('planning-showHours')
-    return v === null ? true : v === 'true'
-  })
+  const [urenOpen,     setUrenOpen]     = useState(false)
+  const [agendasOpen,  setAgendasOpen]  = useState(false)
+  const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
     const v = localStorage.getItem('planning-viewSize') as ViewSize
@@ -548,7 +557,6 @@ export default function PlanningPage() {
 
   useEffect(() => { localStorage.setItem('planning-viewSize', viewSize) }, [viewSize])
   useEffect(() => { localStorage.setItem('planning-zoom', zoom) }, [zoom])
-  useEffect(() => { localStorage.setItem('planning-showHours', String(showHours)) }, [showHours])
   useEffect(() => { localStorage.setItem('planning-colOffset', String(colOffset)) }, [colOffset])
 
   // ─── Drag-to-scroll ───────────────────────────────────────────────────────────
@@ -652,7 +660,9 @@ export default function PlanningPage() {
     setDetailProject(null)
   }
 
-  const totalWidth  = NAME_W + NAME_PAD + cols.reduce((s, c) => s + c.widthPx, 0)
+  const nameW       = isMobile ? 130 : NAME_W
+  const namePad     = isMobile ? 14 : NAME_PAD
+  const totalWidth  = nameW + namePad + cols.reduce((s, c) => s + c.widthPx, 0)
   const monthGroups = zoom !== 'maand' ? getMonthGroupsFromCols(cols) : null
   const stickyBg    = 'var(--bg-base)'
 
@@ -667,35 +677,43 @@ export default function PlanningPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
       {/* ── Fixed header (never scrolls) ── */}
-      <div style={{ flexShrink: 0, padding: '24px 32px 0' }}>
+      <div style={{ flexShrink: 0, padding: isMobile ? '12px 14px 0' : '24px 32px 0' }}>
         {/* Title row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>📅 Planning</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 10 : 14, gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>📅 Planning</h1>
 
-            {/* Uren toggle */}
-            <button onClick={() => setShowHours(h => !h)} title="Uren tonen/verbergen"
-              style={{ ...navBtn, background: showHours ? 'var(--accent)' : 'var(--bg-card)', color: showHours ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: 12, marginLeft: 6 }}>
+            {/* Uren popup trigger */}
+            <button onClick={() => setUrenOpen(true)} title="Capaciteit per persoon"
+              style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
               Uren
             </button>
 
-            {/* View size toggle */}
-            <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden', marginLeft: 4 }}>
-              {(['compact', 'large'] as ViewSize[]).map(v => (
-                <button key={v} onClick={() => setViewSize(v)}
-                  style={{ padding: '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
-                    background: viewSize === v ? 'var(--accent)' : 'transparent',
-                    color: viewSize === v ? '#fff' : 'var(--text-secondary)' }}>
-                  {v === 'compact' ? 'Compact' : 'Groot'}
-                </button>
-              ))}
-            </div>
+            {/* Agenda's popup trigger */}
+            <button onClick={() => setAgendasOpen(true)} title="Agenda's"
+              style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>
+              Agenda&apos;s
+            </button>
+
+            {/* View size toggle (desktop only) */}
+            {!isMobile && (
+              <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
+                {(['compact', 'large'] as ViewSize[]).map(v => (
+                  <button key={v} onClick={() => setViewSize(v)}
+                    style={{ padding: '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
+                      background: viewSize === v ? 'var(--accent)' : 'transparent',
+                      color: viewSize === v ? '#fff' : 'var(--text-secondary)' }}>
+                    {v === 'compact' ? 'Compact' : 'Groot'}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Zoom level */}
             <div style={{ display: 'flex', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
               {(['dag', 'week', 'maand'] as ZoomLevel[]).map(z => (
                 <button key={z} onClick={() => { setZoom(z); setColOffset(0) }}
-                  style={{ padding: '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
+                  style={{ padding: isMobile ? '4px 9px' : '5px 12px', fontSize: 12, border: 'none', cursor: 'pointer', fontWeight: 600,
                     background: zoom === z ? 'var(--text-primary)' : 'transparent',
                     color: zoom === z ? 'var(--bg-base)' : 'var(--text-secondary)',
                     textTransform: 'capitalize' }}>
@@ -706,25 +724,43 @@ export default function PlanningPage() {
           </div>
 
           {/* Navigation */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button onClick={jumpBack}    style={navBtn}>‹‹</button>
-            <button onClick={stepBack}    style={navBtn}>‹</button>
-            <button onClick={goToday}     style={{ ...navBtn, color: 'var(--accent)', fontWeight: 700 }}>Vandaag</button>
-            <button onClick={stepForward} style={navBtn}>›</button>
-            <button onClick={jumpForward} style={navBtn}>››</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6 }}>
+            {!isMobile && <button onClick={jumpBack} style={navBtn}>‹‹</button>}
+            <button onClick={stepBack}    style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>‹</button>
+            <button onClick={goToday}     style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13, color: 'var(--accent)', fontWeight: 700 }}>Vandaag</button>
+            <button onClick={stepForward} style={{ ...navBtn, padding: isMobile ? '4px 9px' : '5px 10px', fontSize: isMobile ? 12 : 13 }}>›</button>
+            {!isMobile && <button onClick={jumpForward} style={navBtn}>››</button>}
           </div>
         </div>
-
-        {/* Board legend */}
-        <div style={{ display: 'flex', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
-          {Object.entries(BOARD_COLORS).map(([b, c]) => (
-            <span key={b} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block', flexShrink: 0 }} />
-              {b}
-            </span>
-          ))}
-        </div>
       </div>
+
+      {/* ── Uren popup ── */}
+      {urenOpen && (
+        <Popup title="Capaciteit per persoon" onClose={() => setUrenOpen(false)}>
+          {team.map(m => (
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
+              <input type="number" value={m.weeklyCapacity} min={0}
+                onChange={e => updateCapacity(m.id, parseInt(e.target.value) || 0)}
+                style={{ width: 60, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 5, padding: '4px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', textAlign: 'right' }} />
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>u/w</span>
+            </div>
+          ))}
+        </Popup>
+      )}
+
+      {/* ── Agenda's popup ── */}
+      {agendasOpen && (
+        <Popup title="Agenda's" onClose={() => setAgendasOpen(false)}>
+          {Object.entries(BOARD_COLORS).map(([b, c]) => (
+            <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
+              <span style={{ width: 14, height: 14, borderRadius: 3, background: c, flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>{b}</span>
+            </div>
+          ))}
+        </Popup>
+      )}
 
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
@@ -734,7 +770,7 @@ export default function PlanningPage() {
           {/* Month grouping row (only for week/day zoom) */}
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
-              <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, background: stickyBg }} />
+              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, background: stickyBg }} />
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '5px 10px', fontSize: 11, fontWeight: 700,
                   color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -747,7 +783,7 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 26 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border)' }}>
-            <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg }} />
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg }} />
             {cols.map(col => (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '6px 2px', textAlign: 'center',
                 borderLeft: '1px solid var(--border)',
@@ -769,17 +805,16 @@ export default function PlanningPage() {
                 {/* Capacity row */}
                 <div style={{ display: 'flex' }}>
                   {/* Sticky name cell */}
-                  <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+                  <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
                     background: mIdx % 2 === 0 ? stickyBg : stickyBg,
                     display: 'flex', alignItems: 'center',
-                    padding: `0 12px 0 ${NAME_PAD}px`, height: hh, borderRight: '1px solid var(--border)' }}>
+                    padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, width: '100%' }}>
                       <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
                       <MemberAvatar member={member} size={av} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
-                        <CapacityEditor member={member} onUpdate={updateCapacity} />
                       </div>
                     </div>
                   </div>
@@ -791,7 +826,7 @@ export default function PlanningPage() {
                     return (
                       <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border)', padding: 2,
                         background: col.isCurrent ? 'rgba(108,99,255,0.04)' : 'transparent', position: 'relative' }}>
-                        <WorkloadCell contribs={contribs} total={total} capacity={cap} showHours={showHours} cs={cs} or={or} zoom={zoom} />
+                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} />
                       </div>
                     )
                   })}
@@ -800,7 +835,7 @@ export default function PlanningPage() {
                 {/* Timeline bars (expanded) */}
                 {isExp && memberProjects.length > 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)} />
@@ -809,7 +844,7 @@ export default function PlanningPage() {
                 )}
                 {isExp && memberProjects.length === 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: NAME_W + NAME_PAD, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
                 )}
