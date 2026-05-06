@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useEffect } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ProfileProvider, useProfile } from './ProfileContext'
 import { TeamPhotosProvider } from './TeamPhotosContext'
@@ -9,17 +9,22 @@ import { UndoProvider } from './UndoContext'
 import Sidebar from './Sidebar'
 import ProfileSetup from './ProfileSetup'
 import { hasSupabase } from '@/lib/supabase'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 function Inner({ children }: { children: ReactNode }) {
   const { needsSetup, editOpen, isAuthenticated } = useProfile()
   const pathname = usePathname()
   const router   = useRouter()
+  const isMobile = useIsMobile()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     if (hasSupabase && !isAuthenticated && pathname !== '/login') {
       router.replace('/login')
     }
   }, [isAuthenticated, pathname, router])
+
+  useEffect(() => { setDrawerOpen(false) }, [pathname])
 
   // Login page: geen sidebar, geen ProfileSetup
   if (pathname === '/login') {
@@ -31,8 +36,32 @@ function Inner({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <Sidebar />
-      <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0 }}>
+      <Sidebar isMobile={isMobile} open={!isMobile || drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      {isMobile && drawerOpen && (
+        <div onClick={() => setDrawerOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 55 }} />
+      )}
+
+      {isMobile && (
+        <button onClick={() => setDrawerOpen(o => !o)} aria-label="Menu"
+          style={{
+            position: 'fixed', top: 12, left: 12, zIndex: 70,
+            width: 40, height: 40, borderRadius: 8,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            color: 'var(--text-primary)', fontSize: 18, padding: 0,
+          }}>
+          {drawerOpen ? '✕' : '☰'}
+        </button>
+      )}
+
+      <main style={{
+        flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,
+        paddingTop: isMobile ? 56 : 0,
+        width: isMobile ? '100%' : undefined,
+      }}>
         {children}
       </main>
       {(needsSetup || editOpen) && <ProfileSetup />}

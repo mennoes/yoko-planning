@@ -233,7 +233,15 @@ const DEFAULT_SIDEBAR_W = 210
 const MIN_SIDEBAR_W     = 160
 const MAX_SIDEBAR_W     = 380
 
-export default function Sidebar() {
+export default function Sidebar({
+  isMobile = false,
+  open     = true,
+  onClose,
+}: {
+  isMobile?: boolean
+  open?:     boolean
+  onClose?:  () => void
+} = {}) {
   const pathname              = usePathname()
   const { profile, openEdit, signOut } = useProfile()
   const [theme,       setTheme]       = useState<Theme>('auto')
@@ -331,9 +339,30 @@ export default function Sidebar() {
 
   const themeInfo = THEMES.find(t => t.value === theme)!
 
+  const containerStyle: React.CSSProperties = isMobile
+    ? {
+        width: 280, minWidth: 280, maxWidth: 280,
+        position: 'fixed', top: 0, left: 0, height: '100vh',
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.22s ease',
+        zIndex: 60, display: 'flex', alignItems: 'stretch',
+        boxShadow: open ? '0 0 30px rgba(0,0,0,0.3)' : 'none',
+      }
+    : {
+        width, minWidth: width, maxWidth: width, flexShrink: 0,
+        position: 'sticky', top: 0, height: '100vh',
+        display: 'flex', alignItems: 'stretch',
+      }
+
   return (
-    <div style={{ width, minWidth: width, maxWidth: width, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', display: 'flex', alignItems: 'stretch' }}>
-      <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}>
+    <div style={containerStyle}>
+      <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}
+        onClick={e => {
+          if (!isMobile || !onClose) return
+          const target = e.target as HTMLElement
+          if (target.closest('a')) onClose()
+        }}
+      >
 
         {/* Logo — bigger, clickable to home */}
         <Link href="/" style={{ padding: '20px 18px 16px', borderBottom: '1px solid var(--border)', textDecoration: 'none', display: 'block' }}
@@ -463,11 +492,13 @@ export default function Sidebar() {
         </div>
       </aside>
 
-      {/* Resize handle */}
-      <div onMouseDown={onResizeMouseDown} title="Sleep om breedte aan te passen"
-        style={{ width: 5, cursor: 'col-resize', flexShrink: 0, background: 'transparent', transition: 'background 0.15s' }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')} />
+      {/* Resize handle (desktop only) */}
+      {!isMobile && (
+        <div onMouseDown={onResizeMouseDown} title="Sleep om breedte aan te passen"
+          style={{ width: 5, cursor: 'col-resize', flexShrink: 0, background: 'transparent', transition: 'background 0.15s' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')} />
+      )}
     </div>
   )
 }
