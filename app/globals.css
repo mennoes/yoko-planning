@@ -87,20 +87,20 @@
 
   --accent:       #B0C6EB;
   --accent-hover: #95B4DB;
-  --accent-light: #B0C6EB1A;
-  --accent-mid:   #B0C6EB35;
+  --accent-light: #B0C6EB22;
+  --accent-mid:   #B0C6EB45;
 
   --bg-base:    #14161A;
   --bg-sidebar: #0E1014;
   --bg-card:    #1B1E23;
-  --bg-hover:   rgba(255,255,255,0.05);
+  --bg-hover:   rgba(255,255,255,0.07);
 
-  --border:       #2A2D33;
-  --border-light: #22252B;
+  --border:       #3A3F47;
+  --border-light: #2E3239;
 
   --text-primary:   #ECEDEF;
-  --text-secondary: #B5B8BD;
-  --text-muted:     #6A6D72;
+  --text-secondary: #C8CCD2;
+  --text-muted:     #8A8E94;
 
   --green:  #7FB392;
   --red:    #D45A50;
@@ -116,7 +116,7 @@
   --sup-lavender: #C09BCA;
   --sup-brown:    #A07A4F;
 
-  --overlay-hover:      rgba(255,255,255,0.04);
+  --overlay-hover:      rgba(255,255,255,0.06);
   --overlay-subtle:     rgba(255,255,255,0.03);
   --overlay-faint:      rgba(255,255,255,0.015);
   --overlay-medium:     rgba(255,255,255,0.08);
@@ -134,17 +134,17 @@
     color-scheme: dark;
     --accent:       #B0C6EB;
     --accent-hover: #95B4DB;
-    --accent-light: #B0C6EB1A;
-    --accent-mid:   #B0C6EB35;
+    --accent-light: #B0C6EB22;
+    --accent-mid:   #B0C6EB45;
     --bg-base:    #14161A;
     --bg-sidebar: #0E1014;
     --bg-card:    #1B1E23;
-    --bg-hover:   rgba(255,255,255,0.05);
-    --border:       #2A2D33;
-    --border-light: #22252B;
+    --bg-hover:   rgba(255,255,255,0.07);
+    --border:       #3A3F47;
+    --border-light: #2E3239;
     --text-primary:   #ECEDEF;
-    --text-secondary: #B5B8BD;
-    --text-muted:     #6A6D72;
+    --text-secondary: #C8CCD2;
+    --text-muted:     #8A8E94;
     --green:  #7FB392;
     --red:    #D45A50;
     --yellow: #D8B62E;
@@ -157,7 +157,7 @@
     --sup-yellow:   #D8B62E;
     --sup-lavender: #C09BCA;
     --sup-brown:    #A07A4F;
-    --overlay-hover:      rgba(255,255,255,0.04);
+    --overlay-hover:      rgba(255,255,255,0.06);
     --overlay-subtle:     rgba(255,255,255,0.03);
     --overlay-faint:      rgba(255,255,255,0.015);
     --overlay-medium:     rgba(255,255,255,0.08);
