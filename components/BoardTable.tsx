@@ -609,8 +609,10 @@ function SubItemsSection({ subitems, onUpdate }: { subitems: SubItem[]; onUpdate
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, onUpdate, onDelete }: {
+function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, onUpdate, onDelete }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
+  selected: boolean
+  onToggleSelect: () => void
   onUpdate: (u: Partial<BoardItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -626,10 +628,18 @@ function BoardRow({ item, cols, gridTemplate, onUpdate, onDelete }: {
         display: 'grid', gridTemplateColumns: gridTemplate,
         alignItems: 'center', minHeight: 40,
         borderBottom: expanded ? 'none' : '1px solid var(--border)',
-        background: hover ? 'var(--overlay-hover)' : 'transparent',
+        background: selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent'),
         transition: 'background 0.1s',
       }}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+
+        {/* Selection checkbox */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+          <input type="checkbox" checked={selected} onChange={onToggleSelect}
+            onClick={e => e.stopPropagation()}
+            style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15,
+              opacity: selected || hover ? 1 : 0.5, transition: 'opacity 0.15s' }} />
+        </div>
 
         <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
           <button onClick={() => setExpanded(e => !e)}
@@ -685,8 +695,11 @@ function BoardRow({ item, cols, gridTemplate, onUpdate, onDelete }: {
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ group, cols, colWidths, gridTemplate, onUpdateGroup, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, onUpdateGroup, onDeleteGroup, onResizeCol }: {
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
+  onSelectGroup: (groupId: string, allSelected: boolean) => void
   onUpdateGroup: (g: BoardGroup) => void
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
@@ -804,6 +817,13 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, onUpdateGroup
           <div style={{ borderLeft: `4px solid ${group.color}` }}>
             {/* Kolom headers */}
             <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--bg-hover)', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <input type="checkbox"
+                  checked={group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))}
+                  ref={el => { if (el) el.indeterminate = group.items.some(i => selectedIds.has(i.id)) && !group.items.every(i => selectedIds.has(i.id)) }}
+                  onChange={e => onSelectGroup(group.id, e.target.checked)}
+                  style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15 }} />
+              </div>
               <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Item</div>
               {cols.map(col => (
                 <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none' }}>
@@ -843,6 +863,8 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, onUpdateGroup
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate}
+                  selected={selectedIds.has(item.id)}
+                  onToggleSelect={() => onToggleSelect(item.id)}
                   onUpdate={u => updateItem(item.id, u)} onDelete={() => deleteItem(item.id)} />
               </div>
             ))}
@@ -857,6 +879,7 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, onUpdateGroup
 
             {group.items.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, borderBottom: '2px solid var(--border)', background: 'var(--overlay-faint)' }}>
+                <div />
                 <div style={{ padding: '5px 14px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Som</div>
                 {cols.map(col => (
                   <div key={col.key} style={{ padding: '5px 8px', fontSize: 11, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', fontWeight: 600 }}>
@@ -897,6 +920,7 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
   const [filterOwner,   setFilterOwner]  = useState('')
   const [filterStatus,  setFilterStatus] = useState('')
   const [editingTitle,  setEditingTitle] = useState(false)
+  const [selectedIds,   setSelectedIds]  = useState<Set<string>>(new Set())
   const [titleDraft,    setTitleDraft]   = useState(title)
 
   function resizeCol(key: string, newWidth: number) {
@@ -978,9 +1002,52 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
     document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
-  const gridTemplate = `1fr ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const gridTemplate = `36px 1fr ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function selectGroup(groupId: string, allSelected: boolean) {
+    const group = groups.find(g => g.id === groupId)
+    if (!group) return
+    setSelectedIds(prev => {
+      const n = new Set(prev)
+      for (const i of group.items) {
+        if (allSelected) n.add(i.id); else n.delete(i.id)
+      }
+      return n
+    })
+  }
+  function clearSelection() { setSelectedIds(new Set()) }
+
+  function bulkUpdate(patch: Partial<BoardItem>) {
+    if (selectedIds.size === 0) return
+    onChange(groups.map(g => ({
+      ...g,
+      items: g.items.map(i => selectedIds.has(i.id) ? { ...i, ...patch } : i),
+    })))
+  }
+  function bulkDelete() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`${selectedIds.size} item(s) verwijderen?`)) return
+    onChange(groups.map(g => ({ ...g, items: g.items.filter(i => !selectedIds.has(i.id)) })))
+    clearSelection()
+  }
+  function bulkMoveTo(targetGroupId: string) {
+    if (selectedIds.size === 0) return
+    const moved: BoardItem[] = []
+    const stripped = groups.map(g => ({
+      ...g,
+      items: g.items.filter(i => {
+        if (!selectedIds.has(i.id)) return true
+        moved.push(i); return false
+      }),
+    }))
+    onChange(stripped.map(g => g.id === targetGroupId ? { ...g, items: [...g.items, ...moved] } : g))
+    clearSelection()
+  }
 
   return (
     <div style={{ padding: '32px 32px 64px' }}>
@@ -1056,6 +1123,9 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
         {filteredGroups.map(group => (
           <BoardGroupSection key={group.id} group={group} cols={columns}
             colWidths={colWidths} gridTemplate={gridTemplate}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onSelectGroup={selectGroup}
             onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
             onDeleteGroup={() => handleDeleteGroup(group.id)} />
         ))}
@@ -1069,8 +1139,114 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
         Klik op tekst/cijfers om te bewerken · Sleep rijen om te herordenen · Klik op tijdlijn om datums in te stellen
       </p>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          color={color}
+          groups={groups}
+          onClear={clearSelection}
+          onDelete={bulkDelete}
+          onUpdate={bulkUpdate}
+          onMoveTo={bulkMoveTo}
+        />
+      )}
     </div>
   )
+}
+
+// ─── Bulk action bar (shown when items selected) ──────────────────────────────
+function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMoveTo }: {
+  count: number; color: string; groups: BoardGroup[]
+  onClear: () => void; onDelete: () => void
+  onUpdate: (patch: Partial<BoardItem>) => void
+  onMoveTo: (groupId: string) => void
+}) {
+  const [statusOpen, setStatusOpen] = useState(false)
+  const [ownerOpen,  setOwnerOpen]  = useState(false)
+  const [moveOpen,   setMoveOpen]   = useState(false)
+  return (
+    <div style={{
+      position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+      zIndex: 200,
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 12, padding: '8px 10px',
+      display: 'flex', alignItems: 'center', gap: 8,
+      boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
+      maxWidth: '94vw', flexWrap: 'wrap',
+    }}>
+      <span style={{ padding: '4px 10px', borderRadius: 8, background: color + '22', color, fontSize: 12.5, fontWeight: 700 }}>
+        {count} geselecteerd
+      </span>
+
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => { setStatusOpen(o => !o); setOwnerOpen(false); setMoveOpen(false) }} style={barBtn}>Status…</button>
+        {statusOpen && (
+          <div style={popoverStyle}>
+            {STATUS_OPTIONS.filter(o => o.label).map(s => (
+              <button key={s.label} onClick={() => { onUpdate({ status: s.label }); setStatusOpen(false) }}
+                style={{ ...popoverItem, background: s.color + '22', color: s.color }}>
+                {s.label}
+              </button>
+            ))}
+            <button onClick={() => { onUpdate({ status: '' }); setStatusOpen(false) }}
+              style={{ ...popoverItem, color: 'var(--text-muted)' }}>Wis status</button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => { setOwnerOpen(o => !o); setStatusOpen(false); setMoveOpen(false) }} style={barBtn}>Owner…</button>
+        {ownerOpen && (
+          <div style={popoverStyle}>
+            {teamData.members.map(m => (
+              <button key={m.id} onClick={() => { onUpdate({ ownerIds: [m.id] }); setOwnerOpen(false) }}
+                style={{ ...popoverItem, color: m.color }}>
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => { setMoveOpen(o => !o); setStatusOpen(false); setOwnerOpen(false) }} style={barBtn}>Verplaats…</button>
+        {moveOpen && (
+          <div style={popoverStyle}>
+            {groups.map(g => (
+              <button key={g.id} onClick={() => { onMoveTo(g.id); setMoveOpen(false) }}
+                style={popoverItem}>
+                {g.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button onClick={onDelete} style={{ ...barBtn, color: '#C4453A', fontWeight: 700 }}>Verwijder</button>
+
+      <button onClick={onClear} style={{ ...barBtn, color: 'var(--text-muted)' }} title="Selectie wissen">×</button>
+    </div>
+  )
+}
+
+const barBtn: React.CSSProperties = {
+  background: 'transparent', border: '1px solid var(--border-light)',
+  borderRadius: 7, padding: '6px 11px', fontSize: 12.5, fontWeight: 600,
+  color: 'var(--text-secondary)', cursor: 'pointer',
+}
+const popoverStyle: React.CSSProperties = {
+  position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
+  background: 'var(--bg-card)', border: '1px solid var(--border)',
+  borderRadius: 8, padding: 4, minWidth: 160,
+  boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+  display: 'flex', flexDirection: 'column', gap: 2,
+}
+const popoverItem: React.CSSProperties = {
+  background: 'transparent', border: 'none',
+  padding: '6px 10px', borderRadius: 5, textAlign: 'left',
+  fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', cursor: 'pointer',
 }
 
 // ─── Gedeelde stijlen ─────────────────────────────────────────────────────────
