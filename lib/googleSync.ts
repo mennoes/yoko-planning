@@ -27,6 +27,20 @@ function eventDates(ev: GoogleEvent): { start: string | null; end: string | null
   return { start: s, end: e }
 }
 
+// Estimate planning-hours from a Google event. Timed events use the actual
+// duration; all-day events fall back to 8h × #days.
+function eventHours(ev: GoogleEvent): number {
+  if (ev.start.dateTime && ev.end.dateTime) {
+    const ms = new Date(ev.end.dateTime).getTime() - new Date(ev.start.dateTime).getTime()
+    return Math.max(0, Math.round((ms / 3600000) * 10) / 10)
+  }
+  if (ev.start.date && ev.end.date) {
+    const days = Math.max(1, Math.round((new Date(ev.end.date).getTime() - new Date(ev.start.date).getTime()) / 86400000))
+    return days * 8
+  }
+  return 0
+}
+
 async function ensureGoogleGroup(
   admin:   SupabaseClient,
   boardId: string,
@@ -120,7 +134,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       start_date:         start,
       end_date:           end ?? start,
       deadline:           null,
-      est_hours:          0,
+      est_hours:          eventHours(ev),
       dagen:              0,
       notes:              ev.description ?? null,
       contactpersoon:     null,

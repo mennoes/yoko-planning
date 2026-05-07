@@ -389,7 +389,7 @@ function TimelineBars({ memberId, projects, cols, colW, onDragMove, onDragEnd, o
   const totalWidth  = cols.reduce((s, c) => s + c.widthPx, 0)
   const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
 
-  const bars = projects
+  const rawBars = projects
     .filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
     .map(p => {
       const s = p.startDate ? new Date(p.startDate).getTime() : gridStartMs
@@ -403,15 +403,28 @@ function TimelineBars({ memberId, projects, cols, colW, onDragMove, onDragEnd, o
     })
     .filter(Boolean) as { p: Project; left: number; width: number }[]
 
+  // Lane-pack: sort by start, place each bar on the lowest lane where it
+  // doesn't overlap an earlier bar. Non-overlapping bars share a row.
+  const sorted = [...rawBars].sort((a, b) => a.left - b.left)
+  const laneEnds: number[] = []
+  const bars = sorted.map(b => {
+    const start = b.left
+    let lane = laneEnds.findIndex(end => end <= start + 1)
+    if (lane < 0) { lane = laneEnds.length; laneEnds.push(b.left + b.width) }
+    else laneEnds[lane] = b.left + b.width
+    return { ...b, lane }
+  })
+  const numLanes = Math.max(1, laneEnds.length)
+
   if (bars.length === 0) return null
-  const height = bars.length * (BAR_H + BAR_GAP) + BAR_GAP + 6
+  const height = numLanes * (BAR_H + BAR_GAP) + BAR_GAP + 6
   return (
     <div style={{ position: 'relative', height, overflow: 'visible' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border)', pointerEvents: 'none' }} />
       ))}
-      {bars.map(({ p, left, width }, i) => (
-        <div key={p.id} style={{ position: 'absolute', top: i * (BAR_H + BAR_GAP), left: 0, right: 0, height: BAR_H + BAR_GAP }}>
+      {bars.map(({ p, left, width, lane }) => (
+        <div key={p.id} style={{ position: 'absolute', top: lane * (BAR_H + BAR_GAP), left: 0, right: 0, height: BAR_H + BAR_GAP }}>
           <DraggableBar project={p} left={left} width={width} colW={colW}
             onDragMove={(s, e) => onDragMove(p, s, e)}
             onDragEnd={(s, e) => onDragEnd(p, s, e)}
@@ -453,7 +466,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     setNewEntry('')
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function save() { onUpdate(project, startDate || null, endDate || null, { estHours: parseFloat(estHours) || 0, notes, journal }) }
+  const isGoogle = rawItem?.source === 'google'
+  function save() { if (!isGoogle) onUpdate(project, startDate || null, endDate || null, { estHours: parseFloat(estHours) || 0, notes, journal }) }
   function addEntry() {
     const text = newEntry.trim()
     if (!text) return
@@ -467,10 +481,18 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     <>
     {/* Backdrop — click to close */}
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 299 }} />
-    <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 'min(420px, 92vw)', zIndex: 300,
+      style={{ position: 'fixed', inset: 0, background: isGoogle ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.25)', zIndex: 299,
+        backdropFilter: isGoogle ? 'blur(4px)' : undefined, WebkitBackdropFilter: isGoogle ? 'blur(4px)' : undefined }} />
+    <div style={isGoogle ? {
+      position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+      width: 'min(480px, 92vw)', maxHeight: '85vh', zIndex: 300,
+      background: 'var(--bg-card)', borderRadius: 14, border: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', overflow: 'hidden',
+    } : {
+      position: 'fixed', right: 0, top: 0, bottom: 0, width: 'min(420px, 92vw)', zIndex: 300,
       background: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
-      display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.35)' }}>
+      display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.35)',
+    }}>
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
           <div>
@@ -488,6 +510,17 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
         </div>
       </div>
+      {isGoogle && (
+        <div style={{ padding: '10px 18px', background: 'rgba(216,182,46,0.18)', borderBottom: '1px solid var(--border)', fontSize: 12.5, fontWeight: 600, color: '#7a5a0a', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>Read-only — wijzig dit item in Google Calendar.</span>
+          {rawItem?.externalLink && (
+            <a href={rawItem.externalLink as string} target="_blank" rel="noopener noreferrer"
+              style={{ marginLeft: 'auto', color: '#7a5a0a', fontWeight: 700, textDecoration: 'underline' }}>
+              Open in Google ↗
+            </a>
+          )}
+        </div>
+      )}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
         <Row label="Owner">
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -502,16 +535,22 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
         <Row label="Status"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{project.status === 'done' ? '✅ Done' : rawItem?.status as string || '—'}</span></Row>
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={dateInput} />
+            <input type="date" value={startDate} disabled={isGoogle}
+              onChange={e => setStartDate(e.target.value)}
+              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
             <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={dateInput} />
+            <input type="date" value={endDate} disabled={isGoogle}
+              onChange={e => setEndDate(e.target.value)}
+              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
           </div>
           {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
         </Row>
         {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
         <Row label="Est Time">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="number" value={estHours} onChange={e => setEstHours(e.target.value)} style={{ ...dateInput, width: 64 }} />
+            <input type="number" value={estHours} disabled={isGoogle}
+              onChange={e => setEstHours(e.target.value)}
+              style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
           </div>
         </Row>
@@ -535,8 +574,9 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
           </div>
         </Row>
         <Row label="Notes">
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Notities…"
-            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+          <textarea value={notes} disabled={isGoogle}
+            onChange={e => setNotes(e.target.value)} rows={3} placeholder={isGoogle ? '' : 'Notities…'}
+            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
         </Row>
         <Row label="Journaal">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -577,7 +617,9 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
       </div>
       <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button onClick={onClose} style={cancelBtn}>Sluiten</button>
-        <button onClick={save} style={{ ...cancelBtn, background: color, color: '#000', border: 'none', fontWeight: 800 }}>Opslaan</button>
+        {!isGoogle && (
+          <button onClick={save} style={{ ...cancelBtn, background: color, color: '#000', border: 'none', fontWeight: 800 }}>Opslaan</button>
+        )}
       </div>
     </div>
     </>
