@@ -126,13 +126,17 @@ export default function PublicProfilePage() {
           </h1>
           {data?.role && <div style={{ marginTop: 6, fontSize: 14, color: 'var(--text-secondary)' }}>{data.role}</div>}
           {isMe && (
-            <button onClick={openEdit}
-              style={{ marginTop: 12, padding: '7px 14px', borderRadius: 8,
-                border: '1px solid var(--border)', background: 'var(--bg-card)',
-                color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
-                cursor: 'pointer' }}>
-              Bewerk profiel
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              <button onClick={openEdit}
+                style={{ padding: '7px 14px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'var(--bg-card)',
+                  color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
+                  cursor: 'pointer' }}>
+                Bewerk profiel
+              </button>
+              <VacationButton current={data?.vacation_until ?? null}
+                onSave={v => persistField({ vacation_until: v })} />
+            </div>
           )}
         </div>
       </div>
@@ -390,6 +394,68 @@ function EditableValue({ field, data, onSave }: {
       style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)',
         borderRadius: 6, padding: '6px 9px', color: 'var(--text-primary)',
         fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+  )
+}
+
+function VacationButton({ current, onSave }: { current: string | null; onSave: (v: string | null) => void }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(current ?? '')
+  const onVacation = !!current && new Date(current).getTime() > Date.now()
+
+  return (
+    <>
+      <button onClick={() => { setDraft(current ?? ''); setOpen(true) }}
+        style={{ padding: '7px 14px', borderRadius: 8,
+          border: `1px solid ${onVacation ? 'rgba(255,123,36,0.4)' : 'var(--border)'}`,
+          background: onVacation ? 'rgba(255,123,36,0.12)' : 'var(--bg-card)',
+          color: onVacation ? '#a05400' : 'var(--text-secondary)',
+          fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+        🏝 {onVacation ? `Vakantie tot ${new Date(current).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}` : 'Vakantie aangeven'}
+      </button>
+
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            zIndex: 251, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
+            padding: '20px 22px', width: 320, maxWidth: '92vw',
+            boxShadow: '0 14px 40px rgba(0,0,0,0.35)' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Vakantie aangeven</h3>
+            <p style={{ margin: '0 0 14px', fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Tot wanneer ben je weg? Het team ziet dit direct op de homepagina.
+            </p>
+            <input type="date" value={draft} autoFocus
+              onChange={e => setDraft(e.target.value)}
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 8,
+                border: '1px solid var(--border)', background: 'var(--bg-base)',
+                color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              {current && (
+                <button onClick={() => { onSave(null); setOpen(false) }}
+                  style={{ flex: 1, padding: '9px', borderRadius: 8,
+                    border: '1px solid var(--border)', background: 'transparent',
+                    color: 'var(--red)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Wissen
+                </button>
+              )}
+              <button onClick={() => setOpen(false)}
+                style={{ flex: 1, padding: '9px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'transparent',
+                  color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Annuleer
+              </button>
+              <button onClick={() => { onSave(draft || null); setOpen(false) }}
+                style={{ flex: 2, padding: '9px', borderRadius: 8,
+                  border: 'none', background: 'var(--accent)',
+                  color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Opslaan
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   )
 }
 

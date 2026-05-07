@@ -974,6 +974,61 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
   )
 }
 
+// ─── Auto-move "Done" items into a dedicated "Done" group ───────────────────
+// Items with status === 'Done' end up in the Done group; if that group does
+// not exist yet, it's created at the bottom. Items in the Done group whose
+// status is no longer Done are bumped back to the first non-Done group.
+function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
+  const doneIdx   = next.findIndex(g => g.name.toLowerCase() === 'done')
+  const doneGroup = doneIdx >= 0 ? next[doneIdx] : null
+
+  const additions: BoardItem[] = []
+  const evictions: BoardItem[] = []
+
+  // Build new arrays per non-Done group: pull out Done items.
+  const updated = next.map(g => {
+    if (doneGroup && g.id === doneGroup.id) return g  // handled below
+    const stay = g.items.filter(i => {
+      if (i.status === 'Done') { additions.push(i); return false }
+      return true
+    })
+    return stay.length === g.items.length ? g : { ...g, items: stay }
+  })
+
+  // Items already in Done group: keep status===Done, evict the rest.
+  const newDoneItems: BoardItem[] = []
+  if (doneGroup) {
+    for (const i of doneGroup.items) {
+      if (i.status === 'Done') newDoneItems.push(i)
+      else evictions.push(i)
+    }
+  }
+  // Append the newly-Done items, deduping by id.
+  const doneIds = new Set(newDoneItems.map(i => i.id))
+  for (const i of additions) if (!doneIds.has(i.id)) newDoneItems.push(i)
+
+  // Nothing changed? Bail out so React reference equality still holds.
+  if (additions.length === 0 && evictions.length === 0) return next
+
+  let result = updated
+  if (evictions.length > 0) {
+    const firstNonDone = result.findIndex(g => !doneGroup || g.id !== doneGroup.id)
+    if (firstNonDone >= 0) {
+      result = result.map((g, i) => i === firstNonDone ? { ...g, items: [...g.items, ...evictions] } : g)
+    }
+  }
+
+  if (doneGroup) {
+    result = result.map(g => g.id === doneGroup.id ? { ...g, items: newDoneItems } : g)
+  } else if (newDoneItems.length > 0) {
+    result = [...result, {
+      id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: false,
+      items: newDoneItems,
+    }]
+  }
+  return result
+}
+
 // ─── BoardTable (hoofd component) ─────────────────────────────────────────────
 type BoardTableProps = {
   title: string; emoji: string; color: string
@@ -982,8 +1037,9 @@ type BoardTableProps = {
   onRenameTitle?: (label: string) => void
 }
 
-export default function BoardTable({ title, emoji, color, columns, groups, onChange, onRenameTitle }: BoardTableProps) {
+export default function BoardTable({ title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const storageKey = `board-col-widths-${title}`
+  const onChange = (next: BoardGroup[]) => rawOnChange(autoMoveDoneItems(next))
 
   function initWidths(): Record<string, number> {
     try {
