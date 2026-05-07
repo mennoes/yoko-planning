@@ -641,6 +641,13 @@ export default function PlanningPage() {
     }
     setAllGroups(loaded)
 
+    // Restore team capacities from localStorage
+    let capByMember: Record<string, number> = {}
+    try {
+      const savedCap = localStorage.getItem('yoko-capacities')
+      if (savedCap) capByMember = JSON.parse(savedCap)
+    } catch {}
+
     // Restore team order from localStorage
     try {
       const saved = localStorage.getItem('planning-team-order')
@@ -650,9 +657,15 @@ export default function PlanningPage() {
         const ordered: TeamMember[] = []
         for (const id of order) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
         for (const m of byId.values()) ordered.push(m)
-        if (ordered.length === teamData.members.length) setTeam(ordered)
+        if (ordered.length === teamData.members.length) {
+          setTeam(ordered.map(m => capByMember[m.id] ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+          return
+        }
       }
     } catch {}
+    if (Object.keys(capByMember).length > 0) {
+      setTeam(teamData.members.map(m => capByMember[m.id] ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+    }
   }, [])
 
   function applyShift() {
@@ -772,7 +785,15 @@ export default function PlanningPage() {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   function updateCapacity(memberId: string, capacity: number) {
-    setTeam(prev => prev.map(m => m.id === memberId ? { ...m, weeklyCapacity: capacity } : m))
+    setTeam(prev => {
+      const next = prev.map(m => m.id === memberId ? { ...m, weeklyCapacity: capacity } : m)
+      try {
+        const map: Record<string, number> = {}
+        for (const m of next) map[m.id] = m.weeklyCapacity
+        localStorage.setItem('yoko-capacities', JSON.stringify(map))
+      } catch {}
+      return next
+    })
   }
   function handleDragMove(project: Project, s: string | null, e: string | null) {
     setShadowDrag({ projectId: project.id, start: s, end: e })
