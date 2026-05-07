@@ -9,12 +9,21 @@ import {
   type NavItem, type SidebarSection,
 } from '@/lib/navStore'
 import { hasSupabase } from '@/lib/supabase'
+import {
+  IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
+  IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
+} from './Icon'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
+const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  '/':         IconHome,
+  '/planning': IconPlanning,
+  '/todos':    IconCheckList,
+}
 const DEFAULT_MAIN = [
-  { id: 'home',     href: '/',         label: 'Home',     icon: '👋' },
-  { id: 'planning', href: '/planning', label: 'Planning', icon: '📅' },
-  { id: 'todos',    href: '/todos',    label: "To do's",  icon: '✅' },
+  { id: 'home',     href: '/',         label: 'Home' },
+  { id: 'planning', href: '/planning', label: 'Planning' },
+  { id: 'todos',    href: '/todos',    label: "To do's" },
 ]
 type MainNavItem = typeof DEFAULT_MAIN[number]
 
@@ -24,10 +33,10 @@ const PALETTE = [
 ]
 
 type Theme = 'auto' | 'dark' | 'light'
-const THEMES: { value: Theme; icon: string; label: string }[] = [
-  { value: 'auto',  icon: '🌓', label: 'Auto'   },
-  { value: 'dark',  icon: '🌙', label: 'Donker' },
-  { value: 'light', icon: '☀️', label: 'Licht'  },
+const THEMES: { value: Theme; Icon: React.ComponentType<{ size?: number }>; label: string }[] = [
+  { value: 'auto',  Icon: IconAuto, label: 'Auto'   },
+  { value: 'dark',  Icon: IconMoon, label: 'Donker' },
+  { value: 'light', Icon: IconSun,  label: 'Licht'  },
 ]
 function applyTheme(t: Theme) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme')
@@ -157,9 +166,9 @@ function SectionBlock({
         {editOrder && (
           <>
             <button onClick={() => onMoveSection(-1)} disabled={isFirstSection} title="Omhoog"
-              style={reorderArrowBtn(isFirstSection)}>↑</button>
+              style={reorderArrowBtn(isFirstSection)}><IconArrowUp size={14} /></button>
             <button onClick={() => onMoveSection(1)} disabled={isLastSection} title="Omlaag"
-              style={reorderArrowBtn(isLastSection)}>↓</button>
+              style={reorderArrowBtn(isLastSection)}><IconArrowDown size={14} /></button>
           </>
         )}
 
@@ -229,9 +238,9 @@ function SectionBlock({
                 {editOrder && !editing && (
                   <>
                     <button onClick={e => { e.stopPropagation(); moveItem(idx, -1) }} disabled={idx === 0}
-                      title="Omhoog" style={reorderArrowBtn(idx === 0)}>↑</button>
+                      title="Omhoog" style={reorderArrowBtn(idx === 0)}><IconArrowUp size={14} /></button>
                     <button onClick={e => { e.stopPropagation(); moveItem(idx, 1) }} disabled={idx === section.items.length - 1}
-                      title="Omlaag" style={reorderArrowBtn(idx === section.items.length - 1)}>↓</button>
+                      title="Omlaag" style={reorderArrowBtn(idx === section.items.length - 1)}><IconArrowDown size={14} /></button>
                   </>
                 )}
 
@@ -325,7 +334,7 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
                   color: theme === t.value ? 'var(--accent)' : 'var(--text-secondary)',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 18 }}>{t.icon}</span>
+                <t.Icon size={18} />
                 {t.label}
               </button>
             ))}
@@ -339,7 +348,7 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
               border: '1px solid var(--border)', background: 'var(--bg-hover)',
               color: 'var(--red)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-            <span>↪</span> Uitloggen
+            <IconLogoutOutline size={16} /> Uitloggen
           </button>
         )}
       </div>
@@ -489,8 +498,6 @@ export default function Sidebar({
     document.addEventListener('mouseup', onUp)
   }
 
-  const themeInfo = THEMES.find(t => t.value === theme)!
-
   const containerStyle: React.CSSProperties = isMobile
     ? {
         width: 320, minWidth: 320, maxWidth: 320,
@@ -520,12 +527,12 @@ export default function Sidebar({
         {isMobile && onClose && (
           <button onClick={onClose} aria-label="Menu sluiten"
             style={{ position: 'absolute', top: 12, right: 12, zIndex: 5,
-              width: 36, height: 36, borderRadius: 8,
-              background: 'var(--bg-hover)', border: '1px solid var(--border)',
-              color: 'var(--text-primary)', fontSize: 20, lineHeight: 1,
+              width: 36, height: 36, borderRadius: 9,
+              background: 'var(--bg-hover)', border: '1px solid var(--border-light)',
+              color: 'var(--text-primary)',
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               padding: 0 }}>
-            ✕
+            <IconClose size={18} />
           </button>
         )}
 
@@ -589,16 +596,16 @@ export default function Sidebar({
                     onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
                     onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
                   >
-                    <span style={{ fontSize: 14 }}>{item.icon}</span>
+                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={17} /> : null })()}
                     <span>{item.label}</span>
                   </Link>
                 )}
                 {editOrder && !editing && (
                   <>
                     <button onClick={() => moveMainNav(idx, -1)} disabled={idx === 0} title="Omhoog"
-                      style={reorderArrowBtn(idx === 0)}>↑</button>
+                      style={reorderArrowBtn(idx === 0)}><IconArrowUp size={14} /></button>
                     <button onClick={() => moveMainNav(idx, 1)} disabled={idx === mainNav.length - 1} title="Omlaag"
-                      style={reorderArrowBtn(idx === mainNav.length - 1)}>↓</button>
+                      style={reorderArrowBtn(idx === mainNav.length - 1)}><IconArrowDown size={14} /></button>
                   </>
                 )}
                 {!editOrder && !editing && (
@@ -657,7 +664,7 @@ export default function Sidebar({
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '8px 10px', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            <span style={{ fontSize: 18 }}>⚙</span>
+            <IconSettings size={18} />
             <span style={{ fontSize: 13.5, color: 'var(--text-secondary)', fontWeight: 500 }}>Instellingen</span>
           </button>
         </div>

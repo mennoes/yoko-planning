@@ -17,6 +17,11 @@ import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
 import { startTimer, stopTimer, getActiveTimer, totalMinutesForProject, onTimerUpdate, fmtMinutes } from '@/lib/timerStore'
 import { logActivity }   from '@/lib/activityLog'
+import {
+  IconMore, IconUsers, IconBoard, IconHourglass, IconRange, IconShare,
+  IconDownload, IconSort, IconChevronLeft, IconChevronRight, IconChevronsLeft, IconChevronsRight,
+  IconPlay, IconStop, IconClose,
+} from '@/components/Icon'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -491,13 +496,13 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {isTimingThis ? (
               <button onClick={() => stopTimer()}
-                style={{ ...cancelBtn, background: '#e2445c', color: '#fff', border: 'none', fontWeight: 700 }}>
-                ■ Stop timer
+                style={{ ...cancelBtn, background: '#e2445c', color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <IconStop size={13} /> Stop timer
               </button>
             ) : (
               <button onClick={() => startTimer(project.id, project.name)}
-                style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700 }}>
-                ▶ Start timer
+                style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <IconPlay size={13} /> Start timer
               </button>
             )}
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -611,6 +616,7 @@ export default function PlanningPage() {
   const [shiftFilter,  setShiftFilter]  = useState('')
   const [shareOpen,    setShareOpen]    = useState(false)
   const [copiedBoard,  setCopiedBoard]  = useState<string | null>(null)
+  const [overflowOpen, setOverflowOpen] = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
   const isMobile = useIsMobile()
@@ -883,7 +889,7 @@ export default function PlanningPage() {
 
         {/* Title + nav */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 10 : 16 }}>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1, paddingRight: isMobile ? 90 : 0 }}>
             <h1 style={{ fontSize: isMobile ? 22 : 30, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em', lineHeight: 1 }}>
               Planning
             </h1>
@@ -891,17 +897,19 @@ export default function PlanningPage() {
               {todayLabel}
             </div>
           </div>
-          <div style={segGroup}>
-            {!isMobile && <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug">‹‹</button>}
-            <button onClick={stepBack} style={segBtn(false)}>‹</button>
-            <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
-            <button onClick={stepForward} style={segBtn(false)}>›</button>
-            {!isMobile && <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit">››</button>}
-          </div>
+          {!isMobile && (
+            <div style={segGroup}>
+              <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
+              <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
+              <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
+              <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
+              <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
+            </div>
+          )}
         </div>
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap', marginBottom: isMobile ? 12 : 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap', marginBottom: isMobile ? 10 : 16 }}>
           {/* Zoom */}
           <div style={segGroup}>
             {(['dag', 'week', 'maand'] as ZoomLevel[]).map(z => (
@@ -912,58 +920,111 @@ export default function PlanningPage() {
             ))}
           </div>
 
-          {!isMobile && <span style={separator} />}
-
-          {/* Filters */}
-          <button onClick={() => setPeopleOpen(true)}
-            style={ghostBtn(filterMembers.size > 0)}>
-            Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
-          </button>
-          <button onClick={() => setAgendasOpen(true)} style={ghostBtn(false)}>
-            Agenda&apos;s
-          </button>
-
-          {!isMobile && <span style={separator} />}
-
-          {/* Actions */}
-          <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
-            Capaciteit
-          </button>
-          <button onClick={() => setShiftOpen(true)} style={ghostBtn(false)} title="Meerdere projecten tegelijk verschuiven">
-            Verschuif
-          </button>
-          <button onClick={() => downloadIcs(projects)} title="Exporteer als iCal" style={ghostBtn(false)}>
-            Exporteer
-          </button>
-          <button onClick={() => setShareOpen(true)} title="Deelbare links per agenda"
-            style={ghostBtn(false)}>
-            Deel
-          </button>
-          <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden"
-            style={ghostBtn(editOrder)}>
-            {editOrder ? '✓ Klaar' : 'Sorteren'}
-          </button>
+          {/* Mobile: nav + overflow */}
+          {isMobile ? (
+            <>
+              <div style={{ ...segGroup, marginLeft: 'auto' }}>
+                <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
+                <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Nu</button>
+                <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
+              </div>
+              <button onClick={() => setOverflowOpen(true)} aria-label="Meer acties"
+                style={{ ...ghostBtn(false), padding: '6px 10px' }}>
+                <IconMore size={18} />
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={separator} />
+              <button onClick={() => setPeopleOpen(true)} style={ghostBtn(filterMembers.size > 0)}>
+                <IconUsers size={14} style={{ marginRight: 6 }} />Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
+              </button>
+              <button onClick={() => setAgendasOpen(true)} style={ghostBtn(false)}>
+                <IconBoard size={14} style={{ marginRight: 6 }} />Agenda&apos;s
+              </button>
+              <span style={separator} />
+              <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
+                <IconHourglass size={14} style={{ marginRight: 6 }} />Capaciteit
+              </button>
+              <button onClick={() => setShiftOpen(true)} style={ghostBtn(false)} title="Meerdere projecten verschuiven">
+                <IconRange size={14} style={{ marginRight: 6 }} />Verschuif
+              </button>
+              <button onClick={() => downloadIcs(projects)} title="Exporteer als iCal" style={ghostBtn(false)}>
+                <IconDownload size={14} style={{ marginRight: 6 }} />Exporteer
+              </button>
+              <button onClick={() => setShareOpen(true)} title="Deelbare links per agenda" style={ghostBtn(false)}>
+                <IconShare size={14} style={{ marginRight: 6 }} />Deel
+              </button>
+              <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden" style={ghostBtn(editOrder)}>
+                <IconSort size={14} style={{ marginRight: 6 }} />{editOrder ? 'Klaar' : 'Sorteren'}
+              </button>
+            </>
+          )}
         </div>
 
-        {/* KPI strip */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-          gap: isMobile ? 8 : 12,
-          paddingBottom: isMobile ? 12 : 18,
-          borderBottom: '1px solid var(--border-light)',
-        }}>
-          <KpiCard label="Capaciteit deze week" value={`${kpis.pctUsed}%`}
-            sub={`${kpis.totalHours} / ${kpis.totalCap} uur`}
-            tone={kpis.pctUsed > 100 ? 'red' : kpis.pctUsed > 85 ? 'amber' : 'normal'} />
-          <KpiCard label="Overbelast" value={String(kpis.overbooked)}
-            sub={kpis.overbooked === 0 ? 'iedereen onder cap' : kpis.overbooked === 1 ? 'persoon' : 'personen'}
-            tone={kpis.overbooked > 0 ? 'red' : 'normal'} />
-          <KpiCard label="Actieve projecten" value={String(kpis.activeProjects)} sub="lopen deze week" />
-          <KpiCard label="Deadlines" value={String(kpis.deadlinesThis)} sub="deze week"
-            tone={kpis.deadlinesThis > 0 ? 'amber' : 'normal'} />
-        </div>
+        {/* KPI strip — horizontally scrollable on mobile */}
+        {isMobile ? (
+          <div style={{
+            display: 'flex', gap: 8,
+            overflowX: 'auto', overflowY: 'hidden',
+            paddingBottom: 12,
+            marginBottom: 4,
+            borderBottom: '1px solid var(--border-light)',
+            scrollbarWidth: 'none',
+          }}>
+            <KpiCard label="Capaciteit" value={`${kpis.pctUsed}%`}
+              sub={`${kpis.totalHours} / ${kpis.totalCap} uur`}
+              tone={kpis.pctUsed > 100 ? 'red' : kpis.pctUsed > 85 ? 'amber' : 'normal'} compact />
+            <KpiCard label="Overbelast" value={String(kpis.overbooked)}
+              sub={kpis.overbooked === 1 ? 'persoon' : 'personen'}
+              tone={kpis.overbooked > 0 ? 'red' : 'normal'} compact />
+            <KpiCard label="Actief" value={String(kpis.activeProjects)} sub="deze week" compact />
+            <KpiCard label="Deadlines" value={String(kpis.deadlinesThis)} sub="deze week"
+              tone={kpis.deadlinesThis > 0 ? 'amber' : 'normal'} compact />
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12,
+            paddingBottom: 18, borderBottom: '1px solid var(--border-light)',
+          }}>
+            <KpiCard label="Capaciteit deze week" value={`${kpis.pctUsed}%`}
+              sub={`${kpis.totalHours} / ${kpis.totalCap} uur`}
+              tone={kpis.pctUsed > 100 ? 'red' : kpis.pctUsed > 85 ? 'amber' : 'normal'} />
+            <KpiCard label="Overbelast" value={String(kpis.overbooked)}
+              sub={kpis.overbooked === 0 ? 'iedereen onder cap' : kpis.overbooked === 1 ? 'persoon' : 'personen'}
+              tone={kpis.overbooked > 0 ? 'red' : 'normal'} />
+            <KpiCard label="Actieve projecten" value={String(kpis.activeProjects)} sub="lopen deze week" />
+            <KpiCard label="Deadlines" value={String(kpis.deadlinesThis)} sub="deze week"
+              tone={kpis.deadlinesThis > 0 ? 'amber' : 'normal'} />
+          </div>
+        )}
       </header>
+
+      {/* ── Mobile overflow menu ── */}
+      {overflowOpen && (
+        <Popup title="Acties" onClose={() => setOverflowOpen(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {[
+              { icon: IconUsers,     label: filterMembers.size > 0 ? `Mensen · ${filterMembers.size}` : 'Mensen', active: filterMembers.size > 0, onClick: () => { setOverflowOpen(false); setPeopleOpen(true) } },
+              { icon: IconBoard,     label: "Agenda's", active: false, onClick: () => { setOverflowOpen(false); setAgendasOpen(true) } },
+              { icon: IconHourglass, label: 'Capaciteit',                 active: false, onClick: () => { setOverflowOpen(false); setUrenOpen(true) } },
+              { icon: IconRange,     label: 'Verschuif projecten',        active: false, onClick: () => { setOverflowOpen(false); setShiftOpen(true) } },
+              { icon: IconDownload,  label: 'Exporteer als iCal',         active: false, onClick: () => { setOverflowOpen(false); downloadIcs(projects) } },
+              { icon: IconShare,     label: 'Deelbare link maken',        active: false, onClick: () => { setOverflowOpen(false); setShareOpen(true) } },
+              { icon: IconSort,      label: editOrder ? 'Stop sorteren'   : 'Sorteer teamleden', active: editOrder, onClick: () => { setOverflowOpen(false); setEditOrder(o => !o) } },
+            ].map(({ icon: Ic, label, active, onClick }) => (
+              <button key={label} onClick={onClick}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', borderRadius: 8,
+                  border: '1px solid transparent',
+                  background: active ? 'var(--accent-light)' : 'var(--bg-hover)',
+                  color: active ? 'var(--accent)' : 'var(--text-primary)',
+                  cursor: 'pointer', fontSize: 14, fontWeight: 500, textAlign: 'left' }}>
+                <Ic size={18} />{label}
+              </button>
+            ))}
+          </div>
+        </Popup>
+      )}
 
       {/* ── Uren popup ── */}
       {urenOpen && (
@@ -1332,23 +1393,25 @@ const separator: React.CSSProperties = {
 }
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, tone = 'normal' }: {
-  label: string; value: string; sub?: string; tone?: 'normal' | 'amber' | 'red'
+function KpiCard({ label, value, sub, tone = 'normal', compact = false }: {
+  label: string; value: string; sub?: string; tone?: 'normal' | 'amber' | 'red'; compact?: boolean
 }) {
   const valueColor = tone === 'red' ? '#C4453A' : tone === 'amber' ? '#B27500' : 'var(--text-primary)'
   return (
     <div style={{
-      padding: '10px 14px',
+      padding: compact ? '8px 12px' : '10px 14px',
       background: 'var(--bg-card)',
       border: '1px solid var(--border-light)',
       borderRadius: 10,
+      flexShrink: 0,
+      minWidth: compact ? 120 : undefined,
     }}>
       <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)',
         textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: valueColor, marginTop: 4, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+      <div style={{ fontSize: compact ? 18 : 22, fontWeight: 700, color: valueColor, marginTop: 4, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap' }}>{sub}</div>}
     </div>
   )
 }

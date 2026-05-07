@@ -6,6 +6,7 @@ import { useProfile } from '@/components/ProfileContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { IconCheckList } from '@/components/Icon'
 import initialData from '@/data/todos.json'
 import teamData    from '@/data/team.json'
 
@@ -300,8 +301,9 @@ export default function TodosPage() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '44px 36px 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 20 : 32 }}>
-        <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', flex: 1 }}>
-          ✅ To do&apos;s
+        <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconCheckList size={isMobile ? 22 : 28} />
+          To do&apos;s
         </h1>
         <button onClick={() => setEditOrder(o => !o)}
           style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',

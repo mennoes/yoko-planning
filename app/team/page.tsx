@@ -5,6 +5,7 @@ import contactsData from '@/data/contacts.json'
 import teamData     from '@/data/team.json'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
+import { IconUsers, IconSearch } from '@/components/Icon'
 
 // ─── Contacts types ───────────────────────────────────────────────────────────
 type Contact = { id: string; name: string; role: string; email: string; phone: string }
@@ -76,7 +77,7 @@ function PhotoCropper({ src, onDone, onCancel }: {
           backgroundPosition: `calc(50% + ${pos.x}px) calc(50% + ${pos.y}px)`,
         }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-        <span>🔍</span>
+        <IconSearch size={14} />
         <input type="range" min={0.5} max={4} step={0.05} value={zoom} onChange={e => setZoom(+e.target.value)}
           style={{ width: 100 }} />
         <span>{Math.round(zoom * 100)}%</span>
@@ -264,7 +265,9 @@ export default function TeamPage() {
   return (
     <div style={{ padding: '32px 32px 64px' }}>
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>👥 Team</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconUsers size={26} />Team
+        </h1>
       </div>
 
       {/* ── Yoko team ── */}
