@@ -8,11 +8,31 @@ export type PageDoc = {
   emoji: string
   createdAt: string
   updatedAt: string
+  folderId?: string | null
+}
+
+export type DocFolder = {
+  id:    string
+  name:  string
+  emoji?: string
 }
 
 const PREFIX     = 'yoko-page-'
 const RECENT_KEY = 'yoko-recent-pages'
+const FOLDERS_KEY = 'yoko-doc-folders'
 const MAX_RECENT = 50
+
+// ─── Doc folders (subfolders inside the Documenten section) ──────────────────
+export function loadDocFolders(): DocFolder[] {
+  if (typeof window === 'undefined') return []
+  try { const s = localStorage.getItem(FOLDERS_KEY); return s ? JSON.parse(s) : [] } catch { return [] }
+}
+
+export function saveDocFolders(folders: DocFolder[]): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
+  window.dispatchEvent(new CustomEvent('yoko-pages-update'))
+}
 
 export function loadPage(id: string): PageDoc | null {
   if (typeof window === 'undefined') return null
