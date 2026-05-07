@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useProfile } from '@/components/ProfileContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
-import { IconCheckList, IconHourglass, IconDocument } from '@/components/Icon'
+import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconAlert, IconBoard } from '@/components/Icon'
 import { UserAvatar } from '@/components/UserAvatar'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
@@ -100,11 +100,16 @@ function fmtRelative(iso: string) {
 
 const card: React.CSSProperties = {
   background: 'var(--bg-card)', borderRadius: 14,
-  border: '1px solid var(--border)', overflow: 'hidden',
+  border: '1px solid var(--border-light)', overflow: 'hidden',
 }
 const cardHeader: React.CSSProperties = {
-  padding: '14px 20px 12px', borderBottom: '1px solid var(--border)',
+  padding: '13px 18px 11px', borderBottom: '1px solid var(--border-light)',
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  background: 'var(--overlay-subtle)',
+}
+const cardLink: React.CSSProperties = {
+  fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none',
+  fontWeight: 600, letterSpacing: '0.02em',
 }
 
 export default function HomePage() {
@@ -258,7 +263,7 @@ export default function HomePage() {
       <div style={card}>
         <div style={cardHeader}>
           <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconCheckList size={isMobile ? 17 : 15} />Jouw taken</h2>
-          <Link href="/todos" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Alle →</Link>
+          <Link href="/todos" style={cardLink}>Alle →</Link>
         </div>
         {memberId ? (
           <div style={{ padding: '6px 0' }}>
@@ -281,7 +286,7 @@ export default function HomePage() {
       <div style={card}>
         <div style={cardHeader}>
           <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconHourglass size={isMobile ? 17 : 15} />Werkdruk deze week</h2>
-          <Link href="/planning" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Planning →</Link>
+          <Link href="/planning" style={cardLink}>Planning →</Link>
         </div>
         <div style={{ padding: '16px 20px 14px' }}>
           {memberId ? (
@@ -321,7 +326,7 @@ export default function HomePage() {
     team: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>👥 Team vandaag</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconUsers size={isMobile ? 17 : 15} />Team vandaag</h2>
         </div>
         <div style={{ padding: '6px 0 10px' }}>
           {teamData.members.map(m => {
@@ -347,7 +352,7 @@ export default function HomePage() {
     deadlines: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>⏰ Deadlines deze week</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconClock size={isMobile ? 17 : 15} />Deadlines deze week</h2>
         </div>
         <div style={{ padding: '6px 0 10px' }}>
           {deadlineItems.length === 0 ? (
@@ -385,7 +390,7 @@ export default function HomePage() {
     overload: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>⚠️ Overbelast deze week</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconAlert size={isMobile ? 17 : 15} />Overbelast deze week</h2>
         </div>
         <div style={{ padding: '6px 0 10px' }}>
           {overloaded.length === 0 ? (
@@ -436,12 +441,12 @@ export default function HomePage() {
       <div style={card}>
         <div style={cardHeader}>
           <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconDocument size={isMobile ? 17 : 15} />Meest recente documenten</h2>
-          <button onClick={createNewPage} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Nieuw</button>
+          <button onClick={createNewPage} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#000', cursor: 'pointer', fontSize: 12, fontWeight: 800 }}>+ Nieuw</button>
         </div>
         {recentPages.length === 0 ? (
           <div style={{ padding: '28px 20px', textAlign: 'center' }}>
             <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 14px' }}>Nog geen documenten.</p>
-            <button onClick={createNewPage} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📄 Nieuw document</button>
+            <button onClick={createNewPage} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', cursor: 'pointer', fontSize: 13, fontWeight: 800 }}>+ Nieuw document</button>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 0 }}>

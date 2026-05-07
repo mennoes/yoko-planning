@@ -167,7 +167,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12,
                       padding: '9px 16px', textAlign: 'left', border: 'none',
                       background: highlight === results.length ? 'var(--bg-hover)' : 'transparent',
-                      cursor: 'pointer', color: 'var(--accent)', borderTop: '1px solid var(--border-light)' }}>
+                      cursor: 'pointer', color: 'var(--text-primary)', borderTop: '1px solid var(--border-light)', fontWeight: 600 }}>
                     <span style={{ fontSize: 18, flexShrink: 0 }}>＋</span>
                     <span style={{ fontSize: 14, fontWeight: 500 }}>Voeg “{query.trim()}” toe als todo</span>
                   </button>
