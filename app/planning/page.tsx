@@ -691,13 +691,13 @@ export default function PlanningPage() {
         for (const id of order) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
         for (const m of byId.values()) ordered.push(m)
         if (ordered.length === teamData.members.length) {
-          setTeam(ordered.map(m => capByMember[m.id] ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+          setTeam(ordered.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
           return
         }
       }
     } catch {}
     if (Object.keys(capByMember).length > 0) {
-      setTeam(teamData.members.map(m => capByMember[m.id] ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+      setTeam(teamData.members.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
     }
   }, [])
 

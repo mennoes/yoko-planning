@@ -4,6 +4,7 @@ import {
   createContext, useContext, useState, useEffect, useRef,
   type ReactNode, type MouseEvent,
 } from 'react'
+import Link from 'next/link'
 import teamData from '@/data/team.json'
 import { useTeamPhotos } from './TeamPhotosContext'
 import { useProfile } from './ProfileContext'
@@ -127,6 +128,15 @@ export function MemberPopupProvider({ children }: { children: ReactNode }) {
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: member.color, display: 'inline-block' }} />
             <span style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>{member.color}</span>
           </div>
+
+          {/* View profile */}
+          <Link href={`/profile/${member.id}`} onClick={() => setActiveId(null)}
+            style={{ display: 'block', marginTop: 14, padding: '8px 10px',
+              background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 8,
+              color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, textAlign: 'center',
+              textDecoration: 'none' }}>
+            Bekijk profiel →
+          </Link>
 
           {/* Close button */}
           <button
