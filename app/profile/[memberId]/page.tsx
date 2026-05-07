@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import teamData from '@/data/team.json'
 import { useProfile } from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { supabase } from '@/lib/supabase'
+import { getCurrentUserId } from '@/lib/sync'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { fmtMinutes, loadEntries } from '@/lib/timerStore'
 
@@ -97,16 +98,21 @@ export default function PublicProfilePage() {
 
       {/* Hero */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, marginBottom: 24 }}>
-        <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}>
-          <img src={photo} alt={name}
-            onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-            style={{
-              width: 110, height: 110, borderRadius: '50%',
-              objectFit: 'cover', border: `3px solid ${color}`,
-              boxShadow: `0 0 0 4px ${color}22`,
-              background: 'var(--bg-card)',
-            }} />
-        </div>
+        <ClickableAvatar
+          photo={photo}
+          name={name}
+          color={color}
+          editable={isMe}
+          onPicked={async (dataUrl) => {
+            // Save to profile + DB if available
+            if (myProfile) {
+              if (supabase && await getCurrentUserId()) {
+                await supabase.from('profiles').update({ photo: dataUrl }).eq('member_id', memberId)
+              }
+              // also reflect immediately via context (profileSet not exposed here — fall back to localStorage)
+              setData(d => ({ ...(d ?? {}), photo: dataUrl }))
+            }
+          }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
             Studio Yoko · Teamlid
@@ -193,6 +199,78 @@ function totalMinutesThisWeek(): number {
 }
 
 const linkStyle: React.CSSProperties = { color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }
+
+// ─── Clickable avatar with file-upload menu ──────────────────────────────────
+function ClickableAvatar({ photo, name, color, editable, onPicked }: {
+  photo: string; name: string; color: string; editable: boolean
+  onPicked: (dataUrl: string) => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [hover, setHover] = useState(false)
+
+  function handleFile(file: File) {
+    const reader = new FileReader()
+    reader.onload = e => { onPicked(String(e.target?.result ?? '')); setMenuOpen(false) }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}>
+      <img src={photo} alt={name}
+        onClick={() => editable && setMenuOpen(o => !o)}
+        onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+        style={{
+          width: 110, height: 110, borderRadius: '50%',
+          objectFit: 'cover', cursor: editable ? 'pointer' : 'default',
+          background: 'var(--bg-card)',
+        }} />
+      {editable && (hover || menuOpen) && (
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          pointerEvents: 'none',
+        }}>
+          Wijzig foto
+        </div>
+      )}
+
+      {menuOpen && editable && (
+        <>
+          <div onClick={() => setMenuOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
+          <div style={{
+            position: 'absolute', top: 118, left: 0, zIndex: 201,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: 6, minWidth: 200,
+            boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
+            display: 'flex', flexDirection: 'column', gap: 2,
+          }}>
+            <button onClick={() => fileRef.current?.click()} style={menuItemStyle}>
+              📤 Upload foto…
+            </button>
+            <button onClick={() => { onPicked(''); setMenuOpen(false) }}
+              style={{ ...menuItemStyle, color: 'var(--text-muted)' }}>
+              Verwijder foto
+            </button>
+          </div>
+        </>
+      )}
+
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+    </div>
+  )
+}
+
+const menuItemStyle: React.CSSProperties = {
+  background: 'transparent', border: 'none', textAlign: 'left',
+  padding: '8px 12px', borderRadius: 6, fontSize: 13, fontWeight: 500,
+  color: 'var(--text-primary)', cursor: 'pointer',
+}
 
 // ─── Editable fields config ──────────────────────────────────────────────────
 type FieldDef = {
