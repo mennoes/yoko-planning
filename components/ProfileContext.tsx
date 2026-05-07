@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import type { UserProfile } from '@/lib/profile'
 import { loadProfile, saveProfile } from '@/lib/profile'
-import { supabase, hasSupabase, type DbProfile } from '@/lib/supabase'
+import { supabase, hasSupabase, requiresAuth, type DbProfile } from '@/lib/supabase'
 
 type Ctx = {
   profile:    UserProfile | null
@@ -30,18 +30,22 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [profile,         setProfileState] = useState<UserProfile | null>(null)
   const [loaded,          setLoaded]       = useState(false)
   const [editOpen,        setEditOpen]     = useState(false)
-  const [isAuthenticated, setIsAuthenticated] = useState(!hasSupabase)
+  // When auth is not required (bypass on), we're auto-authenticated.
+  // When auth IS required and we have a supabase client, we wait for session.
+  const [isAuthenticated, setIsAuthenticated] = useState(!requiresAuth)
 
-  // ── Without Supabase: use localStorage ──────────────────────────────────────
+  // ── Without supabase client (no config): use localStorage ──────────────────
   useEffect(() => {
-    if (hasSupabase) return
+    if (supabase) return
     setProfileState(loadProfile())
     setLoaded(true)
   }, [])
 
-  // ── With Supabase: sync with auth session ────────────────────────────────────
+  // ── With Supabase: keep auth state and load profile if signed in ───────────
   useEffect(() => {
-    if (!hasSupabase || !supabase) return
+    if (!supabase) return
+    // Always start by loading local profile so the UI has something
+    const local = loadProfile(); if (local) setProfileState(local)
 
     async function loadFromSupabase(userId: string) {
       const { data } = await supabase!.from('profiles').select('*').eq('user_id', userId).single()
@@ -58,7 +62,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(true)
         loadFromSupabase(session.user.id)
       } else {
-        setIsAuthenticated(false)
+        // No session: only flip to "not authenticated" if auth is required.
+        if (requiresAuth) setIsAuthenticated(false)
         setLoaded(true)
       }
     })
@@ -69,7 +74,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         loadFromSupabase(session.user.id)
       }
       if (event === 'SIGNED_OUT') {
-        setIsAuthenticated(false)
+        if (requiresAuth) setIsAuthenticated(false)
         setProfileState(null)
         setLoaded(true)
       }

@@ -9,7 +9,7 @@ import {
   type NavItem, type SidebarSection,
 } from '@/lib/navStore'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
-import { hasSupabase } from '@/lib/supabase'
+import { requiresAuth } from '@/lib/supabase'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
@@ -398,7 +398,7 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
         </div>
 
         {/* Sign out */}
-        {hasSupabase && (
+        {requiresAuth && (
           <button onClick={() => { onClose(); signOut() }}
             style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
               border: '1px solid var(--border)', background: 'var(--bg-hover)',

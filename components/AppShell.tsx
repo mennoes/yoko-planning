@@ -11,8 +11,10 @@ import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import { IconMenu, IconSearch } from './Icon'
-import { hasSupabase } from '@/lib/supabase'
+import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
+import { onAuthChange } from '@/lib/sync'
 
 function Inner({ children }: { children: ReactNode }) {
   const { needsSetup, editOpen, isAuthenticated } = useProfile()
@@ -23,7 +25,7 @@ function Inner({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
-    if (hasSupabase && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share')) {
+    if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share')) {
       router.replace('/login')
     }
   }, [isAuthenticated, pathname, router])
@@ -42,13 +44,24 @@ function Inner({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [searchOpen])
 
+  // Remote pages sync — pulls + subscribes when user is signed in.
+  useEffect(() => {
+    let unsubChannel: (() => void) | null = null
+    function start() {
+      pullPagesFromRemote().then(ok => { if (ok) unsubChannel = subscribeRemotePages() })
+    }
+    start()
+    const offAuth = onAuthChange(() => { unsubChannel?.(); unsubChannel = null; start() })
+    return () => { offAuth(); unsubChannel?.() }
+  }, [])
+
   // Login + share routes: geen sidebar, geen ProfileSetup, geen auth-redirect
   if (pathname === '/login' || pathname.startsWith('/share')) {
     return <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0 }}>{children}</main>
   }
 
   // Wacht op auth redirect
-  if (hasSupabase && !isAuthenticated) return null
+  if (requiresAuth && !isAuthenticated) return null
 
   return (
     <>
