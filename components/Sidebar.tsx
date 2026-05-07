@@ -489,80 +489,85 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
   if (typeof document === 'undefined') return null
   return createPortal(
     <>
+      {/* Click-away backdrop, no dimming — Vercel-style popover */}
       <div onClick={onClose}
-        style={{ position: 'fixed', inset: 0, zIndex: 10000,
-          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} />
+        style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'transparent' }} />
       <div style={{
-        position: 'fixed', top: '50%', left: '50%',
-        transform: 'translate(-50%, -50%)',
+        position: 'fixed', bottom: 12, left: 12,
         zIndex: 10001, background: 'var(--bg-card)',
-        border: '1px solid var(--border)', borderRadius: 14,
-        padding: '16px 20px 18px', width: 360, maxWidth: '92vw',
-        maxHeight: '85vh', overflowY: 'auto',
-        boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
+        border: '1px solid var(--border)', borderRadius: 12,
+        padding: '6px', width: 290, maxWidth: '92vw',
+        maxHeight: '88vh', overflowY: 'auto',
+        boxShadow: '0 14px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.1)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Instellingen</h3>
-          <button onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 24, lineHeight: 1, color: 'var(--text-muted)', padding: '0 4px' }}>×</button>
-        </div>
-
-        {/* Profile */}
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Profiel</div>
-          <button onClick={openEdit}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', textAlign: 'left' }}>
-            {profile?.photo ? (
-              <img src={profile.photo} alt="" style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
-            ) : profile ? (
-              <span style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: profile.color }}>
-                {profile.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-              </span>
-            ) : (
-              <span style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: 'var(--text-muted)' }}>?</span>
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {profile?.name ?? 'Profiel instellen'}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Tik om te bewerken</div>
+        {/* Profile header */}
+        <button onClick={openEdit}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', textAlign: 'left' }}>
+          {profile?.photo ? (
+            <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+          ) : profile ? (
+            <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
+              {profile.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+            </span>
+          ) : (
+            <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--text-muted)' }}>?</span>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile?.name ?? 'Profiel instellen'}
             </div>
-          </button>
-        </div>
+            {profile && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Bewerk profiel →</div>}
+          </div>
+        </button>
 
-        {/* Theme */}
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Thema</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-            {THEMES.map(t => (
-              <button key={t.value} onClick={() => setTheme(t.value)}
-                style={{ padding: '10px 6px', borderRadius: 8,
-                  border: `1px solid ${theme === t.value ? 'var(--accent)' : 'var(--border)'}`,
-                  background: theme === t.value ? 'var(--accent-light)' : 'var(--bg-hover)',
-                  color: theme === t.value ? 'var(--accent)' : 'var(--text-secondary)',
-                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <t.Icon size={18} />
-                {t.label}
-              </button>
-            ))}
+        <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
+
+        {/* Inline theme row — small Vercel-style 3-button toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>Thema</span>
+          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--overlay-faint)', border: '1px solid var(--border-light)', borderRadius: 999, padding: 2, gap: 0 }}>
+            {THEMES.map(t => {
+              const on = theme === t.value
+              return (
+                <button key={t.value} onClick={() => setTheme(t.value)} title={t.label}
+                  style={{ width: 26, height: 22, borderRadius: 999, border: 'none',
+                    background: on ? 'var(--bg-card)' : 'transparent',
+                    color: on ? 'var(--text-primary)' : 'var(--text-muted)',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: on ? '0 1px 2px rgba(0,0,0,0.1)' : 'none', padding: 0 }}>
+                  <t.Icon size={13} />
+                </button>
+              )
+            })}
           </div>
         </div>
 
+        <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
+
         {/* Google Calendar */}
-        {requiresAuth && <GoogleConnector />}
+        {requiresAuth && (
+          <div style={{ padding: '4px 10px 8px' }}>
+            <GoogleConnector />
+          </div>
+        )}
 
         {/* Set / change password */}
-        {requiresAuth && <PasswordSetter />}
+        {requiresAuth && (
+          <div style={{ padding: '0 10px 8px' }}>
+            <PasswordSetter />
+          </div>
+        )}
+
+        {requiresAuth && <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />}
 
         {/* Sign out */}
         {requiresAuth && (
           <button onClick={() => { onClose(); signOut() }}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
-              border: '1px solid var(--border)', background: 'var(--bg-hover)',
-              color: 'var(--red)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-            <IconLogoutOutline size={16} /> Uitloggen
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
+              border: 'none', background: 'transparent',
+              color: 'var(--red)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }}>
+            <IconLogoutOutline size={14} /> Uitloggen
           </button>
         )}
       </div>
