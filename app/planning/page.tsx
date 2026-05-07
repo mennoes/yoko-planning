@@ -956,6 +956,11 @@ export default function PlanningPage() {
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
+  const [freelancersOpen, setFreelancersOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('planning-freelancers-open') === '1'
+  })
+  useEffect(() => { localStorage.setItem('planning-freelancers-open', freelancersOpen ? '1' : '0') }, [freelancersOpen])
   const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -1715,10 +1720,29 @@ export default function PlanningPage() {
             })}
           </div>
 
-          {/* Member rows (filtered by people-picker if active) */}
-          {team
-            .filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
-            .map((member, mIdx) => {
+          {/* Member rows (filtered by people-picker if active),
+              grouped: TEAM YOKO > UNASSIGNED > FREELANCERS (collapsible) */}
+          {(() => {
+            const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur'])
+            const visible = team.filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
+            const yokoTeam     = visible.filter(m => YOKO_IDS.has(m.id))
+            const unassigned   = visible.filter(m => m.id === 'unassigned')
+            const freelancers  = visible.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned')
+
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; isOpen?: boolean }) => (
+              <div onClick={opts?.onClick}
+                style={{ padding: '10px 14px 6px', borderBottom: '1px solid var(--border-light)',
+                  background: 'var(--overlay-faint)', display: 'flex', alignItems: 'center', gap: 8,
+                  cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none' }}>
+                {opts?.onClick && (
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: opts.isOpen ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                )}
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
+              </div>
+            )
+
+            const renderMember = (member: TeamMember, mIdx: number) => {
             const isExp = expanded.has(member.id)
             const cap   = colCapacity(member.weeklyCapacity)
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
@@ -1798,7 +1822,25 @@ export default function PlanningPage() {
                 )}
               </div>
             )
-          })}
+            }
+
+            const out: React.ReactNode[] = []
+            if (yokoTeam.length > 0) {
+              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length)}</div>)
+              yokoTeam.forEach((m, i) => out.push(<div key={`y-${m.id}`}>{renderMember(m, i)}</div>))
+            }
+            if (unassigned.length > 0) {
+              out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
+              unassigned.forEach((m, i) => out.push(<div key={`u-${m.id}`}>{renderMember(m, i)}</div>))
+            }
+            if (freelancers.length > 0) {
+              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
+              if (freelancersOpen) {
+                freelancers.forEach((m, i) => out.push(<div key={`f-${m.id}`}>{renderMember(m, i)}</div>))
+              }
+            }
+            return out
+          })()}
 
         </div>
 
