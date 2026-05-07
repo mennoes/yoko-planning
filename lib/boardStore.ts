@@ -43,6 +43,8 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     nummers:        (r.nummers as number | undefined) ?? undefined,
     subitems:       (r.subitems as BoardItem['subitems']) ?? undefined,
     journal:        (r.journal as BoardItem['journal']) ?? undefined,
+    source:         (r.source as BoardItem['source']) ?? undefined,
+    externalLink:   (r.external_link as string | undefined) ?? undefined,
     ...((r.extra as Record<string, unknown>) ?? {}),
   } as BoardItem
 }
@@ -82,6 +84,7 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
 const STANDARD_FIELDS = new Set([
   'id','name','ownerIds','status','startDate','endDate','deadline','estHours',
   'dagen','notes','contactpersoon','uitzenddag','framelink','nummers','subitems','journal',
+  'source','externalLink',
 ])
 function itemToRow(boardName: string, groupId: string, position: number, item: BoardItem): Record<string, unknown> {
   const extra: Record<string, unknown> = {}

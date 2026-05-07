@@ -15,6 +15,8 @@ export type Project = {
   endDate: string | null
   estHours: number
   status: 'active' | 'done'
+  source?: 'manual' | 'google'
+  externalLink?: string
 }
 
 export const BOARD_COLORS: Record<string, string> = {
