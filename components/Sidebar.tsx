@@ -722,23 +722,31 @@ export default function Sidebar({
 
         {/* Footer — profile + theme + settings */}
         <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={openEdit} title="Profiel bewerken"
-            style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            {profile?.photo ? (
-              <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
-            ) : profile ? (
-              <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
-                {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
+          {profile?.memberId ? (
+            <Link href={`/profile/${profile.memberId}`} title="Mijn profiel"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left', textDecoration: 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+              {profile?.photo ? (
+                <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+              ) : (
+                <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
+                  {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
+                </span>
+              )}
+              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {profile.name}
               </span>
-            ) : (
+            </Link>
+          ) : (
+            <button onClick={openEdit} title="Profiel instellen"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
               <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--text-muted)' }}>?</span>
-            )}
-            <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {profile?.name ?? 'Profiel instellen'}
-            </span>
-          </button>
+              <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}>Profiel instellen</span>
+            </button>
+          )}
 
           <button onClick={cycleTheme} title={`Thema: ${(THEMES.find(t => t.value === theme) ?? THEMES[0]).label}`}
             style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
