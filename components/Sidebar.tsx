@@ -197,37 +197,29 @@ function PagesSectionItems({ pathname }: { pathname: string }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, marginTop: 6, paddingLeft: 14, paddingRight: 10 }}>
-        <button onClick={() => createNewIn(null)}
-          style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            padding: '7px 8px', borderRadius: 6,
-            background: 'transparent', border: '1px dashed var(--border)',
-            color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderStyle = 'solid' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderStyle = 'dashed' }}>
-          <IconDocument size={13} /> + Document
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, paddingLeft: 14, paddingRight: 10, paddingBottom: 2 }}>
         {addingFolder ? (
           <input autoFocus value={folderDraft}
             onChange={e => setFolderDraft(e.target.value)}
             onBlur={addFolder}
             onKeyDown={e => { if (e.key === 'Enter') addFolder(); if (e.key === 'Escape') { setFolderDraft(''); setAddingFolder(false) } }}
             placeholder="Mapnaam…"
-            style={{ flex: 1, background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 6, padding: '6px 9px', color: 'var(--text-primary)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }} />
+            style={{ flex: 1, background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 5, padding: '4px 8px', color: 'var(--text-primary)', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
         ) : (
-          <button onClick={() => { setFolderDraft(''); setAddingFolder(true) }}
-            style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              padding: '7px 8px', borderRadius: 6,
-              background: 'transparent', border: '1px dashed var(--border)',
-              color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderStyle = 'solid' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderStyle = 'dashed' }}>
-            <IconFolder size={13} /> + Submap
-          </button>
+          <>
+            <button onClick={() => createNewIn(null)} title="Nieuw document"
+              style={tinyAddBtn}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+              <IconDocument size={12} /> doc
+            </button>
+            <button onClick={() => { setFolderDraft(''); setAddingFolder(true) }} title="Nieuwe submap"
+              style={tinyAddBtn}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+              <IconFolder size={12} /> map
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -249,8 +241,13 @@ function SectionBlock({
   isLastSection:  boolean
   onMoveSection:  (dir: -1 | 1) => void
 }) {
-  // All sections are collapsible. Default-open if the current route lives inside.
-  const [open,          setOpen]          = useState(true)
+  // All sections are collapsible. Default open for 'projects' (Agenda's),
+  // collapsed for 'docs' (Pagina's) and 'pages' (Documenten). Auto-open if
+  // the current route lives inside.
+  const [open,          setOpen]          = useState(
+    section.type === 'projects'
+    || section.items.some(i => pathname.startsWith(i.href))
+  )
   useEffect(() => {
     if (section.items.some(i => pathname.startsWith(i.href))) setOpen(true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -553,6 +550,14 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
   )
 }
 
+const tinyAddBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  background: 'transparent', border: 'none',
+  color: 'var(--text-muted)', fontSize: 11, fontWeight: 500,
+  padding: '3px 7px', borderRadius: 5, cursor: 'pointer',
+  textTransform: 'lowercase', letterSpacing: '0.02em',
+}
+
 // ─── Reorder arrow button style ───────────────────────────────────────────────
 function reorderArrowBtn(disabled: boolean): React.CSSProperties {
   return {
@@ -745,14 +750,6 @@ export default function Sidebar({
             </svg>
             <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--sup-yellow)', letterSpacing: '0.28em', textTransform: 'uppercase', marginTop: 6 }}>PLANNING</div>
           </Link>
-          {profile?.memberId && (
-            <Link href={`/profile/${profile.memberId}`} title="Mijn profiel"
-              style={{ display: 'flex', flexShrink: 0, textDecoration: 'none' }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
-              <UserAvatar memberId={profile.memberId} size={32} />
-            </Link>
-          )}
         </div>
 
         {/* Nav */}
