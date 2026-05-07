@@ -53,16 +53,17 @@ export function saveProjects(items: NavItem[]) { save(PROJECTS_KEY, items) }
 export type SidebarSection = {
   id:    string
   name:  string
-  type:  'docs' | 'projects' | 'folder'
+  type:  'docs' | 'projects' | 'folder' | 'pages'
   items: NavItem[]
 }
 
-const SECTIONS_KEY = 'yoko-sidebar-sections-v2'
+const SECTIONS_KEY = 'yoko-sidebar-sections-v3'
 
 function defaultSections(): SidebarSection[] {
   return [
-    { id: 'docs',    name: 'Documenten', type: 'docs',     items: load(DOCS_KEY,     DEFAULT_DOCS)     },
-    { id: 'agendas', name: "AGENDA's",   type: 'projects', items: load(PROJECTS_KEY, DEFAULT_PROJECTS) },
+    { id: 'agendas', name: "Agenda's",   type: 'projects', items: load(PROJECTS_KEY, DEFAULT_PROJECTS) },
+    { id: 'pagina',  name: "Pagina's",   type: 'docs',     items: load(DOCS_KEY,     DEFAULT_DOCS)     },
+    { id: 'docs2',   name: 'Documenten', type: 'pages',    items: [] },
   ]
 }
 

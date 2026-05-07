@@ -26,6 +26,7 @@ export function savePage(doc: PageDoc): void {
   const ids = loadRecentPageIds().filter(id => id !== doc.id)
   ids.unshift(doc.id)
   localStorage.setItem(RECENT_KEY, JSON.stringify(ids.slice(0, MAX_RECENT)))
+  window.dispatchEvent(new CustomEvent('yoko-pages-update'))
 }
 
 export function deletePage(id: string): void {
@@ -33,6 +34,7 @@ export function deletePage(id: string): void {
   localStorage.removeItem(PREFIX + id)
   const ids = loadRecentPageIds().filter(i => i !== id)
   localStorage.setItem(RECENT_KEY, JSON.stringify(ids))
+  window.dispatchEvent(new CustomEvent('yoko-pages-update'))
 }
 
 export function loadRecentPageIds(): string[] {
