@@ -1198,15 +1198,15 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center' }}>
-          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>AGENDA</span>
-          <span style={{ color: 'var(--border)', margin: '0 10px' }}>/</span>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center' }}>
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Agenda</span>
+          <span style={{ color: 'var(--border)', margin: '0 8px' }}>/</span>
           {editingTitle ? (
             <input autoFocus value={titleDraft}
               onChange={e => setTitleDraft(e.target.value)}
               onBlur={() => { const v = titleDraft.trim() || title; onRenameTitle?.(v); setEditingTitle(false) }}
               onKeyDown={e => { if (e.key === 'Enter') { const v = titleDraft.trim() || title; onRenameTitle?.(v); setEditingTitle(false) } if (e.key === 'Escape') setEditingTitle(false) }}
-              style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', background: 'transparent', border: 'none', borderBottom: '2px solid var(--accent)', outline: 'none', padding: '0 2px', width: Math.max(120, titleDraft.length * 17) }}
+              style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', background: 'transparent', border: 'none', borderBottom: '2px solid var(--accent)', outline: 'none', padding: '0 2px', width: Math.max(120, titleDraft.length * 14) }}
             />
           ) : (
             <span onClick={() => { if (onRenameTitle) { setTitleDraft(title); setEditingTitle(true) } }}
