@@ -77,6 +77,8 @@ export default function PublicProfilePage() {
     await supabase.from('profiles').update(patch).eq('member_id', memberId)
   }
 
+  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
+
   if (!loaded) return null
   if (!baseMember) {
     return <div style={{ padding: 40 }}><h1>Onbekend teamlid</h1></div>
@@ -92,6 +94,8 @@ export default function PublicProfilePage() {
   const myMinutesThisWeek = isMe ? totalMinutesThisWeek() : null
 
   const hasAnyValue = EDITABLE_FIELDS.some(f => fieldHasValue(data, f))
+  const visibleFields = EDITABLE_FIELDS.filter(f => fieldHasValue(data, f) || revealedKeys.has(f.key as string))
+  const hiddenFields  = EDITABLE_FIELDS.filter(f => !fieldHasValue(data, f) && !revealedKeys.has(f.key as string))
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: isMobile ? '24px 16px 80px' : '52px 36px 100px' }}>
@@ -154,30 +158,37 @@ export default function PublicProfilePage() {
       )}
 
       {/* Field grid */}
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 14, overflow: 'hidden', marginTop: 24 }}>
-        {(isMe ? EDITABLE_FIELDS : EDITABLE_FIELDS.filter(f => fieldHasValue(data, f))).map((f, i, arr) => (
-          <div key={f.key} style={{
-            display: 'grid', gridTemplateColumns: isMobile ? '110px 1fr' : '160px 1fr',
-            gap: 12, padding: '12px 18px',
-            borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none',
-            alignItems: 'center',
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</span>
-            {isMe ? (
-              <EditableValue field={f} data={data} onSave={persistField} />
-            ) : (
-              <span style={{ fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-                {renderReadValue(f, data)}
-              </span>
-            )}
-          </div>
-        ))}
-        {!isMe && !hasAnyValue && !data?.bio && (
-          <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-            Dit teamlid heeft nog geen extra info ingevuld.
-          </div>
-        )}
-      </div>
+      {visibleFields.length > 0 && (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 14, overflow: 'hidden', marginTop: 24 }}>
+          {visibleFields.map((f, i, arr) => (
+            <div key={f.key} style={{
+              display: 'grid', gridTemplateColumns: isMobile ? '110px 1fr' : '160px 1fr',
+              gap: 12, padding: '12px 18px',
+              borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none',
+              alignItems: 'center',
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</span>
+              {isMe ? (
+                <EditableValue field={f} data={data} onSave={persistField} />
+              ) : (
+                <span style={{ fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                  {renderReadValue(f, data)}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isMe && !hasAnyValue && !data?.bio && (
+        <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 14, marginTop: 24 }}>
+          Dit teamlid heeft nog geen extra info ingevuld.
+        </div>
+      )}
+
+      {isMe && hiddenFields.length > 0 && (
+        <AddFieldPicker fields={hiddenFields} onPick={k => setRevealedKeys(s => new Set(s).add(k))} />
+      )}
 
       {isMe && myMinutesThisWeek !== null && (
         <div style={{ marginTop: 24, fontSize: 12, color: 'var(--text-muted)' }}>
@@ -279,19 +290,25 @@ type FieldDef = {
   type:   'text' | 'email' | 'tel' | 'date' | 'url' | 'longtext' | 'days'
 }
 const EDITABLE_FIELDS: FieldDef[] = [
+  // Werk
   { key: 'role',              label: 'Functie',         type: 'text' },
   { key: 'office',            label: 'Kantoor',         type: 'text' },
+  // Contact
   { key: 'email',             label: 'Email',           type: 'email' },
   { key: 'phone',             label: 'Telefoon',        type: 'tel' },
+  { key: 'slack_handle',      label: 'Slack',           type: 'text' },
+  { key: 'linkedin',          label: 'LinkedIn',        type: 'url' },
+  // Persoonlijk
   { key: 'birthday',          label: 'Verjaardag',      type: 'date' },
   { key: 'pronouns',          label: 'Voornaamwoorden', type: 'text' },
   { key: 'languages',         label: 'Talen',           type: 'text' },
-  { key: 'slack_handle',      label: 'Slack',           type: 'text' },
-  { key: 'linkedin',          label: 'LinkedIn',        type: 'url' },
+  // Beschikbaarheid
   { key: 'days_off',          label: 'Werkdagen vrij',  type: 'days' },
   { key: 'vacation_until',    label: 'Vakantie tot',    type: 'date' },
+  // Nood
   { key: 'emergency_contact', label: 'Noodcontact',     type: 'text' },
   { key: 'emergency_phone',   label: 'Noodnummer',      type: 'tel' },
+  // Extra
   { key: 'fun_fact',          label: 'Fun fact',        type: 'text' },
 ]
 
@@ -373,6 +390,40 @@ function EditableValue({ field, data, onSave }: {
       style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)',
         borderRadius: 6, padding: '6px 9px', color: 'var(--text-primary)',
         fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+  )
+}
+
+function AddFieldPicker({ fields, onPick }: { fields: FieldDef[]; onPick: (k: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginTop: 12, position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ padding: '8px 14px', borderRadius: 8,
+          border: '1px dashed var(--border)', background: 'transparent',
+          color: 'var(--text-muted)', fontSize: 12.5, fontWeight: 600,
+          cursor: 'pointer' }}>
+        + Veld toevoegen
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+          <div style={{ position: 'absolute', top: 38, left: 0, zIndex: 51,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: 6, minWidth: 200, maxHeight: 280, overflowY: 'auto',
+            boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
+            display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {fields.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key as string); setOpen(false) }}
+                style={{ background: 'transparent', border: 'none', textAlign: 'left',
+                  padding: '7px 10px', borderRadius: 6, fontSize: 13, fontWeight: 500,
+                  color: 'var(--text-primary)', cursor: 'pointer' }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
