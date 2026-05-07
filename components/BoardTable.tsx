@@ -502,6 +502,18 @@ function UrlCell({ value, onChange }: { value: string; onChange: (v: string) => 
   )
 }
 
+// ─── Effective hours/days helpers ─────────────────────────────────────────────
+// When subitems exist they are the source of truth; the parent's stored
+// estHours is ignored. Days are always derived from hours at 8h/day.
+export function effectiveHours(item: BoardItem): number {
+  const subs = item.subitems ?? []
+  if (subs.length > 0) return subs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  return Number(item.estHours) || 0
+}
+export function effectiveDays(item: BoardItem): number {
+  return Math.round((effectiveHours(item) / 8) * 10) / 10
+}
+
 // ─── Cel dispatcher ───────────────────────────────────────────────────────────
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
@@ -510,6 +522,20 @@ function Cell({ item, col, onUpdate }: {
   if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => onUpdate({ status: v })} />
   if (col.type === 'daterange') return <DateRangeCell startDate={item.startDate} endDate={item.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} />
   if (col.type === 'url')       return <UrlCell       value={(item[col.key] as string) ?? ''} onChange={v => onUpdate({ [col.key]: v })} />
+
+  const hasSubs = (item.subitems?.length ?? 0) > 0
+
+  // estHours: when subitems exist, show their sum (read-only).
+  if (col.key === 'estHours' && hasSubs) {
+    const sum = effectiveHours(item)
+    return <span title="Som van subitems" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{sum}u</span>
+  }
+  // dagen: always computed from estHours (or sum of subs), read-only.
+  if (col.key === 'dagen') {
+    const days = effectiveDays(item)
+    return <span title="Auto: uren ÷ 8" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{days || ''}</span>
+  }
+
   return (
     <EditableCell
       value={item[col.key] as string | number | null}
@@ -795,8 +821,8 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
     }] })
   }
 
-  const totHours = group.items.reduce((s, i) => s + (i.estHours ?? 0), 0)
-  const totDagen = group.items.reduce((s, i) => s + (i.dagen ?? 0), 0)
+  const totHours = group.items.reduce((s, i) => s + effectiveHours(i), 0)
+  const totDagen = Math.round((totHours / 8) * 10) / 10
 
   return (
     <GroupCtx.Provider value={{ color: group.color }}>

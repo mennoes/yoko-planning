@@ -14,6 +14,7 @@ export type Project = {
   startDate: string | null
   endDate: string | null
   estHours: number
+  ownerHours?: Record<string, number>   // optional per-owner hours override
   status: 'active' | 'done'
   source?: 'manual' | 'google'
   externalLink?: string
@@ -110,6 +111,13 @@ export function projectHoursInWeek(
   if (project.estHours === 0) return 0
   if (!project.startDate || !project.endDate) return 0
 
+  // Per-owner override: if ownerHours[memberId] is set, that's this owner's
+  // share. Otherwise split estHours evenly across owners.
+  const myShare = project.ownerHours && memberId in project.ownerHours
+    ? Number(project.ownerHours[memberId]) || 0
+    : project.estHours / Math.max(project.ownerIds.length, 1)
+  if (myShare === 0) return 0
+
   const pStart = new Date(project.startDate)
   const pEnd   = new Date(project.endDate)
   pEnd.setHours(23, 59, 59, 999)
@@ -129,8 +137,7 @@ export function projectHoursInWeek(
   const overlapMs = overlapEnd.getTime() - overlapStart.getTime()
 
   const fraction        = overlapMs / totalMs
-  const hoursPerOwner   = project.estHours / Math.max(project.ownerIds.length, 1)
-  const result          = fraction * hoursPerOwner
+  const result          = fraction * myShare
 
   return Math.round(result * 10) / 10
 }
