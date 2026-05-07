@@ -89,7 +89,6 @@ function Inner({ children }: { children: ReactNode }) {
 
       <main style={{
         flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,
-        paddingTop: isMobile ? 56 : 0,
         width: isMobile ? '100%' : undefined,
       }}>
         {children}
