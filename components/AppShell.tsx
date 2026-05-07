@@ -22,7 +22,7 @@ function Inner({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
-    if (hasSupabase && !isAuthenticated && pathname !== '/login') {
+    if (hasSupabase && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share')) {
       router.replace('/login')
     }
   }, [isAuthenticated, pathname, router])
@@ -41,8 +41,8 @@ function Inner({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [searchOpen])
 
-  // Login page: geen sidebar, geen ProfileSetup
-  if (pathname === '/login') {
+  // Login + share routes: geen sidebar, geen ProfileSetup, geen auth-redirect
+  if (pathname === '/login' || pathname.startsWith('/share')) {
     return <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0 }}>{children}</main>
   }
 
