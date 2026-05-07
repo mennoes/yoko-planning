@@ -204,13 +204,13 @@ function SectionBlock({
   return (
     <div style={{
       marginTop: 8,
-      background: 'var(--bg-card)',
+      background: 'transparent',
       border: '1px solid var(--border-light)',
       borderRadius: 10,
       overflow: 'hidden',
       transition: 'background 0.15s',
     }}>
-      {/* Section header — tinted bg, white items below */}
+      {/* Section header — gentle tint, white items below */}
       <div onClick={e => {
         // Click anywhere on the header (except buttons / inputs) toggles open state
         const t = e.target as HTMLElement
@@ -218,7 +218,7 @@ function SectionBlock({
         setOpen(o => !o)
       }}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 12px', cursor: 'pointer',
-          background: 'var(--overlay-subtle)',
+          background: 'var(--overlay-faint)',
           borderBottom: open ? '1px solid var(--border-light)' : 'none' }}
         onMouseEnter={e => {
           e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '1'))
