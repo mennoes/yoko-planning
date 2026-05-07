@@ -1,161 +1,2256 @@
 {
   "groups": [
     {
-      "id": "s11-colleges",
+      "id": "g_nederland_0",
       "name": "(S11) Nederland colleges",
-      "color": "#9c7ee8",
-      "collapsed": false,
+      "color": "#579bfc",
       "items": [
         {
-          "id": "nl-fos",
+          "id": "it_nederland_1_0_o3jm",
           "name": "UVNL Faces of Science",
-          "ownerIds": ["menno", "odette"],
+          "ownerIds": [
+            "anne-fleur"
+          ],
           "status": "",
           "startDate": null,
           "endDate": null,
           "deadline": null,
           "estHours": 24,
           "dagen": 3,
-          "contactpersoon": "fay@pnpmedia.nl",
-          "uitzenddag": null
+          "contactpersoon": "fay@pnpmedia.nl"
         },
         {
-          "id": "nl-news",
+          "id": "it_nederland_1_1_ozo6",
           "name": "UvNL NEWS",
-          "ownerIds": [],
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": null,
           "endDate": null,
           "deadline": null,
           "estHours": 16,
           "dagen": 2,
-          "contactpersoon": "fay@pnpmedia.nl",
-          "uitzenddag": null
+          "contactpersoon": "fay@pnpmedia.nl"
         },
         {
-          "id": "nl-e33",
+          "id": "it_nederland_1_2_ae3s",
           "name": "NL College S04 E33 (Ultrabewerkt eten)",
-          "ownerIds": ["menno", "odette"],
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
           "status": "",
           "startDate": "2026-05-06",
           "endDate": "2026-05-12",
           "deadline": null,
           "estHours": 24,
           "dagen": 3,
-          "contactpersoon": "loes@universiteitvannederland.nl",
-          "uitzenddag": null
+          "contactpersoon": "loes@universiteitvannederland.nl"
         },
         {
-          "id": "nl-e34",
+          "id": "it_nederland_1_3_rwv3",
           "name": "NL College S04 E34 (Autisme)",
-          "ownerIds": ["odette"],
+          "ownerIds": [
+            "vincent"
+          ],
           "status": "",
           "startDate": "2026-05-11",
           "endDate": "2026-05-18",
           "deadline": null,
           "estHours": 24,
           "dagen": 3,
-          "contactpersoon": "julia@universiteitvannederland.nl",
-          "uitzenddag": null
+          "contactpersoon": "julia@universiteitvannederland.nl"
         },
         {
-          "id": "nl-heyu",
+          "id": "it_nederland_1_4_buuo",
           "name": "HEY U E10 ADHD",
-          "ownerIds": ["menno", "odette"],
+          "ownerIds": [
+            "anne-fleur"
+          ],
           "status": "",
           "startDate": "2026-05-19",
           "endDate": "2026-05-20",
           "deadline": null,
           "estHours": 16,
           "dagen": 2,
-          "contactpersoon": "julia@universiteitvannederland.nl",
-          "uitzenddag": null
+          "contactpersoon": "julia@universiteitvannederland.nl"
         },
         {
-          "id": "nl-e35",
+          "id": "it_nederland_1_5_x5kn",
           "name": "NL College S04 E35 (PFAS in schuim)",
-          "ownerIds": ["menno", "odette"],
+          "ownerIds": [
+            "anne-fleur"
+          ],
           "status": "",
           "startDate": "2026-05-26",
           "endDate": "2026-05-29",
           "deadline": null,
           "estHours": 24,
           "dagen": 3,
-          "contactpersoon": "Eliane@universiteitvannederland.nl",
-          "uitzenddag": null
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
         }
       ]
     },
     {
-      "id": "overige",
+      "id": "g_nederland_1",
       "name": "Overige",
-      "color": "#579bfc",
-      "collapsed": false,
+      "color": "#9c7ee8",
       "items": [
         {
-          "id": "nl-quantum3",
+          "id": "it_nederland_2_0_2wm9",
           "name": "UvNL Quantum 3 afleveringen",
-          "ownerIds": ["menno"],
-          "status": "Working on...",
+          "ownerIds": [
+            "vincent",
+            "odette",
+            "menno"
+          ],
+          "status": "Working on it",
           "startDate": null,
           "endDate": null,
-          "deadline": "2026-04-14",
+          "deadline": null,
           "estHours": 0,
           "dagen": 0,
           "contactpersoon": "josephine@universiteitvannederland.nl",
-          "uitzenddag": null
+          "subitems": [
+            {
+              "id": "si_nederland_2_0_gtp0",
+              "name": "UvNL quantum V1",
+              "ownerIds": [
+                "vincent",
+                "menno",
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2026-03-24",
+              "endDate": "2026-04-08",
+              "estHours": 64
+            },
+            {
+              "id": "si_nederland_2_1_rj83",
+              "name": "UvNL quantum v2 DEF",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2026-04-10",
+              "endDate": "2026-04-13",
+              "estHours": 16
+            }
+          ]
         },
         {
-          "id": "nl-artis",
+          "id": "it_nederland_2_1_cbgb",
           "name": "Artis",
-          "ownerIds": [],
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2026-03-16",
           "endDate": "2026-05-12",
           "deadline": null,
           "estHours": 0,
           "dagen": 0,
-          "contactpersoon": "",
-          "uitzenddag": null
+          "subitems": [
+            {
+              "id": "si_nederland_2_0_idof",
+              "name": "Poster",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2026-03-16",
+              "endDate": "2026-04-03",
+              "estHours": 8
+            },
+            {
+              "id": "si_nederland_2_1_2hxo",
+              "name": "Plattegrond",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-06",
+              "endDate": "2026-04-10",
+              "estHours": 8
+            },
+            {
+              "id": "si_nederland_2_2_es1j",
+              "name": "Rondloper planetarium",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-23",
+              "endDate": "2026-05-06",
+              "estHours": 40
+            },
+            {
+              "id": "si_nederland_2_3_ffwe",
+              "name": "Project management",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            }
+          ]
         },
         {
-          "id": "nl-rv",
+          "id": "it_nederland_2_2_jd6i",
           "name": "RV",
-          "ownerIds": [],
+          "ownerIds": [
+            "anne-fleur"
+          ],
           "status": "",
           "startDate": null,
           "endDate": null,
           "deadline": null,
           "estHours": 0,
           "dagen": 0,
-          "contactpersoon": "",
-          "uitzenddag": null
+          "subitems": [
+            {
+              "id": "si_nederland_2_0_lt96",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-01",
+              "endDate": "2026-04-01",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_1_83ce",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-08",
+              "endDate": "2026-04-08",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_2_08in",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-15",
+              "endDate": "2026-04-15",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_3_l2up",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-22",
+              "endDate": "2026-04-22",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_4_ylnt",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-29",
+              "endDate": "2026-04-29",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_5_s4bm",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-05-06",
+              "endDate": "2026-05-06",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_6_u3js",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-05-13",
+              "endDate": "2026-05-13",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_7_gho0",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_8_vyjh",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-05-27",
+              "endDate": "2026-05-27",
+              "estHours": 3
+            },
+            {
+              "id": "si_nederland_2_9_a72c",
+              "name": "-",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-06-03",
+              "endDate": "2026-06-03",
+              "estHours": 3
+            }
+          ]
         },
         {
-          "id": "nl-fos-titels",
-          "name": "Faces of Science – logoanimatie/titels",
-          "ownerIds": ["menno", "odette"],
+          "id": "it_nederland_2_3_6xhs",
+          "name": "Faces of Science - logoanimatie/titels",
+          "ownerIds": [
+            "vincent"
+          ],
           "status": "",
           "startDate": "2026-04-13",
           "endDate": "2026-04-26",
           "deadline": null,
           "estHours": 32,
-          "dagen": 4,
-          "contactpersoon": "",
-          "uitzenddag": null
+          "dagen": 4
         },
         {
-          "id": "nl-news-titels",
-          "name": "NEWS – leader/titels",
-          "ownerIds": [],
+          "id": "it_nederland_2_4_ccqx",
+          "name": "NEWS - leader/titels",
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2026-05-18",
           "endDate": "2026-05-31",
           "deadline": null,
           "estHours": 12,
+          "dagen": 2
+        }
+      ]
+    },
+    {
+      "id": "g_nederland_2",
+      "name": "Done",
+      "color": "#e2445c",
+      "items": [
+        {
+          "id": "it_nederland_3_0_yyfu",
+          "name": "NL College S02 E14 Zweet",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-04",
+          "endDate": "2024-01-12",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_1_aj49",
+          "name": "NL College S02 E15 Geo-engineering",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-15",
+          "endDate": "2024-01-18",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_2_d16h",
+          "name": "NL College S02 E17 Bewegingsziek",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-16",
+          "endDate": "2024-01-19",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_3_m150",
+          "name": "NL College S02 E16 Ademhalen",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-18",
+          "endDate": "2024-01-22",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "jake@zuidveen.work"
+        },
+        {
+          "id": "it_nederland_3_4_75bi",
+          "name": "NL College S02 E18 (Daten)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-06",
+          "endDate": "2024-02-08",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_5_nhdh",
+          "name": "NL College S02 E20 (Groeien)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-15",
+          "endDate": "2024-02-21",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_6_gc20",
+          "name": "NL College S02 E21 (Erik Scherder)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-21",
+          "endDate": "2024-02-27",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_7_pm3m",
+          "name": "(Eerste college van Marieke onder contract) NL College S02 E22 (Ritmegevoel)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-04",
+          "endDate": "2024-03-07",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_8_mmgv",
+          "name": "NL College S02 E23 (Fietsen/evenwicht)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-08",
+          "endDate": "2024-03-13",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_9_wvnn",
+          "name": "NL College S02 E24 (Vliegtuigen)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-18",
+          "endDate": "2024-03-20",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_10_wpw2",
+          "name": "NL College S02 E25 (Bewustzijn/ visuele verwerking)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-19",
+          "endDate": "2024-03-22",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "thirsa@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_11_yw97",
+          "name": "NL College S02 E27 (Nanotechnologie)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-03",
+          "endDate": "2024-04-05",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_12_iwse",
+          "name": "NL College S02 E28 (Zoutbatterij)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-09",
+          "endDate": "2024-04-11",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_13_nyc2",
+          "name": "NL College S02 E29 (Hormonen)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-15",
+          "endDate": "2024-04-18",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_14_b0u9",
+          "name": "NL College S02 E30 (Taal)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-22",
+          "endDate": "2024-04-24",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_15_oaso",
+          "name": "NL College S02 E31 (Zelfherstellend lichaam)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-30",
+          "endDate": "2024-05-02",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_16_zbem",
+          "name": "NL College S02 E32 (Achtbanen)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-06",
+          "endDate": "2024-05-08",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_17_vqek",
+          "name": "NL College S02 E37 (Iran)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-21",
+          "endDate": "2024-06-12",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_18_ffv6",
+          "name": "NL College S02 E34 (Bionische mens)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-27",
+          "endDate": "2024-05-28",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "merijn@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_19_p7qh",
+          "name": "NL College S02 E35 (Voetbal)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-27",
+          "endDate": "2024-05-30",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_20_c950",
+          "name": "NL College S02 E36 (Helium)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-04",
+          "endDate": "2024-06-07",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_21_0d81",
+          "name": "NL College S02 E38 (Klimaat)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-10",
+          "endDate": "2024-06-13",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_22_i27u",
+          "name": "NL College S02 E39 (Katten)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-01",
+          "endDate": "2024-07-04",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "mariette@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_23_ybnq",
+          "name": "NL College S02 E40 (Kookshow #1)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-01",
+          "endDate": "2024-07-04",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_24_rcfz",
+          "name": "NL College S02 E41 (Kookshow #2)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-08",
+          "endDate": "2024-07-11",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_25_66df",
+          "name": "NL College S02 E43 (Nederland vol)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-09",
+          "endDate": "2024-07-12",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_26_1ct6",
+          "name": "NL College S02 E42 (Kookshow #3)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-15",
+          "endDate": "2024-07-18",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_27_k0kx",
+          "name": "NL College S02 E44 (Multiversum)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-12",
+          "endDate": "2024-08-15",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_28_rzm4",
+          "name": "NL College S03 E01 (Cosmetische ingrepen)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-28",
+          "endDate": "2024-09-04",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_29_aegg",
+          "name": "NL College S03 E03 (Zaadcellen maken)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-09-09",
+          "endDate": "2024-09-12",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_30_2jcl",
+          "name": "NL College S03 E04 (Prestatiedruk)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-09-19",
+          "endDate": "2024-09-24",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_31_eph7",
+          "name": "NL College S03 E05 (Linedancen)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-09-24",
+          "endDate": "2024-09-27",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_32_qo4z",
+          "name": "NL College S03 E06 (Sterren)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-09-30",
+          "endDate": "2024-10-03",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_33_5e1a",
+          "name": "Carre graphics",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-07",
+          "endDate": "2024-10-23",
+          "deadline": null,
+          "estHours": 45,
+          "dagen": 6,
+          "subitems": [
+            {
+              "id": "si_nederland_3_0_skmj",
+              "name": "Carre graphics",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-10-21",
+              "endDate": "2024-10-22",
+              "estHours": 12
+            }
+          ]
+        },
+        {
+          "id": "it_nederland_3_34_lwi9",
+          "name": "NL College S03 E07 (Zonnestormen)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-09",
+          "endDate": "2024-10-14",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_35_8s1r",
+          "name": "NL College S03 E08 (Zuidpool)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-14",
+          "endDate": "2024-10-21",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_36_z5sz",
+          "name": "NL College S03 E10 (CO2-opslag)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-11-04",
+          "endDate": "2024-11-12",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_37_igk7",
+          "name": "NL College S03 E11 (Kaas z koe)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-11-12",
+          "endDate": "2024-11-15",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_38_b70m",
+          "name": "NL College S03 E12 (Lichaamssappen)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-11-14",
+          "endDate": "2024-11-19",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_39_pabv",
+          "name": "NL College S03 E13 (Reclame)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-11-25",
+          "endDate": "2024-11-28",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_40_00qd",
+          "name": "NL College S03 E16 (Hardlopen)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-11",
+          "endDate": "2024-12-16",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_41_5nd7",
+          "name": "NL College S03 E15 (PCOS)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-13",
+          "endDate": "2024-12-18",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_42_t7rc",
+          "name": "NL College S03 E18 (Winterslaap)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-30",
+          "endDate": "2025-01-07",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_43_g7g4",
+          "name": "NL College S03 E17 (CO2-neutraal vliegen)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-01-06",
+          "endDate": "2025-01-09",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_44_gd2z",
+          "name": "NL College S03 E19 (Zwaartekrachtgolven)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-01-21",
+          "endDate": "2025-01-23",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_45_8efk",
+          "name": "NL College S03 E21 (Openbare ruimtes)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-03",
+          "endDate": "2025-02-05",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "tijmen@pnpmedia.nl"
+        },
+        {
+          "id": "it_nederland_3_46_dk6g",
+          "name": "NL College S03 E22 (Kunstbaarmoeder)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-03",
+          "endDate": "2025-02-06",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_47_ipb5",
+          "name": "NL College S03 E24 (Coke)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-17",
+          "endDate": "2025-02-20",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_48_zpdi",
+          "name": "NL College S03 E25 (Schimmelnetwerk)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-24",
+          "endDate": "2025-02-27",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "mail@nickfelix.nl"
+        },
+        {
+          "id": "it_nederland_3_49_00oq",
+          "name": "NL College S03 E26 (Skincare)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-03",
+          "endDate": "2025-03-06",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_50_6er9",
+          "name": "NL College S03 E27 (Paleo dieet)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-17",
+          "endDate": "2025-03-20",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_51_ri9h",
+          "name": "NL College S03 E28 (Kipjes)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-21",
+          "endDate": "2025-03-27",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_52_5xue",
+          "name": "NL College S03 E29 (Wereldhandel)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-31",
+          "endDate": "2025-04-03",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_53_5zbt",
+          "name": "NL College S03 E30 (Zadenarchief)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-07",
+          "endDate": "2025-04-10",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "julia@pnpmedia.nl"
+        },
+        {
+          "id": "it_nederland_3_54_fz1x",
+          "name": "NL College S03 E32 (Samenwonen)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-14",
+          "endDate": "2025-04-17",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_55_0zhu",
+          "name": "NL College S03 E34 (Digital twin)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-17",
+          "endDate": "2025-04-30",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_56_vzcg",
+          "name": "NL College S03 E31 (Bubbels)",
+          "ownerIds": [
+            "michel"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-23",
+          "endDate": "2025-04-28",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "tijmen@pnpmedia.nl"
+        },
+        {
+          "id": "it_nederland_3_57_8adn",
+          "name": "Artis colleges",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-28",
+          "endDate": "2025-05-31",
+          "deadline": null,
+          "estHours": 56,
+          "dagen": 7
+        },
+        {
+          "id": "it_nederland_3_58_h0ge",
+          "name": "NL College S03 E33 (Poep en plas als mest)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-28",
+          "endDate": "2025-05-01",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_59_sgqb",
+          "name": "NL College S03 E35 (Wereldorde)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-07",
+          "endDate": "2025-05-12",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "barttpeters@gmail.com"
+        },
+        {
+          "id": "it_nederland_3_60_kj4a",
+          "name": "NL College S03 E38 (Uitdijen heelal)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-13",
+          "endDate": "2025-05-16",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "mail@nickfelix.nl"
+        },
+        {
+          "id": "it_nederland_3_61_y7ak",
+          "name": "NL College S03 E36 (Ozempic)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-19",
+          "endDate": "2025-05-22",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_62_8xxt",
+          "name": "NL College S03 E37 (Turing) - ARTIS",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-19",
+          "endDate": "2025-05-22",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_63_yedo",
+          "name": "NL College S03 E39 (Mieren)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-04",
+          "endDate": "2025-06-10",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_64_xm1w",
+          "name": "NL College S03 E40 (Evolutie)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-11",
+          "endDate": "2025-06-19",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_65_wxp2",
+          "name": "NL College S03 E41 (Controlfreaks)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-17",
+          "endDate": "2025-06-20",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_66_tloh",
+          "name": "NL College S03 E42 (Snijzaal)",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-23",
+          "endDate": "2025-06-26",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_67_l1n3",
+          "name": "Laatste week Marieke",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-23",
+          "endDate": "2025-06-26",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_nederland_3_68_xc01",
+          "name": "NL College S03 E43 (Elektronica recycling)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-30",
+          "endDate": "2025-07-03",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_69_2mqa",
+          "name": "NL College S03 E44 (Zwemmen)",
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-07",
+          "endDate": "2025-07-10",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_70_xcjr",
+          "name": "NL College S03 E45 (Supermarkten)",
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-08",
+          "endDate": "2025-07-11",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_71_ejaw",
+          "name": "NL College S04 E02 (Vallende sterren)",
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-28",
+          "endDate": "2025-07-31",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "julia@pnpmedia.nl"
+        },
+        {
+          "id": "it_nederland_3_72_m43w",
+          "name": "NL College S04 E06 Magnetron",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-25",
+          "endDate": "2025-08-28",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_73_gx6o",
+          "name": "NL College S04 E07 (Chronische pijn)",
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-01",
+          "endDate": "2025-09-04",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_74_xl6v",
+          "name": "UvNL: Vorm nieuw format",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-02",
+          "endDate": "2025-09-03",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_nederland_3_75_ad0n",
+          "name": "UvNL templates opschonen",
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-08",
+          "endDate": "2025-09-08",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_nederland_3_76_hh1z",
+          "name": "NL College S04 E08 (Verstandskiezen)",
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-15",
+          "endDate": "2025-09-25",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_77_mczw",
+          "name": "NL College S04 E09 (Waterkwaliteit)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-17",
+          "endDate": "2025-09-20",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_78_vyoh",
+          "name": "HEY U: Draaidag",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-22",
+          "endDate": "2025-09-22",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_nederland_3_79_2kzm",
+          "name": "NL College S04 E10 (Ruimteafval)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-29",
+          "endDate": "2025-10-06",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "julia@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_80_32n0",
+          "name": "HEY U E01 (Open Relaties)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-01",
+          "endDate": "2025-10-02",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_81_c0u4",
+          "name": "NL College S04 E11 (Planten)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-14",
+          "endDate": "2025-10-17",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_82_gbwe",
+          "name": "HEY U E02 (Slaap)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-19",
+          "endDate": "2025-10-20",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_83_9z99",
+          "name": "NL College S04 E12 (Overstromingsrisico huizenprijzen)",
+          "ownerIds": [
+            "take-lijzenga"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-24",
+          "endDate": "2025-10-29",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_84_vqyq",
+          "name": "NL College S04 E13 (Zeilende vrachtschepen)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-27",
+          "endDate": "2025-10-30",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_85_mpzf",
+          "name": "HEY U E03 (Social media)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-05",
+          "endDate": "2025-11-06",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_86_5kwo",
+          "name": "NL College S04 E14 (Kankertest)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-10",
+          "endDate": "2025-11-13",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_87_kj6n",
+          "name": "NL College S04 E15 (Gips)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-17",
+          "endDate": "2025-11-20",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_88_ya66",
+          "name": "NL College S04 E16 (OV)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-24",
+          "endDate": "2025-11-27",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_89_1efb",
+          "name": "Thumbsontwikkeling",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-26",
+          "endDate": "2025-11-26",
+          "deadline": null,
+          "estHours": 2,
           "dagen": 0,
-          "contactpersoon": "",
-          "uitzenddag": null
+          "subitems": [
+            {
+              "id": "si_nederland_3_0_loz2",
+              "name": "Thumbs presenteren",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-12-16",
+              "endDate": "2025-12-16",
+              "estHours": 2
+            },
+            {
+              "id": "si_nederland_3_1_9nza",
+              "name": "Doornemen",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-12-03",
+              "endDate": "2025-12-03",
+              "estHours": 1.5
+            },
+            {
+              "id": "si_nederland_3_2_oyhb",
+              "name": "Doornemen (copy)",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-12-10",
+              "endDate": "2025-12-10",
+              "estHours": 1.5
+            }
+          ]
+        },
+        {
+          "id": "it_nederland_3_90_1njl",
+          "name": "HEY U E04 (Vulkanen?)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-01",
+          "endDate": "2025-12-03",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_91_z90m",
+          "name": "NL College S04 E17 (Lichaamstaal)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-08",
+          "endDate": "2025-12-11",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_92_4v8g",
+          "name": "NL College S04 E19 (Mindfulness)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-15",
+          "endDate": "2025-12-20",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_93_sbk3",
+          "name": "NL College S04 E18 (Licht)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-15",
+          "endDate": "2025-12-18",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_94_tdw4",
+          "name": "HEY U E05 (Leren)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-05",
+          "endDate": "2026-01-07",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl",
+          "subitems": [
+            {
+              "id": "si_nederland_3_0_u9qp",
+              "name": "Hey U automatiseren",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-01-04",
+              "endDate": "2026-01-09",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_nederland_3_95_hfsv",
+          "name": "NL College S04 E20 (Natuurijs)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-05",
+          "endDate": "2026-01-09",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_96_ioyj",
+          "name": "NL College S04 E21 (Stress)",
+          "ownerIds": [
+            "take-lijzenga"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-12",
+          "endDate": "2026-01-16",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_97_fvw8",
+          "name": "HEY U E06 Heelal",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-12",
+          "endDate": "2026-01-14",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@pnpmedia.nl"
+        },
+        {
+          "id": "it_nederland_3_98_20hf",
+          "name": "NL College S04 E22 (Smetvrees)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-02-02",
+          "endDate": "2026-02-06",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_99_kqis",
+          "name": "NL College S04 E23 (Kernenergie)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-02-02",
+          "endDate": "2026-02-06",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_100_05ve",
+          "name": "Bij Artis langs",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-02-05",
+          "endDate": "2026-02-05",
+          "deadline": null,
+          "estHours": 3,
+          "dagen": 0
+        },
+        {
+          "id": "it_nederland_3_101_ybti",
+          "name": "UvNL Even Denken",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-02-09",
+          "endDate": "2026-02-28",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2,
+          "contactpersoon": "fay@pnpmedia.nl"
+        },
+        {
+          "id": "it_nederland_3_102_plzk",
+          "name": "NL college S04 E24 (mysteries op mars)",
+          "ownerIds": [
+            "anne-fleur",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-02-10",
+          "endDate": "2026-02-13",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_103_px9l",
+          "name": "NL College S04 E25 (fietsen)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-02-16",
+          "endDate": "2026-02-18",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_104_a9uj",
+          "name": "HEY U E07 Porno",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-02-23",
+          "endDate": "2026-02-24",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_105_t9ml",
+          "name": "NL College S04 E26 (America first)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-03-05",
+          "endDate": "2026-03-10",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_106_w8hc",
+          "name": "NL College S04 E27 (Verkeerde tijdzone)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-03-11",
+          "endDate": "2026-03-14",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_107_f86j",
+          "name": "NL College S04 E28 (Metropolis)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-03-16",
+          "endDate": "2026-03-19",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_108_n0lq",
+          "name": "NL College S02 E26 ANIMEERT MARIETTE ZELF",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_nederland_3_109_rxsm",
+          "name": "NL College S02 E33 MARIETTE ANIMEERT ZELF",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_nederland_3_110_9yif",
+          "name": "NL College S03 E02 MARIETTE ANIMEERT ZELF",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_nederland_3_111_vezl",
+          "name": "NL College S03 E09 (Armoede) MAAKT MARIETTE ZELF",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_nederland_3_112_we3v",
+          "name": "NL College S03 E14 MARIETTE ANIMEERT ZELF",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_nederland_3_113_d7of",
+          "name": "NL College S03 E20 (Darmen)",
+          "ownerIds": [
+            "joeri-teijma"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_114_go3d",
+          "name": "NL College S03 E23 (Fruitvliegen)",
+          "ownerIds": [
+            "joeri-teijma"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "tuur@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_115_ko8u",
+          "name": "HEY U: Animeren intro/bumpers",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_nederland_3_0_kfik",
+              "name": "HEY U: Animeren intro/bumpers",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-09-29",
+              "endDate": "2025-09-29",
+              "estHours": 8
+            },
+            {
+              "id": "si_nederland_3_1_ffyt",
+              "name": "HEY U: Animeren intro/bumpers",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-10-06",
+              "endDate": "2025-10-08",
+              "estHours": 16
+            }
+          ]
+        },
+        {
+          "id": "it_nederland_3_116_zaj3",
+          "name": "Podcast: Even Denken",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_nederland_3_117_2sug",
+          "name": "NL College S04 E29 (Eiwitten)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-03-30",
+          "endDate": "2026-04-02",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_118_8dg1",
+          "name": "NL College S04 E31 (jeugdcriminelen middelbare school)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-04-13",
+          "endDate": "2026-04-16",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_119_otu3",
+          "name": "NL College S04 E32 (Vakantiegeld)",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-04-25",
+          "endDate": "2026-04-28",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_120_zpzw",
+          "name": "HEY U E09 Voedingsmythes",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2026-04-20",
+          "endDate": "2026-04-24",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_121_tvkr",
+          "name": "NL College S04 E30 (Grenzen)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-04-10",
+          "endDate": "2026-04-13",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_3_122_u9bc",
+          "name": "HEY U E08 Poep",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2026-03-23",
+          "endDate": "2026-03-26",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl"
+        }
+      ]
+    },
+    {
+      "id": "g_nederland_3",
+      "name": "Done seizoen 04",
+      "color": "#00c875",
+      "items": [
+        {
+          "id": "it_nederland_4_0_0om2",
+          "name": "NL College S04 E01 (Reuma)",
+          "ownerIds": [
+            "odette",
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-21",
+          "endDate": "2025-07-24",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_4_1_gv8h",
+          "name": "NL College S04 E04 (Zien/foton)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-04",
+          "endDate": "2025-08-07",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_4_2_tjrg",
+          "name": "NL College S04 E03 (Vierdaagse)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-11",
+          "endDate": "2025-08-14",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_4_3_vpf4",
+          "name": "NL College S04 E05 (Kuddegedrag)",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-25",
+          "endDate": "2025-08-28",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        }
+      ]
+    },
+    {
+      "id": "g_nederland_4",
+      "name": "Losse projecten",
+      "color": "#ff7a00",
+      "items": [
+        {
+          "id": "it_nederland_5_0_om23",
+          "name": "UvNL: Romeinenpodcast",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-08",
+          "endDate": "2024-01-16",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 3
+        },
+        {
+          "id": "it_nederland_5_1_9vr7",
+          "name": "UvNL Romeinen 3D poster",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-05",
+          "endDate": "2024-02-09",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
         }
       ]
     }

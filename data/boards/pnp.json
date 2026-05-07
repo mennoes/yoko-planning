@@ -1,50 +1,541 @@
 {
   "groups": [
     {
-      "id": "pnp-actief",
-      "name": "PnP",
-      "color": "#e2445c",
-      "collapsed": false,
+      "id": "g_pnp_0",
+      "name": "Items",
+      "color": "#579bfc",
       "items": [
         {
-          "id": "pnp-bloedheet",
-          "name": "Bloedheet en Tranen S...",
-          "ownerIds": ["odette"],
+          "id": "it_pnp_1_0_hue4",
+          "name": "Bloedheet en Tranen S02",
+          "ownerIds": [
+            "odette"
+          ],
           "status": "",
           "startDate": null,
           "endDate": null,
           "deadline": null,
           "estHours": 60,
-          "dagen": 7.5,
-          "contactpersoon": ""
+          "dagen": 8,
+          "subitems": [
+            {
+              "id": "si_pnp_1_0_4hd8",
+              "name": "Femsplainers 1&2",
+              "ownerIds": [
+                "vincent",
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2026-05-21",
+              "endDate": "2026-05-26",
+              "estHours": 12
+            },
+            {
+              "id": "si_pnp_1_1_i0o2",
+              "name": "Femsplainers 3&4",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2026-06-05",
+              "endDate": "2026-06-08",
+              "estHours": 12
+            },
+            {
+              "id": "si_pnp_1_2_i1n3",
+              "name": "Femsplainers 5&6",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2026-06-18",
+              "endDate": "2026-06-22",
+              "estHours": 12
+            }
+          ]
         },
         {
-          "id": "pnp-nmi2",
+          "id": "it_pnp_1_1_b5m0",
           "name": "NMI video 2",
-          "ownerIds": ["odette"],
+          "ownerIds": [
+            "odette"
+          ],
           "status": "",
           "startDate": "2026-03-26",
           "endDate": "2026-03-26",
           "deadline": null,
           "estHours": 8,
           "dagen": 1,
-          "contactpersoon": ""
+          "subitems": [
+            {
+              "id": "si_pnp_1_0_mbhm",
+              "name": "V01",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            },
+            {
+              "id": "si_pnp_1_1_eykt",
+              "name": "V02",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            }
+          ]
         }
       ]
     },
     {
-      "id": "mantis",
-      "name": "Mantis",
-      "color": "#9c7ee8",
-      "collapsed": false,
-      "items": []
-    },
-    {
-      "id": "done",
+      "id": "g_pnp_2",
       "name": "Done",
-      "color": "#00c875",
-      "collapsed": true,
-      "items": []
+      "color": "#e2445c",
+      "items": [
+        {
+          "id": "it_pnp_3_0_xkrw",
+          "name": "Sexotisch aflv 2",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-12",
+          "endDate": "2024-09-12",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_1_43o4",
+          "name": "Sexotisch ident",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-06-03",
+          "endDate": "2024-07-28",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_2_b935",
+          "name": "Sexotisch aflv 1",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-06-17",
+          "endDate": "2024-07-26",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_3_v99u",
+          "name": "NRO Kennisrotonde 2023",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-04-15",
+          "endDate": "2024-05-10",
+          "deadline": "2024-05-10",
+          "estHours": 56,
+          "dagen": 7
+        },
+        {
+          "id": "it_pnp_3_4_jq82",
+          "name": "NRO Stijl",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2023-11-30",
+          "endDate": "2023-12-01",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_pnp_3_5_hexy",
+          "name": "NRO: Leader + feedback",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-01-22",
+          "endDate": "2024-01-23",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_pnp_3_6_bxoz",
+          "name": "NRO: 5 Videos + resoluties",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-01-09",
+          "endDate": "2024-01-13",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_pnp_3_7_64h3",
+          "name": "Sexotisch aflv 3",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-26",
+          "endDate": "2024-09-27",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_8_ebpi",
+          "name": "NRO Kennisrotonde 2024",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-11-19",
+          "endDate": "2024-12-04",
+          "deadline": null,
+          "estHours": 60,
+          "dagen": 8
+        },
+        {
+          "id": "it_pnp_3_9_imni",
+          "name": "Evi: leader",
+          "ownerIds": [
+            "menno",
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-03",
+          "endDate": "2025-02-07",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_pnp_3_10_diwp",
+          "name": "Evi: Trailer feedbackverwerken + 3 formaten",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-31",
+          "endDate": "2025-02-03",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_pnp_3_11_65fb",
+          "name": "Evi: Mansplainers",
+          "ownerIds": [
+            "odette",
+            "menno",
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-10",
+          "endDate": "2025-03-16",
+          "deadline": null,
+          "estHours": 112,
+          "dagen": 14
+        },
+        {
+          "id": "it_pnp_3_12_7t2o",
+          "name": "Unicef podcast",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-24",
+          "endDate": "2025-04-27",
+          "deadline": "2025-04-14",
+          "estHours": 40,
+          "dagen": 5,
+          "framelink": "https://www.figma.com/design/6gKfhJ9l0aglFBxoJqt85x/Unicef---op-het-netvlies?node-id=54-2&t=HUylkCVVKs7h8GW7-1"
+        },
+        {
+          "id": "it_pnp_3_13_3b8a",
+          "name": "FEMsplainer afronding",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-24",
+          "endDate": "2025-04-08",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_pnp_3_14_q7bi",
+          "name": "Afhaal S02 E01",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-31",
+          "endDate": "2025-04-10",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_15_2eyh",
+          "name": "NJI Podcast vormgeving",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-24",
+          "endDate": "2025-04-04",
+          "deadline": "2025-04-04",
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Timo",
+          "framelink": "https://www.figma.com/design/kjVqKqZi0W0veH1JOOkGmq/NJi-De-Beleidsmakers-Jeugd?node-id=0-1&t=3oEyfK57CaruKZ4n-1"
+        },
+        {
+          "id": "it_pnp_3_16_z2md",
+          "name": "Afhaal S02 E02",
+          "ownerIds": [
+            "take-lijzenga"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-09",
+          "endDate": "2025-04-17",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_17_1w3t",
+          "name": "Afhaal S02 E04",
+          "ownerIds": [
+            "take-lijzenga"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-15",
+          "endDate": "2025-04-21",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_18_1wdk",
+          "name": "Afhaal S02 E03",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-11",
+          "endDate": "2025-04-18",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_pnp_3_19_xs44",
+          "name": "Podcast studio promotie",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-06-30",
+          "endDate": "2025-07-04",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_pnp_3_20_k4ll",
+          "name": "KNRM trailer + Social pakket",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-09-09",
+          "endDate": "2025-09-25",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_pnp_3_21_9acm",
+          "name": "Laugh is all you need",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-09-08",
+          "endDate": "2025-11-15",
+          "deadline": "2025-11-15",
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_pnp_3_0_khgf",
+              "name": "LIAYN - Aanpassingen?",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-11-24",
+              "endDate": "2025-12-06",
+              "estHours": 16
+            }
+          ]
+        },
+        {
+          "id": "it_pnp_3_22_h6io",
+          "name": "NRO kennisrotonde",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_pnp_3_0_80q9",
+              "name": "Animeren",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-11-24",
+              "endDate": "2025-12-09",
+              "estHours": 64
+            }
+          ]
+        },
+        {
+          "id": "it_pnp_3_23_eu91",
+          "name": "NCTO vormgeving",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2026-02-09",
+          "endDate": "2026-02-09",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_pnp_3_24_s7z4",
+          "name": "NCTO feedback",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2026-02-16",
+          "endDate": "2026-02-16",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_pnp_3_25_mpxq",
+          "name": "LIAYN - 9x16 logo",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2026-01-12",
+          "endDate": "2026-01-12",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_pnp_3_26_5c22",
+          "name": "FF De Frisse Wind",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2026-01-06",
+          "endDate": "2026-01-16",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_pnp_3_27_fpqu",
+          "name": "NMI",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-12-17",
+          "endDate": "2026-01-08",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_pnp_3_0_gg5a",
+              "name": "NMI ontwikkeling",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-10-06",
+              "endDate": "2025-10-23",
+              "estHours": 24
+            },
+            {
+              "id": "si_pnp_3_1_e4ei",
+              "name": "NMI maken",
+              "ownerIds": [
+                "vincent",
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-12-16",
+              "endDate": "2025-12-19",
+              "estHours": 16
+            },
+            {
+              "id": "si_pnp_3_2_7qcf",
+              "name": "NMI feedback verwerken",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-12-31",
+              "endDate": "2026-01-06",
+              "estHours": 4
+            }
+          ]
+        }
+      ]
     }
   ]
 }

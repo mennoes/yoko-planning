@@ -1,9 +1,16 @@
 {
   "members": [
-    { "id": "menno",      "name": "Menno",             "email": "menno@studioyoko.nl",      "weeklyCapacity": 40, "color": "#579bfc" },
-    { "id": "vincent",    "name": "Vincent",            "email": "vincent@studioyoko.nl",    "weeklyCapacity": 40, "color": "#9c7ee8" },
-    { "id": "odette",     "name": "Odette",             "email": "odette@studioyoko.nl",     "weeklyCapacity": 40, "color": "#e2445c" },
-    { "id": "kars",       "name": "Kars",               "email": "kars@studioyoko.nl",       "weeklyCapacity": 24, "color": "#00c875" },
-    { "id": "anne-fleur", "name": "Anne-Fleur",         "email": "annefleur@studioyoko.nl",  "weeklyCapacity": 24, "color": "#ffcb00" }
+    { "id": "menno",            "name": "Menno",            "email": "menno@studioyoko.nl",      "weeklyCapacity": 40, "color": "#579bfc" },
+    { "id": "vincent",          "name": "Vincent",          "email": "vincent@studioyoko.nl",    "weeklyCapacity": 40, "color": "#9c7ee8" },
+    { "id": "odette",           "name": "Odette",           "email": "odette@studioyoko.nl",     "weeklyCapacity": 40, "color": "#e2445c" },
+    { "id": "kars",             "name": "Kars",             "email": "kars@studioyoko.nl",       "weeklyCapacity": 24, "color": "#00c875" },
+    { "id": "anne-fleur",       "name": "Anne-Fleur",       "email": "annefleur@studioyoko.nl",  "weeklyCapacity": 24, "color": "#ffcb00" },
+    { "id": "fokke-mars",       "name": "Fokke Mars",       "email": "",                          "weeklyCapacity": 0,  "color": "#ff7a00" },
+    { "id": "joeri-teijma",     "name": "Joeri Teijma",     "email": "",                          "weeklyCapacity": 0,  "color": "#a25ddc" },
+    { "id": "marcus-driessen",  "name": "Marcus Driessen",  "email": "",                          "weeklyCapacity": 0,  "color": "#26b3a4" },
+    { "id": "marieke",          "name": "Marieke",          "email": "",                          "weeklyCapacity": 0,  "color": "#ec6e8b" },
+    { "id": "michel",           "name": "Michel",           "email": "",                          "weeklyCapacity": 0,  "color": "#7a5af8" },
+    { "id": "take-lijzenga",    "name": "Take Lijzenga",    "email": "",                          "weeklyCapacity": 0,  "color": "#1e8a4e" },
+    { "id": "unassigned",       "name": "Unassigned",       "email": "",                          "weeklyCapacity": 0,  "color": "#9aadbd" }
   ]
 }

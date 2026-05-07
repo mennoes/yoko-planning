@@ -1,161 +1,3887 @@
 {
   "groups": [
     {
-      "id": "losse-projecten",
+      "id": "g_yoko_0",
       "name": "Losse projecten",
       "color": "#579bfc",
-      "collapsed": false,
       "items": [
         {
-          "id": "y-witteman",
+          "id": "it_yoko_1_0_e1g6",
           "name": "Witte Man",
-          "ownerIds": ["menno", "anne-fleur"],
-          "status": "Working on...",
-          "startDate": null,
-          "endDate": "2025-12-15",
-          "deadline": "2025-12-15",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Working on it",
+          "startDate": "2025-12-15",
+          "endDate": "2026-03-29",
+          "deadline": null,
           "estHours": 176,
-          "dagen": 22,
-          "notes": ""
+          "dagen": 22
         },
         {
-          "id": "y-sas-icu",
+          "id": "it_yoko_1_1_tdoa",
           "name": "SAS-ICU",
-          "ownerIds": [],
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2026-05-04",
           "endDate": "2026-07-03",
           "deadline": null,
           "estHours": 140,
-          "dagen": 17.5,
-          "notes": "",
+          "dagen": 18,
           "subitems": [
-            { "id": "sas-s1", "name": "Kennismaking",             "ownerIds": [], "status": "", "startDate": "2025-11-07", "endDate": null,         "estHours": 2 },
-            { "id": "sas-s2", "name": "Inventariseren onderwerp", "ownerIds": [], "status": "", "startDate": "2025-11-17", "endDate": null,         "estHours": 2 },
-            { "id": "sas-s3", "name": "Stijlonderzoek",           "ownerIds": [], "status": "", "startDate": null,         "endDate": null,         "estHours": 0 },
-            { "id": "sas-s4", "name": "Storyboard",               "ownerIds": [], "status": "", "startDate": "2026-05-13", "endDate": "2026-06-01", "estHours": 36 },
-            { "id": "sas-s5", "name": "Storyboard presentatie",   "ownerIds": [], "status": "", "startDate": "2026-06-12", "endDate": null,         "estHours": 3 },
-            { "id": "sas-s6", "name": "Animeren v1",              "ownerIds": [], "status": "", "startDate": "2026-06-15", "endDate": "2026-07-09", "estHours": 50 },
-            { "id": "sas-s7", "name": "Opleveren v2",             "ownerIds": [], "status": "", "startDate": "2026-07-13", "endDate": "2026-08-02", "estHours": 30 }
+            {
+              "id": "si_yoko_1_0_z1l8",
+              "name": "Kennismaking",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-11-07",
+              "endDate": "2025-11-07",
+              "estHours": 2
+            },
+            {
+              "id": "si_yoko_1_1_voc0",
+              "name": "Inventariseren onderwerpen",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-11-17",
+              "endDate": "2025-11-17",
+              "estHours": 2
+            },
+            {
+              "id": "si_yoko_1_2_7p3a",
+              "name": "Stijlonderzoek",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            },
+            {
+              "id": "si_yoko_1_3_qxwt",
+              "name": "Storyboard",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-05-19",
+              "endDate": "2026-06-10",
+              "estHours": 36
+            },
+            {
+              "id": "si_yoko_1_4_arjb",
+              "name": "Storyboard presentatie",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-06-12",
+              "endDate": "2026-06-12",
+              "estHours": 3
+            },
+            {
+              "id": "si_yoko_1_5_7wq1",
+              "name": "Animeren v1",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-06-15",
+              "endDate": "2026-07-09",
+              "estHours": 50
+            },
+            {
+              "id": "si_yoko_1_6_xjz2",
+              "name": "Opleveren v2",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-07-13",
+              "endDate": "2026-08-02",
+              "estHours": 30
+            }
           ]
         },
         {
-          "id": "y-explainer-bpd",
-          "name": "explainer.nl – BPD",
-          "ownerIds": [],
+          "id": "it_yoko_1_2_bfhv",
+          "name": "explainer.nl - BPD",
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2026-01-28",
-          "endDate": null,
+          "endDate": "2026-04-13",
           "deadline": "2026-04-13",
           "estHours": 0,
           "dagen": 0,
-          "notes": "",
           "subitems": [
-            { "id": "bpd-s1", "name": "BPD-Stijlplaten",      "ownerIds": [], "status": "Done", "startDate": "2026-01-28", "endDate": "2026-02-05", "estHours": 12 },
-            { "id": "bpd-s2", "name": "BPD-Feedback verwerkt","ownerIds": [], "status": "Done", "startDate": "2026-02-11", "endDate": null,         "estHours": 2 },
-            { "id": "bpd-s3", "name": "BPD-Animatie v1",      "ownerIds": [], "status": "Done", "startDate": "2026-03-23", "endDate": "2026-03-30", "estHours": 32 },
-            { "id": "bpd-s4", "name": "BPD-Animatie v2",      "ownerIds": [], "status": "",     "startDate": "2026-04-08", "endDate": "2026-04-13", "estHours": 16 }
+            {
+              "id": "si_yoko_1_0_rgs0",
+              "name": "BPD - Stijlplaten",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "Done",
+              "startDate": "2026-01-28",
+              "endDate": "2026-02-05",
+              "estHours": 12
+            },
+            {
+              "id": "si_yoko_1_1_mr38",
+              "name": "BPD - Feedback verwerkt",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "Done",
+              "startDate": "2026-02-11",
+              "endDate": "2026-02-11",
+              "estHours": 2
+            },
+            {
+              "id": "si_yoko_1_2_c3az",
+              "name": "BPD - Animatie v1",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "Done",
+              "startDate": "2026-03-23",
+              "endDate": "2026-03-30",
+              "estHours": 32
+            },
+            {
+              "id": "si_yoko_1_3_yhwf",
+              "name": "BPD - Animatie v2",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2026-04-08",
+              "endDate": "2026-04-13",
+              "estHours": 16
+            }
           ]
         },
         {
-          "id": "y-pinkfloyd-wall",
-          "name": "PinkFloyd – The Wall",
-          "ownerIds": ["anne-fleur"],
+          "id": "it_yoko_1_3_rzbb",
+          "name": "PinkFloyd - The Wall",
+          "ownerIds": [
+            "vincent"
+          ],
           "status": "",
           "startDate": null,
           "endDate": null,
           "deadline": "2026-09-01",
           "estHours": 0,
           "dagen": 0,
-          "notes": "",
           "subitems": [
-            { "id": "pf-s1", "name": "Concepting meeting 01",    "ownerIds": [], "status": "", "startDate": "2026-03-25", "endDate": "2026-03-31", "estHours": 16, "echtGewerkt": 24 },
-            { "id": "pf-s2", "name": "Concepting meeting 02",    "ownerIds": [], "status": "", "startDate": "2026-03-31", "endDate": "2026-04-15", "estHours": 32 },
-            { "id": "pf-s3", "name": "Draaidagen voorbereiden",  "ownerIds": [], "status": "", "startDate": "2026-04-27", "endDate": "2026-05-09", "estHours": 16 },
-            { "id": "pf-s4", "name": "Draaidag",                 "ownerIds": [], "status": "", "startDate": "2026-05-09", "endDate": null,         "estHours": 8 },
-            { "id": "pf-s5", "name": "Productie graphics",       "ownerIds": [], "status": "", "startDate": "2026-03-25", "endDate": "2026-08-31", "estHours": 100 },
-            { "id": "pf-s6", "name": "Laatste aanpassingen",     "ownerIds": [], "status": "", "startDate": "2026-08-01", "endDate": "2026-08-31", "estHours": 40 }
+            {
+              "id": "si_yoko_1_0_6jjq",
+              "name": "Concepting meeting 01",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-03-25",
+              "endDate": "2026-03-31",
+              "estHours": 16,
+              "echtGewerkt": 24
+            },
+            {
+              "id": "si_yoko_1_1_0rxa",
+              "name": "Concepting meeting 02",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-03-31",
+              "endDate": "2026-04-28",
+              "estHours": 32
+            },
+            {
+              "id": "si_yoko_1_2_enyc",
+              "name": "Draaidagen voorbereiden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-05-23",
+              "endDate": "2026-06-03",
+              "estHours": 16
+            },
+            {
+              "id": "si_yoko_1_3_8rmw",
+              "name": "Draaidag",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-06-04",
+              "endDate": "2026-06-04",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_1_4_tg1u",
+              "name": "Productie graphics",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-03-25",
+              "endDate": "2026-08-01",
+              "estHours": 100
+            },
+            {
+              "id": "si_yoko_1_5_9rf8",
+              "name": "Laatste aanpassingen",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-08-01",
+              "endDate": "2026-08-31",
+              "estHours": 40
+            }
           ]
         },
         {
-          "id": "y-wonenzuid",
+          "id": "it_yoko_1_4_hn3b",
           "name": "WonenZuid",
-          "ownerIds": ["odette"],
+          "ownerIds": [
+            "odette"
+          ],
           "status": "",
           "startDate": "2026-03-27",
           "endDate": "2026-03-28",
           "deadline": "2026-04-03",
           "estHours": 6,
-          "dagen": 0.75,
-          "notes": ""
+          "dagen": 1
         },
         {
-          "id": "y-bedrijvencentrum",
+          "id": "it_yoko_1_5_kusp",
           "name": "Bedrijvencentrum U illustraties",
-          "ownerIds": ["menno", "odette"],
+          "ownerIds": [
+            "anne-fleur"
+          ],
           "status": "",
-          "startDate": "2026-04-21",
-          "endDate": "2026-05-03",
+          "startDate": "2026-05-18",
+          "endDate": "2026-05-30",
           "deadline": "2026-04-30",
           "estHours": 16,
-          "dagen": 2,
-          "notes": ""
+          "dagen": 2
         }
       ]
     },
     {
-      "id": "rewind",
+      "id": "g_yoko_1",
       "name": "Rewind",
-      "color": "#ffcb00",
-      "collapsed": false,
+      "color": "#9c7ee8",
       "items": [
         {
-          "id": "y-rewind-dec",
+          "id": "it_yoko_2_0_y28o",
           "name": "Rewind december",
-          "ownerIds": ["menno"],
+          "ownerIds": [
+            "kars"
+          ],
           "status": "",
           "startDate": "2025-12-01",
           "endDate": "2025-12-31",
           "deadline": null,
           "estHours": 8,
           "dagen": 1,
-          "notes": ""
+          "subitems": [
+            {
+              "id": "si_yoko_2_0_kh7k",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-12-17",
+              "endDate": "2025-12-17",
+              "estHours": 8
+            }
+          ]
         },
         {
-          "id": "y-rewind-jan",
+          "id": "it_yoko_2_1_exf9",
           "name": "Rewind jan",
-          "ownerIds": ["menno"],
+          "ownerIds": [
+            "kars"
+          ],
           "status": "",
           "startDate": "2026-01-01",
           "endDate": "2026-01-30",
           "deadline": null,
           "estHours": 16,
           "dagen": 2,
-          "notes": ""
+          "subitems": [
+            {
+              "id": "si_yoko_2_0_0fmm",
+              "name": "Rewind - Finland",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-01-20",
+              "endDate": "2026-01-20",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_2_1_9aox",
+              "name": "Rewind - XTC & Wayan Koster",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-01-26",
+              "endDate": "2026-01-26",
+              "estHours": 8
+            }
+          ]
         },
         {
-          "id": "y-rewind-feb",
+          "id": "it_yoko_2_2_koqq",
           "name": "Rewind feb",
-          "ownerIds": ["menno"],
+          "ownerIds": [
+            "kars"
+          ],
           "status": "",
           "startDate": "2026-01-30",
           "endDate": "2026-02-28",
           "deadline": null,
           "estHours": 16,
           "dagen": 2,
-          "notes": ""
+          "subitems": [
+            {
+              "id": "si_yoko_2_0_ivot",
+              "name": "Rewind - Ongedocumenteerden",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-02-17",
+              "endDate": "2026-02-17",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_2_1_jifo",
+              "name": "Rewind - Toxische tijdlijn",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-02-20",
+              "endDate": "2026-02-20",
+              "estHours": 8
+            }
+          ]
         },
         {
-          "id": "y-rewind-mrt",
+          "id": "it_yoko_2_3_x26l",
           "name": "Rewind mrt",
-          "ownerIds": ["menno"],
+          "ownerIds": [
+            "kars"
+          ],
           "status": "",
           "startDate": "2026-03-01",
           "endDate": "2026-03-31",
           "deadline": null,
           "estHours": 16,
           "dagen": 2,
-          "notes": ""
+          "subitems": [
+            {
+              "id": "si_yoko_2_0_6fg1",
+              "name": "Rewind",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-03-02",
+              "endDate": "2026-03-02",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_2_1_pnmw",
+              "name": "Rewind",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-03-24",
+              "endDate": "2026-03-24",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_2_4_07wi",
+          "name": "Rewind apr",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "",
+          "startDate": "2026-04-01",
+          "endDate": "2026-04-30",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_yoko_2_0_u86x",
+              "name": "Rewind",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-04-14",
+              "endDate": "2026-04-14",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_2_1_p981",
+              "name": "Rewind",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2026-04-29",
+              "endDate": "2026-04-29",
+              "estHours": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g_yoko_2",
+      "name": "Vrij",
+      "color": "#e2445c",
+      "items": [
+        {
+          "id": "it_yoko_3_0_61e4",
+          "name": "Verbouwen",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "",
+          "startDate": "2026-01-26",
+          "endDate": "2026-07-31",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_yoko_3_0_qpln",
+              "name": "Klus",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-04-16",
+              "endDate": "2026-04-16",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_3_1_vnqq",
+          "name": "Vrijdag vrij",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_yoko_3_0_7b3t",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-17",
+              "endDate": "2026-04-17",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_1_qx1k",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-04-24",
+              "endDate": "2026-04-24",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_2_twib",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-05-08",
+              "endDate": "2026-05-08",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_3_qn0y",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-05-15",
+              "endDate": "2026-05-15",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_4_593n",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-06-12",
+              "endDate": "2026-06-12",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_5_ghe2",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-06-19",
+              "endDate": "2026-06-19",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_6_dklj",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-07-03",
+              "endDate": "2026-07-03",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_7_gg6x",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-07-06",
+              "endDate": "2026-07-06",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_8_s39m",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-07-31",
+              "endDate": "2026-07-31",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_9_vin9",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-08-21",
+              "endDate": "2026-08-21",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_3_10_u382",
+              "name": "Vrij",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-08-24",
+              "endDate": "2026-08-24",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_3_2_0odc",
+          "name": "Hemelvaartdag",
+          "ownerIds": [
+            "anne-fleur",
+            "menno",
+            "vincent",
+            "odette"
+          ],
+          "status": "",
+          "startDate": "2026-05-14",
+          "endDate": "2026-05-14",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_3_3_bc7g",
+          "name": "Tweede Pinksterdag",
+          "ownerIds": [
+            "odette",
+            "anne-fleur",
+            "menno",
+            "vincent"
+          ],
+          "status": "",
+          "startDate": "2026-05-25",
+          "endDate": "2026-05-25",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_3_4_bykr",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "",
+          "startDate": "2026-05-15",
+          "endDate": "2026-05-22",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6
+        }
+      ]
+    },
+    {
+      "id": "g_yoko_3",
+      "name": "Vrij done",
+      "color": "#00c875",
+      "items": [
+        {
+          "id": "it_yoko_4_0_sb0z",
+          "name": "Milou maand uitwaai dag!",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-14",
+          "endDate": "2024-02-14",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_4_1_u489",
+          "name": "Vrij - Nieuwjaar",
+          "ownerIds": [
+            "menno",
+            "odette",
+            "michel"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-01",
+          "endDate": "2024-01-01",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_4_2_fyj2",
+          "name": "Vakantie",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-01",
+          "endDate": "2024-01-16",
+          "deadline": null,
+          "estHours": 92,
+          "dagen": 12
+        },
+        {
+          "id": "it_yoko_4_3_za96",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2023-12-27",
+          "endDate": "2024-01-05",
+          "deadline": null,
+          "estHours": 60,
+          "dagen": 8
+        }
+      ]
+    },
+    {
+      "id": "g_yoko_4",
+      "name": "Done",
+      "color": "#ff7a00",
+      "items": [
+        {
+          "id": "it_yoko_5_0_bapn",
+          "name": "Abovo: ruiter Dakkappellen (?)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": "2024-06-11",
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_1_p1an",
+          "name": "VIXY: ING Hackathon",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_2_e1cs",
+          "name": "Greenpeace: vertaling Engels",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": "2024-06-07",
+          "estHours": 3,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_3_svpt",
+          "name": "DJ OnDemand voorlichting",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 104,
+          "dagen": 13,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_kurg",
+              "name": "Presentatie voorbereiden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-02-20",
+              "endDate": "2024-02-20",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_md1j",
+              "name": "Webinar aanpassingen doorvoeren",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-03-21",
+              "endDate": "2024-03-25",
+              "estHours": 6
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_4_o89c",
+          "name": "Vitens - DOOH aanpassingen",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-17",
+          "endDate": "2025-07-17",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_5_gb9m",
+          "name": "4 daagse",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-14",
+          "endDate": "2025-07-18",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_6_iwa7",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-03",
+          "endDate": "2025-07-04",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_7_5b05",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-02",
+          "endDate": "2025-07-02",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_8_e9e5",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-30",
+          "endDate": "2025-07-18",
+          "deadline": null,
+          "estHours": 120,
+          "dagen": 15
+        },
+        {
+          "id": "it_yoko_5_9_ua5n",
+          "name": "Medialogica aflv 1",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-30",
+          "endDate": "2025-07-09",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_evvd",
+              "name": "Medialogica Afronding + timing",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-07-15",
+              "endDate": "2025-07-16",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_10_9p2u",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-18",
+          "endDate": "2025-06-18",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_11_sn6j",
+          "name": "Vrij",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-06-04",
+          "endDate": "2025-06-20",
+          "deadline": null,
+          "estHours": 108,
+          "dagen": 14
+        },
+        {
+          "id": "it_yoko_5_12_tqhh",
+          "name": "Hemelvaart",
+          "ownerIds": [
+            "menno",
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-29",
+          "endDate": "2025-05-29",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_13_u7gv",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-26",
+          "endDate": "2025-05-26",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_14_nfbg",
+          "name": "Vrij",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-19",
+          "endDate": "2025-06-22",
+          "deadline": null,
+          "estHours": 200,
+          "dagen": 25
+        },
+        {
+          "id": "it_yoko_5_15_bl6n",
+          "name": "Frenk motion video",
+          "ownerIds": [
+            "take-lijzenga"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-16",
+          "endDate": "2025-05-31",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_16_t97s",
+          "name": "Bruiloft Italie",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-15",
+          "endDate": "2025-05-28",
+          "deadline": null,
+          "estHours": 64,
+          "dagen": 8
+        },
+        {
+          "id": "it_yoko_5_17_j3i7",
+          "name": "Evi posters",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-14",
+          "endDate": "2025-05-16",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2,
+          "notes": "Zie figma"
+        },
+        {
+          "id": "it_yoko_5_18_yzyn",
+          "name": "Verve Altix Bento",
+          "ownerIds": [
+            "take-lijzenga"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-12",
+          "endDate": "2025-05-14",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_19_znxd",
+          "name": "Bevrijdingsdag",
+          "ownerIds": [
+            "anne-fleur",
+            "odette",
+            "vincent",
+            "menno",
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-05",
+          "endDate": "2025-05-05",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_20_mm2c",
+          "name": "Rewind mei",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-05-01",
+          "endDate": "2025-05-31",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_8qma",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-05-02",
+              "endDate": "2025-05-02",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_ig3w",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-05-27",
+              "endDate": "2025-05-27",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_21_2n3o",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-30",
+          "endDate": "2025-05-06",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_22_4tru",
+          "name": "Greenpeace inschatting",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-28",
+          "endDate": "2025-05-15",
+          "deadline": "2025-05-15",
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_23_o2rk",
+          "name": "Vrij",
+          "ownerIds": [
+            "anne-fleur",
+            "vincent",
+            "menno",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-21",
+          "endDate": "2025-04-21",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4
+        },
+        {
+          "id": "it_yoko_5_24_10o6",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-18",
+          "endDate": "2025-04-18",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_25_ahu2",
+          "name": "Polarsteps",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-10",
+          "endDate": "2025-06-11",
+          "deadline": null,
+          "estHours": 115,
+          "dagen": 14
+        },
+        {
+          "id": "it_yoko_5_26_w4be",
+          "name": "Mr Beam - Deventer",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-08",
+          "endDate": "2025-05-31",
+          "deadline": null,
+          "estHours": 120,
+          "dagen": 15
+        },
+        {
+          "id": "it_yoko_5_27_3gou",
+          "name": "UvVL Facts slides",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-02",
+          "endDate": "2025-04-03",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_28_rn7t",
+          "name": "Rewind april",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-01",
+          "endDate": "2025-04-30",
+          "deadline": null,
+          "estHours": 34,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_usc5",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-04-01",
+              "endDate": "2025-04-01",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_45rr",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-04-04",
+              "endDate": "2025-04-04",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_r20m",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-04-12",
+              "endDate": "2025-04-13",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_3_lodp",
+              "name": "REWIND Techniekmythe Feedback",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-04-17",
+              "endDate": "2025-04-17",
+              "estHours": 2
+            },
+            {
+              "id": "si_yoko_5_4_ao8j",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-04-30",
+              "endDate": "2025-04-30",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_29_6ob3",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-28",
+          "endDate": "2025-03-28",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_30_ytmz",
+          "name": "Verleden in Zicht afronding",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-24",
+          "endDate": "2025-03-28",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_31_q39m",
+          "name": "Menno & Vincent op vakantie",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-19",
+          "endDate": "2025-03-21",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_32_6s7r",
+          "name": "Casevideo KLM Holiday",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-17",
+          "endDate": "2025-04-08",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_33_a8gs",
+          "name": "Lapland",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-17",
+          "endDate": "2025-04-08",
+          "deadline": null,
+          "estHours": 120,
+          "dagen": 15
+        },
+        {
+          "id": "it_yoko_5_34_fmsr",
+          "name": "WonenZuid",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-17",
+          "endDate": "2025-04-05",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_35_xjcc",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-13",
+          "endDate": "2025-03-21",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_36_5znu",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-12",
+          "endDate": "2025-03-12",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_37_o3fp",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-07",
+          "endDate": "2025-03-07",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_38_m0py",
+          "name": "UvNL Manifest video",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-03",
+          "endDate": "2025-03-04",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_39_6zez",
+          "name": "Rewind maart",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-03-01",
+          "endDate": "2025-03-31",
+          "deadline": null,
+          "estHours": 6,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_5tw2",
+              "name": "REWIND Techniekmythe",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-03-21",
+              "endDate": "2025-03-21",
+              "estHours": 6
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_40_cgmp",
+          "name": "Socialpost @ 27 feb Bloedheet & Tranen",
+          "ownerIds": [
+            "odette",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-26",
+          "endDate": "2025-02-26",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_41_tgio",
+          "name": "Rewind @ 21, 26, 28 feb",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-21",
+          "endDate": "2025-02-28",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_42_9uit",
+          "name": "Barca werk/vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-06",
+          "endDate": "2025-02-11",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_43_bqkr",
+          "name": "Vrij",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-02-01",
+          "endDate": "2025-02-09",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_44_8639",
+          "name": "Docu Ontsnapt meeting + voorbereiding",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-01-23",
+          "endDate": "2025-01-23",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_45_661g",
+          "name": "Casevideo Dr Oekter",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-01-23",
+          "endDate": "2025-02-07",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_46_7bdp",
+          "name": "Evi",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-01-20",
+          "endDate": "2025-01-31",
+          "deadline": null,
+          "estHours": 45,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_47_2jfq",
+          "name": "Docu Ontsnapt moods",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-01-14",
+          "endDate": "2025-01-15",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_48_en7e",
+          "name": "Nieuwsuur",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2025-01-13",
+          "endDate": "2025-01-17",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_49_ousq",
+          "name": "Feestdagen",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-23",
+          "endDate": "2025-01-02",
+          "deadline": null,
+          "estHours": 140,
+          "dagen": 18
+        },
+        {
+          "id": "it_yoko_5_50_5w7j",
+          "name": "Rewind aanpassingen",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-19",
+          "endDate": "2024-12-19",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_51_hd3k",
+          "name": "Dienjaar 365",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-17",
+          "endDate": "2024-12-17",
+          "deadline": null,
+          "estHours": 6,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_52_wb5z",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-16",
+          "endDate": "2025-01-01",
+          "deadline": null,
+          "estHours": 104,
+          "dagen": 13
+        },
+        {
+          "id": "it_yoko_5_53_f8ku",
+          "name": "Anatomiegebouw",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-16",
+          "endDate": "2024-12-20",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_54_r3i3",
+          "name": "Zapp",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-16",
+          "endDate": "2024-12-20",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_55_aa0j",
+          "name": "RE:WIND - C'est Mocro Aflv 4",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-12",
+          "endDate": "2024-12-12",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_56_ei6x",
+          "name": "RE:WIND - Essential graphics",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-09",
+          "endDate": "2024-12-18",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_57_ogfq",
+          "name": "Verleden in Zicht uitwerking + feedback",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-12-05",
+          "endDate": "2025-01-31",
+          "deadline": null,
+          "estHours": 60,
+          "dagen": 8
+        },
+        {
+          "id": "it_yoko_5_58_3tma",
+          "name": "UvNL Presentatiefilm",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-11-26",
+          "endDate": "2024-12-05",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_59_wjsv",
+          "name": "RE:WIND - C'est Mocro afmaken",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2024-11-20",
+          "endDate": "2024-11-20",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_60_0cqc",
+          "name": "Talpa Smint",
+          "ownerIds": [
+            "odette",
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-11-14",
+          "endDate": "2024-12-13",
+          "deadline": "2024-11-27",
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_61_s7my",
+          "name": "KNRM NPO Symfonie",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-23",
+          "endDate": "2024-10-29",
+          "deadline": null,
+          "estHours": 21,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_62_9t7l",
+          "name": "Talpa FAST kanalen",
+          "ownerIds": [
+            "odette",
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-17",
+          "endDate": "2024-10-31",
+          "deadline": "2024-10-31",
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_63_s3sp",
+          "name": "RE:WIND - Generatiedenken",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-17",
+          "endDate": "2024-10-29",
+          "deadline": "2024-10-22",
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_64_boez",
+          "name": "RE:WIND - C'est Mocro",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-10",
+          "endDate": "2024-10-11",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_65_xsx1",
+          "name": "Nieuwsuur Mina (ong 8 dagen)",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-07",
+          "endDate": "2024-10-17",
+          "deadline": null,
+          "estHours": 64,
+          "dagen": 8
+        },
+        {
+          "id": "it_yoko_5_66_o7y0",
+          "name": "Weekje vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-07",
+          "endDate": "2024-10-11",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_67_3hhh",
+          "name": "KNRM Theater",
+          "ownerIds": [
+            "menno",
+            "marcus-driessen"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-03",
+          "endDate": "2024-10-10",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_68_3aez",
+          "name": "KNRM Narrowcast aanpassing",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-10-01",
+          "endDate": "2024-10-03",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_69_jthj",
+          "name": "KNRM OOH Symfonie",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-09-03",
+          "endDate": "2024-09-03",
+          "deadline": null,
+          "estHours": 2,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_70_6bnu",
+          "name": "Week weg",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-31",
+          "endDate": "2024-09-08",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_71_zcam",
+          "name": "Alles op tafel - titels + cover",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-28",
+          "endDate": "2024-09-02",
+          "deadline": "2024-08-30",
+          "estHours": 3,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_72_fcb0",
+          "name": "ABOVO DEKA markt",
+          "ownerIds": [
+            "marcus-driessen"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-20",
+          "endDate": "2024-09-13",
+          "deadline": "2024-08-29",
+          "estHours": 50,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_73_um6x",
+          "name": "Nieuwsuur Fok (ong 15 dagen)",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-19",
+          "endDate": "2024-09-20",
+          "deadline": null,
+          "estHours": 120,
+          "dagen": 15
+        },
+        {
+          "id": "it_yoko_5_74_nip3",
+          "name": "ZD: Lino explainer",
+          "ownerIds": [
+            "menno",
+            "marcus-driessen"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-19",
+          "endDate": "2024-09-11",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_75_kl0m",
+          "name": "ZD: Ecosystem",
+          "ownerIds": [
+            "menno",
+            "marcus-driessen"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-19",
+          "endDate": "2024-09-11",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_76_25g9",
+          "name": "ZD: IBC LED animatie",
+          "ownerIds": [
+            "menno",
+            "marcus-driessen"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-19",
+          "endDate": "2024-09-11",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_77_g4x2",
+          "name": "Week weg",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-19",
+          "endDate": "2024-08-23",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_78_u5hf",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-19",
+          "endDate": "2024-08-19",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_79_5eyo",
+          "name": "Weekje vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-19",
+          "endDate": "2024-08-23",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_80_u6zk",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-16",
+          "endDate": "2024-08-16",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_81_605p",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-09",
+          "endDate": "2024-08-09",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_82_iakp",
+          "name": "Dag vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-08-02",
+          "endDate": "2024-08-02",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_83_vxxn",
+          "name": "Week weg",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-29",
+          "endDate": "2024-08-02",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_84_p9pd",
+          "name": "Polarsteps Travel Together",
+          "ownerIds": [
+            "odette",
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-18",
+          "endDate": "2024-08-18",
+          "deadline": "2024-08-12",
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_85_3yfx",
+          "name": "GP Diepzee edit",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-11",
+          "endDate": "2024-07-18",
+          "deadline": null,
+          "estHours": 10,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_86_sbgq",
+          "name": "Polarsteps 1.4 edit",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-10",
+          "endDate": "2024-07-16",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_87_sryz",
+          "name": "KNRM OOH",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-07-01",
+          "endDate": "2024-07-03",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_88_h2m3",
+          "name": "Poster UvNL 10 jaar",
+          "ownerIds": [
+            "fokke-mars"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-24",
+          "endDate": "2024-07-12",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_89_lv4r",
+          "name": "Burger Reserve trailer",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-24",
+          "endDate": "2024-06-27",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_90_w9kk",
+          "name": "Vakantie!",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-24",
+          "endDate": "2024-07-07",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_91_lfcx",
+          "name": "KNRM Narrowcasting",
+          "ownerIds": [
+            "menno",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-20",
+          "endDate": "2024-06-28",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_92_0n39",
+          "name": "Polarsteps 3 x Summer ads",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-19",
+          "endDate": "2024-07-31",
+          "deadline": "2024-08-12",
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_93_6ld5",
+          "name": "Insify Switchers animation",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-18",
+          "endDate": "2024-06-27",
+          "deadline": "2024-06-21",
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_94_167x",
+          "name": "Vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-17",
+          "endDate": "2024-06-17",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_95_oiup",
+          "name": "Halve dag vrij",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-14",
+          "endDate": "2024-06-14",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_96_rkre",
+          "name": "Ijsland",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-06-07",
+          "endDate": "2024-07-07",
+          "deadline": null,
+          "estHours": 160,
+          "dagen": 20
+        },
+        {
+          "id": "it_yoko_5_97_xhu5",
+          "name": "Verve: schiphol",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-29",
+          "endDate": "2024-05-31",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_98_jsd2",
+          "name": "ZD: PostNAB Event",
+          "ownerIds": [
+            "menno",
+            "marcus-driessen"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-23",
+          "endDate": "2024-05-29",
+          "deadline": null,
+          "estHours": 52,
+          "dagen": 7
+        },
+        {
+          "id": "it_yoko_5_99_5r9q",
+          "name": "ZD: Imagine Tech",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-20",
+          "endDate": "2024-05-30",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_100_uqhr",
+          "name": "TNO - Smart Energy Living Lab",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-13",
+          "endDate": "2024-06-23",
+          "deadline": "2024-06-19",
+          "estHours": 50,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_101_67a5",
+          "name": "Hemelvaart + vrije dag",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-09",
+          "endDate": "2024-05-10",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_102_gv3q",
+          "name": "ABOVO - Vitens zomercampagne",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-05-06",
+          "endDate": "2024-05-21",
+          "deadline": null,
+          "estHours": 60,
+          "dagen": 8
+        },
+        {
+          "id": "it_yoko_5_103_0ib4",
+          "name": "Denemarken!",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-14",
+          "endDate": "2024-04-24",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_104_l6dr",
+          "name": "Babyboom Mich",
+          "ownerIds": [
+            "michel"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-08",
+          "endDate": "2024-04-14",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_105_4cuy",
+          "name": "TOMIS: Muziekweb.nl",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-08",
+          "endDate": "2024-04-08",
+          "deadline": "2024-04-12",
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_84sk",
+              "name": "Muziekweb.nl V1 TOMIS",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            },
+            {
+              "id": "si_yoko_5_1_rq4i",
+              "name": "Muziekweb.nl V2",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_106_t8wa",
+          "name": "Wonen Zuid huurverhoging",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-04-02",
+          "endDate": "2024-04-15",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_107_mqkz",
+          "name": "UvNL Quantum Aflv 1 feedback doorvoeren",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-28",
+          "endDate": "2024-03-28",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_108_fjfi",
+          "name": "UvNL - Slidedeck maken",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-27",
+          "endDate": "2024-03-27",
+          "deadline": "2024-03-29",
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_109_145z",
+          "name": "RE:WIND",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-22",
+          "endDate": "2024-03-28",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_110_e5jc",
+          "name": "Insify TVC NL edit",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-19",
+          "endDate": "2024-03-19",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_111_2vzk",
+          "name": "ZD: LINO",
+          "ownerIds": [
+            "menno",
+            "marcus-driessen"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-18",
+          "endDate": "2024-04-19",
+          "deadline": null,
+          "estHours": 120,
+          "dagen": 15
+        },
+        {
+          "id": "it_yoko_5_112_hr3u",
+          "name": "Greenpeace - Diepzeemijnbouw",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-18",
+          "endDate": "2024-04-24",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_113_n5pw",
+          "name": "VIXY Think socials",
+          "ownerIds": [
+            "odette",
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-14",
+          "endDate": "2024-04-07",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_114_wsay",
+          "name": "PnP Podcast logo animatie",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-13",
+          "endDate": "2024-03-14",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_115_2950",
+          "name": "Marieke Tenerife",
+          "ownerIds": [
+            "marieke"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-13",
+          "endDate": "2024-03-20",
+          "deadline": null,
+          "estHours": 64,
+          "dagen": 8
+        },
+        {
+          "id": "it_yoko_5_116_x69r",
+          "name": "KCS Font wijzigen",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-12",
+          "endDate": "2024-03-13",
+          "deadline": null,
+          "estHours": 1,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_117_qibv",
+          "name": "Insify TVC NL kleine aanpassing",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-11",
+          "endDate": "2024-03-13",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_118_x2ad",
+          "name": "Parijs",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-07",
+          "endDate": "2024-03-08",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_119_u3l6",
+          "name": "ABN Leader pakketje",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-04",
+          "endDate": "2024-03-05",
+          "deadline": null,
+          "estHours": 5,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_120_s84w",
+          "name": "KNRM trailer",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-04",
+          "endDate": "2024-03-07",
+          "deadline": "2024-03-10",
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_121_vj6u",
+          "name": "Nieuwsuur",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2024-03-01",
+          "endDate": "2024-07-31",
+          "deadline": null,
+          "estHours": 300,
+          "dagen": 38
+        },
+        {
+          "id": "it_yoko_5_122_hbhk",
+          "name": "Kraijicek foundation TOMIS",
+          "ownerIds": [
+            "menno",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-28",
+          "endDate": "2024-02-28",
+          "deadline": "2024-03-01",
+          "estHours": 12,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_jd7d",
+              "name": "Kraijcek - Voor edit maken",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-02-27",
+              "endDate": "2024-02-27",
+              "estHours": 4
+            },
+            {
+              "id": "si_yoko_5_1_ihcf",
+              "name": "Kraijcek - Afronden",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-03-05",
+              "endDate": "2024-03-07",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_123_z3u0",
+          "name": "DJ Fysieke presentatie",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-26",
+          "endDate": "2024-02-26",
+          "deadline": "2024-02-27",
+          "estHours": 2,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_124_g12t",
+          "name": "Insify FR RCD",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-26",
+          "endDate": "2024-03-01",
+          "deadline": null,
+          "estHours": 6,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_125_fk4w",
+          "name": "Polarsteps * 4 Mercator ads",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-26",
+          "endDate": "2024-02-29",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_rkn0",
+              "name": "Polarsteps v2",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-03-18",
+              "endDate": "2024-03-18",
+              "estHours": 16
+            },
+            {
+              "id": "si_yoko_5_1_xp5p",
+              "name": "Polarsteps v2",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-03-20",
+              "endDate": "2024-03-21",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_km0e",
+              "name": "Polarsteps v3 - formaten ombouwen",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-04-10",
+              "endDate": "2024-04-11",
+              "estHours": 16
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_126_8080",
+          "name": "DJ Webinar",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-20",
+          "endDate": "2024-02-27",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4
+        },
+        {
+          "id": "it_yoko_5_127_pwni",
+          "name": "Insify FR Disability",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-06",
+          "endDate": "2024-02-07",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_128_6fb7",
+          "name": "KCS Feedback verwerken",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-02-05",
+          "endDate": "2024-02-05",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_129_3xs3",
+          "name": "Insify 6 * 6 sec * 3 res",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-22",
+          "endDate": "2024-02-04",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_130_oljb",
+          "name": "Insify TVC FR",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-22",
+          "endDate": "2024-02-02",
+          "deadline": null,
+          "estHours": 14,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_131_7z5i",
+          "name": "VIXY: ORANGE Live",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-15",
+          "endDate": "2024-01-15",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_132_yiex",
+          "name": "Vrij",
+          "ownerIds": [
+            "michel"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-11",
+          "endDate": "2024-01-15",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_133_jqcc",
+          "name": "DJ Presentatie Voorlichting",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-08",
+          "endDate": "2024-01-10",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_134_nnq0",
+          "name": "KCS karakters animeren",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2024-01-08",
+          "endDate": "2024-01-14",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_135_luob",
+          "name": "KCS karakters afronden",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2023-10-16",
+          "endDate": "2023-12-18",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_136_fose",
+          "name": "Socials productie",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-19",
+          "endDate": "2025-08-21",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_137_8akq",
+          "name": "Vrij: Buitenkunst",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-16",
+          "endDate": "2025-08-23",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_138_1lp3",
+          "name": "LL",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-15",
+          "endDate": "2025-08-18",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_139_9v98",
+          "name": "Gids: Noorwegen",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-02",
+          "endDate": "2025-08-16",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_140_x7mx",
+          "name": "Gids: Zweden",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-10",
+          "endDate": "2025-07-22",
+          "deadline": null,
+          "estHours": 120,
+          "dagen": 15
+        },
+        {
+          "id": "it_yoko_5_141_7a4o",
+          "name": "Vrij",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-29",
+          "endDate": "2025-07-30",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_142_vmwt",
+          "name": "Festival",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-14",
+          "endDate": "2025-08-17",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_143_f8li",
+          "name": "Weekje vrij?",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-06",
+          "endDate": "2025-08-15",
+          "deadline": null,
+          "estHours": 64,
+          "dagen": 8
+        },
+        {
+          "id": "it_yoko_5_144_winh",
+          "name": "AF end of times",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-28",
+          "endDate": "2025-09-28",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_145_khti",
+          "name": "Polarsteps re-motion brand",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-07-28",
+          "endDate": "2025-08-29",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_146_9nrx",
+          "name": "Medialogica/REWIND - Schooltv Dichterbijnieuws",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-13",
+          "endDate": "2025-10-17",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_147_eq2u",
+          "name": "KRO - Leven tot het laatst",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-02",
+          "endDate": "2025-10-07",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3
+        },
+        {
+          "id": "it_yoko_5_148_q7hp",
+          "name": "Medialogica aflv 2 VINDICAT",
+          "ownerIds": [
+            "vincent",
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-24",
+          "endDate": "2025-11-04",
+          "deadline": null,
+          "estHours": 30,
+          "dagen": 4
+        },
+        {
+          "id": "it_yoko_5_149_a674",
+          "name": "Ontsnapt docu",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-21",
+          "endDate": "2025-09-29",
+          "deadline": null,
+          "estHours": 144,
+          "dagen": 18,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_17p1",
+              "name": "Onstnapt docu v2",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-10-08",
+              "endDate": "2025-10-21",
+              "estHours": 24
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_150_0li1",
+          "name": "Medialogica x Musk",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-04",
+          "endDate": "2025-10-31",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_151_66u8",
+          "name": "Podcast Klassieke Mysteries",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-08-25",
+          "endDate": "2025-09-15",
+          "deadline": "2025-09-16",
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_152_o2dv",
+          "name": "Vakantie September",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-15",
+          "endDate": "2025-10-05",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_153_41wx",
+          "name": "Weekje vakantie",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-20",
+          "endDate": "2025-10-24",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_154_23vj",
+          "name": "Verlof",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-09-25",
+          "endDate": "2025-10-30",
+          "deadline": null,
+          "estHours": 200,
+          "dagen": 25
+        },
+        {
+          "id": "it_yoko_5_155_3lfo",
+          "name": "KNRM TVC",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-20",
+          "endDate": "2025-11-26",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_156_qfpb",
+          "name": "Rewind september",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_5e60",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-09-04",
+              "endDate": "2025-09-04",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_xhwl",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-09-09",
+              "endDate": "2025-09-09",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_ue65",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-09-11",
+              "endDate": "2025-09-11",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_157_pi83",
+          "name": "Rewind juli",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_e5mp",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-07-18",
+              "endDate": "2025-07-18",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_0ww8",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-07-22",
+              "endDate": "2025-07-22",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_158_76f1",
+          "name": "Rewind november",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-01",
+          "endDate": "2025-11-30",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_kzzn",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-11-17",
+              "endDate": "2025-11-17",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_5e2q",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-11-24",
+              "endDate": "2025-11-24",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_v8rk",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-11-25",
+              "endDate": "2025-11-25",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_159_xol5",
+          "name": "Rewind juni",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_6yz0",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-06-06",
+              "endDate": "2025-06-06",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_6x18",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-06-13",
+              "endDate": "2025-06-13",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_io4x",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Done",
+              "startDate": "2025-06-24",
+              "endDate": "2025-06-24",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_160_7lc2",
+          "name": "Rewind oktober",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": "2025-10-01",
+          "endDate": "2025-10-31",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_7lly",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-10-10",
+              "endDate": "2025-10-10",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_dpi3",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-10-24",
+              "endDate": "2025-10-24",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_go87",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-10-31",
+              "endDate": "2025-10-31",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_161_bsgk",
+          "name": "Rewind augustus",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_lmvm",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-08-21",
+              "endDate": "2025-08-21",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_1_nffa",
+              "name": "REWIND",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-08-28",
+              "endDate": "2025-08-28",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_162_cagf",
+          "name": "Donderdag wissel met vrijdag",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-11",
+          "endDate": "2025-12-11",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_163_x3ie",
+          "name": "United Playgrounds",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Done",
+          "startDate": "2025-04-01",
+          "endDate": "2025-07-31",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_af78",
+              "name": "UP Showreel",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2025-07-14",
+              "endDate": "2025-08-23",
+              "estHours": 60
+            },
+            {
+              "id": "si_yoko_5_1_k2w8",
+              "name": "Verve Bento Heart Electric",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "Done",
+              "startDate": "2025-04-24",
+              "endDate": "2025-05-02",
+              "estHours": 24
+            },
+            {
+              "id": "si_yoko_5_2_l76p",
+              "name": "UP 3D logo's",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2025-08-02",
+              "endDate": "2025-09-11",
+              "estHours": 40
+            },
+            {
+              "id": "si_yoko_5_3_u550",
+              "name": "UP DNZ Award post",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-04-30",
+              "endDate": "2025-05-11",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_4_38w8",
+              "name": "UP Logo met content",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2025-07-30",
+              "endDate": "2025-08-04",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_5_4f4j",
+              "name": "Verve C&A pitch",
+              "ownerIds": [
+                "take-lijzenga"
+              ],
+              "status": "Done",
+              "startDate": "2025-05-26",
+              "endDate": "2025-05-27",
+              "estHours": 12
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_164_k0a8",
+          "name": "Funny animals tekenen",
+          "ownerIds": [
+            "anne-fleur",
+            "menno",
+            "odette",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-10",
+          "endDate": "2025-12-10",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4
+        },
+        {
+          "id": "it_yoko_5_165_aal5",
+          "name": "Polarsteps x Vakantiebeurs",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-01",
+          "endDate": "2025-12-04",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_166_kd6w",
+          "name": "Medialogica x Maccabi",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-15",
+          "endDate": "2025-12-19",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_167_444x",
+          "name": "Burgerreserve tekeningen/animatie maken?",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-23",
+          "endDate": "2025-12-23",
+          "deadline": null,
+          "estHours": 2,
+          "dagen": 0
+        },
+        {
+          "id": "it_yoko_5_168_dwvm",
+          "name": "KRO - Taboes",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2025-11-01",
+          "endDate": "2025-11-27",
+          "deadline": null,
+          "estHours": 50,
+          "dagen": 6,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_zleo",
+              "name": "Taboes - eerste voorstel",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-10-06",
+              "endDate": "2025-10-09",
+              "estHours": 4
+            },
+            {
+              "id": "si_yoko_5_1_t6co",
+              "name": "Taboes - productie",
+              "ownerIds": [
+                "vincent",
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2025-11-20",
+              "endDate": "2025-11-27",
+              "estHours": 35
+            },
+            {
+              "id": "si_yoko_5_2_ohyk",
+              "name": "Taboes - Message aanpassen aflv",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-01-22",
+              "endDate": "2026-02-02",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_169_e209",
+          "name": "ZIN social kanaal",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-04",
+          "endDate": "2025-12-28",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_8wwk",
+              "name": "1. ZIN Uitvraag",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2025-12-04",
+              "endDate": "2025-12-09",
+              "estHours": 20
+            },
+            {
+              "id": "si_yoko_5_1_lvkl",
+              "name": "2. ZIN Presentatie richtingen",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2025-12-09",
+              "endDate": "2025-12-16",
+              "estHours": 40
+            },
+            {
+              "id": "si_yoko_5_2_ll30",
+              "name": "3. ZIN Richting final",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2025-12-16",
+              "endDate": "2025-12-23",
+              "estHours": 40
+            },
+            {
+              "id": "si_yoko_5_3_9xk6",
+              "name": "4. Oplevering deel 1",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2025-12-23",
+              "endDate": "2025-12-30",
+              "estHours": 15
+            },
+            {
+              "id": "si_yoko_5_4_e7qy",
+              "name": "4. Oplevering deel 2",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-01-05",
+              "endDate": "2026-01-12",
+              "estHours": 25
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_170_z5a6",
+          "name": "Kerst",
+          "ownerIds": [
+            "menno",
+            "vincent",
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-25",
+          "endDate": "2025-12-26",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_171_h60b",
+          "name": "Vakantie december",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-22",
+          "endDate": "2026-01-02",
+          "deadline": null,
+          "estHours": 80,
+          "dagen": 10
+        },
+        {
+          "id": "it_yoko_5_172_twa3",
+          "name": "Vrij?",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-23",
+          "endDate": "2025-12-24",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_173_7ls4",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno",
+            "anne-fleur",
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-01",
+          "endDate": "2026-01-01",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4
+        },
+        {
+          "id": "it_yoko_5_174_e0gs",
+          "name": "Vrij",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2025-12-29",
+          "endDate": "2025-12-30",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_yoko_5_175_vmql",
+          "name": "Vrij sleuteloverdracht",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-15",
+          "endDate": "2026-01-15",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_176_tbxt",
+          "name": "Vrij",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-16",
+          "endDate": "2026-01-24",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6
+        },
+        {
+          "id": "it_yoko_5_177_1744",
+          "name": "Socials",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": null,
+          "endDate": null,
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_dneh",
+              "name": "Socials",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-09-30",
+              "endDate": "2025-09-30",
+              "estHours": 4
+            },
+            {
+              "id": "si_yoko_5_1_4a1g",
+              "name": "Socials-batch maken",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-10-10",
+              "endDate": "2025-10-10",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_ooij",
+              "name": "Socials",
+              "ownerIds": [
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2025-10-15",
+              "endDate": "2025-10-15",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_178_3o1u",
+          "name": "What the Fact",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-20",
+          "endDate": "2026-02-15",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_179_ky1a",
+          "name": "Politie - Animaties",
+          "ownerIds": [
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-01-10",
+          "endDate": "2026-04-03",
+          "deadline": "2026-03-31",
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_yoko_5_0_c3xw",
+              "name": "Project Management",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-01-01",
+              "endDate": "2026-03-31",
+              "estHours": 12
+            },
+            {
+              "id": "si_yoko_5_1_29o4",
+              "name": "Script schrijven",
+              "ownerIds": [
+                "vincent",
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2026-01-12",
+              "endDate": "2026-01-28",
+              "estHours": 8
+            },
+            {
+              "id": "si_yoko_5_2_4sar",
+              "name": "Storyboard / styleframes",
+              "ownerIds": [
+                "menno",
+                "anne-fleur"
+              ],
+              "status": "",
+              "startDate": "2026-02-02",
+              "endDate": "2026-02-17",
+              "estHours": 32
+            },
+            {
+              "id": "si_yoko_5_3_9f9s",
+              "name": "Animatie v1",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2026-02-17",
+              "endDate": "2026-03-11",
+              "estHours": 32
+            },
+            {
+              "id": "si_yoko_5_4_fojy",
+              "name": "Animatie v2",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-03-23",
+              "endDate": "2026-03-25",
+              "estHours": 16
+            },
+            {
+              "id": "si_yoko_5_5_ga8i",
+              "name": "Animatie Oplevering",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2026-03-27",
+              "endDate": "2026-03-30",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_yoko_5_180_iuw8",
+          "name": "Lapland",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2026-03-07",
+          "endDate": "2026-03-20",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_yoko_5_181_ib25",
+          "name": "VAKANTIE",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-03-16",
+          "endDate": "2026-03-29",
+          "deadline": null,
+          "estHours": 72,
+          "dagen": 9
+        },
+        {
+          "id": "it_yoko_5_182_tcee",
+          "name": "Tweede paasdag",
+          "ownerIds": [
+            "anne-fleur",
+            "menno",
+            "vincent",
+            "odette"
+          ],
+          "status": "Done",
+          "startDate": "2026-04-06",
+          "endDate": "2026-04-06",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_183_c8lc",
+          "name": "Koningsdag",
+          "ownerIds": [
+            "anne-fleur",
+            "menno",
+            "odette",
+            "vincent"
+          ],
+          "status": "Done",
+          "startDate": "2026-04-27",
+          "endDate": "2026-04-27",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1
+        },
+        {
+          "id": "it_yoko_5_184_c5fo",
+          "name": "Playgrounds",
+          "ownerIds": [
+            "anne-fleur"
+          ],
+          "status": "Done",
+          "startDate": "2026-04-16",
+          "endDate": "2026-04-17",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
         }
       ]
     }

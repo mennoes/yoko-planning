@@ -1,130 +1,4577 @@
 {
   "groups": [
     {
-      "id": "gepland",
-      "name": "GEPLAND – (niet factureren)",
-      "color": "#9c7ee8",
-      "collapsed": true,
-      "items": []
-    },
-    {
-      "id": "productie-yoko",
-      "name": "Productie uren yoko",
-      "color": "#00c875",
-      "collapsed": false,
+      "id": "g_dienjaar_0",
+      "name": "GEPLAND - (niet factureren)",
+      "color": "#579bfc",
       "items": [
         {
-          "id": "dj-w40",
-          "name": "Week 40",
-          "ownerIds": [],
+          "id": "it_dienjaar_1_0_wqvu",
+          "name": "OnDemand aanpassingen",
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
-          "startDate": "2025-09-29",
-          "endDate": "2025-10-05",
-          "deadline": null,
-          "estHours": 3,
-          "dagen": 0.375,
-          "nummers": 0
+          "startDate": null,
+          "endDate": null,
+          "deadline": "2025-04-15",
+          "estHours": 60,
+          "dagen": 8,
+          "subitems": [
+            {
+              "id": "si_dienjaar_1_0_2chp",
+              "name": "OnDemand 1e versie",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2025-03-17",
+              "endDate": "2025-04-01",
+              "estHours": 40
+            },
+            {
+              "id": "si_dienjaar_1_1_50va",
+              "name": "OnDemand 2e versie",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2025-04-07",
+              "endDate": "2025-04-15",
+              "estHours": 20
+            }
+          ]
         },
         {
-          "id": "dj-w46",
-          "name": "Week 46",
-          "ownerIds": [],
-          "status": "",
-          "startDate": "2025-11-10",
-          "endDate": "2025-11-16",
-          "deadline": null,
-          "estHours": 12,
-          "dagen": 1.5,
-          "nummers": 0
-        },
-        {
-          "id": "dj-w45",
-          "name": "Week 45",
-          "ownerIds": [],
+          "id": "it_dienjaar_1_1_sctk",
+          "name": "NWT - Voorlichtingsfilm ?",
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2025-11-03",
-          "endDate": "2025-11-09",
+          "endDate": "2025-11-28",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4
+        },
+        {
+          "id": "it_dienjaar_1_2_shuz",
+          "name": "Doorstroom",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "",
+          "startDate": "2025-04-22",
+          "endDate": "2025-06-20",
+          "deadline": null,
+          "estHours": 145,
+          "dagen": 18,
+          "subitems": [
+            {
+              "id": "si_dienjaar_1_0_7vdk",
+              "name": "Wekelijkse brainstorm + snelle content met Tomis en Dienjaarteam",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-28",
+              "endDate": "2025-04-28",
+              "estHours": 30
+            },
+            {
+              "id": "si_dienjaar_1_1_lu4v",
+              "name": "4 explainers",
+              "ownerIds": [
+                "kars",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-04-22",
+              "endDate": "2025-05-09",
+              "estHours": 70
+            },
+            {
+              "id": "si_dienjaar_1_2_g409",
+              "name": "Sana vullen met Tomis",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-03-17",
+              "endDate": "2025-04-15",
+              "estHours": 45
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_1_3_bwdl",
+          "name": "Verdiepende content - 4 OPCO's",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "",
+          "startDate": "2025-04-07",
+          "endDate": "2025-04-21",
+          "deadline": "2025-04-15",
+          "estHours": 64,
+          "dagen": 8,
+          "nummers": 22322,
+          "subitems": [
+            {
+              "id": "si_dienjaar_1_0_6srb",
+              "name": "Landmacht",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_1_1_79kw",
+              "name": "Luchtmacht",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_1_2_92tg",
+              "name": "Marine",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_1_3_opdt",
+              "name": "Marechaussee",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g_dienjaar_1",
+      "name": "Productie uren yoko",
+      "color": "#9c7ee8",
+      "items": [
+        {
+          "id": "it_dienjaar_2_0_atgb",
+          "name": "Week 40",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "",
+          "startDate": "2025-09-29",
+          "endDate": "2025-10-03",
+          "deadline": null,
+          "estHours": 3,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_2_0_nmfu",
+              "name": "AMC presentatie",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-09-29",
+              "endDate": "2025-10-03",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_2_1_xyps",
+          "name": "Week 46",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "",
+          "startDate": "2025-11-10",
+          "endDate": "2025-11-14",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_2_0_cz51",
+              "name": "NWT: Loopbaan portret in Whatsapp gesprek",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-11-10",
+              "endDate": "2025-11-14",
+              "estHours": 12
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_2_2_0l22",
+          "name": "Week 45",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "",
+          "startDate": "2025-11-03",
+          "endDate": "2025-11-07",
           "deadline": null,
           "estHours": 16,
           "dagen": 2,
-          "nummers": 0
+          "subitems": [
+            {
+              "id": "si_dienjaar_2_0_webe",
+              "name": "NWT - Doorstroom animaties aanpassen",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-11-07",
+              "endDate": "2025-11-10",
+              "estHours": 16
+            }
+          ]
         },
         {
-          "id": "dj-w41",
+          "id": "it_dienjaar_2_3_6uow",
           "name": "Week 41",
-          "ownerIds": [],
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2025-10-06",
-          "endDate": "2025-10-12",
+          "endDate": "2025-10-10",
           "deadline": null,
           "estHours": 1,
-          "dagen": 0.125,
-          "nummers": 0
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_2_0_sdxj",
+              "name": "Doorontwikkeling: fase01 Sportcluster aanpassingen",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "Ermee bezig",
+              "startDate": "2025-10-08",
+              "endDate": "2025-10-09",
+              "estHours": 1
+            }
+          ]
         },
         {
-          "id": "dj-w39",
+          "id": "it_dienjaar_2_4_fn0x",
           "name": "Week 39",
-          "ownerIds": [],
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2025-09-22",
-          "endDate": "2025-09-28",
+          "endDate": "2025-09-26",
           "deadline": null,
           "estHours": 3,
-          "dagen": 0.375,
-          "nummers": 0
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_2_0_nb9s",
+              "name": "Doorontwikkeling: fase01 Sportcluster aanpassingen",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-09-25",
+              "endDate": "2025-09-26",
+              "estHours": 3
+            }
+          ]
         },
         {
-          "id": "dj-w48",
+          "id": "it_dienjaar_2_5_u1i1",
           "name": "Week 48",
-          "ownerIds": [],
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": "2025-11-24",
-          "endDate": "2025-11-30",
+          "endDate": "2025-11-28",
           "deadline": null,
           "estHours": 6,
-          "dagen": 0.75,
-          "nummers": 0
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_2_0_p4i7",
+              "name": "Marine presentatie",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2025-11-27",
+              "endDate": "2025-11-27",
+              "estHours": 6
+            }
+          ]
         },
         {
-          "id": "dj-nwt",
+          "id": "it_dienjaar_2_6_w60u",
           "name": "Nwt aanpassing",
-          "ownerIds": ["menno"],
+          "ownerIds": [
+            "odette"
+          ],
           "status": "",
           "startDate": "2026-03-30",
           "endDate": "2026-04-07",
           "deadline": null,
           "estHours": 24,
-          "dagen": 3,
-          "nummers": 0
+          "dagen": 3
         }
       ]
     },
     {
-      "id": "ontwikkeling-yoko",
+      "id": "g_dienjaar_2",
       "name": "Ontwikkeling yoko",
-      "color": "#579bfc",
-      "collapsed": false,
+      "color": "#e2445c",
       "items": [
         {
-          "id": "dj-ontw-w20",
+          "id": "it_dienjaar_3_0_77ug",
           "name": "Ontwikkeling week 20",
-          "ownerIds": [],
+          "ownerIds": [
+            "unassigned"
+          ],
           "status": "",
           "startDate": null,
           "endDate": null,
           "deadline": null,
           "estHours": 0,
-          "dagen": 0,
-          "nummers": 0
+          "dagen": 0
         }
       ]
     },
     {
-      "id": "productie-kars",
-      "name": "Productie uren Kars",
-      "color": "#00c875",
-      "collapsed": false,
-      "items": []
+      "id": "g_dienjaar_4",
+      "name": "Finished",
+      "color": "#ff7a00",
+      "items": [
+        {
+          "id": "it_dienjaar_5_0_wcej",
+          "name": "Marine feedback",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-08-25",
+          "endDate": "2025-08-27",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2
+        },
+        {
+          "id": "it_dienjaar_5_1_23e3",
+          "name": "Marine",
+          "ownerIds": [
+            "menno",
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-08-18",
+          "endDate": "2025-08-22",
+          "deadline": null,
+          "estHours": 36,
+          "dagen": 5
+        },
+        {
+          "id": "it_dienjaar_5_2_3wyn",
+          "name": "Productie uren week 31",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-07-28",
+          "endDate": "2025-08-01",
+          "deadline": null,
+          "estHours": 6,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_2g09",
+              "name": "Platform explainers",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-07-28",
+              "endDate": "2025-07-28",
+              "estHours": 6
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_3_9l9u",
+          "name": "Productie uren week 30",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-07-21",
+          "endDate": "2025-07-25",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_orxr",
+              "name": "Platform explainers",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-07-23",
+              "endDate": "2025-07-23",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_4_nbmu",
+          "name": "Productie uren week 26",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-06-23",
+          "endDate": "2025-06-27",
+          "deadline": null,
+          "estHours": 3,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_e75s",
+              "name": "Paar dingetjes",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-06-23",
+              "endDate": "2025-06-27",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_5_kjo0",
+          "name": "Productie uren week 20",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-05-14",
+          "endDate": "2025-05-15",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_ng9l",
+              "name": "Dienjaar SPEC voorbereidingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_lvxy",
+              "name": "Dienjaar SPEC meetings/aanpassingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_2_rzel",
+              "name": "Dienjaar SPEC productie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_6_3e7k",
+          "name": "OnDemand specialistisch",
+          "ownerIds": [
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-05-14",
+          "endDate": "2025-05-15",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_dienjaar_5_7_nyjx",
+          "name": "Productie uren week 20",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-05-12",
+          "endDate": "2025-05-16",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_15e1",
+              "name": "Odette specialistisch",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_8_dc4w",
+          "name": "Productie uren week 19",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-05-08",
+          "endDate": "2025-05-09",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_ira0",
+              "name": "Doorstroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "Klaar",
+              "startDate": "2025-05-08",
+              "endDate": "2025-05-09",
+              "estHours": 12
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_9_deda",
+          "name": "Productie uren week 19",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-05-05",
+          "endDate": "2025-05-09",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_metz",
+              "name": "Doorstroom Feedback v2",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-05-09",
+              "endDate": "2025-05-09",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_10_hydj",
+          "name": "Productie uren week 19",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-05-05",
+          "endDate": "2025-05-09",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_omyt",
+              "name": "Doorstroom Odette",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-05-08",
+              "endDate": "2025-05-09",
+              "estHours": 12
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_11_f4ss",
+          "name": "Productie uren week 18",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-28",
+          "endDate": "2025-05-02",
+          "deadline": null,
+          "estHours": 18,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_r2ak",
+              "name": "Feedback Doorstroom",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-04-28",
+              "endDate": "2025-04-29",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_1_w1yg",
+              "name": "Doorstroom",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-04-28",
+              "endDate": "2025-05-02",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_12_h89o",
+          "name": "Productie uren week 18",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-28",
+          "endDate": "2025-05-02",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_13_p61w",
+          "name": "Productie uren week 17",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-22",
+          "endDate": "2025-04-25",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_sr96",
+              "name": "Voorbereiden Doorstroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-22",
+              "endDate": "2025-04-22",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_1_romw",
+              "name": "Contacturen Fokke/Odette/Judith/Mijntje/Mandy",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-22",
+              "endDate": "2025-04-22",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_2_w9pd",
+              "name": "VC aanpassingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-24",
+              "endDate": "2025-04-24",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_3_acie",
+              "name": "Doorstroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-23",
+              "endDate": "2025-04-25",
+              "estHours": 20
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_14_74ac",
+          "name": "Productie uren week 17",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-21",
+          "endDate": "2025-04-25",
+          "deadline": null,
+          "estHours": 49,
+          "dagen": 6,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_fxs1",
+              "name": "Doorstroom",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-04-22",
+              "endDate": "2025-04-25",
+              "estHours": 32
+            },
+            {
+              "id": "si_dienjaar_5_1_jhjt",
+              "name": "Doorstroom",
+              "ownerIds": [
+                "fokke-mars"
+              ],
+              "status": "",
+              "startDate": "2025-04-22",
+              "endDate": "2025-04-23",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_2_lk3o",
+              "name": "Doorstroom",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-04-22",
+              "endDate": "2025-04-25",
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_15_ssb1",
+          "name": "Productie uren week 16",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-14",
+          "endDate": "2025-04-18",
+          "deadline": null,
+          "estHours": 13,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_urjc",
+              "name": "Calls en plannings",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-04-14",
+              "endDate": "2025-04-14",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_7mh9",
+              "name": "Verdiepende Content",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-04-16",
+              "endDate": "2025-04-16",
+              "estHours": 12
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_16_gv78",
+          "name": "Productie uren week 16",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-14",
+          "endDate": "2025-04-17",
+          "deadline": null,
+          "estHours": 21,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_6vd3",
+              "name": "Verdiepende Content 4 OPCO's animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-14",
+              "endDate": "2025-04-14",
+              "estHours": 6.5
+            },
+            {
+              "id": "si_dienjaar_5_1_p7do",
+              "name": "Call Chantal Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-14",
+              "endDate": "2025-04-14",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_2_mn66",
+              "name": "Call Chantal Judith - Doorstroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-14",
+              "endDate": "2025-04-14",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_3_adm2",
+              "name": "Verdiepende Content Landmacht Deel 1",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-15",
+              "endDate": "2025-04-15",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_4_13bk",
+              "name": "Verdiepende Content Landmacht Deel 2",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-15",
+              "endDate": "2025-04-15",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_5_7okj",
+              "name": "Voorbereiding Doorstroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-17",
+              "endDate": "2025-04-17",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_6_c9o0",
+              "name": "Call Dienjaar Doorstroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-17",
+              "endDate": "2025-04-17",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_7_0ccj",
+              "name": "VC Animatielaag KMAR/Luchtmacht/Marine timen + kleine correcties",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2025-04-17",
+              "endDate": "2025-04-17",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_17_1a3l",
+          "name": "Productie uren week 15",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-07",
+          "endDate": "2025-04-11",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_x9h6",
+              "name": "Verdiepende content",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-04-08",
+              "endDate": "2025-04-11",
+              "estHours": 20
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_18_bf5r",
+          "name": "Productie uren week 15",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-04-07",
+          "endDate": "2025-04-11",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_bpey",
+              "name": "NWT aanpassingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-07",
+              "endDate": "2025-04-07",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_1_60sv",
+              "name": "Verdiepende Content 4 OPCO's animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-07",
+              "endDate": "2025-04-07",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_2_yws1",
+              "name": "Verdiepende Content 4 OPCO's animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-09",
+              "endDate": "2025-04-09",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_3_f1j0",
+              "name": "OnDemand aanpassingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-11",
+              "endDate": "2025-04-11",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_4_crr7",
+              "name": "Verdiepende Content 4 OPCO's animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-10",
+              "endDate": "2025-04-11",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_19_n0r3",
+          "name": "Productie uren week 14",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-31",
+          "endDate": "2025-04-04",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_20_x0l0",
+          "name": "Productie uren week 14",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-31",
+          "endDate": "2025-04-03",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_qzsx",
+              "name": "OnDemand aanpassingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-03-31",
+              "endDate": "2025-04-01",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_1_tbdw",
+              "name": "NWT Intro animaties + audio bewerking",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-03",
+              "endDate": "2025-04-03",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_2_05cd",
+              "name": "VC Voorbereidingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-04-03",
+              "endDate": "2025-04-03",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_21_mkka",
+          "name": "AMC Presentatie",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-26",
+          "endDate": "2025-04-06",
+          "deadline": null,
+          "estHours": 40,
+          "dagen": 5
+        },
+        {
+          "id": "it_dienjaar_5_22_vo18",
+          "name": "Productie uren week 13",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-24",
+          "endDate": "2025-03-28",
+          "deadline": null,
+          "estHours": 1,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_l62k",
+              "name": "Meetings Kars",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_23_z4hi",
+          "name": "Productie uren week 13",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-24",
+          "endDate": "2025-03-28",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_12vb",
+              "name": "Call Chantal Ondemand",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-03-24",
+              "endDate": "2025-03-24",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_pkk3",
+              "name": "OnDemand animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-03-24",
+              "endDate": "2025-03-28",
+              "estHours": 31.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_24_7euz",
+          "name": "Productie uren week 12",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-17",
+          "endDate": "2025-03-21",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_25_a2dq",
+          "name": "Productie uren week 12",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-17",
+          "endDate": "2025-03-20",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_is9n",
+              "name": "Meeting Chantal Ondemand/VerdiependeContent/Doorstroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-03-17",
+              "endDate": "2025-03-17",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_40lb",
+              "name": "OnDemand animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-03-20",
+              "endDate": "2025-03-20",
+              "estHours": 7.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_26_wbt6",
+          "name": "Productie uren week 11",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-11",
+          "endDate": "2025-03-11",
+          "deadline": null,
+          "estHours": 0.5,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_ipla",
+              "name": "Meeting Vincent+Mandy",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_27_lcr0",
+          "name": "Productie uren week 11",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-10",
+          "endDate": "2025-03-14",
+          "deadline": null,
+          "estHours": 2,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_t138",
+              "name": "Meeting Kars / Mandy + voor- en nabereiden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-03-11",
+              "endDate": "2025-03-11",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_8nfi",
+              "name": "Meeting Chantal + terugkoppeling",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-03-11",
+              "endDate": "2025-03-11",
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_28_957h",
+          "name": "Productie uren week 10",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-03",
+          "endDate": "2025-03-07",
+          "deadline": null,
+          "estHours": 2,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_psms",
+              "name": "Meetings en Mogrt maken voor podcast",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-03-03",
+              "endDate": "2025-03-07",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_29_i8d6",
+          "name": "Productie uren week 10",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-03-03",
+          "endDate": "2025-03-07",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_30_u0dw",
+          "name": "Productie uren week 9",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-24",
+          "endDate": "2025-02-28",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_31_nay4",
+          "name": "Productie uren week 9",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-24",
+          "endDate": "2025-02-28",
+          "deadline": null,
+          "estHours": 1,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_rx0j",
+              "name": "Radio thumb / eindbumper",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-24",
+              "endDate": "2025-02-24",
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_32_3dtn",
+          "name": "Productie uren week 8",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-18",
+          "endDate": "2025-02-19",
+          "deadline": null,
+          "estHours": 10,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_ve48",
+              "name": "Meeting Chantal",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-18",
+              "endDate": "2025-02-18",
+              "estHours": 0.25
+            },
+            {
+              "id": "si_dienjaar_5_1_1q1i",
+              "name": "Chat cast Thumb design",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-18",
+              "endDate": "2025-02-18",
+              "estHours": 1.5
+            },
+            {
+              "id": "si_dienjaar_5_2_t1bz",
+              "name": "Chastcast Animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-19",
+              "endDate": "2025-02-19",
+              "estHours": 6.25
+            },
+            {
+              "id": "si_dienjaar_5_3_gms9",
+              "name": "Aanpassingen Chatcast Animaties + Eindbumpers",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-21",
+              "endDate": "2025-02-21",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_33_4yo7",
+          "name": "Productie uren week 8",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-17",
+          "endDate": "2025-02-21",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_34_u9rw",
+          "name": "Productie uren week 7",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-10",
+          "endDate": "2025-02-14",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_nhzs",
+              "name": "Meeting redactie + Kars",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-02-11",
+              "endDate": "2025-02-11",
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_35_wfiq",
+          "name": "Productie uren week 7",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-10",
+          "endDate": "2025-02-14",
+          "deadline": null,
+          "estHours": 5.5,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_o80o",
+              "name": "Meeting Itorium + Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-11",
+              "endDate": "2025-02-11",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_ax1j",
+              "name": "ZHKH + KAKO aanpassingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-11",
+              "endDate": "2025-02-11",
+              "estHours": 4.5
+            },
+            {
+              "id": "si_dienjaar_5_2_ias9",
+              "name": "Nieuwe thumb UNIFORM",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-11",
+              "endDate": "2025-02-11",
+              "estHours": 0.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_36_ns6d",
+          "name": "Productie uren week 6",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-03",
+          "endDate": "2025-02-07",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_37_j8st",
+          "name": "Productie uren week 6",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-02-03",
+          "endDate": "2025-02-05",
+          "deadline": null,
+          "estHours": 13,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_r9ey",
+              "name": "Instroom feedback + aanleveren Instroom/Kako/ZHKH",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-03",
+              "endDate": "2025-02-03",
+              "estHours": 5
+            },
+            {
+              "id": "si_dienjaar_5_1_7a6x",
+              "name": "ZHKH/KAKO nieuwe montages + feedback verwerken + aanleveren",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-02-05",
+              "endDate": "2025-02-05",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_38_0ldg",
+          "name": "Productie uren week 5",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-28",
+          "endDate": "2025-01-31",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_jld5",
+              "name": "ZHKH",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-28",
+              "endDate": "2025-01-31",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_1_ekl9",
+              "name": "Aanpassingen instroom",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-30",
+              "endDate": "2025-01-31",
+              "estHours": 7.5
+            },
+            {
+              "id": "si_dienjaar_5_2_skil",
+              "name": "Meeting Odette",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-30",
+              "endDate": "2025-01-30",
+              "estHours": 0.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_39_elil",
+          "name": "Productie uren week 5",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-27",
+          "endDate": "2025-01-31",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_34n0",
+              "name": "ZHKH extra power",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-01-30",
+              "endDate": "2025-01-30",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_40_crms",
+          "name": "Productie uren week 4",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-20",
+          "endDate": "2025-01-24",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_ft1p",
+              "name": "Kast animatie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-20",
+              "endDate": "2025-01-20",
+              "estHours": 6.5
+            },
+            {
+              "id": "si_dienjaar_5_1_3tcu",
+              "name": "Meeting Itorium",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-20",
+              "endDate": "2025-01-20",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_2_74p4",
+              "name": "Instroom animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-20",
+              "endDate": "2025-01-20",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_3_xzah",
+              "name": "Kako animatie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-21",
+              "endDate": "2025-01-23",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_4_g2zy",
+              "name": "Kako feedback",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-24",
+              "endDate": "2025-01-24",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_41_vyt4",
+          "name": "Productie uren week 4",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-20",
+          "endDate": "2025-01-24",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_7ah4",
+              "name": "Extra toevoegingen Instroom",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-01-20",
+              "endDate": "2025-01-20",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_42_mt4x",
+          "name": "Productie uren week 3",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-13",
+          "endDate": "2025-01-17",
+          "deadline": null,
+          "estHours": 42,
+          "dagen": 5,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_5uwp",
+              "name": "Meeting itorium",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-13",
+              "endDate": "2025-01-13",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_ftvo",
+              "name": "Extra Thumbnails + verschillende versies",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_2_k4s0",
+              "name": "Instroom animaties",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 22.5
+            },
+            {
+              "id": "si_dienjaar_5_3_c6gt",
+              "name": "Instroom Tas animatie + feedback",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_4_8zm6",
+              "name": "Instroom Kast animatie",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_43_mvu2",
+          "name": "Productie uren week 3",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-13",
+          "endDate": "2025-01-17",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_p36s",
+              "name": "Extra toevoegingen Instroom",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-01-16",
+              "endDate": "2025-01-17",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_44_uwb9",
+          "name": "Productie uren week 2",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-06",
+          "endDate": "2025-01-10",
+          "deadline": null,
+          "estHours": 14,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_qgp2",
+              "name": "Meeting Redactie",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-01-06",
+              "endDate": "2025-01-06",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_pinn",
+              "name": "Opzet eerste video's",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2025-01-06",
+              "endDate": "2025-01-07",
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_2_fdxk",
+              "name": "Meeting redactie + Kars",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2025-01-09",
+              "endDate": "2025-01-09",
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_45_3ca7",
+          "name": "Productie uren week 2",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-06",
+          "endDate": "2025-01-10",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_0b7t",
+              "name": "Meeting redactie + Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-09",
+              "endDate": "2025-01-09",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_6d7k",
+              "name": "Call Judith",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-10",
+              "endDate": "2025-01-10",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_2_i6aj",
+              "name": "Instroom animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2025-01-08",
+              "endDate": "2025-01-10",
+              "estHours": 22.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_46_dbqw",
+          "name": "Ontwikkelingsuren week 2",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-01-06",
+          "endDate": "2025-01-10",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_47_11w2",
+          "name": "Productie uren week 52",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-12-23",
+          "endDate": "2024-12-27",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_48_ps44",
+          "name": "Productie uren week 51",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-12-16",
+          "endDate": "2024-12-20",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_gjv4",
+              "name": "OnDemand - feedback verwerken",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-16",
+              "endDate": "2024-12-17",
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_1_0ie1",
+              "name": "365",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-12-17",
+              "endDate": "2024-12-18",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_2_2dxo",
+              "name": "OnDemand - titels toevoegen",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-18",
+              "endDate": "2024-12-18",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_3_470z",
+              "name": "OnDemand - laatste loodjes",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-19",
+              "endDate": "2024-12-19",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_49_soga",
+          "name": "Productie uren week 50",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-12-09",
+          "endDate": "2024-12-13",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_8ogf",
+              "name": "Resultaten video",
+              "ownerIds": [
+                "odette",
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-12-09",
+              "endDate": "2024-12-12",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_1_ca40",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-09",
+              "endDate": "2024-12-09",
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_2_uezp",
+              "name": "365",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_3_720e",
+              "name": "OnDemand feedback verwerken",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-13",
+              "endDate": "2024-12-13",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_4_htfz",
+              "name": "OnDemand afronden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-10",
+              "endDate": "2024-12-11",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_5_xexo",
+              "name": "365",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-05",
+              "endDate": "2024-12-11",
+              "estHours": 16
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_50_w42v",
+          "name": "Ontwikkelingsuren week 50",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-12-09",
+          "endDate": "2024-12-13",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_dqbs",
+              "name": "Kickoff leercontent Kars & Tomis",
+              "ownerIds": [
+                "vincent",
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-12-12",
+              "endDate": "2024-12-12",
+              "estHours": 16
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_51_380p",
+          "name": "Productie uren week 49",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-12-02",
+          "endDate": "2024-12-06",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_tyo8",
+              "name": "Resultaten video",
+              "ownerIds": [
+                "menno",
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-12-05",
+              "endDate": "2024-12-06",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_1_0g3r",
+              "name": "Meeting",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-02",
+              "endDate": "2024-12-02",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_2_0afy",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-02",
+              "endDate": "2024-12-02",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_3_ix83",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-12-03",
+              "endDate": "2024-12-03",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_52_dw6t",
+          "name": "Productie uren week 48",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-11-25",
+          "endDate": "2024-11-29",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_x3hc",
+              "name": "Meeting",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-25",
+              "endDate": "2024-11-25",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_7mn7",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-25",
+              "endDate": "2024-11-25",
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_2_aegn",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-26",
+              "endDate": "2024-11-26",
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_3_ggf4",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-28",
+              "endDate": "2024-11-28",
+              "estHours": 7
+            },
+            {
+              "id": "si_dienjaar_5_4_0rva",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-29",
+              "endDate": "2024-11-29",
+              "estHours": 6
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_53_1e5e",
+          "name": "Productie uren week 47",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-11-18",
+          "endDate": "2024-11-22",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_5aql",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-18",
+              "endDate": "2024-11-18",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_1_8zcl",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-19",
+              "endDate": "2024-11-19",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_54_kznq",
+          "name": "Productie uren week 46",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-11-11",
+          "endDate": "2024-11-15",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_40vb",
+              "name": "Meeting Nicky / Chantal / Mijntje",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-11",
+              "endDate": "2024-11-11",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_724j",
+              "name": "Voorstel On Demand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-12",
+              "endDate": "2024-11-12",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_55_xfgv",
+          "name": "Productie uren week 45",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-11-04",
+          "endDate": "2024-11-08",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_54on",
+              "name": "Animatie OD + 365",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-11-04",
+              "endDate": "2024-11-04",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_56_9y2m",
+          "name": "Productie uren week 44",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-28",
+          "endDate": "2024-11-01",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_57_wx50",
+          "name": "Productie uren week 44",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-28",
+          "endDate": "2024-11-01",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_9qxf",
+              "name": "365 edit",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-28",
+              "endDate": "2024-10-28",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_1_ud5i",
+              "name": "365 edit",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-10-29",
+              "endDate": "2024-10-31",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_2_7ayd",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-30",
+              "endDate": "2024-11-01",
+              "estHours": 16
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_58_h76b",
+          "name": "Ontwikkelingsuren week 47",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-28",
+          "endDate": "2024-11-01",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_9w0h",
+              "name": "Leercontent - Instroom Meeting",
+              "ownerIds": [
+                "vincent",
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-11-28",
+              "endDate": "2024-11-28",
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_59_9cu7",
+          "name": "Productie uren week 43",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-21",
+          "endDate": "2024-10-25",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_5j97",
+              "name": "365 film edit + animatie",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-23",
+              "endDate": "2024-10-23",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_1_lc8w",
+              "name": "OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-23",
+              "endDate": "2024-10-23",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_2_p2w5",
+              "name": "365 + OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-24",
+              "endDate": "2024-10-24",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_60_5dog",
+          "name": "Ontwikkelingsuren week 43",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-21",
+          "endDate": "2024-10-25",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_61_afeq",
+          "name": "Productie uren week 43",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-21",
+          "endDate": "2024-10-25",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_62_sij1",
+          "name": "Productie uren week 42",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-14",
+          "endDate": "2024-10-18",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_63_ievb",
+          "name": "Ontwikkelingsuren week 42",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-14",
+          "endDate": "2024-10-18",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_64_g0tr",
+          "name": "Productie uren week 42",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-14",
+          "endDate": "2024-10-18",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_l7df",
+              "name": "365 - Montage + muziek research",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-18",
+              "endDate": "2024-10-18",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_65_n8jo",
+          "name": "Productie uren Kars week 41",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-07",
+          "endDate": "2024-10-11",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_66_jlrt",
+          "name": "Productie uren week 41",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-07",
+          "endDate": "2024-10-11",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_ros9",
+              "name": "Feedback verwerking videos SPEC en exporteren voor eindmontage",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-07",
+              "endDate": "2024-10-07",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_1_mim6",
+              "name": "Afbeeldingen mail maken",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-07",
+              "endDate": "2024-10-07",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_2_91k1",
+              "name": "SPEC feedback verwerken in SANA",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-08",
+              "endDate": "2024-10-08",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_3_pj03",
+              "name": "SPEC extra aanleveren materiaal",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-08",
+              "endDate": "2024-10-08",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_4_mg5h",
+              "name": "Nieuwe foto's SPEC selecteren en video's afronden + uploaden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-11",
+              "endDate": "2024-10-11",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_67_rtum",
+          "name": "Ontwikkelingsuren week 41",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-10-07",
+          "endDate": "2024-10-11",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_68_5hvg",
+          "name": "Productie uren week 40",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-30",
+          "endDate": "2024-10-04",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_kdoa",
+              "name": "Feedback verwerken SANA",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-30",
+              "endDate": "2024-09-30",
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_1_w5ja",
+              "name": "Video's opnieuw checken / uploaden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-30",
+              "endDate": "2024-09-30",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_2_1jp5",
+              "name": "Feedback verwerken SANA",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-01",
+              "endDate": "2024-10-01",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_3_u122",
+              "name": "Adhoc dingen fixen",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-10-02",
+              "endDate": "2024-10-02",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_69_40jv",
+          "name": "Productie uren Kars week 40",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-30",
+          "endDate": "2024-10-04",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_7j9b",
+              "name": "Incheck meeting Nicky/Chantal/Vincent",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-30",
+              "endDate": "2024-09-30",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_fe7g",
+              "name": "Leercontent - Projecten samenvoegen/Thumbs & extra aanpassingen/Nieuwe exports maken",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-30",
+              "endDate": "2024-09-30",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_2_wstu",
+              "name": "Specialistisch Dienjaar",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-30",
+              "endDate": "2024-10-02",
+              "estHours": 13.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_70_d3tb",
+          "name": "Ontwikkelingsuren week 40",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-30",
+          "endDate": "2024-10-04",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_71_hy44",
+          "name": "Productie uren week 39",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-23",
+          "endDate": "2024-09-27",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_rfhy",
+              "name": "Sana verder uitwerken, heel veel praten en Kars helpen leercontent",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-24",
+              "endDate": "2024-09-24",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_1_nz11",
+              "name": "Testformulier comments verwerken",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-26",
+              "endDate": "2024-09-26",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_2_mt7i",
+              "name": "Video content uploaden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-27",
+              "endDate": "2024-09-27",
+              "estHours": 1
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_72_ovl5",
+          "name": "Ontwikkelingsuren week 39",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-23",
+          "endDate": "2024-09-27",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_73_fbex",
+          "name": "Productie uren Kars week 39",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-23",
+          "endDate": "2024-09-27",
+          "deadline": null,
+          "estHours": 16.5,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_70rw",
+              "name": "Feedback verwerken/ Opleveren Animaties Leercontent & Specialistisch placeholder",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-24",
+              "endDate": "2024-09-25",
+              "estHours": 16
+            },
+            {
+              "id": "si_dienjaar_5_1_zk4b",
+              "name": "Aanpassingen/Exports Spec dienjaar",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-23",
+              "endDate": "2024-09-23",
+              "estHours": 0.25
+            },
+            {
+              "id": "si_dienjaar_5_2_ksqb",
+              "name": "Exports Doc animaties",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-27",
+              "endDate": "2024-09-27",
+              "estHours": 0.25
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_74_ve5b",
+          "name": "Ontwikkelingsuren week 38",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-16",
+          "endDate": "2024-09-20",
+          "deadline": null,
+          "estHours": 8,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_slds",
+              "name": "Sana: Tomis onboarding & ontwerpsessies",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-16",
+              "endDate": "2024-09-16",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_75_gs9f",
+          "name": "Productie uren week 38",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-16",
+          "endDate": "2024-09-20",
+          "deadline": null,
+          "estHours": 44,
+          "dagen": 6,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_msma",
+              "name": "Sana: Ontwikkeling content",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-16",
+              "endDate": "2024-09-16",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_1_lyo2",
+              "name": "Leercontent animaties / thumbs",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-16",
+              "endDate": "2024-09-20",
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_2_b6m8",
+              "name": "Sana: Productie content samen met Tomis",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-17",
+              "endDate": "2024-09-17",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_3_hh88",
+              "name": "Sana: Productie content samen met Tomis",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-18",
+              "endDate": "2024-09-18",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_4_x3g6",
+              "name": "Bijspringen met feedback verwerken voor leercontent",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-19",
+              "endDate": "2024-09-19",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_5_tmq0",
+              "name": "Sana afronden 1e versie",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-19",
+              "endDate": "2024-09-19",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_76_sh4m",
+          "name": "Productie uren Kars week 38",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-16",
+          "endDate": "2024-09-20",
+          "deadline": null,
+          "estHours": 38,
+          "dagen": 5,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_cd2o",
+              "name": "Incheck meeting Nicky / Menno / Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-16",
+              "endDate": "2024-09-16",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_mzw2",
+              "name": "Animating / Compositing Leercontent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-16",
+              "endDate": "2024-09-16",
+              "estHours": 7.5
+            },
+            {
+              "id": "si_dienjaar_5_2_sec3",
+              "name": "Meeting Odette",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-17",
+              "endDate": "2024-09-17",
+              "estHours": 0.25
+            },
+            {
+              "id": "si_dienjaar_5_3_l24b",
+              "name": "Animating / Compositing Leercontent & Specialistisch placeholder",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-17",
+              "endDate": "2024-09-17",
+              "estHours": 10
+            },
+            {
+              "id": "si_dienjaar_5_4_deo1",
+              "name": "Animating / Compositing Leercontent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-18",
+              "endDate": "2024-09-18",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_5_erfz",
+              "name": "Animating / Compositing Leercontent & Specialistisch placeholder",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-19",
+              "endDate": "2024-09-20",
+              "estHours": 12
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_77_ug5g",
+          "name": "Productie uren Kars week 37",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-10",
+          "endDate": "2024-09-13",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_svul",
+              "name": "Incheck Briefing Feedback Odette meeting",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-10",
+              "endDate": "2024-09-10",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_0hvw",
+              "name": "Meeting Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-11",
+              "endDate": "2024-09-11",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_2_8kow",
+              "name": "01.9 Sporttest Voorbereiding Footage Aanpassingen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-11",
+              "endDate": "2024-09-11",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_3_uou9",
+              "name": "02.5 Persoonlijkheidsvragenlijst Graphics/Storyboard",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-10",
+              "endDate": "2024-09-11",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_4_gien",
+              "name": "02.7 Arbeidsvoorwaarden Vid 2-4 Graphics/Storyboard",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-10",
+              "endDate": "2024-09-11",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_5_hbac",
+              "name": "04.10 Veiligheidsonderzoek Vid 1-3 Graphics/Storyboard",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-10",
+              "endDate": "2024-09-11",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_6_jsnq",
+              "name": "Meeting Feedback Odette",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-12",
+              "endDate": "2024-09-12",
+              "estHours": 0.25
+            },
+            {
+              "id": "si_dienjaar_5_7_3j1t",
+              "name": "Meeting Incheck Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-12",
+              "endDate": "2024-09-12",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_8_3jn6",
+              "name": "Voorbereiden werk Odette",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-12",
+              "endDate": "2024-09-13",
+              "estHours": 0.25
+            },
+            {
+              "id": "si_dienjaar_5_9_74ws",
+              "name": "Thumbs Graphics",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-12",
+              "endDate": "2024-09-13",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_10_ss0q",
+              "name": "Animating / Compositing Leercontent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-12",
+              "endDate": "2024-09-13",
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_11_50r6",
+              "name": "Lower Third Graphics / Animatie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-13",
+              "endDate": "2024-09-13",
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_78_ogpg",
+          "name": "Ontwikkelingsuren week 37",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-09",
+          "endDate": "2024-09-13",
+          "deadline": null,
+          "estHours": 22,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_2ws2",
+              "name": "Sana stijlonderzoek",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-13",
+              "endDate": "2024-09-13",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_1_0fpl",
+              "name": "Draaidag",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-10",
+              "endDate": "2024-09-10",
+              "estHours": 5
+            },
+            {
+              "id": "si_dienjaar_5_2_a9k0",
+              "name": "Draaidag voorbereiden",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-09",
+              "endDate": "2024-09-09",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_3_sjw0",
+              "name": "Sana stijlonderzoek",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-12",
+              "endDate": "2024-09-12",
+              "estHours": 5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_79_4xlt",
+          "name": "Productie uren week 37",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-09",
+          "endDate": "2024-09-13",
+          "deadline": null,
+          "estHours": 48,
+          "dagen": 6,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_zkst",
+              "name": "Sporttest animaties finetunen + alle clusters maken",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-09",
+              "endDate": "2024-09-13",
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_1_rqez",
+              "name": "Leercontent animaties",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-09",
+              "endDate": "2024-09-13",
+              "estHours": 28
+            },
+            {
+              "id": "si_dienjaar_5_2_b0i3",
+              "name": "Productie Leercontent",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-11",
+              "endDate": "2024-09-11",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_80_eg06",
+          "name": "Productieuren Kars week 36",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-02",
+          "endDate": "2024-09-06",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_4gwy",
+              "name": "Meeting Nicky, Kars, Menno, Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_dlp4",
+              "name": "Frank voormontages doornemen, materiaal verzamelen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_2_69s9",
+              "name": "04.10 Veiligheidsonderzoek Vid03 Animatie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 1.5
+            },
+            {
+              "id": "si_dienjaar_5_3_3blr",
+              "name": "Presentatie omzetten",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_4_11gi",
+              "name": "Checklist maken, meeting voorbereiden, exports",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_5_j7iw",
+              "name": "Incheck meeting Vincent",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_6_jsci",
+              "name": "Frank voormontages doornemen, pipelines, meerdere exports, aanpassen, meekijken",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-03",
+              "endDate": "2024-09-03",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_7_p8dd",
+              "name": "01.9 Sporttest Voorbereiding Animatie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-03",
+              "endDate": "2024-09-03",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_8_rcdf",
+              "name": "Meeting Vincent, Odette + Overdracht",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-04",
+              "endDate": "2024-09-04",
+              "estHours": 1.25
+            },
+            {
+              "id": "si_dienjaar_5_9_733c",
+              "name": "01.9 Sporttest Graphics/Storyboard",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-05",
+              "endDate": "2024-09-05",
+              "estHours": 5
+            },
+            {
+              "id": "si_dienjaar_5_10_7xja",
+              "name": "02.2 Game-based assessment Graphics/Storyboard",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-05",
+              "endDate": "2024-09-06",
+              "estHours": 4.5
+            },
+            {
+              "id": "si_dienjaar_5_11_5zf1",
+              "name": "Meeting Vincent, Odette Incheck/Feedback",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-06",
+              "endDate": "2024-09-06",
+              "estHours": 0.75
+            },
+            {
+              "id": "si_dienjaar_5_12_fmyv",
+              "name": "02.4 Capaciteitentest Graphics/Storyboards",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-06",
+              "endDate": "2024-09-06",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_13_jpg4",
+              "name": "Meeting Odette",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-09-06",
+              "endDate": "2024-09-06",
+              "estHours": 0.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_81_5fcc",
+          "name": "Ontwikkelingsuren week 36",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-02",
+          "endDate": "2024-09-06",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_82_0zvp",
+          "name": "Productie yoko uren week 36",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-02",
+          "endDate": "2024-09-06",
+          "deadline": null,
+          "estHours": 61,
+          "dagen": 8,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_141h",
+              "name": "Meeting Nicky, Kars, Vincent, Menno",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_1_2h21",
+              "name": "365 Beeldmateriaal spotten",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-03",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_2_5092",
+              "name": "365 Edit",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-03",
+              "endDate": "2024-09-04",
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_3_wz7n",
+              "name": "Meeting Newwest",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-05",
+              "endDate": "2024-09-05",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_4_si1b",
+              "name": "Voorbereiding Draaidagen",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-04",
+              "endDate": "2024-09-05",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_5_7vur",
+              "name": "Communicatie over Sana / leerontent / OnDemand",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-06",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_6_7ig0",
+              "name": "Sana content maken",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-06",
+              "endDate": "2024-09-06",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_7_iqoh",
+              "name": "Dienjaar SPEC",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-06",
+              "endDate": "2024-09-06",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_8_yg6f",
+              "name": "Leercontent sporttest AE",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-05",
+              "endDate": "2024-09-06",
+              "estHours": 14
+            },
+            {
+              "id": "si_dienjaar_5_9_52i4",
+              "name": "Leercontent video's splitsen",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-03",
+              "endDate": "2024-09-04",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_10_f6dr",
+              "name": "3Docs: Verwerken naar 3 losse videos",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-03",
+              "endDate": "2024-09-04",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_83_bwq1",
+          "name": "Ondemand: Instarts",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-09-02",
+          "endDate": "2024-09-04",
+          "deadline": "2024-09-04",
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_5rek",
+              "name": "OPCO shots research + loopend maken + color",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-04",
+              "estHours": 12
+            },
+            {
+              "id": "si_dienjaar_5_1_o84a",
+              "name": "OPCO shots research",
+              "ownerIds": [
+                "odette"
+              ],
+              "status": "",
+              "startDate": "2024-09-02",
+              "endDate": "2024-09-02",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_84_8lbh",
+          "name": "Ontwikkelingsuren week 35",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-26",
+          "endDate": "2024-08-30",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0
+        },
+        {
+          "id": "it_dienjaar_5_85_zi5i",
+          "name": "Productieuren week 35",
+          "ownerIds": [
+            "menno",
+            "odette"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-26",
+          "endDate": "2024-08-30",
+          "deadline": null,
+          "estHours": 29,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_x3fe",
+              "name": "Meetings: Check-ins & doornemen",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-26",
+              "endDate": "2024-08-26",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_1_wmmv",
+              "name": "365: Spotten & ruwe montage",
+              "ownerIds": [
+                "odette",
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-26",
+              "endDate": "2024-08-30",
+              "estHours": 20
+            },
+            {
+              "id": "si_dienjaar_5_2_d5t1",
+              "name": "Sana: Meeting Barend Sana bespreken",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-29",
+              "endDate": "2024-08-29",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_3_pizq",
+              "name": "Hangaar: spotten materiaal",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-29",
+              "endDate": "2024-08-29",
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_4_lk0n",
+              "name": "LMS Presentatie",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-28",
+              "endDate": "2024-08-29",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_5_3lnn",
+              "name": "Meetings & doornemen",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-29",
+              "endDate": "2024-08-29",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_6_um7q",
+              "name": "Meeting Ondemand",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-30",
+              "endDate": "2024-08-30",
+              "estHours": 0.5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_86_p92s",
+          "name": "Productie-uren week 35",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-26",
+          "endDate": "2024-08-30",
+          "deadline": null,
+          "estHours": 32,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_yj8y",
+              "name": "Meeting Chantal + Scripts doornemen & bijwerken",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-26",
+              "endDate": "2024-08-26",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_1_alqo",
+              "name": "Video: Sporttest voorbereiding - A B testing visuals",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-26",
+              "endDate": "2024-08-26",
+              "estHours": 6
+            },
+            {
+              "id": "si_dienjaar_5_2_hg0r",
+              "name": "Meeting Menno Nicky - Check in",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-28",
+              "endDate": "2024-08-28",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_3_b0ka",
+              "name": "Meeting Menno - Visuals",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-28",
+              "endDate": "2024-08-28",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_4_oxoe",
+              "name": "Veiligheidsonderzoek animatie visuals",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-28",
+              "endDate": "2024-08-28",
+              "estHours": 7
+            },
+            {
+              "id": "si_dienjaar_5_5_o1bc",
+              "name": "OnDemand Teller animatie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-29",
+              "endDate": "2024-08-29",
+              "estHours": 0.25
+            },
+            {
+              "id": "si_dienjaar_5_6_eak0",
+              "name": "Sana: Meeting Barend Sana bespreken",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-29",
+              "endDate": "2024-08-29",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_7_h7dm",
+              "name": "VO materiaal opknippen & timen",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-29",
+              "endDate": "2024-08-30",
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_8_lqep",
+              "name": "Video: Sporttest voorbereiding - Graphics",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-29",
+              "endDate": "2024-08-29",
+              "estHours": 4.25
+            },
+            {
+              "id": "si_dienjaar_5_9_kzcn",
+              "name": "Video: Veiligheidsonderzoek - Graphics/Animatie",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": "2024-08-30",
+              "endDate": "2024-08-30",
+              "estHours": 8
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_87_q2vh",
+          "name": "Productie-uren week 34",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-20",
+          "endDate": "2024-08-23",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_vm0v",
+              "name": "Check-in meeting Menno & Nicky",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_gtyz",
+              "name": "Meeting visuals Menno",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_2_o3yt",
+              "name": "Verwachtingen Keuring: Aanpassingen verwerken + Eerste uitwerking",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 7
+            },
+            {
+              "id": "si_dienjaar_5_3_efoo",
+              "name": "Scripts bijwerken",
+              "ownerIds": [
+                "kars"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_4_js32",
+              "name": "Eerste visualisaties/schetsen 7 animaties",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 5
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_88_diz3",
+          "name": "Ontwikkelingsuren week 34",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-19",
+          "endDate": "2024-08-23",
+          "deadline": null,
+          "estHours": 4,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_nsa3",
+              "name": "Inventarisatie meeting Kars & Nicky",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-20",
+              "endDate": "2024-08-20",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_1_s2p8",
+              "name": "Pipeline opzetten voor editors --> bijschaven en mailen",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-21",
+              "endDate": "2024-08-21",
+              "estHours": 0.5
+            },
+            {
+              "id": "si_dienjaar_5_2_07id",
+              "name": "Sana: thumb beleid & vormgeving",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-21",
+              "endDate": "2024-08-22",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_89_rhyj",
+          "name": "Productieuren week 34",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-19",
+          "endDate": "2024-08-23",
+          "deadline": null,
+          "estHours": 6,
+          "dagen": 1,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_aqyq",
+              "name": "Edit Erik Presentatie video",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-21",
+              "endDate": "2024-08-21",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_1_052u",
+              "name": "365: Spotten & selecteren materiaal",
+              "ownerIds": [
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-22",
+              "endDate": "2024-08-23",
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_90_hrtv",
+          "name": "Productie-uren week 33",
+          "ownerIds": [
+            "kars"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-14",
+          "endDate": "2024-08-16",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_x3yf",
+              "name": "Meeting & overdracht met Menno, Vincent",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_1_6avs",
+              "name": "Inlezen en voorbereiding scripts",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_2_05lq",
+              "name": "Meeting Chantal & 10 scripts doornemen",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_3_jxc6",
+              "name": "1b: Verwachtingen Keuring - Eerste visuals + animaties",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_4_jbtq",
+              "name": "2: GBA - Graphics",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_5_30qi",
+              "name": "1a: Introductie MijnDienjaar - Eerste visuals",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_91_d8sr",
+          "name": "Ontwikkelingsuren week 33",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-12",
+          "endDate": "2024-08-16",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 3,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_x2jt",
+              "name": "Meeting Nicky",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-08-12",
+              "endDate": "2024-08-12",
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_1_8zri",
+              "name": "Workflow opstellen & overdracht Kars",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-08-13",
+              "endDate": "2024-08-13",
+              "estHours": 8
+            },
+            {
+              "id": "si_dienjaar_5_2_5hid",
+              "name": "Sana: Meeting Barend",
+              "ownerIds": [
+                "vincent",
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-13",
+              "endDate": "2024-08-13",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_3_tqj4",
+              "name": "Samenwerking & begeleiding Kars",
+              "ownerIds": [
+                "vincent",
+                "menno"
+              ],
+              "status": "",
+              "startDate": "2024-08-14",
+              "endDate": "2024-08-14",
+              "estHours": 4
+            },
+            {
+              "id": "si_dienjaar_5_4_1c0f",
+              "name": "Sana: scripts en Sana doorlopen Chantal",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-08-15",
+              "endDate": "2024-08-15",
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_5_n0mw",
+              "name": "Sana: Adhv meeting Barend mailen, postpipeline maken, Kars helpen, etc",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": "2024-08-15",
+              "endDate": "2024-08-15",
+              "estHours": 3
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_92_ehjs",
+          "name": "Ontwikkelingsuren week 32",
+          "ownerIds": [
+            "vincent",
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-08-05",
+          "endDate": "2024-08-09",
+          "deadline": null,
+          "estHours": 14,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_bwp2",
+              "name": "Sana: platform begrijpen",
+              "ownerIds": [
+                "vincent",
+                "menno"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 3
+            },
+            {
+              "id": "si_dienjaar_5_1_lm67",
+              "name": "Sana: Meeting Barend",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_2_vzoi",
+              "name": "Meeting Mandy",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_3_67de",
+              "name": "Meeting Nicky",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_4_doqg",
+              "name": "Meeting Barend en Roel over landingspagina",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_5_5hx7",
+              "name": "Meeting knopen doorhakken Hangar",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_6_47qx",
+              "name": "Voorbereiden en terugkoppelen meetings",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 2
+            },
+            {
+              "id": "si_dienjaar_5_7_ul2q",
+              "name": "Sana: Voorstel Sana",
+              "ownerIds": [
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 1
+            },
+            {
+              "id": "si_dienjaar_5_8_7cyx",
+              "name": "Meetings Vincent, Kars, Menno",
+              "ownerIds": [
+                "menno",
+                "vincent"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_93_qwxx",
+          "name": "Ontwikkelingsuren week 31",
+          "ownerIds": [
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-07-29",
+          "endDate": "2024-08-02",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_wg8g",
+              "name": "Uitwerking Stijl toegepast op 03 Docs",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 14
+            },
+            {
+              "id": "si_dienjaar_5_1_gxph",
+              "name": "Meetings",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 2
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_94_arwv",
+          "name": "Ontwikkelingsuren week 30",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-07-22",
+          "endDate": "2024-07-26",
+          "deadline": null,
+          "estHours": 28,
+          "dagen": 4,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_eih7",
+              "name": "- Stijl algemeen & leercontent Vincent en Menno",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 24
+            },
+            {
+              "id": "si_dienjaar_5_1_3mfy",
+              "name": "- Meetings, presentaties, consulting",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 4
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_95_5qgn",
+          "name": "Animatie Erik presentatie",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-07-16",
+          "endDate": "2024-07-22",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2
+        },
+        {
+          "id": "it_dienjaar_5_96_kchr",
+          "name": "Ontwikkelingsuren week 29",
+          "ownerIds": [
+            "menno",
+            "vincent"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-07-15",
+          "endDate": "2024-07-19",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_kjyc",
+              "name": "Ontwikkeling stijl",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            },
+            {
+              "id": "si_dienjaar_5_1_gf39",
+              "name": "Meetings, projectmanagement",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_97_5h5w",
+          "name": "Ontwikkelingsuren week 28",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-07-08",
+          "endDate": "2024-07-12",
+          "deadline": null,
+          "estHours": 12,
+          "dagen": 2,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_bgtg",
+              "name": "Eerste opzet leercontent",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            },
+            {
+              "id": "si_dienjaar_5_1_0smb",
+              "name": "Meetings",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            },
+            {
+              "id": "si_dienjaar_5_2_t84j",
+              "name": "Regievisie meeting overdracht",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 0
+            }
+          ]
+        },
+        {
+          "id": "it_dienjaar_5_98_npji",
+          "name": "Ontwikkelingsuren week 27",
+          "ownerIds": [
+            "menno"
+          ],
+          "status": "Klaar",
+          "startDate": "2024-07-01",
+          "endDate": "2024-07-05",
+          "deadline": null,
+          "estHours": 20,
+          "dagen": 3
+        },
+        {
+          "id": "it_dienjaar_5_99_ck1o",
+          "name": "Week 33",
+          "ownerIds": [
+            "unassigned"
+          ],
+          "status": "Klaar",
+          "startDate": "2025-08-11",
+          "endDate": "2025-08-15",
+          "deadline": null,
+          "estHours": 0,
+          "dagen": 0,
+          "subitems": [
+            {
+              "id": "si_dienjaar_5_0_vpnw",
+              "name": "Doorontwikkeling: fase01 Sportcluster aanpassingen",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": null,
+              "endDate": null,
+              "estHours": 2
+            }
+          ]
+        }
+      ]
     }
   ]
 }
