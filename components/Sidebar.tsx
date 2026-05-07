@@ -13,7 +13,7 @@ import { requiresAuth } from '@/lib/supabase'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
-  IconDocument,
+  IconDocument, IconFolder, IconFolderOpen, IconSort,
 } from './Icon'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
@@ -141,8 +141,12 @@ function SectionBlock({
   isLastSection:  boolean
   onMoveSection:  (dir: -1 | 1) => void
 }) {
-  const alwaysOpen = section.type === 'projects' || section.type === 'pages'
-  const [open,          setOpen]          = useState(alwaysOpen || section.items.some(i => pathname.startsWith(i.href)))
+  // All sections are collapsible. Default-open if the current route lives inside.
+  const [open,          setOpen]          = useState(true)
+  useEffect(() => {
+    if (section.items.some(i => pathname.startsWith(i.href))) setOpen(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [addingItem,    setAddingItem]    = useState(false)
   const [newLabel,      setNewLabel]      = useState('')
   const [editName,      setEditName]      = useState(false)
@@ -199,28 +203,26 @@ function SectionBlock({
 
   return (
     <div style={{ marginTop: 8 }}>
-      {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 10px 6px 6px' }}
+      {/* Section header — folder style */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 6px 12px', marginTop: 6 }}
         onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '1')) }}
         onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '0')) }}>
-        {!alwaysOpen ? (
-          <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', flexShrink: 0 }}>
-            {open ? '▼' : '▶'}
-          </button>
-        ) : (
-          <span style={{ width: 18, flexShrink: 0 }} />
-        )}
+        <button onClick={() => setOpen(o => !o)}
+          title={open ? 'Inklappen' : 'Uitklappen'}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0 }}>
+          {open ? <IconFolderOpen size={16} /> : <IconFolder size={16} />}
+        </button>
 
         {editName ? (
           <input autoFocus value={nameDraft}
             onChange={e => setNameDraft(e.target.value)}
             onBlur={() => { saveName(nameDraft.trim() || section.name); setEditName(false) }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { saveName(nameDraft.trim() || section.name); setEditName(false) } }}
-            style={{ background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', outline: 'none', width: 120 }}
+            style={{ background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', outline: 'none', width: 140 }}
           />
         ) : (
           <span onDoubleClick={() => { setNameDraft(section.name); setEditName(true) }} title="Dubbelklik om naam te bewerken"
-            style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', cursor: 'text', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.01em', cursor: 'text', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {section.name}
           </span>
         )}
@@ -427,9 +429,9 @@ function reorderArrowBtn(disabled: boolean): React.CSSProperties {
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
-const DEFAULT_SIDEBAR_W = 210
-const MIN_SIDEBAR_W     = 160
-const MAX_SIDEBAR_W     = 380
+const DEFAULT_SIDEBAR_W = 248
+const MIN_SIDEBAR_W     = 200
+const MAX_SIDEBAR_W     = 400
 
 export default function Sidebar({
   isMobile = false,
@@ -607,19 +609,6 @@ export default function Sidebar({
         {/* Nav */}
         <nav style={{ padding: '8px 8px', flex: 1 }}>
 
-          {/* Reorder toggle */}
-          <div style={{ padding: '2px 4px 6px' }}>
-            <button onClick={() => setEditOrder(o => !o)}
-              style={{ width: '100%', padding: '6px 10px', borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: editOrder ? 'var(--accent)' : 'transparent',
-                color: editOrder ? '#fff' : 'var(--text-muted)',
-                fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              {editOrder ? '✓ Klaar met sorteren' : '↕ Volgorde aanpassen'}
-            </button>
-          </div>
-
           {/* Main nav */}
           {mainNav.map((item, idx) => {
             const active  = pathname === item.href
@@ -643,16 +632,17 @@ export default function Sidebar({
                   <Link href={item.href}
                     onClick={e => { if (editOrder) e.preventDefault() }}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 10, flex: 1,
-                      padding: '9px 12px', borderRadius: 8,
+                      display: 'flex', alignItems: 'center', gap: 11, flex: 1,
+                      padding: '10px 12px', borderRadius: 8,
                       color: 'var(--text-primary)',
                       background: active ? 'var(--bg-hover)' : 'transparent',
-                      textDecoration: 'none', fontSize: 15.5, fontWeight: active ? 600 : 500,
+                      textDecoration: 'none', fontSize: 17, fontWeight: active ? 700 : 600,
+                      letterSpacing: '-0.01em',
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
-                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={19} /> : null })()}
+                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={21} /> : null })()}
                     <span>{item.label}</span>
                   </Link>
                 )}
@@ -714,25 +704,49 @@ export default function Sidebar({
           </div>
         </nav>
 
+        {/* Reorder toggle — small, just above footer */}
+        <div style={{ padding: '4px 12px 6px' }}>
+          <button onClick={() => setEditOrder(o => !o)}
+            title={editOrder ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+            style={{ display: 'flex', alignItems: 'center', gap: 6,
+              background: 'none', border: 'none',
+              color: editOrder ? 'var(--accent)' : 'var(--text-muted)',
+              cursor: 'pointer', fontSize: 11, fontWeight: 500,
+              padding: '4px 6px', borderRadius: 4 }}
+            onMouseEnter={e => (e.currentTarget.style.color = editOrder ? 'var(--accent)' : 'var(--text-secondary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = editOrder ? 'var(--accent)' : 'var(--text-muted)')}>
+            <IconSort size={12} />
+            {editOrder ? 'Klaar' : 'Volgorde'}
+          </button>
+        </div>
+
         {/* Footer — profile + theme + settings */}
         <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={openEdit} title="Profiel bewerken"
-            style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            {profile?.photo ? (
-              <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
-            ) : profile ? (
-              <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
-                {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
+          {profile?.memberId ? (
+            <Link href={`/profile/${profile.memberId}`} title="Mijn profiel"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left', textDecoration: 'none' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+              {profile?.photo ? (
+                <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+              ) : (
+                <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
+                  {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
+                </span>
+              )}
+              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {profile.name}
               </span>
-            ) : (
+            </Link>
+          ) : (
+            <button onClick={openEdit} title="Profiel instellen"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
               <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--text-muted)' }}>?</span>
-            )}
-            <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {profile?.name ?? 'Profiel instellen'}
-            </span>
-          </button>
+              <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}>Profiel instellen</span>
+            </button>
+          )}
 
           <button onClick={cycleTheme} title={`Thema: ${(THEMES.find(t => t.value === theme) ?? THEMES[0]).label}`}
             style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
