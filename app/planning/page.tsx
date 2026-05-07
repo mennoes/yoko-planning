@@ -1189,7 +1189,7 @@ export default function PlanningPage() {
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Projecten ({shiftPicked.size})</span>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setShiftPicked(new Set(projects.filter(p => p.startDate && p.endDate).map(p => p.id)))}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>Alles</button>
+                style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: 0, textDecoration: 'underline' }}>Alles</button>
               <button onClick={() => setShiftPicked(new Set())}
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>Wis</button>
             </div>
@@ -1245,7 +1245,7 @@ export default function PlanningPage() {
             </span>
             {filterMembers.size > 0 && (
               <button onClick={() => setFilterMembers(new Set())}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>
+                style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: 0, textDecoration: 'underline' }}>
                 Reset
               </button>
             )}

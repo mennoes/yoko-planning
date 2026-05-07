@@ -198,7 +198,7 @@ function totalMinutesThisWeek(): number {
     .reduce((s, e) => s + e.minutes, 0)
 }
 
-const linkStyle: React.CSSProperties = { color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }
+const linkStyle: React.CSSProperties = { color: 'var(--text-primary)', textDecoration: 'underline', textDecorationColor: 'var(--accent)', textDecorationThickness: 2, textUnderlineOffset: 3, fontWeight: 500 }
 
 // ─── Clickable avatar with file-upload menu ──────────────────────────────────
 function ClickableAvatar({ photo, name, color, editable, onPicked }: {
