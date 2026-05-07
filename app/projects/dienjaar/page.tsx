@@ -14,6 +14,12 @@ export default function DienjaarPage() {
 
   useEffect(() => {
     setGroups(loadGroups('dienjaar', initialData.groups as BoardGroup[]))
+    function onUpdate(e: Event) {
+      const ce = e as CustomEvent<{ boardName: string }>
+      if (!ce.detail || ce.detail.boardName === 'dienjaar') setGroups(loadGroups('dienjaar', initialData.groups as BoardGroup[]))
+    }
+    window.addEventListener('yoko-board-update', onUpdate)
+    return () => window.removeEventListener('yoko-board-update', onUpdate)
   }, [])
 
   useEffect(() => {

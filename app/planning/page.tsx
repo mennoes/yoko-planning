@@ -635,11 +635,20 @@ export default function PlanningPage() {
   const [isDragScrolling, setIsDragScrolling] = useState(false)
 
   useEffect(() => {
-    const loaded: Record<string, BoardGroup[]> = {}
-    for (const [name, raw] of Object.entries(RAW)) {
-      loaded[name] = loadGroups(name, raw.groups as BoardGroup[])
+    function refresh() {
+      const loaded: Record<string, BoardGroup[]> = {}
+      for (const [name, raw] of Object.entries(RAW)) {
+        loaded[name] = loadGroups(name, raw.groups as BoardGroup[])
+      }
+      setAllGroups(loaded)
     }
-    setAllGroups(loaded)
+    refresh()
+    function onBoardUpdate() { refresh() }
+    window.addEventListener('yoko-board-update', onBoardUpdate)
+    return () => window.removeEventListener('yoko-board-update', onBoardUpdate)
+  }, [])
+
+  useEffect(() => {
 
     // Restore team capacities from localStorage
     let capByMember: Record<string, number> = {}

@@ -15,7 +15,19 @@ import { IconMenu, IconSearch } from './Icon'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
-import { onAuthChange } from '@/lib/sync'
+import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
+import { onAuthChange, isSyncing } from '@/lib/sync'
+import yokoRaw       from '@/data/boards/yoko.json'
+import pnpRaw        from '@/data/boards/pnp.json'
+import nederlandRaw  from '@/data/boards/nederland.json'
+import vlaanderenRaw from '@/data/boards/vlaanderen.json'
+import dienjaarRaw   from '@/data/boards/dienjaar.json'
+import type { BoardGroup } from '@/lib/boards'
+
+const BOARD_INITIALS: Record<string, { groups: unknown[] }> = {
+  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
+  vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
+}
 
 function Inner({ children }: { children: ReactNode }) {
   const { needsSetup, editOpen, isAuthenticated } = useProfile()
@@ -45,15 +57,32 @@ function Inner({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [searchOpen])
 
-  // Remote pages sync — pulls + subscribes when user is signed in.
+  // Remote sync — pulls + subscribes when user is signed in.
   useEffect(() => {
-    let unsubChannel: (() => void) | null = null
-    function start() {
-      pullPagesFromRemote().then(ok => { if (ok) unsubChannel = subscribeRemotePages() })
+    const unsubs: Array<() => void> = []
+    async function start() {
+      const syncing = await isSyncing()
+      if (!syncing) return
+      // Pages
+      pullPagesFromRemote()
+      unsubs.push(subscribeRemotePages())
+      // Boards: pull + subscribe + first-time migrate from localStorage
+      for (const b of BOARD_NAMES) {
+        const ok = await pullBoardFromRemote(b)
+        if (!ok) {
+          // Remote empty — push current local snapshot so other devices can pull it
+          const local = loadGroups(b, (BOARD_INITIALS[b]?.groups ?? []) as BoardGroup[])
+          if (local.length > 0) await pushBoardToRemote(b, local)
+        }
+        unsubs.push(subscribeRemoteBoard(b))
+      }
     }
     start()
-    const offAuth = onAuthChange(() => { unsubChannel?.(); unsubChannel = null; start() })
-    return () => { offAuth(); unsubChannel?.() }
+    const offAuth = onAuthChange(() => {
+      while (unsubs.length) unsubs.pop()?.()
+      start()
+    })
+    return () => { offAuth(); while (unsubs.length) unsubs.pop()?.() }
   }, [])
 
   // Login + share routes: geen sidebar, geen ProfileSetup, geen auth-redirect
