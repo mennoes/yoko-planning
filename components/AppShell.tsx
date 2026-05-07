@@ -17,6 +17,7 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
 import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
 import { onAuthChange, isSyncing } from '@/lib/sync'
+import { syncGoogleNow } from '@/lib/googleClient'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -87,6 +88,20 @@ function Inner({ children }: { children: ReactNode }) {
       start()
     })
     return () => { offAuth(); while (unsubs.length) unsubs.pop()?.() }
+  }, [])
+
+  // Google Calendar sync — pull on mount + every 5 min while signed in.
+  useEffect(() => {
+    let cancelled = false
+    async function tick() {
+      if (cancelled) return
+      const syncing = await isSyncing()
+      if (syncing) await syncGoogleNow()
+    }
+    tick()
+    const id = setInterval(tick, 5 * 60 * 1000)
+    const offAuth = onAuthChange(() => { tick() })
+    return () => { cancelled = true; clearInterval(id); offAuth() }
   }, [])
 
   // Login + share + auth routes: geen sidebar, geen ProfileSetup, geen auth-redirect

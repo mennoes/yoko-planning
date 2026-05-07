@@ -42,6 +42,8 @@ export type BoardItem = {
   nummers?:       number
   subitems?:      SubItem[]
   journal?:       JournalEntry[]
+  source?:        'manual' | 'google'   // origin of this item
+  externalLink?:  string                // link back to source (e.g. Google Calendar event)
   [key: string]:  unknown
 }
 

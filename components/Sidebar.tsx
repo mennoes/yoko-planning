@@ -11,6 +11,12 @@ import {
 import { loadRecentPages, savePage, loadDocFolders, saveDocFolders, type PageDoc, type DocFolder } from '@/lib/pagesStore'
 import { requiresAuth, supabase } from '@/lib/supabase'
 import {
+  startGoogleOAuth, fetchGoogleCalendars, updateGoogleCalendar,
+  disconnectGoogle, syncGoogleNow,
+  type GoogleConnection, type GoogleCalAvailable,
+} from '@/lib/googleClient'
+import { BOARD_CONFIGS } from '@/lib/boards'
+import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
   IconDocument, IconFolder, IconFolderOpen, IconSort,
@@ -539,6 +545,9 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
           </div>
         </div>
 
+        {/* Google Calendar */}
+        {requiresAuth && <GoogleConnector />}
+
         {/* Set / change password */}
         {requiresAuth && <PasswordSetter />}
 
@@ -554,6 +563,156 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
         )}
       </div>
     </>
+  )
+}
+
+// ─── Google Calendar connector (in Settings popup) ───────────────────────────
+function GoogleConnector() {
+  const [loaded,      setLoaded]      = useState(false)
+  const [connections, setConnections] = useState<GoogleConnection[]>([])
+  const [available,   setAvailable]   = useState<GoogleCalAvailable[]>([])
+  const [busy,        setBusy]        = useState(false)
+  const [msg,         setMsg]         = useState<{ text: string; ok: boolean } | null>(null)
+
+  async function reload() {
+    const r = await fetchGoogleCalendars()
+    setConnections(r.connections)
+    setAvailable(r.available)
+    setLoaded(true)
+  }
+
+  useEffect(() => {
+    reload()
+    // Surface ?google=connected / ?google=error from the OAuth callback
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      const status = sp.get('google')
+      if (status === 'connected') {
+        setMsg({ text: 'Google Calendar verbonden — synchroniseren…', ok: true })
+        syncGoogleNow().then(() => reload())
+      } else if (status === 'error') {
+        setMsg({ text: `Verbinden mislukt: ${sp.get('msg') ?? ''}`, ok: false })
+      }
+      if (status) {
+        sp.delete('google'); sp.delete('msg'); sp.delete('board')
+        const q = sp.toString()
+        window.history.replaceState({}, '', window.location.pathname + (q ? '?' + q : ''))
+      }
+    }
+  }, [])
+
+  async function connect() {
+    setBusy(true); setMsg(null)
+    try { await startGoogleOAuth(null) }
+    catch (e) { setMsg({ text: String(e), ok: false }); setBusy(false) }
+  }
+
+  async function setBoard(calendarId: string, boardId: string) {
+    setBusy(true)
+    await updateGoogleCalendar(calendarId, { boardId: boardId || null })
+    await syncGoogleNow()
+    await reload()
+    setBusy(false)
+  }
+
+  async function setCalendar(oldCalendarId: string, newCalendarId: string) {
+    setBusy(true)
+    await updateGoogleCalendar(oldCalendarId, { newCalendarId })
+    await syncGoogleNow()
+    await reload()
+    setBusy(false)
+  }
+
+  async function disconnect(calendarId: string) {
+    if (!confirm('Verbinding met Google Calendar verbreken?')) return
+    setBusy(true)
+    await disconnectGoogle(calendarId)
+    await reload()
+    setBusy(false)
+  }
+
+  const boards = Object.values(BOARD_CONFIGS).map(b => ({ id: b.id, label: b.name }))
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        Google Calendar
+      </div>
+
+      {!loaded ? (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Laden…</div>
+      ) : connections.length === 0 ? (
+        <button onClick={connect} disabled={busy}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--bg-hover)',
+            color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500,
+            cursor: busy ? 'wait' : 'pointer', textAlign: 'left' }}>
+          Verbind Google Calendar
+          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            Trekt afspraken automatisch in een gekozen bord, leest enkel.
+          </span>
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {connections.map(c => (
+            <div key={c.calendarId} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-hover)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {c.calendarName ?? c.calendarId}
+              </div>
+
+              {available.length > 0 && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                  Kalender:
+                  <select value={c.calendarId} disabled={busy}
+                    onChange={e => setCalendar(c.calendarId, e.target.value)}
+                    style={{ flex: 1, padding: '5px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }}>
+                    {available.map(a => <option key={a.id} value={a.id}>{a.summary}{a.primary ? ' (primary)' : ''}</option>)}
+                  </select>
+                </label>
+              )}
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+                Bord:
+                <select value={c.boardId ?? ''} disabled={busy}
+                  onChange={e => setBoard(c.calendarId, e.target.value)}
+                  style={{ flex: 1, padding: '5px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }}>
+                  <option value="">— Geen —</option>
+                  {boards.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+                </select>
+              </label>
+
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={async () => { setBusy(true); await syncGoogleNow(); await reload(); setBusy(false) }} disabled={busy}
+                  style={{ flex: 1, padding: '6px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
+                  Sync nu
+                </button>
+                <button onClick={() => disconnect(c.calendarId)} disabled={busy}
+                  style={{ flex: 1, padding: '6px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--red)', fontSize: 11, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
+                  Ontkoppel
+                </button>
+              </div>
+              {c.lastSyncAt && (
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+                  Laatst gesynchroniseerd: {new Date(c.lastSyncAt).toLocaleString('nl-NL')}
+                </div>
+              )}
+            </div>
+          ))}
+          <button onClick={connect} disabled={busy}
+            style={{ padding: '7px', borderRadius: 7, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
+            + Extra Google account koppelen
+          </button>
+        </div>
+      )}
+
+      {msg && (
+        <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 6, fontSize: 12,
+          background: msg.ok ? 'rgba(0,200,117,0.12)' : 'rgba(196,69,58,0.12)',
+          color: msg.ok ? '#037f4c' : '#C4453A' }}>
+          {msg.text}
+        </div>
+      )}
+    </div>
   )
 }
 

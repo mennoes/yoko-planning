@@ -22,6 +22,7 @@ import {
   IconDownload, IconSort, IconChevronLeft, IconChevronRight, IconChevronsLeft, IconChevronsRight,
   IconPlay, IconStop, IconClose,
 } from '@/components/Icon'
+import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import type { BoardGroup } from '@/lib/boards'
 
@@ -161,6 +162,8 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
         endDate:   i.endDate   as string | null,
         estHours:  (i.estHours as number) ?? 0,
         status:    (i.status as string) === 'Done' ? 'done' : 'active',
+        source:        (i.source as 'manual' | 'google' | undefined),
+        externalLink:  (i.externalLink as string | undefined),
       } satisfies Project))
   )
 }
@@ -296,7 +299,10 @@ function DraggableBar({ project, left, width, colW, onDragMove, onDragEnd, onCli
   const didDrag = useRef(false)
   const dpx = 7 / colW
 
+  const isReadOnly = project.source === 'google'
+
   function startDrag(e: React.MouseEvent, mode: DragInfo['mode']) {
+    if (isReadOnly) return
     e.preventDefault(); e.stopPropagation()
     didDrag.current = false
     dragRef.current = { mode, startX: e.clientX, origStart: project.startDate, origEnd: project.endDate }
@@ -349,14 +355,16 @@ function DraggableBar({ project, left, width, colW, onDragMove, onDragEnd, onCli
         style={{ position: 'absolute', top: BAR_GAP, left: g.left + 2, width: g.width, height: BAR_H,
           background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
           overflow: 'hidden', fontSize: 10.5, fontWeight: 600, color: '#fff',
-          cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
+          cursor: isReadOnly ? 'pointer' : ghost ? 'grabbing' : 'grab', userSelect: 'none',
           boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
-          zIndex: ghost ? 1 : 'auto' }}>
+          zIndex: ghost ? 1 : 'auto' }}
+        title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
         <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
           style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
         </div>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4 }}>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>G</span>}
           {project.name}{project.group ? ` | ${project.group}` : ''}
         </span>
         <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'end') }}
@@ -466,9 +474,13 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 4 }}>{project.name}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}>
+              {rawItem?.source === 'google' && <GoogleBadge href={rawItem?.externalLink as string | undefined} size={15} />}
+              {project.name}
+            </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
               in → <span style={{ color, fontWeight: 600 }}>{project.board}</span>{project.group ? <> · {project.group}</> : null}
+              {rawItem?.source === 'google' && <span style={{ marginLeft: 8, color: '#a05400' }}>· Bewerk in Google Calendar</span>}
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}

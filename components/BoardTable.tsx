@@ -6,6 +6,7 @@ import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
+import { GoogleBadge }    from './GoogleBadge'
 
 // ─── Status opties ────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -662,7 +663,9 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderM
             </span>
           )}
 
-          {editName ? (
+          {item.source === 'google' && <GoogleBadge href={item.externalLink} />}
+
+          {editName && item.source !== 'google' ? (
             <input autoFocus value={nameDraft}
               onChange={e => setNameDraft(e.target.value)}
               onBlur={() => { onUpdate({ name: nameDraft }); setEditName(false) }}
@@ -672,8 +675,15 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderM
               }}
               style={{ ...editInput, flex: 1 }} />
           ) : (
-            <span onClick={() => { setNameDraft(item.name); setEditName(true) }}
-              style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+            <span
+              onClick={() => {
+                if (item.source === 'google') return
+                setNameDraft(item.name); setEditName(true)
+              }}
+              title={item.source === 'google' ? 'Bewerk dit item in Google Calendar' : undefined}
+              style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
+                cursor: item.source === 'google' ? 'default' : 'pointer',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
               {item.name}
             </span>
           )}
@@ -693,7 +703,7 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderM
               <button onClick={onMoveDown} disabled={isLast} title="Omlaag"
                 style={{ background: isLast ? 'transparent' : 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 4, color: isLast ? 'var(--text-muted)' : 'var(--text-primary)', cursor: isLast ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700, padding: '1px 4px', opacity: isLast ? 0.4 : 1 }}>↓</button>
             </>
-          ) : hover ? (
+          ) : hover && item.source !== 'google' ? (
             <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
           ) : null}
         </div>
