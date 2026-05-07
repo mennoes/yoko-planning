@@ -9,7 +9,8 @@ import pnpRaw            from '@/data/boards/pnp.json'
 import nederlandRaw      from '@/data/boards/nederland.json'
 import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
 import dienjaarRaw       from '@/data/boards/dienjaar.json'
-import { loadGroups, saveGroups, addDays } from '@/lib/boardStore'
+import { loadGroups, saveGroups, addDays, BOARD_NAMES } from '@/lib/boardStore'
+import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type TeamMember } from '@/lib/workload'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
@@ -34,7 +35,7 @@ const RAW: Record<string, { groups: unknown[] }> = {
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ViewSize  = 'compact' | 'large' | 'extra'
+type ViewSize  = 'compact' | 'large'
 type ZoomLevel = 'dag' | 'week' | 'maand'
 
 type Col = {
@@ -56,9 +57,8 @@ const HANDLE_W = 8
 
 // ─── View-size presets ────────────────────────────────────────────────────────
 function vc(vs: ViewSize) {
-  if (vs === 'extra') return { cs: 110, or: 48, hh: 140, av: 54 }
-  if (vs === 'large') return { cs: 78,  or: 35, hh: 110, av: 46 }
-  return                     { cs: 46,  or: 20, hh:  60, av: 32 }
+  if (vs === 'large') return { cs: 78, or: 35, hh: 110, av: 46 }
+  return                     { cs: 46, or: 20, hh:  60, av: 32 }
 }
 // Column widths per zoom
 const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 46, week: 104, maand: 120 }
@@ -468,6 +468,12 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     setNewEntry('')
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const isGoogle = rawItem?.source === 'google'
   function save() { if (!isGoogle) onUpdate(project, startDate || null, endDate || null, { estHours: parseFloat(estHours) || 0, notes, journal }) }
   function addEntry() {
@@ -624,6 +630,118 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   )
 }
 
+// ─── New item popup (planner → agenda) ───────────────────────────────────────
+function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
+  onClose: () => void
+  onCreate: (boardName: string, item: BoardItem) => void
+  defaultMemberId: string | null
+}) {
+  const team = teamData.members
+  const today = new Date().toISOString().slice(0, 10)
+  const [name,    setName]    = useState('')
+  const [board,   setBoard]   = useState<string>(BOARD_NAMES[0])
+  const [owner,   setOwner]   = useState<string>(defaultMemberId ?? team[0]?.id ?? '')
+  const [start,   setStart]   = useState<string>(today)
+  const [end,     setEnd]     = useState<string>(today)
+  const [hours,   setHours]   = useState<string>('1')
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { nameRef.current?.focus() }, [])
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  function save() {
+    if (!name.trim()) return
+    const item: BoardItem = {
+      id:        `it_${Date.now().toString(36)}`,
+      name:      name.trim(),
+      ownerIds:  owner ? [owner] : [],
+      status:    '',
+      startDate: start || null,
+      endDate:   end   || null,
+      deadline:  null,
+      estHours:  parseFloat(hours) || 0,
+      dagen:     0,
+    }
+    onCreate(board, item)
+    onClose()
+  }
+
+  return (
+    <>
+      <div onClick={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: 299, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} />
+      <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 300,
+        width: 'min(440px, 92vw)', background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Nieuw item</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--text-muted)', lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input ref={nameRef} type="text" placeholder="Naam"
+            value={name} onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') save() }}
+            style={popupInput} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <label style={popupLabel}>Agenda
+              <select value={board} onChange={e => setBoard(e.target.value)} style={popupSelect}>
+                {BOARD_NAMES.map(b => <option key={b} value={b}>{BOARD_CONFIGS[b]?.name ?? b}</option>)}
+              </select>
+            </label>
+            <label style={popupLabel}>Owner
+              <select value={owner} onChange={e => setOwner(e.target.value)} style={popupSelect}>
+                <option value="">— geen —</option>
+                {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px', gap: 8 }}>
+            <label style={popupLabel}>Start
+              <input type="date" value={start} onChange={e => setStart(e.target.value)} style={popupSelect} />
+            </label>
+            <label style={popupLabel}>Eind
+              <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={popupSelect} />
+            </label>
+            <label style={popupLabel}>Uren
+              <input type="number" step="0.5" min="0" value={hours} onChange={e => setHours(e.target.value)} style={popupSelect} />
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              Annuleer
+            </button>
+            <button onClick={save} disabled={!name.trim()}
+              style={{ flex: 2, padding: '9px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 13, fontWeight: 700, cursor: name.trim() ? 'pointer' : 'not-allowed', opacity: name.trim() ? 1 : 0.6 }}>
+              Toevoegen
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const popupInput: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box',
+}
+const popupLabel: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+  textTransform: 'uppercase', letterSpacing: '0.05em',
+}
+const popupSelect: React.CSSProperties = {
+  padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border)',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, alignItems: 'start', marginBottom: 14 }}>
@@ -664,6 +782,7 @@ function Popup({ title, onClose, children }: {
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function PlanningPage() {
   const { pushUndo }   = useUndo()
+  const { profile }    = useProfile()
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
   // Always start at this week (don't persist colOffset between sessions)
@@ -687,8 +806,15 @@ export default function PlanningPage() {
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
     const v = localStorage.getItem('planning-viewSize') as ViewSize
-    return (v === 'compact' || v === 'large' || v === 'extra') ? v : 'compact'
+    return (v === 'compact' || v === 'large') ? v : 'compact'
   })
+  const [colWZoom, setColWZoom] = useState<number>(() => {
+    if (typeof window === 'undefined') return 100
+    const v = parseFloat(localStorage.getItem('planning-colW-zoom') ?? '100')
+    return Number.isFinite(v) ? Math.max(50, Math.min(300, v)) : 100
+  })
+  useEffect(() => { localStorage.setItem('planning-colW-zoom', String(colWZoom)) }, [colWZoom])
+  const [newItemOpen, setNewItemOpen] = useState(false)
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     if (typeof window === 'undefined') return 'week'
     const v = localStorage.getItem('planning-zoom') as ZoomLevel
@@ -827,8 +953,8 @@ export default function PlanningPage() {
 
   // Compute view constants
   const { cs, or, hh, av } = vc(viewSize)
-  const weekW = viewSize === 'extra' ? 220 : viewSize === 'large' ? 140 : 104
-  const colW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : weekW
+  const baseColW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : (viewSize === 'large' ? 130 : 104)
+  const colW = Math.round(baseColW * (colWZoom / 100))
 
   // On first render (and when zoom changes back to colOffset 0), scroll the grid
   // so "today" is near the left of the viewport — past columns are reachable
@@ -1058,13 +1184,17 @@ export default function PlanningPage() {
               <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden" style={ghostBtn(editOrder)}>
                 <IconSort size={14} style={{ marginRight: 6 }} />{editOrder ? 'Klaar' : 'Sorteren'}
               </button>
+              <span style={separator} />
+              <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
+                + Nieuw item
+              </button>
 
               {/* View size segmented (desktop) */}
               <span style={separator} />
               <div style={segGroup}>
-                {(['compact', 'large', 'extra'] as ViewSize[]).map(v => (
+                {(['compact', 'large'] as ViewSize[]).map(v => (
                   <button key={v} onClick={() => setViewSize(v)} style={segBtn(viewSize === v)}>
-                    {v === 'compact' ? 'Compact' : v === 'large' ? 'Standaard' : 'Breed'}
+                    {v === 'compact' ? 'Compact' : 'Standaard'}
                   </button>
                 ))}
               </div>
@@ -1401,8 +1531,12 @@ export default function PlanningPage() {
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-                {expanded.size >= team.length ? '▾' : '▸'} alles
+                {expanded.size >= team.length ? '▾' : '▸'} Alles
               </button>
+              <input type="range" min={50} max={300} step={5}
+                value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
+                title={`Kolom-breedte ${colWZoom}%`}
+                style={{ width: 80, marginLeft: 8, accentColor: 'var(--accent)' }} />
             </div>
             {cols.map(col => {
               const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
@@ -1443,7 +1577,7 @@ export default function PlanningPage() {
                       )}
                       <MemberAvatar member={member} size={av} />
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: viewSize === 'extra' ? 15 : viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
+                        <div style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
                       </div>
                       {editOrder && (() => {
                         const realIdx  = team.findIndex(t => t.id === member.id)
@@ -1516,6 +1650,22 @@ export default function PlanningPage() {
       {detailProject && (
         <DetailPanel project={detailProject} allGroups={allGroups}
           onClose={() => setDetailProject(null)} onUpdate={handleDetailUpdate} />
+      )}
+
+      {newItemOpen && (
+        <NewItemPopup
+          defaultMemberId={profile?.memberId ?? null}
+          onClose={() => setNewItemOpen(false)}
+          onCreate={(boardName, item) => {
+            const cur = allGroups[boardName] ?? []
+            // Drop into the first group; create one if the board has no groups yet
+            const next = cur.length > 0
+              ? cur.map((g, idx) => idx === 0 ? { ...g, items: [...g.items, item] } : g)
+              : [{ id: `g_${Date.now().toString(36)}`, name: 'Nieuwe items', color: '#9aadbd', items: [item] }]
+            saveGroups(boardName, next)
+            setAllGroups(prev => ({ ...prev, [boardName]: next }))
+            logActivity('Item toegevoegd', item.name, `in ${boardName}`)
+          }} />
       )}
     </div>
   )
