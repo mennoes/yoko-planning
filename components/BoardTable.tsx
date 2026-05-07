@@ -1084,6 +1084,48 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
         </div>
       </div>
 
+      {/* Owner avatar strip — quick filter on people in this board */}
+      {allOwners.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+          {allOwners.map(id => {
+            const m = teamData.members.find(t => t.id === id)
+            if (!m) return null
+            const active = filterOwner === id
+            return (
+              <button key={id} onClick={() => setFilterOwner(active ? '' : id)} title={m.name}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '3px 9px 3px 3px', borderRadius: 999,
+                  border: `1.5px solid ${active ? m.color : 'var(--border-light)'}`,
+                  background: active ? m.color + '18' : 'var(--bg-card)',
+                  cursor: 'pointer', transition: 'all 0.12s',
+                }}>
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  background: m.color + '30', border: `1.5px solid ${m.color}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700, color: m.color, flexShrink: 0,
+                }}>
+                  {m.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                </span>
+                <span style={{
+                  fontSize: 12.5, fontWeight: active ? 700 : 500,
+                  color: active ? m.color : 'var(--text-secondary)',
+                }}>
+                  {m.name.split(' ')[0]}
+                </span>
+              </button>
+            )
+          })}
+          {filterOwner && (
+            <button onClick={() => setFilterOwner('')}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, fontWeight: 500, padding: '4px 8px' }}>
+              × wis filter
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Filter bar */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative' }}>

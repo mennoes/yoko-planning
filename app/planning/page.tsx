@@ -59,9 +59,10 @@ function vc(vs: ViewSize) {
     : { cs: 46, or: 20, hh:  60, av: 32 }
 }
 // Column widths per zoom
-const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 28, week: 104, maand: 120 }
+const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 46, week: 104, maand: 120 }
 // Column counts per zoom
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 90, week: 56, maand: 18 }
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 60, week: 56, maand: 18 }
+const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
 function getWeekCols(from: Date, count: number, colW: number): Col[] {
@@ -97,8 +98,8 @@ function getDayCols(from: Date, count: number, colW: number): Col[] {
     const ds = new Date(from); ds.setDate(from.getDate() + i); ds.setHours(0,0,0,0)
     const de = new Date(ds); de.setHours(23,59,59,999)
     cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: de,
-      label1: String(ds.getDate()),
-      label2: NL_MON[ds.getMonth()],
+      label1: NL_DAY[ds.getDay()],          // 'ma', 'di', ...
+      label2: String(ds.getDate()),         // '6', '7', ...
       widthPx: colW,
       isCurrent: ds.getTime() === today.getTime() })
   }
@@ -221,15 +222,20 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom }: {
   const [open, setOpen] = useState(false)
   const pct = capacity > 0 ? total / capacity : 0
 
-  // For day zoom: show a thin bar instead of a circle
+  // For day zoom: full-cell tinted block — much more readable than a tiny bar
   if (zoom === 'dag') {
-    const barH  = 6
-    const color = pct > 1 ? '#e2445c' : '#579bfc'
+    const baseColor = pct > 1 ? '#e2445c' : pct > 0.85 ? '#ff7b24' : '#579bfc'
+    // Opacity scales with workload — 0 invisible, 1.0 = visible, >1 = strong
+    const alpha = pct > 0 ? Math.min(0.15 + Math.min(pct, 1) * 0.45, 0.65) : 0
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', padding: '0 2px 4px' }}>
-        <div style={{ width: '100%', height: barH, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-          {pct > 0 && <div style={{ height: '100%', width: `${Math.min(pct, 1) * 100}%`, background: color, borderRadius: 3 }} />}
-        </div>
+      <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: pct > 0 ? `${baseColor}${Math.round(alpha * 255).toString(16).padStart(2, '0')}` : 'transparent',
+        borderRadius: 4 }}>
+        {total > 0 && (
+          <span style={{ fontSize: 11, fontWeight: 700, color: pct > 1 ? '#fff' : 'var(--text-primary)', textShadow: pct > 1 ? '0 0 2px rgba(0,0,0,0.4)' : 'none' }}>
+            {total >= 1 ? Math.round(total) : total.toFixed(1)}
+          </span>
+        )}
       </div>
     )
   }
@@ -1272,14 +1278,19 @@ export default function PlanningPage() {
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-light)' }}>
             <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
-            {cols.map(col => (
+            {cols.map(col => {
+              const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
+              const weekend = dow === 0 || dow === 6
+              const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : stickyBg
+              return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
                 borderLeft: '1px solid var(--border-light)',
-                background: col.isCurrent ? 'var(--accent-light)' : stickyBg }}>
-                <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--accent)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>{col.label1}</div>
-                {zoom !== 'dag' && <div style={{ fontSize: 9.5, color: 'var(--text-muted)', marginTop: 2, letterSpacing: '0.04em' }}>{col.label2}</div>}
+                background: headerBg }}>
+                <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--accent)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
+                <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 400, color: col.isCurrent ? 'var(--accent)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Member rows (filtered by people-picker if active) */}
@@ -1336,9 +1347,11 @@ export default function PlanningPage() {
                   {cols.map(col => {
                     const contribs = memberHoursInCol(effectiveProjects, member.id, col)
                     const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+                    const dow      = zoom === 'dag' ? col.rangeStart.getDay() : -1
+                    const weekend  = dow === 0 || dow === 6
                     return (
                       <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-light)', padding: 2,
-                        background: col.isCurrent ? 'var(--accent-light)' : 'transparent', position: 'relative' }}>
+                        background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent', position: 'relative' }}>
                         <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} />
                       </div>
                     )
