@@ -13,7 +13,7 @@ import { loadRecentPages, savePage, loadDocFolders, saveDocFolders, type PageDoc
 import { requiresAuth, supabase } from '@/lib/supabase'
 import {
   startGoogleOAuth, fetchGoogleCalendars, updateGoogleCalendar,
-  disconnectGoogle, syncGoogleNow,
+  disconnectGoogle, syncGoogleNow, cleanupGoogleDuplicates,
   type GoogleConnection, type GoogleCalAvailable,
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
@@ -758,6 +758,17 @@ function GoogleConnector() {
               )}
             </div>
           ))}
+          <button onClick={async () => {
+              if (!confirm('Verwijder alle handmatige rijen die dezelfde naam hebben als een Google-event? (Bijv. duplicaten van vóór de Google koppeling.)')) return
+              setBusy(true)
+              const r = await cleanupGoogleDuplicates()
+              await Promise.all((connections.map(c => c.boardId).filter(Boolean) as string[]).map(b => import('@/lib/boardStore').then(m => m.pullBoardFromRemote(b))))
+              setMsg(r ? { text: `${r.deleted} dubbelen verwijderd`, ok: true } : { text: 'Opschonen mislukt', ok: false })
+              setBusy(false)
+            }} disabled={busy}
+            style={{ padding: '7px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--red)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
+            🧹 Opschonen — verwijder dubbelen
+          </button>
           <button onClick={connect} disabled={busy}
             style={{ padding: '7px', borderRadius: 7, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
             + Extra Google account koppelen
