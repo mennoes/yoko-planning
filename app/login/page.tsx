@@ -4,22 +4,32 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
+function readNext(): string {
+  if (typeof window === 'undefined') return '/'
+  const p = new URLSearchParams(window.location.search).get('next')
+  if (!p) return '/'
+  return p.startsWith('/') && !p.startsWith('//') ? p : '/'
+}
+
 type Mode = 'magic' | 'password'
 
 export default function LoginPage() {
   const router = useRouter()
+  const [safeNext, setSafeNext] = useState('/')
 
-  // If already signed in, hop straight to home
+  useEffect(() => { setSafeNext(readNext()) }, [])
+
+  // If already signed in, hop to the page they were trying to reach
   useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) router.replace('/')
+      if (data.session?.user) router.replace(safeNext)
     })
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) router.replace('/')
+      if (event === 'SIGNED_IN' && session?.user) router.replace(safeNext)
     })
     return () => data.subscription.unsubscribe()
-  }, [router])
+  }, [router, safeNext])
 
   const [mode,     setMode]     = useState<Mode>('password')
   const [email,    setEmail]    = useState('')
@@ -45,7 +55,7 @@ export default function LoginPage() {
     setLoading(false)
     if (error) setMessage({ text: error.message, ok: false })
     else if (isNew) setMessage({ text: 'Account aangemaakt! Check je e-mail om te bevestigen.', ok: true })
-    else window.location.href = '/'
+    else window.location.href = safeNext
   }
 
   async function handleReset() {

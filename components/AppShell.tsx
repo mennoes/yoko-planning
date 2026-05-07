@@ -30,7 +30,7 @@ const BOARD_INITIALS: Record<string, { groups: unknown[] }> = {
 }
 
 function Inner({ children }: { children: ReactNode }) {
-  const { needsSetup, editOpen, isAuthenticated } = useProfile()
+  const { needsSetup, editOpen, isAuthenticated, authChecked } = useProfile()
   const pathname = usePathname()
   const router   = useRouter()
   const isMobile = useIsMobile()
@@ -38,10 +38,14 @@ function Inner({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
+    // Wait for the initial session check before redirecting — otherwise a hard
+    // refresh on a deep link bounces to /login and back.
+    if (!authChecked) return
     if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share') && !pathname.startsWith('/auth')) {
-      router.replace('/login')
+      const next = pathname + (typeof window !== 'undefined' ? window.location.search : '')
+      router.replace(`/login?next=${encodeURIComponent(next)}`)
     }
-  }, [isAuthenticated, pathname, router])
+  }, [authChecked, isAuthenticated, pathname, router])
 
   useEffect(() => { setDrawerOpen(false); setSearchOpen(false) }, [pathname])
 
@@ -95,8 +99,8 @@ function Inner({ children }: { children: ReactNode }) {
     )
   }
 
-  // Wacht op auth redirect
-  if (requiresAuth && !isAuthenticated) return null
+  // Wacht op auth check — voorkomt flash van /login op refresh
+  if (requiresAuth && (!authChecked || !isAuthenticated)) return null
 
   return (
     <>
