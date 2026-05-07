@@ -664,18 +664,18 @@ export default function Sidebar({
                     onClick={e => { if (editOrder) e.preventDefault() }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 11, flex: 1,
-                      padding: '10px 12px', borderRadius: 8,
-                      color: active ? 'var(--accent)' : 'var(--text-primary)',
+                      padding: '11px 12px', borderRadius: 8,
+                      color: '#000',
                       background: active ? 'var(--accent-light)' : 'transparent',
-                      textDecoration: 'none', fontSize: 17, fontWeight: active ? 700 : 600,
-                      letterSpacing: '-0.01em',
+                      textDecoration: 'none', fontSize: 18, fontWeight: active ? 800 : 600,
+                      letterSpacing: '-0.02em',
                       borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
                       paddingLeft: active ? 9 : 12,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
-                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={21} /> : null })()}
+                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={22} /> : null })()}
                     <span>{item.label}</span>
                   </Link>
                 )}
