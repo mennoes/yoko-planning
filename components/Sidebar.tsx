@@ -42,8 +42,12 @@ const THEMES: { value: Theme; Icon: React.ComponentType<{ size?: number }>; labe
   { value: 'light', Icon: IconSun,  label: 'Licht'  },
 ]
 function applyTheme(t: Theme) {
-  if (t === 'auto') document.documentElement.removeAttribute('data-theme')
-  else document.documentElement.setAttribute('data-theme', t)
+  if (t === 'auto') {
+    const h = new Date().getHours()
+    document.documentElement.setAttribute('data-theme', (h >= 7 && h < 19) ? 'light' : 'dark')
+  } else {
+    document.documentElement.setAttribute('data-theme', t)
+  }
 }
 
 // ─── Generic drag-to-reorder ──────────────────────────────────────────────────
