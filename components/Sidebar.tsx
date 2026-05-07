@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useProfile } from './ProfileContext'
 import {
   loadSections, saveSections,
@@ -485,7 +486,8 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
   setTheme: (t: Theme) => void
   signOut: () => void
 }) {
-  return (
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <>
       <div onClick={onClose}
         style={{ position: 'fixed', inset: 0, zIndex: 10000,
@@ -564,7 +566,8 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
           </button>
         )}
       </div>
-    </>
+    </>,
+    document.body
   )
 }
 
