@@ -8,7 +8,7 @@ import {
   loadSections, saveSections,
   type NavItem, type SidebarSection,
 } from '@/lib/navStore'
-import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
+import { loadRecentPages, savePage, loadDocFolders, saveDocFolders, type PageDoc, type DocFolder } from '@/lib/pagesStore'
 import { requiresAuth } from '@/lib/supabase'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
@@ -63,12 +63,85 @@ function useReorder<T>(items: T[], setItems: (items: T[]) => void) {
 }
 
 // ─── Documenten / pages section (dynamic from pagesStore) ────────────────────
-function PagesSectionItems({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function PageLink({ p, active }: { p: PageDoc; active: boolean }) {
+  return (
+    <Link href={`/pages/${p.id}`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '6px 10px 6px 28px',
+        borderRadius: 6, marginBottom: 1,
+        color: 'var(--text-primary)',
+        background: active ? 'var(--bg-hover)' : 'transparent',
+        textDecoration: 'none', fontSize: 14, fontWeight: active ? 600 : 500, minWidth: 0,
+      }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+    >
+      <span style={{ fontSize: 13, flexShrink: 0 }}>{p.emoji || '📄'}</span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {p.title || 'Naamloos'}
+      </span>
+    </Link>
+  )
+}
+
+function DocSubfolder({ folder, pages, pathname, onAddDoc, onRename, onDelete }: {
+  folder: DocFolder; pages: PageDoc[]; pathname: string
+  onAddDoc: (folderId: string) => void
+  onRename: (folderId: string, name: string) => void
+  onDelete: (folderId: string) => void
+}) {
+  const [open, setOpen] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(folder.name)
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 14px', cursor: 'pointer' }}
+        onClick={e => { if ((e.target as HTMLElement).closest('button,input')) return; setOpen(o => !o) }}
+        onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.subf-act').forEach(b => (b.style.opacity = '1')) }}
+        onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.subf-act').forEach(b => (b.style.opacity = '0')) }}>
+        <IconFolder size={13} style={{ color: 'var(--text-muted)' }} />
+        {editing ? (
+          <input autoFocus value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => { onRename(folder.id, draft.trim() || folder.name); setEditing(false) }}
+            onKeyDown={e => { if (e.key === 'Enter') { onRename(folder.id, draft.trim() || folder.name); setEditing(false) } if (e.key === 'Escape') { setDraft(folder.name); setEditing(false) } }}
+            style={{ background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 6px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', flex: 1, minWidth: 0 }} />
+        ) : (
+          <span onDoubleClick={() => { setDraft(folder.name); setEditing(true) }}
+            style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {folder.name}
+          </span>
+        )}
+        <button className="subf-act" onClick={e => { e.stopPropagation(); onAddDoc(folder.id) }} title="Document hierin toevoegen"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 3px', opacity: 0, flexShrink: 0 }}>+</button>
+        <button className="subf-act" onClick={e => { e.stopPropagation(); if (confirm(`Map "${folder.name}" verwijderen?`)) onDelete(folder.id) }} title="Map verwijderen"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, padding: '0 3px', opacity: 0, flexShrink: 0 }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #C9483D)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
+      </div>
+      {open && (
+        <div>
+          {pages.length === 0 ? (
+            <div style={{ padding: '4px 10px 4px 28px', fontSize: 11.5, color: 'var(--text-muted)', fontStyle: 'italic' }}>Leeg</div>
+          ) : pages.map(p => (
+            <PageLink key={p.id} p={p} active={pathname === `/pages/${p.id}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PagesSectionItems({ pathname }: { pathname: string }) {
   const router = useRouter()
   const [pages, setPages] = useState<PageDoc[]>([])
+  const [folders, setFolders] = useState<DocFolder[]>([])
+  const [addingFolder, setAddingFolder] = useState(false)
+  const [folderDraft, setFolderDraft] = useState('')
 
   useEffect(() => {
-    function refresh() { setPages(loadRecentPages()) }
+    function refresh() { setPages(loadRecentPages()); setFolders(loadDocFolders()) }
     refresh()
     window.addEventListener('storage', refresh)
     window.addEventListener('yoko-pages-update', refresh)
@@ -78,50 +151,84 @@ function PagesSectionItems({ pathname, onNavigate }: { pathname: string; onNavig
     }
   }, [])
 
-  function createNew() {
-    const id   = Date.now().toString()
-    onNavigate?.()
+  function createNewIn(folderId: string | null) {
+    const id  = Date.now().toString()
+    const now = new Date().toISOString()
+    savePage({ id, title: '', content: '', emoji: '📄', createdAt: now, updatedAt: now, folderId })
     router.push(`/pages/${id}`)
   }
+  function addFolder() {
+    const name = folderDraft.trim()
+    if (!name) { setAddingFolder(false); return }
+    const next: DocFolder = { id: Date.now().toString(), name }
+    saveDocFolders([...folders, next])
+    setFolderDraft(''); setAddingFolder(false)
+  }
+  function renameFolder(id: string, name: string) {
+    saveDocFolders(folders.map(f => f.id === id ? { ...f, name } : f))
+  }
+  function deleteFolder(id: string) {
+    // Move pages back to root before removing folder
+    for (const p of pages.filter(p => p.folderId === id)) {
+      savePage({ ...p, folderId: null })
+    }
+    saveDocFolders(folders.filter(f => f.id !== id))
+  }
+
+  const looseDocs = pages.filter(p => !p.folderId)
 
   return (
-    <div style={{ marginTop: 2 }}>
-      {pages.map(p => {
-        const href   = `/pages/${p.id}`
-        const active = pathname === href
-        return (
-          <Link key={p.id} href={href}
+    <div style={{ marginTop: 2, paddingBottom: 6 }}>
+      {folders.map(f => (
+        <DocSubfolder key={f.id} folder={f}
+          pages={pages.filter(p => p.folderId === f.id)}
+          pathname={pathname}
+          onAddDoc={createNewIn}
+          onRename={renameFolder}
+          onDelete={deleteFolder} />
+      ))}
+
+      {looseDocs.length > 0 && (
+        <div style={{ marginTop: folders.length > 0 ? 6 : 0 }}>
+          {looseDocs.map(p => (
+            <PageLink key={p.id} p={p} active={pathname === `/pages/${p.id}`} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 6, paddingLeft: 14, paddingRight: 10 }}>
+        <button onClick={() => createNewIn(null)}
+          style={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '7px 8px', borderRadius: 6,
+            background: 'transparent', border: '1px dashed var(--border)',
+            color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderStyle = 'solid' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderStyle = 'dashed' }}>
+          <IconDocument size={13} /> + Document
+        </button>
+        {addingFolder ? (
+          <input autoFocus value={folderDraft}
+            onChange={e => setFolderDraft(e.target.value)}
+            onBlur={addFolder}
+            onKeyDown={e => { if (e.key === 'Enter') addFolder(); if (e.key === 'Escape') { setFolderDraft(''); setAddingFolder(false) } }}
+            placeholder="Mapnaam…"
+            style={{ flex: 1, background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 6, padding: '6px 9px', color: 'var(--text-primary)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }} />
+        ) : (
+          <button onClick={() => { setFolderDraft(''); setAddingFolder(true) }}
             style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '7px 10px 7px 18px',
-              borderRadius: 6, marginBottom: 1,
-              color: 'var(--text-primary)',
-              background: active ? 'var(--bg-hover)' : 'transparent',
-              textDecoration: 'none', fontSize: 14.5, fontWeight: active ? 600 : 500, minWidth: 0,
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '7px 8px', borderRadius: 6,
+              background: 'transparent', border: '1px dashed var(--border)',
+              color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
             }}
-            onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
-            onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
-          >
-            <span style={{ fontSize: 14, flexShrink: 0 }}>{p.emoji || '📄'}</span>
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {p.title || 'Naamloos'}
-            </span>
-          </Link>
-        )
-      })}
-      <button onClick={createNew}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 10px 8px 18px', borderRadius: 6, marginTop: 4,
-          background: 'transparent', border: '1px dashed var(--border)',
-          color: 'var(--text-secondary)', fontSize: 13.5, fontWeight: 500,
-          cursor: 'pointer', textAlign: 'left',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderStyle = 'solid' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderStyle = 'dashed' }}>
-        <IconDocument size={15} />
-        + Nieuw document
-      </button>
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderStyle = 'solid' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderStyle = 'dashed' }}>
+            <IconFolder size={13} /> + Submap
+          </button>
+        )}
+      </div>
     </div>
   )
 }

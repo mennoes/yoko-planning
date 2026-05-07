@@ -65,6 +65,7 @@ export default function PageEditor() {
     const updated: PageDoc = {
       id, title: titleVal, content: contentHtml, emoji: emojiVal,
       createdAt: doc?.createdAt ?? now, updatedAt: now,
+      folderId: doc?.folderId ?? null,
     }
     savePage(updated)
     setDoc(updated)
