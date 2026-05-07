@@ -14,12 +14,13 @@ type Ctx = {
   closeEdit:  () => void
   signOut:    () => void
   isAuthenticated: boolean
+  authChecked: boolean
 }
 
 const ProfileCtx = createContext<Ctx>({
   profile: null, setProfile: () => {}, needsSetup: false,
   openEdit: () => {}, editOpen: false, closeEdit: () => {},
-  signOut: () => {}, isAuthenticated: false,
+  signOut: () => {}, isAuthenticated: false, authChecked: false,
 })
 
 function dbToProfile(db: DbProfile): UserProfile {
@@ -122,6 +123,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       closeEdit:  () => setEditOpen(false),
       signOut,
       isAuthenticated,
+      authChecked: loaded,
     }}>
       {children}
     </ProfileCtx.Provider>
