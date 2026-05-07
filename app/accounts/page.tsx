@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { IconKey } from '@/components/Icon'
 import initialData from '@/data/accounts.json'
 
 type Account = {
@@ -54,8 +55,8 @@ export default function AccountsPage() {
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 32px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          🔑 Accounts
+        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconKey size={28} />Accounts
         </h1>
         <button
           onClick={() => setShowPasswords(!showPasswords)}

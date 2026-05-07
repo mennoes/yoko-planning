@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { IconSearch } from './Icon'
 import { loadRecentPages } from '@/lib/pagesStore'
 import { loadGroups, BOARD_NAMES } from '@/lib/boardStore'
 import yokoRaw       from '@/data/boards/yoko.json'
@@ -126,7 +127,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
         boxShadow: '0 18px 48px rgba(0,0,0,0.4)', overflow: 'hidden',
       }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 18, color: 'var(--text-muted)' }}>🔍</span>
+          <IconSearch size={18} style={{ color: 'var(--text-muted)' }} />
           <input autoFocus value={query} onChange={e => setQuery(e.target.value)} onKeyDown={onKey}
             placeholder="Zoek of typ om een todo toe te voegen…"
             style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 16 }} />

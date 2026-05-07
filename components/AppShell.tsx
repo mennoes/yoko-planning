@@ -10,6 +10,7 @@ import Sidebar from './Sidebar'
 import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
+import { IconMenu, IconSearch } from './Icon'
 import { hasSupabase } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 
@@ -59,30 +60,28 @@ function Inner({ children }: { children: ReactNode }) {
       )}
 
       {isMobile && !drawerOpen && (
-        <>
-          <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
-            style={{
-              position: 'fixed', top: 12, left: 12, zIndex: 70,
-              width: 40, height: 40, borderRadius: 8,
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              color: 'var(--text-primary)', fontSize: 18, padding: 0,
-            }}>
-            ☰
-          </button>
+        <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6 }}>
           <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
             style={{
-              position: 'fixed', top: 12, right: 12, zIndex: 70,
-              width: 40, height: 40, borderRadius: 8,
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              width: 38, height: 38, borderRadius: 9,
+              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              color: 'var(--text-primary)', fontSize: 16, padding: 0,
+              cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+              color: 'var(--text-primary)', padding: 0,
             }}>
-            🔍
+            <IconSearch size={18} />
           </button>
-        </>
+          <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
+            style={{
+              width: 38, height: 38, borderRadius: 9,
+              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+              color: 'var(--text-primary)', padding: 0,
+            }}>
+            <IconMenu size={20} />
+          </button>
+        </div>
       )}
 
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
