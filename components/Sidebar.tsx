@@ -15,6 +15,7 @@ import {
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
   IconDocument, IconFolder, IconFolderOpen, IconSort,
 } from './Icon'
+import { UserAvatar } from './UserAvatar'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -746,16 +747,10 @@ export default function Sidebar({
           </Link>
           {profile?.memberId && (
             <Link href={`/profile/${profile.memberId}`} title="Mijn profiel"
-              style={{ display: 'flex', flexShrink: 0, textDecoration: 'none', borderRadius: '50%' }}
+              style={{ display: 'flex', flexShrink: 0, textDecoration: 'none' }}
               onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
               onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
-              {profile.photo ? (
-                <img src={profile.photo} alt={profile.name} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{ width: 32, height: 32, borderRadius: '50%', background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
-                  {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
-                </span>
-              )}
+              <UserAvatar memberId={profile.memberId} size={32} />
             </Link>
           )}
         </div>
@@ -883,13 +878,7 @@ export default function Sidebar({
               style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left', textDecoration: 'none' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-              {profile?.photo ? (
-                <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
-              ) : (
-                <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
-                  {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
-                </span>
-              )}
+              <UserAvatar memberId={profile.memberId} size={32} />
               <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {profile.name}
               </span>
