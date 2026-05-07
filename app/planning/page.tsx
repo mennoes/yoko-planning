@@ -34,7 +34,7 @@ const RAW: Record<string, { groups: unknown[] }> = {
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type ViewSize  = 'compact' | 'large'
+type ViewSize  = 'compact' | 'large' | 'extra'
 type ZoomLevel = 'dag' | 'week' | 'maand'
 
 type Col = {
@@ -56,9 +56,9 @@ const HANDLE_W = 8
 
 // ─── View-size presets ────────────────────────────────────────────────────────
 function vc(vs: ViewSize) {
-  return vs === 'large'
-    ? { cs: 78, or: 35, hh: 110, av: 46 }
-    : { cs: 46, or: 20, hh:  60, av: 32 }
+  if (vs === 'extra') return { cs: 110, or: 48, hh: 140, av: 54 }
+  if (vs === 'large') return { cs: 78,  or: 35, hh: 110, av: 46 }
+  return                     { cs: 46,  or: 20, hh:  60, av: 32 }
 }
 // Column widths per zoom
 const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 46, week: 104, maand: 120 }
@@ -685,7 +685,7 @@ export default function PlanningPage() {
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
     const v = localStorage.getItem('planning-viewSize') as ViewSize
-    return (v === 'compact' || v === 'large') ? v : 'compact'
+    return (v === 'compact' || v === 'large' || v === 'extra') ? v : 'compact'
   })
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     if (typeof window === 'undefined') return 'week'
@@ -824,7 +824,8 @@ export default function PlanningPage() {
 
   // Compute view constants
   const { cs, or, hh, av } = vc(viewSize)
-  const colW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : (viewSize === 'large' ? 130 : 104)
+  const weekW = viewSize === 'extra' ? 220 : viewSize === 'large' ? 140 : 104
+  const colW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : weekW
 
   // Compute from-date based on zoom and offset.
   // Default (offset 0): today / this week / this month at the LEFT edge.
@@ -1045,9 +1046,9 @@ export default function PlanningPage() {
               {/* View size segmented (desktop) */}
               <span style={separator} />
               <div style={segGroup}>
-                {(['compact', 'large'] as ViewSize[]).map(v => (
+                {(['compact', 'large', 'extra'] as ViewSize[]).map(v => (
                   <button key={v} onClick={() => setViewSize(v)} style={segBtn(viewSize === v)}>
-                    {v === 'compact' ? 'Compact' : 'Standaard'}
+                    {v === 'compact' ? 'Compact' : v === 'large' ? 'Standaard' : 'Breed'}
                   </button>
                 ))}
               </div>
@@ -1426,7 +1427,7 @@ export default function PlanningPage() {
                       )}
                       <MemberAvatar member={member} size={av} />
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
+                        <div style={{ fontSize: viewSize === 'extra' ? 15 : viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
                       </div>
                       {editOrder && (() => {
                         const realIdx  = team.findIndex(t => t.id === member.id)
