@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/components/ProfileContext'
-import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconCheckList, IconHourglass, IconDocument } from '@/components/Icon'
+import { UserAvatar } from '@/components/UserAvatar'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
@@ -97,7 +97,6 @@ const cardHeader: React.CSSProperties = {
 
 export default function HomePage() {
   const { profile }    = useProfile()
-  const { getPhoto }   = useTeamPhotos()
   const { showMember } = useMemberPopup()
   const router         = useRouter()
   const isMobile       = useIsMobile()
@@ -112,7 +111,6 @@ export default function HomePage() {
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
 
   const memberId = profile?.memberId ?? ''
-  const member   = teamData.members.find(m => m.id === memberId)
 
   useEffect(() => {
     setRecentPages(loadRecentPages().slice(0, 9))
@@ -177,7 +175,6 @@ export default function HomePage() {
   const doneTodos = myTodos.filter(t => t.done)
   const pct       = weekCapacity > 0 ? Math.min(weekHours / weekCapacity, 1) : 0
   const barColor  = pct > 0.9 ? '#e2445c' : pct > 0.6 ? 'var(--accent)' : '#00c875'
-  const photo     = memberId ? (profile?.photo ?? getPhoto(memberId) ?? null) : null
 
   if (!hydrated) return null
 
@@ -315,15 +312,8 @@ export default function HomePage() {
       {/* ── Greeting ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18, marginBottom: isMobile ? 18 : 40 }}>
         {memberId && (
-          photo ? (
-            <img src={photo} alt="" onClick={e => showMember(memberId, e)}
-              style={{ width: isMobile ? 48 : 60, height: isMobile ? 48 : 60, borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', flexShrink: 0 }} />
-          ) : (
-            <div onClick={e => showMember(memberId, e)}
-              style={{ width: isMobile ? 48 : 60, height: isMobile ? 48 : 60, borderRadius: '50%', background: (member?.color ?? '#888') + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 18 : 22, fontWeight: 700, color: member?.color ?? '#888', cursor: 'pointer', flexShrink: 0 }}>
-              {firstName.charAt(0)}
-            </div>
-          )
+          <UserAvatar memberId={memberId} size={isMobile ? 48 : 60}
+            onClick={e => showMember(memberId, e)} />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
