@@ -16,6 +16,7 @@ import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
 import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
+// (BOARD_NAMES re-used by the auto-sync tick below)
 import { onAuthChange, isSyncing } from '@/lib/sync'
 import { syncGoogleNow } from '@/lib/googleClient'
 import yokoRaw       from '@/data/boards/yoko.json'
@@ -96,7 +97,11 @@ function Inner({ children }: { children: ReactNode }) {
     async function tick() {
       if (cancelled) return
       const syncing = await isSyncing()
-      if (syncing) await syncGoogleNow()
+      if (!syncing) return
+      await syncGoogleNow()
+      // Defensive force-pull — realtime can drop events, this guarantees the
+      // local cache reflects whatever the sync just wrote.
+      await Promise.all(BOARD_NAMES.map(b => pullBoardFromRemote(b)))
     }
     tick()
     const id = setInterval(tick, 5 * 60 * 1000)
@@ -156,12 +161,41 @@ function Inner({ children }: { children: ReactNode }) {
 
       <main style={{
         flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,
-        width: isMobile ? '100%' : undefined,
+        width: isMobile ? '100%' : undefined, position: 'relative',
       }}>
+        {!isMobile && <BackButton pathname={pathname} />}
         {children}
       </main>
       {(needsSetup || editOpen) && <ProfileSetup />}
     </>
+  )
+}
+
+// Top-level routes have their own sidebar entry — no back button needed.
+const TOP_LEVEL_ROUTES = new Set(['/', '/planning', '/todos', '/team', '/accounts', '/activity', '/kantoor'])
+
+function BackButton({ pathname }: { pathname: string }) {
+  const router = useRouter()
+  const isDeep =
+    !TOP_LEVEL_ROUTES.has(pathname) &&
+    !pathname.startsWith('/projects') &&  // projects appear in sidebar
+    pathname !== '/'
+  if (!isDeep) return null
+  return (
+    <button onClick={() => router.back()} title="Terug"
+      style={{
+        position: 'absolute', top: 14, left: 14, zIndex: 30,
+        width: 36, height: 36, borderRadius: 9,
+        background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        color: 'var(--text-primary)', padding: 0,
+      }}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12" />
+        <polyline points="12 19 5 12 12 5" />
+      </svg>
+    </button>
   )
 }
 

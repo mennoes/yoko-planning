@@ -307,7 +307,7 @@ const EDITABLE_FIELDS: FieldDef[] = [
   { key: 'pronouns',          label: 'Voornaamwoorden', type: 'text' },
   { key: 'languages',         label: 'Talen',           type: 'text' },
   // Beschikbaarheid
-  { key: 'days_off',          label: 'Werkdagen vrij',  type: 'days' },
+  { key: 'days_off',          label: 'Vrije dagen',     type: 'days' },
   { key: 'vacation_until',    label: 'Vakantie tot',    type: 'date' },
   // Nood
   { key: 'emergency_contact', label: 'Noodcontact',     type: 'text' },
@@ -345,7 +345,9 @@ function EditableValue({ field, data, onSave }: {
   if (field.type === 'days') {
     const set = new Set<string>(Array.isArray(raw) ? (raw as string[]) : [])
     return (
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Selecteer dagen waarop je <strong>niet</strong> werkt.</div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {(['mon','tue','wed','thu','fri','sat','sun'] as const).map(d => {
           const on = set.has(d)
           return (
@@ -362,6 +364,7 @@ function EditableValue({ field, data, onSave }: {
             </button>
           )
         })}
+        </div>
       </div>
     )
   }
