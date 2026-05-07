@@ -19,7 +19,8 @@ import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
 import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, type Project } from '@/lib/workload'
-import type { BoardGroup } from '@/lib/boards'
+import { supabase } from '@/lib/supabase'
+import type { BoardGroup, BoardItem } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
   yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw, vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
@@ -27,8 +28,19 @@ const RAW: Record<string, { groups: unknown[] }> = {
 
 type TodoItem = { id: string; text: string; done: boolean }
 
-type SectionId = 'taken' | 'werkdruk' | 'documenten' | 'paginas'
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'paginas', 'documenten']
+type SectionId = 'taken' | 'werkdruk' | 'team' | 'deadlines' | 'overload' | 'documenten' | 'paginas'
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload', 'paginas', 'documenten']
+
+type RemoteProfile = {
+  member_id:       string | null
+  name:            string | null
+  vacation_until:  string | null
+  days_off:        string[] | null
+  weekly_capacity: number | null
+}
+
+const NL_DAY_CODES = ['sun','mon','tue','wed','thu','fri','sat']
+const DAY_NL: Record<string, string> = { mon: 'maandag', tue: 'dinsdag', wed: 'woensdag', thu: 'donderdag', fri: 'vrijdag', sat: 'zaterdag', sun: 'zondag' }
 
 const QUICK_LINKS: { groups: { name: string; items: { label: string; href: string; emoji: string }[] }[] } = {
   groups: [
@@ -109,6 +121,9 @@ export default function HomePage() {
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
+  const [profilesById, setProfilesById] = useState<Record<string, RemoteProfile>>({})
+  const [allProjects,  setAllProjects]  = useState<Project[]>([])
+  const [deadlineItems, setDeadlineItems] = useState<{ board: string; item: BoardItem }[]>([])
 
   const memberId = profile?.memberId ?? ''
 
@@ -119,15 +134,29 @@ export default function HomePage() {
     const section = todosData.sections.find(s => s.id === memberId)
     if (section) setMyTodos(section.items as TodoItem[])
 
-    // Workload this week
-    if (memberId) {
-      const allProjects: Project[] = []
-      for (const [name, raw] of Object.entries(RAW)) {
-        const groups = loadGroups(name, raw.groups as BoardGroup[])
-        allProjects.push(...groupsToProjects(name, groups))
+    // Load all boards once for team status / deadlines / workload widgets
+    const projectList: Project[] = []
+    const allDeadlines: { board: string; item: BoardItem }[] = []
+    const now = Date.now(); const weekAhead = now + 7 * 86400000
+    for (const [name, raw] of Object.entries(RAW)) {
+      const groups = loadGroups(name, raw.groups as BoardGroup[])
+      projectList.push(...groupsToProjects(name, groups))
+      for (const g of groups) for (const item of g.items) {
+        if (!item.deadline) continue
+        const dl = new Date(item.deadline as string).getTime()
+        if (dl >= now - 86400000 && dl <= weekAhead) {
+          allDeadlines.push({ board: name, item })
+        }
       }
+    }
+    setAllProjects(projectList)
+    allDeadlines.sort((a, b) => new Date(a.item.deadline as string).getTime() - new Date(b.item.deadline as string).getTime())
+    setDeadlineItems(allDeadlines)
+
+    // Workload this week (own)
+    if (memberId) {
       const week    = getWeekStart(new Date())
-      const contribs = memberContributions(allProjects, memberId, week)
+      const contribs = memberContributions(projectList, memberId, week)
       setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
       setWeekItems(contribs.map(c => ({ name: c.project.name, board: c.project.board, hours: c.hours })))
     }
@@ -147,6 +176,19 @@ export default function HomePage() {
 
     setHydrated(true)
   }, [memberId])
+
+  // Pull all member profiles for team-status / vacation widgets
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    supabase.from('profiles').select('member_id, name, vacation_until, days_off, weekly_capacity').then(({ data }) => {
+      if (cancelled || !data) return
+      const map: Record<string, RemoteProfile> = {}
+      for (const r of data as RemoteProfile[]) { if (r.member_id) map[r.member_id] = r }
+      setProfilesById(map)
+    })
+    return () => { cancelled = true }
+  }, [])
 
   function moveSection(id: SectionId, dir: -1 | 1) {
     setSectionOrder(prev => {
@@ -177,6 +219,39 @@ export default function HomePage() {
   const barColor  = pct > 0.9 ? '#e2445c' : pct > 0.6 ? 'var(--accent)' : '#00c875'
 
   if (!hydrated) return null
+
+  // ─── Team status helpers ────────────────────────────────────────────────────
+  const todayCode = NL_DAY_CODES[new Date().getDay()]
+  type Status = { kind: 'vacation' | 'free' | 'available'; detail?: string }
+  function statusFor(memberIdLocal: string): Status {
+    const p = profilesById[memberIdLocal]
+    if (p?.vacation_until) {
+      const until = new Date(p.vacation_until)
+      until.setHours(23, 59, 59, 999)
+      if (until.getTime() >= Date.now()) {
+        const fmt = until.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+        return { kind: 'vacation', detail: `terug ${fmt}` }
+      }
+    }
+    if (p?.days_off?.includes(todayCode)) return { kind: 'free', detail: 'vrij vandaag' }
+    return { kind: 'available' }
+  }
+
+  // Hours per member this week
+  const weekStartTeam = getWeekStart(new Date())
+  const memberHoursThisWeek: Record<string, number> = {}
+  for (const m of teamData.members) {
+    const contribs = memberContributions(allProjects, m.id, weekStartTeam)
+    memberHoursThisWeek[m.id] = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+  }
+  const overloaded = teamData.members
+    .map(m => {
+      const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const hrs = memberHoursThisWeek[m.id] ?? 0
+      return { member: m, hours: hrs, cap, pct: cap > 0 ? Math.round((hrs / cap) * 100) : 0 }
+    })
+    .filter(x => x.hours > x.cap)
+    .sort((a, b) => b.pct - a.pct)
 
   const sections: Record<SectionId, React.ReactNode> = {
     taken: (
@@ -240,6 +315,95 @@ export default function HomePage() {
           ) : (
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Stel je profiel in om werkdruk te zien.</p>
           )}
+        </div>
+      </div>
+    ),
+    team: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>👥 Team vandaag</h2>
+        </div>
+        <div style={{ padding: '6px 0 10px' }}>
+          {teamData.members.map(m => {
+            const s = statusFor(m.id)
+            const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
+                       : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
+                       :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
+            return (
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
+                <UserAvatar memberId={m.id} size={22} />
+                <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {m.name}
+                </Link>
+                <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+                  {tone.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    ),
+    deadlines: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>⏰ Deadlines deze week</h2>
+        </div>
+        <div style={{ padding: '6px 0 10px' }}>
+          {deadlineItems.length === 0 ? (
+            <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen deadlines de komende 7 dagen.</p>
+          ) : deadlineItems.slice(0, 8).map(({ board, item }) => {
+            const ms = new Date(item.deadline as string).getTime()
+            const days = Math.round((ms - Date.now()) / 86400000)
+            const tone = days < 0 ? { bg: 'rgba(196,69,58,0.15)', fg: '#C4453A' }
+                       : days <= 1 ? { bg: 'rgba(196,69,58,0.15)', fg: '#C4453A' }
+                       : days <= 3 ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400' }
+                       :              { bg: 'transparent', fg: 'var(--text-muted)' }
+            const owners = (item.ownerIds ?? []).slice(0, 3)
+            return (
+              <Link key={`${board}-${item.id}`} href={`/projects/${board}`} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[board] ?? 'var(--accent)', flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                <div style={{ display: 'flex', flexShrink: 0 }}>
+                  {owners.map((id, i) => (
+                    <span key={id} style={{ marginLeft: i === 0 ? 0 : -6 }}>
+                      <UserAvatar memberId={id} size={20} style={{ border: '2px solid var(--bg-card)' }} borderless={false} />
+                    </span>
+                  ))}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                  {days < 0 ? `${Math.abs(days)}d te laat` : days === 0 ? 'vandaag' : `${days}d`}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+    ),
+    overload: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>⚠️ Overbelast deze week</h2>
+        </div>
+        <div style={{ padding: '6px 0 10px' }}>
+          {overloaded.length === 0 ? (
+            <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Iedereen onder cap deze week 👌</p>
+          ) : overloaded.map(o => (
+            <div key={o.member.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
+              <UserAvatar memberId={o.member.id} size={22} />
+              <Link href={`/profile/${o.member.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {o.member.name}
+              </Link>
+              <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(o.pct, 100)}%`, background: '#C4453A' }} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#C4453A', background: 'rgba(196,69,58,0.15)', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                {o.hours}u / {o.cap}u
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     ),
@@ -356,6 +520,11 @@ export default function HomePage() {
             {sections.taken}
             {sections.werkdruk}
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 18, marginBottom: 18, alignItems: 'start' }}>
+            {sections.team}
+            {sections.deadlines}
+          </div>
+          <div style={{ marginBottom: 18 }}>{sections.overload}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 18, alignItems: 'start' }}>
             {sections.documenten}
             {sections.paginas}
