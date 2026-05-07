@@ -16,6 +16,7 @@ import {
   type GoogleConnection, type GoogleCalAvailable,
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
+import { pullBoardFromRemote } from '@/lib/boardStore'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
@@ -582,6 +583,22 @@ function GoogleConnector() {
     setLoaded(true)
   }
 
+  async function runSync() {
+    const results = await syncGoogleNow()
+    // Refresh local cache for every board the user has connected
+    const boards = new Set(connections.map(c => c.boardId).filter(Boolean) as string[])
+    for (const b of boards) await pullBoardFromRemote(b)
+
+    const errs = results.filter(r => r.error)
+    if (errs.length > 0) {
+      setMsg({ text: `Sync fout: ${errs[0].error}`, ok: false })
+    } else if (results.length > 0) {
+      const tot = results.reduce((s, r) => s + r.added + r.updated, 0)
+      setMsg({ text: `${tot} events gesynchroniseerd`, ok: true })
+    }
+    return results
+  }
+
   useEffect(() => {
     reload()
     // Surface ?google=connected / ?google=error from the OAuth callback
@@ -590,7 +607,7 @@ function GoogleConnector() {
       const status = sp.get('google')
       if (status === 'connected') {
         setMsg({ text: 'Google Calendar verbonden — synchroniseren…', ok: true })
-        syncGoogleNow().then(() => reload())
+        runSync().then(() => reload())
       } else if (status === 'error') {
         setMsg({ text: `Verbinden mislukt: ${sp.get('msg') ?? ''}`, ok: false })
       }
@@ -600,7 +617,7 @@ function GoogleConnector() {
         window.history.replaceState({}, '', window.location.pathname + (q ? '?' + q : ''))
       }
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function connect() {
     setBusy(true); setMsg(null)
@@ -611,7 +628,7 @@ function GoogleConnector() {
   async function setBoard(calendarId: string, boardId: string) {
     setBusy(true)
     await updateGoogleCalendar(calendarId, { boardId: boardId || null })
-    await syncGoogleNow()
+    await runSync()
     await reload()
     setBusy(false)
   }
@@ -619,7 +636,7 @@ function GoogleConnector() {
   async function setCalendar(oldCalendarId: string, newCalendarId: string) {
     setBusy(true)
     await updateGoogleCalendar(oldCalendarId, { newCalendarId })
-    await syncGoogleNow()
+    await runSync()
     await reload()
     setBusy(false)
   }
@@ -683,7 +700,7 @@ function GoogleConnector() {
               </label>
 
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={async () => { setBusy(true); await syncGoogleNow(); await reload(); setBusy(false) }} disabled={busy}
+                <button onClick={async () => { setBusy(true); await runSync(); await reload(); setBusy(false) }} disabled={busy}
                   style={{ flex: 1, padding: '6px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
                   Sync nu
                 </button>

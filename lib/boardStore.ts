@@ -162,12 +162,23 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
 
 const channelByBoard: Record<string, ReturnType<NonNullable<typeof supabase>['channel']>> = {}
 
+// Debounce realtime-triggered pulls so a batch of N events (e.g. Google sync
+// upserting 50 items at once) doesn't fan out into N parallel REST fetches.
+const pullTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+function schedulePull(boardName: string) {
+  if (pullTimers[boardName]) return
+  pullTimers[boardName] = setTimeout(() => {
+    delete pullTimers[boardName]
+    pullBoardFromRemote(boardName).catch(() => {})
+  }, 600)
+}
+
 export function subscribeRemoteBoard(boardName: string): () => void {
   if (!supabase) return () => {}
   if (channelByBoard[boardName]) return () => {}
   const ch = supabase.channel(`board:${boardName}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'board_items',  filter: `board_id=eq.${boardName}` }, () => pullBoardFromRemote(boardName))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'board_groups', filter: `board_id=eq.${boardName}` }, () => pullBoardFromRemote(boardName))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'board_items',  filter: `board_id=eq.${boardName}` }, () => schedulePull(boardName))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'board_groups', filter: `board_id=eq.${boardName}` }, () => schedulePull(boardName))
     .subscribe()
   channelByBoard[boardName] = ch
   return () => { supabase!.removeChannel(ch); delete channelByBoard[boardName] }
