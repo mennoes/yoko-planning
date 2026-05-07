@@ -386,8 +386,20 @@ function DraggableBar({ project, left, width, colW, onDragMove, onDragEnd, onCli
 }
 
 // ─── Timeline bars row ────────────────────────────────────────────────────────
-function TimelineBars({ memberId, projects, cols, colW, onDragMove, onDragEnd, onBarClick }: {
+// In week zoom we render only Mon–Fri inside each week column (5 day-cells per
+// week). Saturday/Sunday events are clipped to the end of Friday so weekends
+// don't waste horizontal space.
+function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
+  const days = Math.floor((d.getTime() - gridStart.getTime()) / 86400000)
+  const weekIdx = Math.floor(days / 7)
+  const dowMon = ((days % 7) + 7) % 7  // 0=Mon..6=Sun (gridStart is a Mon)
+  const cellInWeek = Math.min(dowMon, 5) // Sat/Sun snap to col-end
+  return weekIdx * weekColW + (cellInWeek / 5) * weekColW
+}
+
+function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDragEnd, onBarClick }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
+  zoom: ZoomLevel
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
@@ -397,17 +409,30 @@ function TimelineBars({ memberId, projects, cols, colW, onDragMove, onDragEnd, o
   const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
   const totalWidth  = cols.reduce((s, c) => s + c.widthPx, 0)
   const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
+  const isWeek      = zoom === 'week'
 
   const rawBars = projects
     .filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
     .map(p => {
-      const s = p.startDate ? new Date(p.startDate).getTime() : gridStartMs
-      const e = p.endDate   ? new Date(p.endDate).getTime() + 86400000 : gridEndMs
+      const sDate = p.startDate ? new Date(p.startDate) : new Date(gridStartMs)
+      const eDate = p.endDate   ? new Date(p.endDate)   : new Date(gridEndMs - 86400000)
+      const s = sDate.getTime()
+      const e = eDate.getTime() + 86400000
       if (e < gridStartMs || s > gridEndMs) return null
-      const cs = Math.max(s, gridStartMs)
-      const ce = Math.min(e, gridEndMs)
-      const left  = (cs - gridStartMs) / msPerPx
-      const width = Math.max((ce - cs) / msPerPx - 2, 6)
+
+      let left: number, width: number
+      if (isWeek) {
+        const csDate = s < gridStartMs ? new Date(gridStartMs) : sDate
+        const ceDate = new Date(Math.min(e, gridEndMs))
+        left  = dateToWeekPx(csDate, gridStart, colW)
+        const right = dateToWeekPx(ceDate, gridStart, colW)
+        width = Math.max(right - left - 2, 6)
+      } else {
+        const cs = Math.max(s, gridStartMs)
+        const ce = Math.min(e, gridEndMs)
+        left  = (cs - gridStartMs) / msPerPx
+        width = Math.max((ce - cs) / msPerPx - 2, 6)
+      }
       return { p, left, width }
     })
     .filter(Boolean) as { p: Project; left: number; width: number }[]
@@ -1596,8 +1621,13 @@ export default function PlanningPage() {
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
                 borderLeft: '1px solid var(--border-light)',
                 background: headerBg }}>
-                <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--accent)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
-                <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 400, color: col.isCurrent ? 'var(--accent)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
+                <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
+                <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
+                {zoom === 'week' && (
+                  <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
+                    <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
+                  </div>
+                )}
               </div>
               )
             })}
@@ -1673,7 +1703,7 @@ export default function PlanningPage() {
                   <div style={{ display: 'flex' }}>
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
-                      <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW}
+                      <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)} />
                     </div>
                   </div>
