@@ -16,7 +16,7 @@ import {
   type GoogleConnection, type GoogleCalAvailable,
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
-import { pullBoardFromRemote } from '@/lib/boardStore'
+import { pullBoardFromRemote, BOARD_NAMES } from '@/lib/boardStore'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
@@ -578,18 +578,11 @@ function SyncButton() {
     setBusy(true); setFlash(null)
     try {
       const results = await syncGoogleNow()
+      // Always force-pull every board after sync — realtime broadcast can lag
+      // a second or two, and the user explicitly asked for an immediate refresh.
+      await Promise.all(BOARD_NAMES.map(b => pullBoardFromRemote(b)))
       const errs = results.filter(r => r.error)
-      if (errs.length === 0 && results.length > 0) {
-        const tot = results.reduce((s, r) => s + r.added + r.updated, 0)
-        for (const r of results) {
-          // Boards are connected per-row; pull each board for an immediate refresh.
-          // (Skip — runSync from settings already does this; here we rely on realtime.)
-          void r
-        }
-        if (tot >= 0) setFlash('ok')
-      } else if (errs.length > 0) {
-        setFlash('err')
-      }
+      if (errs.length > 0) setFlash('err'); else setFlash('ok')
     } finally {
       setBusy(false)
       setTimeout(() => setFlash(null), 1800)
