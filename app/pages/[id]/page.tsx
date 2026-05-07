@@ -349,7 +349,7 @@ export default function PageEditor() {
                 <IconClose size={16} />
               </button>
             </div>
-            <div style={{ background: 'rgba(255,230,100,0.25)', borderLeft: '3px solid #C8A028', padding: '8px 10px', borderRadius: 4, marginBottom: 10, fontSize: 13, color: 'var(--text-secondary)', maxHeight: 80, overflowY: 'auto' }}>
+            <div style={{ background: 'rgba(255,230,100,0.25)', borderLeft: '3px solid var(--sup-yellow)', padding: '8px 10px', borderRadius: 4, marginBottom: 10, fontSize: 13, color: 'var(--text-secondary)', maxHeight: 80, overflowY: 'auto' }}>
               {composeQuote}
             </div>
             <textarea autoFocus value={composeBody} onChange={e => setComposeBody(e.target.value)}
@@ -397,7 +397,7 @@ export default function PageEditor() {
                 <IconCheck size={12} /> Afhandelen
               </button>
             </div>
-            <div style={{ background: 'rgba(255,230,100,0.25)', borderLeft: '3px solid #C8A028', padding: '6px 9px', borderRadius: 4, marginBottom: 10, fontSize: 12, color: 'var(--text-secondary)', maxHeight: 60, overflowY: 'auto' }}>
+            <div style={{ background: 'rgba(255,230,100,0.25)', borderLeft: '3px solid var(--sup-yellow)', padding: '6px 9px', borderRadius: 4, marginBottom: 10, fontSize: 12, color: 'var(--text-secondary)', maxHeight: 60, overflowY: 'auto' }}>
               {activeComment.quote}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10, maxHeight: 240, overflowY: 'auto' }}>

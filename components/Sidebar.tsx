@@ -202,11 +202,28 @@ function SectionBlock({
   }
 
   return (
-    <div style={{ marginTop: 8 }}>
+    <div style={{
+      marginTop: 8,
+      background: open ? 'var(--overlay-subtle)' : 'transparent',
+      border: '1px solid var(--border-light)',
+      borderRadius: 10,
+      paddingBottom: open ? 6 : 0,
+      transition: 'background 0.15s, padding-bottom 0.15s',
+    }}>
       {/* Section header — folder style */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 6px 12px', marginTop: 6 }}
-        onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '1')) }}
-        onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '0')) }}>
+      <div onClick={e => {
+        // Click anywhere on the header (except buttons / inputs) toggles open state
+        const t = e.target as HTMLElement
+        if (t.closest('button') || t.closest('input')) return
+        setOpen(o => !o)
+      }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 12px', cursor: 'pointer', borderRadius: 10 }}
+        onMouseEnter={e => {
+          e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '1'))
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '0'))
+        }}>
         <button onClick={() => setOpen(o => !o)}
           title={open ? 'Inklappen' : 'Uitklappen'}
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0 }}>
@@ -248,6 +265,18 @@ function SectionBlock({
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, padding: '0 2px', opacity: 0, flexShrink: 0 }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
+        )}
+
+        {/* Toggle affordance — visible on hover */}
+        {!editOrder && (
+          <span className="sec-toggle-hint"
+            style={{ width: 18, height: 18, borderRadius: 5,
+              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+              color: 'var(--text-muted)', fontSize: 12, lineHeight: 1, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              opacity: 0, flexShrink: 0, transition: 'opacity 0.15s' }}>
+            {open ? '−' : '+'}
+          </span>
         )}
       </div>
 
