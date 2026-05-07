@@ -3,6 +3,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { loadPage, savePage, type PageDoc } from '@/lib/pagesStore'
+import {
+  loadComment, saveComment, deleteComment, newCommentId,
+  type CommentThread, type CommentReply,
+} from '@/lib/commentsStore'
+import { useProfile } from '@/components/ProfileContext'
+import { useTeamPhotos } from '@/components/TeamPhotosContext'
+import { IconClose, IconCheck } from '@/components/Icon'
 
 const EMOJIS = ['📄','📝','📌','🗒','💡','🔖','📋','🗂','📊','🎨','🚀','⭐']
 
@@ -13,6 +20,8 @@ function toolbar(cmd: string, val?: string) {
 export default function PageEditor() {
   const params = useParams()
   const id     = String(params.id)
+  const { profile } = useProfile()
+  const { getPhoto } = useTeamPhotos()
 
   const [doc,     setDoc]     = useState<PageDoc | null>(null)
   const [status,  setStatus]  = useState<'saved' | 'saving' | 'new'>('new')
@@ -21,6 +30,17 @@ export default function PageEditor() {
   const [emojiOpen, setEmojiOpen] = useState(false)
   const editorRef  = useRef<HTMLDivElement>(null)
   const saveTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ─── Comments state ─────────────────────────────────────────────────────────
+  const [selToolbar, setSelToolbar] = useState<{ x: number; y: number } | null>(null)
+  const savedRange   = useRef<Range | null>(null)
+  const [composeOpen, setComposeOpen] = useState(false)
+  const [composeQuote, setComposeQuote] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  const [openCommentId, setOpenCommentId] = useState<string | null>(null)
+  const [openCommentPos, setOpenCommentPos] = useState<{ x: number; y: number } | null>(null)
+  const [activeComment, setActiveComment] = useState<CommentThread | null>(null)
+  const [replyDraft, setReplyDraft] = useState('')
 
   // Load or create
   useEffect(() => {
@@ -72,10 +92,126 @@ export default function PageEditor() {
     scheduleSave(title, emoji)
   }
 
+  // ─── Selection toolbar ──────────────────────────────────────────────────────
+  function updateSelectionToolbar() {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setSelToolbar(null); return }
+    const range = sel.getRangeAt(0)
+    if (!editorRef.current?.contains(range.commonAncestorContainer)) { setSelToolbar(null); return }
+    const text = sel.toString().trim()
+    if (!text) { setSelToolbar(null); return }
+    const rect = range.getBoundingClientRect()
+    setSelToolbar({ x: rect.left + rect.width / 2, y: rect.top - 8 })
+    savedRange.current = range.cloneRange()
+  }
+  useEffect(() => {
+    function onSel() { updateSelectionToolbar() }
+    document.addEventListener('selectionchange', onSel)
+    return () => document.removeEventListener('selectionchange', onSel)
+  }, [])
+
+  function startComposeFromSelection() {
+    if (!savedRange.current) return
+    const text = savedRange.current.toString().trim()
+    if (!text) return
+    setComposeQuote(text)
+    setComposeBody('')
+    setComposeOpen(true)
+    setSelToolbar(null)
+  }
+
+  function submitComment() {
+    if (!savedRange.current || !composeBody.trim()) return
+    const cmtId = newCommentId()
+    const author = profile?.name ?? 'Onbekend'
+    const reply: CommentReply = {
+      id: 'r-' + Date.now().toString(36),
+      author, authorId: profile?.memberId,
+      body: composeBody.trim(),
+      createdAt: new Date().toISOString(),
+    }
+    const thread: CommentThread = {
+      id: cmtId, contextId: id, quote: composeQuote,
+      thread: [reply], resolved: false,
+      createdAt: new Date().toISOString(),
+    }
+    saveComment(thread)
+
+    // Wrap selection in a <mark> element
+    try {
+      const range = savedRange.current
+      const mark = document.createElement('mark')
+      mark.setAttribute('data-cmt', cmtId)
+      mark.className = 'cm'
+      // If the range crosses elements, surroundContents may fail; fall back to extract+insert
+      try { range.surroundContents(mark) }
+      catch {
+        const frag = range.extractContents()
+        mark.appendChild(frag)
+        range.insertNode(mark)
+      }
+    } catch (err) {
+      console.warn('Could not wrap selection', err)
+    }
+    save(title, emoji, editorRef.current?.innerHTML ?? '')
+    setComposeOpen(false); setComposeBody(''); setComposeQuote('')
+    window.getSelection()?.removeAllRanges()
+  }
+
+  function openCommentAt(cmtId: string, target: HTMLElement) {
+    const t = loadComment(cmtId)
+    if (!t) return
+    const rect = target.getBoundingClientRect()
+    setActiveComment(t)
+    setOpenCommentId(cmtId)
+    setOpenCommentPos({ x: rect.left + rect.width / 2, y: rect.bottom + 6 })
+  }
+  function closeComment() { setOpenCommentId(null); setActiveComment(null); setOpenCommentPos(null); setReplyDraft('') }
+
+  function addReply() {
+    if (!activeComment || !replyDraft.trim()) return
+    const author = profile?.name ?? 'Onbekend'
+    const reply: CommentReply = {
+      id: 'r-' + Date.now().toString(36),
+      author, authorId: profile?.memberId,
+      body: replyDraft.trim(),
+      createdAt: new Date().toISOString(),
+    }
+    const updated = { ...activeComment, thread: [...activeComment.thread, reply] }
+    saveComment(updated)
+    setActiveComment(updated); setReplyDraft('')
+  }
+
+  function resolveComment() {
+    if (!activeComment || !editorRef.current) return
+    const id = activeComment.id
+    deleteComment(id)
+    // Unwrap matching mark elements
+    const marks = editorRef.current.querySelectorAll(`mark[data-cmt="${id}"]`)
+    marks.forEach(m => {
+      const parent = m.parentNode
+      while (m.firstChild) parent?.insertBefore(m.firstChild, m)
+      parent?.removeChild(m)
+    })
+    save(title, emoji, editorRef.current.innerHTML)
+    closeComment()
+  }
+
+  // Click handler for marks in the editor
+  function onEditorClick(e: React.MouseEvent) {
+    const target = e.target as HTMLElement
+    const mark = target.closest<HTMLElement>('mark.cm[data-cmt]')
+    if (mark) {
+      e.preventDefault()
+      const cmtId = mark.getAttribute('data-cmt')!
+      openCommentAt(cmtId, mark)
+    }
+  }
+
   const createdAt = doc?.createdAt ? new Date(doc.createdAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
 
   return (
-    <div style={{ maxWidth: 740, margin: '0 auto', padding: '52px 36px 120px' }}>
+    <div style={{ maxWidth: 740, margin: '0 auto', padding: '52px 36px 120px', position: 'relative' }}>
 
       {/* Emoji + title */}
       <div style={{ marginBottom: 8 }}>
@@ -169,12 +305,123 @@ export default function PageEditor() {
         contentEditable
         suppressContentEditableWarning
         onInput={onInput}
+        onClick={onEditorClick}
         data-placeholder="Begin met typen..."
         style={{
           minHeight: 480, outline: 'none', fontSize: 15, lineHeight: 1.75,
           color: 'var(--text-secondary)', padding: '16px 0',
         }}
       />
+
+      {/* Floating selection toolbar */}
+      {selToolbar && !composeOpen && (
+        <button onMouseDown={e => e.preventDefault()} onClick={startComposeFromSelection}
+          style={{
+            position: 'fixed', top: selToolbar.y, left: selToolbar.x,
+            transform: 'translate(-50%, -100%)',
+            background: 'var(--text-primary)', color: 'var(--bg-base)',
+            border: 'none', borderRadius: 8,
+            padding: '6px 12px', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', zIndex: 200,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            display: 'flex', alignItems: 'center', gap: 6,
+            whiteSpace: 'nowrap',
+          }}>
+          + Comment
+        </button>
+      )}
+
+      {/* Compose popup */}
+      {composeOpen && (
+        <>
+          <div onClick={() => setComposeOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.35)' }} />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            zIndex: 251, background: 'var(--bg-card)',
+            border: '1px solid var(--border)', borderRadius: 12,
+            padding: 16, width: 400, maxWidth: '92vw',
+            boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Nieuwe opmerking</h3>
+              <button onClick={() => setComposeOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                <IconClose size={16} />
+              </button>
+            </div>
+            <div style={{ background: 'rgba(255,230,100,0.25)', borderLeft: '3px solid #C8A028', padding: '8px 10px', borderRadius: 4, marginBottom: 10, fontSize: 13, color: 'var(--text-secondary)', maxHeight: 80, overflowY: 'auto' }}>
+              {composeQuote}
+            </div>
+            <textarea autoFocus value={composeBody} onChange={e => setComposeBody(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitComment() }}
+              placeholder="Schrijf een opmerking…  (⌘+Enter om te plaatsen)"
+              rows={3}
+              style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+              <button onClick={() => setComposeOpen(false)}
+                style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                Annuleer
+              </button>
+              <button onClick={submitComment} disabled={!composeBody.trim()}
+                style={{ padding: '7px 14px', borderRadius: 7, border: 'none',
+                  background: composeBody.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                  color: composeBody.trim() ? '#fff' : 'var(--text-muted)',
+                  fontSize: 13, fontWeight: 700,
+                  cursor: composeBody.trim() ? 'pointer' : 'not-allowed' }}>
+                Plaats opmerking
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Comment popup */}
+      {openCommentId && activeComment && openCommentPos && (
+        <>
+          <div onClick={closeComment}
+            style={{ position: 'fixed', inset: 0, zIndex: 240 }} />
+          <div style={{
+            position: 'fixed', top: openCommentPos.y, left: openCommentPos.x,
+            transform: 'translateX(-50%)',
+            zIndex: 241, background: 'var(--bg-card)',
+            border: '1px solid var(--border)', borderRadius: 10,
+            padding: 14, width: 320, maxWidth: '92vw',
+            boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {activeComment.thread.length} opmerking{activeComment.thread.length === 1 ? '' : 'en'}
+              </span>
+              <button onClick={resolveComment} title="Afgehandeld"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, padding: '3px 8px', color: 'var(--green)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                <IconCheck size={12} /> Afhandelen
+              </button>
+            </div>
+            <div style={{ background: 'rgba(255,230,100,0.25)', borderLeft: '3px solid #C8A028', padding: '6px 9px', borderRadius: 4, marginBottom: 10, fontSize: 12, color: 'var(--text-secondary)', maxHeight: 60, overflowY: 'auto' }}>
+              {activeComment.quote}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10, maxHeight: 240, overflowY: 'auto' }}>
+              {activeComment.thread.map(r => (
+                <CommentReplyView key={r.id} reply={r} getPhoto={getPhoto} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={replyDraft} onChange={e => setReplyDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addReply() }}
+                placeholder="Reageer…"
+                style={{ flex: 1, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 9px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+              <button onClick={addReply} disabled={!replyDraft.trim()}
+                style={{ padding: '6px 11px', borderRadius: 6, border: 'none',
+                  background: replyDraft.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                  color: replyDraft.trim() ? '#fff' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 600,
+                  cursor: replyDraft.trim() ? 'pointer' : 'not-allowed' }}>
+                Plaats
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <style>{`
         [data-placeholder]:empty::before {
@@ -189,7 +436,50 @@ export default function PageEditor() {
         [contenteditable] ul, [contenteditable] ol { padding-left: 24px; margin: 0 0 10px; }
         [contenteditable] li { margin-bottom: 4px; }
         [contenteditable] hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+        [contenteditable] mark.cm {
+          background: rgba(255, 230, 100, 0.45);
+          color: inherit;
+          padding: 1px 0;
+          border-radius: 2px;
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        [contenteditable] mark.cm:hover {
+          background: rgba(255, 230, 100, 0.75);
+        }
       `}</style>
+    </div>
+  )
+}
+
+// ─── Comment reply view ───────────────────────────────────────────────────────
+function CommentReplyView({ reply, getPhoto }: { reply: CommentReply; getPhoto: (id: string) => string | null }) {
+  const photo = reply.authorId ? getPhoto(reply.authorId) : null
+  const initials = reply.author.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  const dt = new Date(reply.createdAt)
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+      {photo ? (
+        <img src={photo} alt="" style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+      ) : (
+        <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+          background: 'var(--accent-light)', color: 'var(--accent)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 700 }}>
+          {initials || '?'}
+        </span>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{reply.author}</span>
+          <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+            {dt.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} · {dt.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {reply.body}
+        </div>
+      </div>
     </div>
   )
 }
