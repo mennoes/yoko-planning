@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // One-off import / migration scripts run via Node directly.
+    "scripts/**",
   ]),
   {
     rules: {
