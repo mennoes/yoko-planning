@@ -173,8 +173,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const sa = eventDates(a).start ?? ''; const sb = eventDates(b).start ?? ''
       return sa.localeCompare(sb)
     })
+    // Only mark the groupKey as seen — individual instance IDs are NOT
+    // separate rows. If older syncs created per-instance rows, they'll
+    // be missing from seenExt and get cleaned up below.
     seenExt.add(groupKey)
-    for (const ev of instances) seenExt.add(ev.id)
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
     const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0)
