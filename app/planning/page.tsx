@@ -22,6 +22,7 @@ import {
   IconDownload, IconSort, IconChevronLeft, IconChevronRight, IconChevronsLeft, IconChevronsRight,
   IconPlay, IconStop, IconClose,
 } from '@/components/Icon'
+import { UserAvatar } from '@/components/UserAvatar'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -455,7 +456,11 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   const owners = team.filter(m => project.ownerIds.includes(m.id))
 
   return (
-    <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 380, zIndex: 300,
+    <>
+    {/* Backdrop — click to close */}
+    <div onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 299 }} />
+    <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 'min(420px, 92vw)', zIndex: 300,
       background: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.35)' }}>
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
@@ -475,8 +480,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
         <Row label="Owner">
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {owners.length > 0 ? owners.map(m => (
-              <span key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: m.color, background: m.color + '18', borderRadius: 20, padding: '3px 10px', border: `1px solid ${m.color}44` }}>
-                <span style={{ width: 18, height: 18, borderRadius: '50%', background: m.color + '30', border: `1.5px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700 }}>{m.name.charAt(0)}</span>
+              <span key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 20, padding: '3px 10px 3px 3px', border: '1px solid var(--border-light)', fontWeight: 500 }}>
+                <UserAvatar memberId={m.id} size={22} />
                 {m.name}
               </span>
             )) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>}
@@ -560,9 +565,10 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
       </div>
       <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button onClick={onClose} style={cancelBtn}>Sluiten</button>
-        <button onClick={save} style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700 }}>Opslaan</button>
+        <button onClick={save} style={{ ...cancelBtn, background: color, color: '#000', border: 'none', fontWeight: 800 }}>Opslaan</button>
       </div>
     </div>
+    </>
   )
 }
 

@@ -194,7 +194,7 @@ function TodoCard({
           onChange={e => setNewText(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && add()}
           placeholder="+ Voeg toe..."
-          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid transparent', color: 'var(--text-muted)', fontSize: 13, padding: '4px 0', outline: 'none', boxSizing: 'border-box' }}
+          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid transparent', color: 'var(--text-muted)', fontSize: 14.3, padding: '4px 0', outline: 'none', boxSizing: 'border-box' }}
           onFocus={e => { e.currentTarget.style.borderBottomColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
           onBlur={e => { e.currentTarget.style.borderBottomColor = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
         />
@@ -228,9 +228,9 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
           <input autoFocus value={editTxt} onChange={e => onEditChange(e.target.value)}
             onBlur={onEditSave}
             onKeyDown={e => { if (e.key === 'Enter') onEditSave(); if (e.key === 'Escape') onEditCancel() }}
-            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 13.5, outline: 'none' }} />
+            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 14.85, outline: 'none' }} />
         ) : (
-          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 13.5, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', display: 'block', lineHeight: 1.4 }}>
+          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 14.85, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', display: 'block', lineHeight: 1.4 }}>
             {item.text}
           </span>
         )}
