@@ -141,8 +141,12 @@ function SectionBlock({
   isLastSection:  boolean
   onMoveSection:  (dir: -1 | 1) => void
 }) {
-  const alwaysOpen = section.type === 'projects' || section.type === 'pages'
-  const [open,          setOpen]          = useState(alwaysOpen || section.items.some(i => pathname.startsWith(i.href)))
+  // All sections are collapsible. Default-open if the current route lives inside.
+  const [open,          setOpen]          = useState(true)
+  useEffect(() => {
+    if (section.items.some(i => pathname.startsWith(i.href))) setOpen(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [addingItem,    setAddingItem]    = useState(false)
   const [newLabel,      setNewLabel]      = useState('')
   const [editName,      setEditName]      = useState(false)
@@ -203,16 +207,11 @@ function SectionBlock({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 6px 12px', marginTop: 6 }}
         onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '1')) }}
         onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '0')) }}>
-        {!alwaysOpen ? (
-          <button onClick={() => setOpen(o => !o)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0 }}>
-            {open ? <IconFolderOpen size={16} /> : <IconFolder size={16} />}
-          </button>
-        ) : (
-          <span style={{ flexShrink: 0, color: 'var(--accent)', display: 'flex', alignItems: 'center' }}>
-            <IconFolderOpen size={16} />
-          </span>
-        )}
+        <button onClick={() => setOpen(o => !o)}
+          title={open ? 'Inklappen' : 'Uitklappen'}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0 }}>
+          {open ? <IconFolderOpen size={16} /> : <IconFolder size={16} />}
+        </button>
 
         {editName ? (
           <input autoFocus value={nameDraft}

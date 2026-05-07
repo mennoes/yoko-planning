@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 
 const url    = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? ''
 const key    = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
-const bypass = process.env.NEXT_PUBLIC_BYPASS_AUTH !== 'false'
+// Auth is required unless explicitly disabled with NEXT_PUBLIC_BYPASS_AUTH=true.
+const bypass = process.env.NEXT_PUBLIC_BYPASS_AUTH === 'true'
 
 // Supabase client is available whenever URL+key are set, regardless of auth
 // bypass. Auth-redirect / login-required behavior is gated separately by

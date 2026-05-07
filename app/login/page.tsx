@@ -1,11 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 type Mode = 'magic' | 'password'
 
 export default function LoginPage() {
+  const router = useRouter()
+
+  // If already signed in, hop straight to home
+  useEffect(() => {
+    if (!supabase) return
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user) router.replace('/')
+    })
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) router.replace('/')
+    })
+    return () => data.subscription.unsubscribe()
+  }, [router])
+
   const [mode,     setMode]     = useState<Mode>('password')
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')

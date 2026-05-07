@@ -10,6 +10,7 @@ import Sidebar from './Sidebar'
 import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
+import ThemeApply from './ThemeApply'
 import { IconMenu, IconSearch } from './Icon'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
@@ -57,7 +58,12 @@ function Inner({ children }: { children: ReactNode }) {
 
   // Login + share routes: geen sidebar, geen ProfileSetup, geen auth-redirect
   if (pathname === '/login' || pathname.startsWith('/share')) {
-    return <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0 }}>{children}</main>
+    return (
+      <>
+        <ThemeApply />
+        <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0 }}>{children}</main>
+      </>
+    )
   }
 
   // Wacht op auth redirect
