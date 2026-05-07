@@ -487,7 +487,8 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
   return (
     <>
       <div onClick={onClose}
-        style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.4)' }} />
+        style={{ position: 'fixed', inset: 0, zIndex: 250,
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
