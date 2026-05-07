@@ -55,9 +55,19 @@ export async function disconnectGoogle(calendarId?: string) {
   return res.ok
 }
 
-export async function syncGoogleNow(): Promise<boolean> {
+export type SyncResult = {
+  calendarId: string
+  added:      number
+  updated:    number
+  removed:    number
+  error?:     string
+}
+
+export async function syncGoogleNow(): Promise<SyncResult[]> {
   const headers = await authHeaders()
-  if (!headers) return false
+  if (!headers) return []
   const res = await fetch('/api/google/sync', { method: 'POST', headers })
-  return res.ok
+  if (!res.ok) return []
+  const body = await res.json().catch(() => ({})) as { results?: SyncResult[] }
+  return body.results ?? []
 }
