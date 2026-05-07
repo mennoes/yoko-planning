@@ -48,6 +48,17 @@ export default function LoginPage() {
     else window.location.href = '/'
   }
 
+  async function handleReset() {
+    if (!email) { setMessage({ text: 'Vul eerst je e-mailadres in.', ok: false }); return }
+    setLoading(true); setMessage(null)
+    const { error } = await supabase!.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset`,
+    })
+    setLoading(false)
+    if (error) setMessage({ text: error.message, ok: false })
+    else setMessage({ text: `Reset-link verstuurd naar ${email}. Check je inbox.`, ok: true })
+  }
+
   const inp: React.CSSProperties = {
     width: '100%', padding: '10px 14px', borderRadius: 8,
     border: '1px solid var(--border)', background: 'var(--bg-card)',
@@ -104,10 +115,18 @@ export default function LoginPage() {
           </button>
 
           {mode === 'password' && (
-            <button onClick={() => setIsNew(n => !n)}
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}>
-              {isNew ? 'Al een account? Inloggen' : 'Nog geen account? Registreren'}
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <button onClick={() => setIsNew(n => !n)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}>
+                {isNew ? 'Al een account? Inloggen' : 'Nog geen account? Registreren'}
+              </button>
+              {!isNew && (
+                <button onClick={handleReset}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, padding: 0, fontWeight: 500 }}>
+                  Wachtwoord instellen / vergeten
+                </button>
+              )}
+            </div>
           )}
         </div>
 
