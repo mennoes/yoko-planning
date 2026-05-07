@@ -7,7 +7,7 @@ import { useProfile } from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
-import { IconCheckList, IconHourglass, IconDocument, IconRocket } from '@/components/Icon'
+import { IconCheckList, IconHourglass, IconDocument, IconRocket, IconBuilding, IconUsers, IconKey } from '@/components/Icon'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
@@ -27,8 +27,30 @@ const RAW: Record<string, { groups: unknown[] }> = {
 
 type TodoItem = { id: string; text: string; done: boolean }
 
-type SectionId = 'taken' | 'werkdruk' | 'documenten' | 'lopend' | 'algemeen'
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'documenten', 'lopend', 'algemeen']
+type SectionId = 'taken' | 'werkdruk' | 'documenten' | 'lopend' | 'algemeen' | 'paginas'
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'paginas', 'documenten', 'lopend', 'algemeen']
+
+const QUICK_LINKS: { groups: { name: string; items: { label: string; href: string; emoji: string }[] }[] } = {
+  groups: [
+    {
+      name: 'Algemeen',
+      items: [
+        { label: 'Kantoor',         href: '/kantoor',         emoji: '🏢' },
+        { label: 'Team',            href: '/team',            emoji: '👥' },
+        { label: 'Accounts',        href: '/accounts',        emoji: '🔑' },
+        { label: 'Tools',           href: '/pages/tools',     emoji: '🎨' },
+        { label: 'Samenwerkingen',  href: '/pages/samenwerkingen', emoji: '❤️' },
+      ],
+    },
+    {
+      name: 'HR',
+      items: [
+        { label: 'Vakantieaanvragen', href: '/pages/vakantie',  emoji: '🏝' },
+        { label: 'Loonstroken',       href: '/pages/loonstroken', emoji: '💰' },
+      ],
+    },
+  ],
+}
 
 const NL_MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
@@ -248,6 +270,31 @@ export default function HomePage() {
         </div>
       </div>
     ),
+    paginas: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>📑 Pagina&apos;s</h2>
+        </div>
+        <div style={{ padding: '6px 0 12px' }}>
+          {QUICK_LINKS.groups.map((g, gi) => (
+            <div key={g.name} style={{ marginTop: gi === 0 ? 4 : 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 18px 4px' }}>
+                {g.name}
+              </div>
+              {g.items.map(item => (
+                <Link key={item.href} href={item.href}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 18px', textDecoration: 'none', color: 'var(--text-primary)', fontSize: 14 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ fontSize: 16 }}>{item.emoji}</span>
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
     documenten: (
       <div style={card}>
         <div style={cardHeader}>
@@ -390,13 +437,14 @@ export default function HomePage() {
             {sections.taken}
             {sections.werkdruk}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start', marginBottom: 18 }}>
             {sections.documenten}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {sections.lopend}
               {sections.algemeen}
             </div>
           </div>
+          {sections.paginas}
         </>
       )}
 
