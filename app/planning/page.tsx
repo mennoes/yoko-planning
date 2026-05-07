@@ -982,18 +982,53 @@ export default function PlanningPage() {
               <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
                 <IconHourglass size={14} style={{ marginRight: 6 }} />Capaciteit
               </button>
-              <button onClick={() => setShiftOpen(true)} style={ghostBtn(false)} title="Meerdere projecten verschuiven">
-                <IconRange size={14} style={{ marginRight: 6 }} />Verschuif
-              </button>
-              <button onClick={() => downloadIcs(projects)} title="Exporteer als iCal" style={ghostBtn(false)}>
-                <IconDownload size={14} style={{ marginRight: 6 }} />Exporteer
-              </button>
-              <button onClick={() => setShareOpen(true)} title="Deelbare links per agenda" style={ghostBtn(false)}>
-                <IconShare size={14} style={{ marginRight: 6 }} />Deel
-              </button>
               <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden" style={ghostBtn(editOrder)}>
                 <IconSort size={14} style={{ marginRight: 6 }} />{editOrder ? 'Klaar' : 'Sorteren'}
               </button>
+
+              {/* View size segmented (desktop) */}
+              <span style={separator} />
+              <div style={segGroup}>
+                {(['compact', 'large'] as ViewSize[]).map(v => (
+                  <button key={v} onClick={() => setViewSize(v)} style={segBtn(viewSize === v)}>
+                    {v === 'compact' ? 'Compact' : 'Standaard'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Right-most overflow: Exporteer + Deel */}
+              <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
+                  style={ghostBtn(overflowOpen)}>
+                  <IconMore size={16} />
+                </button>
+                {overflowOpen && (
+                  <>
+                    <div onClick={() => setOverflowOpen(false)}
+                      style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                    <div style={{
+                      position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 101,
+                      background: 'var(--bg-card)', border: '1px solid var(--border)',
+                      borderRadius: 8, padding: 4, minWidth: 220,
+                      boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
+                      display: 'flex', flexDirection: 'column', gap: 2,
+                    }}>
+                      <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }}
+                        style={overflowItemStyle}>
+                        <IconDownload size={14} /> Exporteer als iCal
+                      </button>
+                      <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }}
+                        style={overflowItemStyle}>
+                        <IconShare size={14} /> Deelbare link maken
+                      </button>
+                      <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }}
+                        style={overflowItemStyle}>
+                        <IconRange size={14} /> Verschuif projecten
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -1277,7 +1312,25 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-light)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg, borderRight: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: namePad }}>
+              <button onClick={() => {
+                  // Toggle: if all expanded → collapse all; otherwise expand all
+                  if (expanded.size >= team.length) setExpanded(new Set())
+                  else setExpanded(new Set(team.map(m => m.id)))
+                }}
+                title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '4px 9px', borderRadius: 6,
+                  background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                  color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
+                {expanded.size >= team.length ? '▾' : '▸'} alles
+              </button>
+            </div>
             {cols.map(col => {
               const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
               const weekend = dow === 0 || dow === 6
@@ -1403,6 +1456,13 @@ const navBtn: React.CSSProperties = {
 }
 
 // ─── Refined toolbar primitives ───────────────────────────────────────────────
+const overflowItemStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 9,
+  padding: '8px 12px', borderRadius: 6,
+  background: 'transparent', border: 'none', cursor: 'pointer',
+  fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', textAlign: 'left',
+}
+
 const segGroup: React.CSSProperties = {
   display: 'inline-flex',
   background: 'var(--bg-card)',
