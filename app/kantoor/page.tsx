@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { IconBuilding } from '@/components/Icon'
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 type InfoRowData   = { id: string; label: string; value: string; mono?: boolean; secret?: boolean }
@@ -231,7 +232,9 @@ export default function KantoorPage() {
   return (
     <div style={{ padding: '32px 32px 64px', maxWidth: 720 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>🏢 Kantoor</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconBuilding size={26} />Kantoor
+        </h1>
         <button onClick={() => update([...sections, { id: genId(), title: 'Nieuwe locatie', emoji: '📍', blocks: [] }])}
           style={{ padding: '6px 14px', borderRadius: 6, fontSize: 13, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
           + Locatie

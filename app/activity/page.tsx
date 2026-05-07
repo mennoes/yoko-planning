@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { loadActivity, clearActivity, type ActivityEntry } from '@/lib/activityLog'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { IconActivity } from '@/components/Icon'
 
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
@@ -33,8 +34,9 @@ export default function ActivityPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '44px 36px 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 18 : 28 }}>
-        <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 900, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.04em' }}>
-          📜 Activiteit
+        <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconActivity size={isMobile ? 22 : 28} />
+          Activiteit
         </h1>
         {entries.length > 0 && (
           <button onClick={() => { if (confirm('Activiteit log leegmaken?')) { clearActivity(); setEntries([]) } }}

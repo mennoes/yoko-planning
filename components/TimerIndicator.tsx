@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getActiveTimer, stopTimer, onTimerUpdate, fmtMinutes, type ActiveTimer } from '@/lib/timerStore'
+import { IconStop } from './Icon'
 
 export default function TimerIndicator() {
   const [active, setActive] = useState<ActiveTimer | null>(null)
@@ -42,10 +43,11 @@ export default function TimerIndicator() {
           {fmtMinutes(elapsedMin)}
         </div>
       </div>
-      <button onClick={() => stopTimer()} title="Stop"
+      <button onClick={() => stopTimer()} title="Stop" aria-label="Stop"
         style={{ background: '#e2445c', border: 'none', color: '#fff', borderRadius: 8,
-          padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-        Stop
+          padding: '6px 10px', cursor: 'pointer', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <IconStop size={14} />
       </button>
       <style jsx global>{`
         @keyframes yoko-timer-pulse {

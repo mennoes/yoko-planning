@@ -7,6 +7,7 @@ import { useProfile } from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { IconCheckList, IconHourglass, IconDocument, IconRocket } from '@/components/Icon'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
@@ -186,7 +187,7 @@ export default function HomePage() {
     taken: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>✅ Jouw taken</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconCheckList size={isMobile ? 17 : 15} />Jouw taken</h2>
           <Link href="/todos" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Alle →</Link>
         </div>
         {memberId ? (
@@ -209,7 +210,7 @@ export default function HomePage() {
     werkdruk: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📅 Werkdruk deze week</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconHourglass size={isMobile ? 17 : 15} />Werkdruk deze week</h2>
           <Link href="/planning" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Planning →</Link>
         </div>
         <div style={{ padding: '16px 20px 14px' }}>
@@ -250,7 +251,7 @@ export default function HomePage() {
     documenten: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📄 Meest recente documenten</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconDocument size={isMobile ? 17 : 15} />Meest recente documenten</h2>
           <button onClick={createNewPage} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Nieuw</button>
         </div>
         {recentPages.length === 0 ? (
@@ -286,7 +287,7 @@ export default function HomePage() {
     lopend: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>🚀 Lopend</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconRocket size={isMobile ? 17 : 15} />Lopend</h2>
           <Link href="/planning" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Planning →</Link>
         </div>
         <div style={{ padding: '6px 0 8px' }}>
@@ -315,7 +316,7 @@ export default function HomePage() {
     algemeen: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)' }}>📋 Algemeen</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconCheckList size={isMobile ? 17 : 15} />Algemeen</h2>
           <Link href="/todos" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Alle →</Link>
         </div>
         <div style={{ padding: '6px 0 8px' }}>
