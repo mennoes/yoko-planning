@@ -1,17 +1,19 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useProfile } from './ProfileContext'
 import {
   loadSections, saveSections,
   type NavItem, type SidebarSection,
 } from '@/lib/navStore'
+import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { hasSupabase } from '@/lib/supabase'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
+  IconDocument,
 } from './Icon'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
@@ -60,6 +62,70 @@ function useReorder<T>(items: T[], setItems: (items: T[]) => void) {
   return { onDragStart, onDragOver, onDragEnd }
 }
 
+// ─── Documenten / pages section (dynamic from pagesStore) ────────────────────
+function PagesSectionItems({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const router = useRouter()
+  const [pages, setPages] = useState<PageDoc[]>([])
+
+  useEffect(() => {
+    function refresh() { setPages(loadRecentPages()) }
+    refresh()
+    window.addEventListener('storage', refresh)
+    window.addEventListener('yoko-pages-update', refresh)
+    return () => {
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener('yoko-pages-update', refresh)
+    }
+  }, [])
+
+  function createNew() {
+    const id   = Date.now().toString()
+    onNavigate?.()
+    router.push(`/pages/${id}`)
+  }
+
+  return (
+    <div style={{ marginTop: 2 }}>
+      {pages.map(p => {
+        const href   = `/pages/${p.id}`
+        const active = pathname === href
+        return (
+          <Link key={p.id} href={href}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 10px 7px 18px',
+              borderRadius: 6, marginBottom: 1,
+              color: 'var(--text-primary)',
+              background: active ? 'var(--bg-hover)' : 'transparent',
+              textDecoration: 'none', fontSize: 14.5, fontWeight: active ? 600 : 500, minWidth: 0,
+            }}
+            onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+            onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+          >
+            <span style={{ fontSize: 14, flexShrink: 0 }}>{p.emoji || '📄'}</span>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.title || 'Naamloos'}
+            </span>
+          </Link>
+        )
+      })}
+      <button onClick={createNew}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 10px 8px 18px', borderRadius: 6, marginTop: 4,
+          background: 'transparent', border: '1px dashed var(--border)',
+          color: 'var(--text-secondary)', fontSize: 13.5, fontWeight: 500,
+          cursor: 'pointer', textAlign: 'left',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderStyle = 'solid' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderStyle = 'dashed' }}>
+        <IconDocument size={15} />
+        + Nieuw document
+      </button>
+    </div>
+  )
+}
+
 // ─── Single section ───────────────────────────────────────────────────────────
 function SectionBlock({
   section, allSections, setAllSections, pathname, onDelete,
@@ -75,12 +141,12 @@ function SectionBlock({
   isLastSection:  boolean
   onMoveSection:  (dir: -1 | 1) => void
 }) {
-  const [open,          setOpen]          = useState(section.items.some(i => pathname.startsWith(i.href)))
+  const alwaysOpen = section.type === 'projects' || section.type === 'pages'
+  const [open,          setOpen]          = useState(alwaysOpen || section.items.some(i => pathname.startsWith(i.href)))
   const [addingItem,    setAddingItem]    = useState(false)
   const [newLabel,      setNewLabel]      = useState('')
   const [editName,      setEditName]      = useState(false)
   const [nameDraft,     setNameDraft]     = useState(section.name)
-  const [colorTarget,   setColorTarget]   = useState<string | null>(null)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const addInputRef = useRef<HTMLInputElement>(null)
 
@@ -117,7 +183,6 @@ function SectionBlock({
   }
   function renameItem(id: string, label: string) { updateItems(section.items.map(i => i.id === id ? { ...i, label } : i)) }
   function removeItem(id: string) { updateItems(section.items.filter(i => i.id !== id)) }
-  function recolorItem(id: string, color: string) { updateItems(section.items.map(i => i.id === id ? { ...i, color } : i)); setColorTarget(null) }
   function addItem() {
     const lbl = newLabel.trim()
     if (!lbl) { setAddingItem(false); return }
@@ -135,23 +200,27 @@ function SectionBlock({
   return (
     <div style={{ marginTop: 8 }}>
       {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px 5px 6px' }}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 10px 6px 6px' }}
         onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '1')) }}
         onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.sec-del').forEach(b => (b.style.opacity = '0')) }}>
-        <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 9, padding: '2px 4px', flexShrink: 0 }}>
-          {open ? '▼' : '▶'}
-        </button>
+        {!alwaysOpen ? (
+          <button onClick={() => setOpen(o => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', flexShrink: 0 }}>
+            {open ? '▼' : '▶'}
+          </button>
+        ) : (
+          <span style={{ width: 18, flexShrink: 0 }} />
+        )}
 
         {editName ? (
           <input autoFocus value={nameDraft}
             onChange={e => setNameDraft(e.target.value)}
             onBlur={() => { saveName(nameDraft.trim() || section.name); setEditName(false) }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { saveName(nameDraft.trim() || section.name); setEditName(false) } }}
-            style={{ background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '1px 5px', color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', outline: 'none', width: 100 }}
+            style={{ background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', outline: 'none', width: 120 }}
           />
         ) : (
           <span onDoubleClick={() => { setNameDraft(section.name); setEditName(true) }} title="Dubbelklik om naam te bewerken"
-            style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', cursor: 'text', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', cursor: 'text', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {section.name}
           </span>
         )}
@@ -180,7 +249,11 @@ function SectionBlock({
         )}
       </div>
 
-      {open && (
+      {open && section.type === 'pages' && (
+        <PagesSectionItems pathname={pathname} />
+      )}
+
+      {open && section.type !== 'pages' && (
         <div style={{ marginTop: 2 }}>
           {section.items.map((item, idx) => {
             const active  = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
@@ -194,22 +267,6 @@ function SectionBlock({
                 onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '1')) }}
                 onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '0')) }}
               >
-                {section.type === 'projects' && (
-                  <div style={{ position: 'relative', paddingLeft: 14, flexShrink: 0 }}>
-                    <button onClick={e => { e.stopPropagation(); setColorTarget(colorTarget === item.id ? null : item.id) }}
-                      style={{ width: 9, height: 9, borderRadius: '50%', padding: 0, background: item.color ?? '#579bfc', border: 'none', cursor: 'pointer' }} />
-                    {colorTarget === item.id && (
-                      <div style={{ position: 'absolute', top: 14, left: 10, zIndex: 100, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.4)' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-                          {PALETTE.map(c => (
-                            <button key={c} onClick={() => recolorItem(item.id, c)} style={{ width: 18, height: 18, borderRadius: 4, background: c, padding: 0, border: 'none', cursor: 'pointer', outline: item.color === c ? '2px solid var(--text-primary)' : 'none', outlineOffset: 1 }} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {editing ? (
                   <input autoFocus defaultValue={item.label}
                     onBlur={e => { const v = e.target.value.trim(); if (v) renameItem(item.id, v); setEditingItemId(null) }}
@@ -220,17 +277,16 @@ function SectionBlock({
                   <Link href={item.href}
                     onClick={e => { if (editOrder) e.preventDefault() }}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 7, flex: 1,
-                      padding: section.type === 'projects' ? '6px 6px' : '6px 10px 6px 14px',
+                      display: 'flex', alignItems: 'center', gap: 8, flex: 1,
+                      padding: '7px 10px 7px 18px',
                       borderRadius: 6, marginBottom: 1,
-                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      color: 'var(--text-primary)',
                       background: active ? 'var(--bg-hover)' : 'transparent',
-                      textDecoration: 'none', fontSize: 13, fontWeight: active ? 600 : 400, minWidth: 0,
+                      textDecoration: 'none', fontSize: 14.5, fontWeight: active ? 600 : 500, minWidth: 0,
                     }}
-                    onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
-                    onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
-                    {section.type !== 'projects' && item.icon && <span style={{ fontSize: 13, flexShrink: 0 }}>{item.icon}</span>}
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
                   </Link>
                 )}
@@ -587,16 +643,16 @@ export default function Sidebar({
                   <Link href={item.href}
                     onClick={e => { if (editOrder) e.preventDefault() }}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, flex: 1,
-                      padding: '7px 10px', borderRadius: 6,
-                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      display: 'flex', alignItems: 'center', gap: 10, flex: 1,
+                      padding: '9px 12px', borderRadius: 8,
+                      color: 'var(--text-primary)',
                       background: active ? 'var(--bg-hover)' : 'transparent',
-                      textDecoration: 'none', fontSize: 13.5, fontWeight: active ? 600 : 400,
+                      textDecoration: 'none', fontSize: 15.5, fontWeight: active ? 600 : 500,
                     }}
-                    onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
-                    onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
-                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={17} /> : null })()}
+                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={19} /> : null })()}
                     <span>{item.label}</span>
                   </Link>
                 )}
@@ -658,14 +714,38 @@ export default function Sidebar({
           </div>
         </nav>
 
-        {/* Footer — single settings button */}
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)' }}>
-          <button onClick={() => setSettingsOpen(true)}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '8px 10px', textAlign: 'left' }}
+        {/* Footer — profile + theme + settings */}
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={openEdit} title="Profiel bewerken"
+            style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-            <IconSettings size={18} />
-            <span style={{ fontSize: 13.5, color: 'var(--text-secondary)', fontWeight: 500 }}>Instellingen</span>
+            {profile?.photo ? (
+              <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+            ) : profile ? (
+              <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
+                {profile.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
+              </span>
+            ) : (
+              <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--text-muted)' }}>?</span>
+            )}
+            <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile?.name ?? 'Profiel instellen'}
+            </span>
+          </button>
+
+          <button onClick={cycleTheme} title={`Thema: ${(THEMES.find(t => t.value === theme) ?? THEMES[0]).label}`}
+            style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
+            {(() => { const T = (THEMES.find(t => t.value === theme) ?? THEMES[0]).Icon; return <T size={17} /> })()}
+          </button>
+
+          <button onClick={() => setSettingsOpen(true)} title="Instellingen"
+            style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
+            <IconSettings size={17} />
           </button>
         </div>
       </aside>
