@@ -14,6 +14,12 @@ export default function PnpPage() {
 
   useEffect(() => {
     setGroups(loadGroups('pnp', initialData.groups as BoardGroup[]))
+    function onUpdate(e: Event) {
+      const ce = e as CustomEvent<{ boardName: string }>
+      if (!ce.detail || ce.detail.boardName === 'pnp') setGroups(loadGroups('pnp', initialData.groups as BoardGroup[]))
+    }
+    window.addEventListener('yoko-board-update', onUpdate)
+    return () => window.removeEventListener('yoko-board-update', onUpdate)
   }, [])
 
   useEffect(() => {
