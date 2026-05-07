@@ -157,13 +157,33 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
   return groups.flatMap(g =>
     g.items
       .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
-      .map(i => {
-        const subs = (i.subitems as Array<{ estHours?: number }> | undefined) ?? []
+      .flatMap((i): Project[] => {
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; ownerIds?: string[] }> | undefined) ?? []
+        // Recurring Google meeting: render one tiny bar per instance instead of
+        // one stretched parent bar.
+        if (i.source === 'google' && subs.length > 1) {
+          return subs.map((si, idx): Project => ({
+            id:        `${boardName}__${i.id}__si${idx}`,
+            name:      i.name as string,
+            board:     boardName,
+            group:     g.name,
+            ownerIds:  (si.ownerIds && si.ownerIds.length ? si.ownerIds : (i.ownerIds as string[])),
+            startDate: si.startDate ?? null,
+            endDate:   si.endDate ?? si.startDate ?? null,
+            estHours:  Number(si.estHours) || 0,
+            status:    'active',
+            source:    'google',
+            externalLink: (i.externalLink as string | undefined),
+          }))
+        }
         const hours = subs.length > 0
           ? subs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
           : (Number(i.estHours) || 0)
-        return {
-          id: `${boardName}__${i.id}`, name: i.name, board: boardName, group: g.name,
+        return [{
+          id: `${boardName}__${i.id}`,
+          name: i.name as string,
+          board: boardName,
+          group: g.name,
           ownerIds:  i.ownerIds  as string[],
           startDate: i.startDate as string | null,
           endDate:   i.endDate   as string | null,
@@ -172,7 +192,7 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
           status:    (i.status as string) === 'Done' ? 'done' : 'active',
           source:        (i.source as 'manual' | 'google' | undefined),
           externalLink:  (i.externalLink as string | undefined),
-        } satisfies Project
+        }]
       })
   )
 }
@@ -322,8 +342,11 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
     function onMove(ev: MouseEvent) {
       if (!dragRef.current) return
       const dx = ev.clientX - dragRef.current.startX
+      // Only treat as drag once the mouse has moved at least 5px — otherwise
+      // a tiny twitch would steal a click.
+      if (Math.abs(dx) < 5 && !didDrag.current) return
       const ddays = Math.round(dx * dpx)
-      if (Math.abs(ddays) > 0) didDrag.current = true
+      if (Math.abs(dx) >= 5) didDrag.current = true
       const { mode, origStart, origEnd } = dragRef.current
       let newL = left, newW = width
       if (mode === 'move')       { newL = left + ddays * (colW / 7) }
@@ -415,41 +438,11 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDrag
   const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
   const isWeek      = zoom === 'week'
 
-  // Pre-group: same-name Google items for this member become one virtual
-  // bar spanning min(start)..max(end). Detail panel shows the underlying list.
+  // Each occurrence renders as its own bar — recurring meetings stay as
+  // small individual dots/bars rather than one stretched merge.
   const owned = projects.filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
-  const googleByName = new Map<string, Project[]>()
-  const standalone:  Project[] = []
-  for (const p of owned) {
-    if (p.source === 'google') {
-      const k = (p.name || '').trim().toLowerCase()
-      if (!k) { standalone.push(p); continue }
-      const arr = googleByName.get(k) ?? []
-      arr.push(p)
-      googleByName.set(k, arr)
-    } else {
-      standalone.push(p)
-    }
-  }
-  const merged: Project[] = []
-  for (const arr of googleByName.values()) {
-    if (arr.length === 1) { merged.push(arr[0]); continue }
-    const sorted = [...arr].sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
-    const minStart = sorted.find(p => p.startDate)?.startDate ?? null
-    const maxEnd   = [...arr].map(p => p.endDate ?? p.startDate ?? '').sort().slice(-1)[0] || null
-    merged.push({
-      ...sorted[0],
-      id:        `merged_${memberId}_${(arr[0].name || '').slice(0, 32)}`,
-      name:      `${arr[0].name} × ${arr.length}`,
-      startDate: minStart,
-      endDate:   maxEnd,
-      estHours:  arr.reduce((s, p) => s + (p.estHours || 0), 0),
-      mergedFrom: arr,
-    })
-  }
-  const effective = [...standalone, ...merged]
 
-  const rawBars = effective.map(p => {
+  const rawBars = owned.map(p => {
       const sDate = p.startDate ? new Date(p.startDate) : new Date(gridStartMs)
       const eDate = p.endDate   ? new Date(p.endDate)   : new Date(gridEndMs - 86400000)
       const s = sDate.getTime()
@@ -470,7 +463,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDrag
         width = Math.max((ce - cs) / msPerPx - 2, 6)
       }
       // Meetings: short Google events render at reduced height
-      const isMeeting = p.source === 'google' && !p.mergedFrom && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
+      const isMeeting = p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
       return { p, left, width, isMeeting }
     })
     .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
@@ -975,6 +968,19 @@ export default function PlanningPage() {
     return Number.isFinite(v) ? Math.max(50, Math.min(300, v)) : 100
   })
   useEffect(() => { localStorage.setItem('planning-colW-zoom', String(colWZoom)) }, [colWZoom])
+
+  // Keyboard shortcuts: +/= zooms in, - zooms out (skip when typing in inputs)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); setColWZoom(z => Math.min(300, z + 10)) }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); setColWZoom(z => Math.max(50, z - 10)) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   const [newItemOpen, setNewItemOpen] = useState(false)
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     if (typeof window === 'undefined') return 'week'
@@ -1676,17 +1682,17 @@ export default function PlanningPage() {
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
                 {expanded.size >= team.length ? '▾' : '▸'} Alles
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginLeft: 8, border: '1px solid var(--border-light)', borderRadius: 6, overflow: 'hidden' }}>
-                <button onClick={() => setColWZoom(z => Math.max(50, z - 25))}
-                  title="Smaller (zoom uit)"
-                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                <span title={`Kolom-breedte ${colWZoom}%`}
-                  style={{ minWidth: 44, padding: '0 6px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center', borderLeft: '1px solid var(--border-light)', borderRight: '1px solid var(--border-light)', height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {colWZoom}%
-                </span>
-                <button onClick={() => setColWZoom(z => Math.min(300, z + 25))}
-                  title="Breder (zoom in)"
-                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                <button onClick={() => setColWZoom(z => Math.max(50, z - 10))}
+                  title="Smaller (sneltoets: −)"
+                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                <input type="range" min={50} max={300} step={5}
+                  value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
+                  title={`Kolom-breedte ${colWZoom}%   ·   sneltoetsen +/−`}
+                  style={{ width: 80, accentColor: 'var(--accent)' }} />
+                <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
+                  title="Breder (sneltoets: +)"
+                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
               </div>
             </div>
             {cols.map(col => {

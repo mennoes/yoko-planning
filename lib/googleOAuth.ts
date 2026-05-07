@@ -12,14 +12,15 @@ const SCOPES = [
 const STATE_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? 'dev-fallback-secret'
 
 export type GoogleEvent = {
-  id:           string
-  status?:      string                            // 'confirmed' | 'cancelled'
-  summary?:     string
-  description?: string
-  htmlLink?:    string
-  start:        { dateTime?: string; date?: string; timeZone?: string }
-  end:          { dateTime?: string; date?: string; timeZone?: string }
-  updated?:     string
+  id:                 string
+  status?:            string                       // 'confirmed' | 'cancelled'
+  summary?:           string
+  description?:       string
+  htmlLink?:          string
+  start:              { dateTime?: string; date?: string; timeZone?: string }
+  end:                { dateTime?: string; date?: string; timeZone?: string }
+  updated?:           string
+  recurringEventId?:  string                       // master ID for recurring instances
 }
 
 export type CalendarSummary = {

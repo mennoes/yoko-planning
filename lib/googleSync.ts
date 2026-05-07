@@ -110,44 +110,111 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   const existing = (existingRows as ItemRow[] | null) ?? []
   const byExt    = new Map(existing.map(r => [r.external_id, r.id]))
 
+  // Group recurring events by their master ID so each recurring meeting
+  // becomes ONE board_item with subitems for each instance. Single events
+  // (no recurringEventId) stay as their own item.
+  const validEvents = events.filter(ev => {
+    if (ev.status === 'cancelled') return false
+    const { start } = eventDates(ev)
+    return !!start
+  })
+  const groupedByRec = new Map<string, GoogleEvent[]>()
+  for (const ev of validEvents) {
+    const key = ev.recurringEventId ?? ev.id
+    const arr = groupedByRec.get(key) ?? []
+    arr.push(ev)
+    groupedByRec.set(key, arr)
+  }
+
   const seenExt: Set<string> = new Set()
   let added = 0, updated = 0
   const upserts: Record<string, unknown>[] = []
 
-  for (const ev of events) {
-    if (ev.status === 'cancelled') continue
-    const { start, end } = eventDates(ev)
-    if (!start) continue
-    seenExt.add(ev.id)
+  for (const [groupKey, instances] of groupedByRec) {
+    if (instances.length === 1) {
+      // Single, non-recurring event
+      const ev = instances[0]
+      const { start, end } = eventDates(ev)
+      if (!start) continue
+      seenExt.add(ev.id)
+      const existingId = byExt.get(ev.id)
+      const id         = existingId ?? `it_g_${ev.id}_${cal.user_id.slice(0, 8)}`
+      if (existingId) updated++; else added++
+      upserts.push({
+        id,
+        group_id:           groupId,
+        board_id:           cal.board_id,
+        name:               ev.summary ?? '(geen titel)',
+        owner_ids:          ownerIds,
+        status:             '',
+        start_date:         start,
+        end_date:           end ?? start,
+        deadline:           null,
+        est_hours:          eventHours(ev),
+        dagen:              0,
+        notes:              ev.description ?? null,
+        contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
+        subitems:           [],
+        journal:            [],
+        extra:              {},
+        position:            0,
+        source:              'google',
+        external_id:         ev.id,
+        external_link:       ev.htmlLink ?? null,
+        external_synced_at:  new Date().toISOString(),
+        external_user_id:    cal.user_id,
+        updated_at:          new Date().toISOString(),
+      })
+      continue
+    }
 
-    const existingId = byExt.get(ev.id)
-    const id         = existingId ?? `it_g_${ev.id}_${cal.user_id.slice(0, 8)}`
+    // Recurring meeting: build one parent + subitem per instance
+    const sorted = [...instances].sort((a, b) => {
+      const sa = eventDates(a).start ?? ''; const sb = eventDates(b).start ?? ''
+      return sa.localeCompare(sb)
+    })
+    seenExt.add(groupKey)
+    for (const ev of instances) seenExt.add(ev.id)
+    const minStart = eventDates(sorted[0]).start
+    const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
+    const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0)
+    const subitems = sorted.map(ev => {
+      const { start, end } = eventDates(ev)
+      const dateLabel = start ? new Date(start).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
+      return {
+        id:        `si_g_${ev.id}`,
+        name:      dateLabel,
+        ownerIds:  ownerIds,
+        status:    '',
+        startDate: start,
+        endDate:   end ?? start,
+        estHours:  eventHours(ev),
+      }
+    })
+    const existingId = byExt.get(groupKey)
+    const id         = existingId ?? `it_g_${groupKey}_${cal.user_id.slice(0, 8)}`
     if (existingId) updated++; else added++
-
     upserts.push({
       id,
       group_id:           groupId,
       board_id:           cal.board_id,
-      name:               ev.summary ?? '(geen titel)',
+      name:               (sorted[0].summary ?? '(geen titel)') + ` (${instances.length}×)`,
       owner_ids:          ownerIds,
       status:             '',
-      start_date:         start,
-      end_date:           end ?? start,
+      start_date:         minStart,
+      end_date:           maxEnd ?? minStart,
       deadline:           null,
-      est_hours:          eventHours(ev),
+      est_hours:          totalHours,
       dagen:              0,
-      notes:              ev.description ?? null,
-      contactpersoon:     null,
-      uitzenddag:         null,
-      framelink:          null,
-      nummers:            null,
-      subitems:           [],
+      notes:              sorted[0].description ?? null,
+      contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
+      subitems,
       journal:            [],
       extra:              {},
       position:            0,
       source:              'google',
-      external_id:         ev.id,
-      external_link:       ev.htmlLink ?? null,
+      external_id:         groupKey,
+      external_link:       sorted[0].htmlLink ?? null,
       external_synced_at:  new Date().toISOString(),
       external_user_id:    cal.user_id,
       updated_at:          new Date().toISOString(),
