@@ -38,7 +38,7 @@ function Inner({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
-    if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share')) {
+    if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share') && !pathname.startsWith('/auth')) {
       router.replace('/login')
     }
   }, [isAuthenticated, pathname, router])
@@ -85,8 +85,8 @@ function Inner({ children }: { children: ReactNode }) {
     return () => { offAuth(); while (unsubs.length) unsubs.pop()?.() }
   }, [])
 
-  // Login + share routes: geen sidebar, geen ProfileSetup, geen auth-redirect
-  if (pathname === '/login' || pathname.startsWith('/share')) {
+  // Login + share + auth routes: geen sidebar, geen ProfileSetup, geen auth-redirect
+  if (pathname === '/login' || pathname.startsWith('/share') || pathname.startsWith('/auth')) {
     return (
       <>
         <ThemeApply />
