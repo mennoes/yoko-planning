@@ -260,13 +260,15 @@ export default function HomePage() {
   }
 
   // Hours per member this week
+  const YOKO_IDS = ['menno','vincent','odette','anne-fleur']
+  const yokoMembers = teamData.members.filter(m => YOKO_IDS.includes(m.id))
   const weekStartTeam = getWeekStart(new Date())
   const memberHoursThisWeek: Record<string, number> = {}
-  for (const m of teamData.members) {
+  for (const m of yokoMembers) {
     const contribs = memberContributions(allProjects, m.id, weekStartTeam)
     memberHoursThisWeek[m.id] = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
   }
-  const overloaded = teamData.members
+  const overloaded = yokoMembers
     .map(m => {
       const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
       const hrs = memberHoursThisWeek[m.id] ?? 0
@@ -367,7 +369,7 @@ export default function HomePage() {
           <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconUsers size={isMobile ? 17 : 15} />Team vandaag</h2>
         </div>
         <div style={{ padding: '6px 0 10px' }}>
-          {teamData.members.map(m => {
+          {yokoMembers.map(m => {
             const s = statusFor(m.id)
             const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
                        : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
