@@ -66,7 +66,7 @@ export default function LoginPage() {
   }
   const btn: React.CSSProperties = {
     width: '100%', padding: '11px', borderRadius: 8, border: 'none',
-    background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 700,
+    background: 'var(--accent)', color: '#000', fontSize: 15, fontWeight: 800, letterSpacing: '-0.01em',
     cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
   }
 
@@ -122,7 +122,7 @@ export default function LoginPage() {
               </button>
               {!isNew && (
                 <button onClick={handleReset}
-                  style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, padding: 0, fontWeight: 500 }}>
+                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12, padding: 0, fontWeight: 600, textDecoration: 'underline' }}>
                   Wachtwoord instellen / vergeten
                 </button>
               )}
@@ -177,10 +177,10 @@ function ThemePicker() {
           <button key={o.v} onClick={() => pick(o.v)}
             style={{
               padding: '7px 0', borderRadius: 7,
-              border: `1px solid ${theme === o.v ? 'var(--accent)' : 'var(--border-light)'}`,
+              border: `1px solid ${theme === o.v ? 'var(--text-primary)' : 'var(--border-light)'}`,
               background: theme === o.v ? 'var(--accent-light)' : 'transparent',
-              color: theme === o.v ? 'var(--accent)' : 'var(--text-muted)',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              color: theme === o.v ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontSize: 12, fontWeight: theme === o.v ? 800 : 600, cursor: 'pointer',
             }}>{o.l}</button>
         ))}
       </div>
