@@ -20,7 +20,7 @@ import { pullBoardFromRemote } from '@/lib/boardStore'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
-  IconDocument, IconFolder, IconFolderOpen, IconSort,
+  IconDocument, IconFolder, IconFolderOpen, IconSort, IconRefresh,
 } from './Icon'
 import { UserAvatar } from './UserAvatar'
 
@@ -565,6 +565,47 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
         )}
       </div>
     </>
+  )
+}
+
+// ─── Quick Google sync button (footer) ───────────────────────────────────────
+function SyncButton() {
+  const [busy,    setBusy]    = useState(false)
+  const [flash,   setFlash]   = useState<'ok' | 'err' | null>(null)
+
+  async function go() {
+    if (busy) return
+    setBusy(true); setFlash(null)
+    try {
+      const results = await syncGoogleNow()
+      const errs = results.filter(r => r.error)
+      if (errs.length === 0 && results.length > 0) {
+        const tot = results.reduce((s, r) => s + r.added + r.updated, 0)
+        for (const r of results) {
+          // Boards are connected per-row; pull each board for an immediate refresh.
+          // (Skip — runSync from settings already does this; here we rely on realtime.)
+          void r
+        }
+        if (tot >= 0) setFlash('ok')
+      } else if (errs.length > 0) {
+        setFlash('err')
+      }
+    } finally {
+      setBusy(false)
+      setTimeout(() => setFlash(null), 1800)
+    }
+  }
+
+  const color = flash === 'ok' ? '#1e8a4e' : flash === 'err' ? '#C4453A' : 'var(--text-secondary)'
+  return (
+    <button onClick={go} disabled={busy}
+      title={busy ? 'Synchroniseren…' : 'Sync Google Calendar nu (auto elke 5 min)'}
+      style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)',
+        color, cursor: busy ? 'wait' : 'pointer', flexShrink: 0,
+        transform: busy ? 'rotate(180deg)' : undefined, transition: 'transform 0.6s ease, color 0.2s' }}>
+      <IconRefresh size={16} />
+    </button>
   )
 }
 
@@ -1150,6 +1191,8 @@ export default function Sidebar({
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
             {(() => { const T = (THEMES.find(t => t.value === theme) ?? THEMES[0]).Icon; return <T size={17} /> })()}
           </button>
+
+          {requiresAuth && <SyncButton />}
 
           <button onClick={() => setSettingsOpen(true)} title="Instellingen"
             style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
