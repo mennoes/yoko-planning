@@ -605,6 +605,12 @@ export default function PlanningPage() {
   const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
   const [peopleOpen,   setPeopleOpen]   = useState(false)
+  const [shiftOpen,    setShiftOpen]    = useState(false)
+  const [shiftPicked,  setShiftPicked]  = useState<Set<string>>(new Set())
+  const [shiftDays,    setShiftDays]    = useState(7)
+  const [shiftFilter,  setShiftFilter]  = useState('')
+  const [shareOpen,    setShareOpen]    = useState(false)
+  const [copiedBoard,  setCopiedBoard]  = useState<string | null>(null)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
   const isMobile = useIsMobile()
@@ -642,6 +648,41 @@ export default function PlanningPage() {
       }
     } catch {}
   }, [])
+
+  function applyShift() {
+    if (shiftPicked.size === 0 || shiftDays === 0) { setShiftOpen(false); return }
+    // Group changes per board for efficient single save per board
+    const updates: Record<string, BoardGroup[]> = {}
+    const before: Record<string, BoardGroup[]> = {}
+    for (const project of projects) {
+      if (!shiftPicked.has(project.id)) continue
+      if (!project.startDate || !project.endDate) continue
+      const board = project.board
+      const itemId = project.id.slice(board.length + 2)
+      if (!updates[board]) {
+        updates[board] = (allGroups[board] ?? []).map(g => ({ ...g, items: g.items.map(i => ({ ...i })) }))
+        before[board]  = allGroups[board] ?? []
+      }
+      for (const g of updates[board]) {
+        for (const i of g.items) {
+          if (i.id === itemId) {
+            if (i.startDate) i.startDate = addDays(i.startDate as string, shiftDays)
+            if (i.endDate)   i.endDate   = addDays(i.endDate   as string, shiftDays)
+          }
+        }
+      }
+    }
+    for (const [board, groups] of Object.entries(updates)) {
+      saveGroups(board, groups)
+    }
+    setAllGroups(prev => ({ ...prev, ...updates }))
+    logActivity('Mass-shift toegepast', `${shiftPicked.size} project(en)`, `${shiftDays > 0 ? '+' : ''}${shiftDays} dagen`)
+    pushUndo(() => {
+      for (const [board, groups] of Object.entries(before)) saveGroups(board, groups)
+      setAllGroups(prev => ({ ...prev, ...before }))
+    })
+    setShiftOpen(false); setShiftPicked(new Set())
+  }
 
   function moveTeamMember(idx: number, dir: -1 | 1) {
     const next = idx + dir
@@ -888,8 +929,15 @@ export default function PlanningPage() {
           <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
             Capaciteit
           </button>
+          <button onClick={() => setShiftOpen(true)} style={ghostBtn(false)} title="Meerdere projecten tegelijk verschuiven">
+            Verschuif
+          </button>
           <button onClick={() => downloadIcs(projects)} title="Exporteer als iCal" style={ghostBtn(false)}>
             Exporteer
+          </button>
+          <button onClick={() => setShareOpen(true)} title="Deelbare links per agenda"
+            style={ghostBtn(false)}>
+            Deel
           </button>
           <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden"
             style={ghostBtn(editOrder)}>
@@ -942,6 +990,117 @@ export default function PlanningPage() {
               <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>{b}</span>
             </div>
           ))}
+        </Popup>
+      )}
+
+      {/* ── Share popup ── */}
+      {shareOpen && (
+        <Popup title="Deelbare read-only links" onClose={() => setShareOpen(false)}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 12 }}>
+            Deel een agenda met klanten of partners. Geen login nodig om te bekijken.
+          </p>
+          {Object.entries(BOARD_COLORS).map(([b, c]) => {
+            const url = typeof window !== 'undefined' ? `${window.location.origin}/share/${b}` : `/share/${b}`
+            const copied = copiedBoard === b
+            return (
+              <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
+                <span style={{ width: 12, height: 12, borderRadius: 3, background: c, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, textTransform: 'capitalize', minWidth: 80 }}>{b}</span>
+                <input readOnly value={url}
+                  onClick={e => e.currentTarget.select()}
+                  style={{ flex: 1, minWidth: 0, background: 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '5px 8px', color: 'var(--text-secondary)', fontSize: 11, outline: 'none', fontFamily: 'monospace' }} />
+                <button onClick={async () => {
+                    try { await navigator.clipboard.writeText(url); setCopiedBoard(b); setTimeout(() => setCopiedBoard(null), 1500) } catch {}
+                  }}
+                  style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border-light)',
+                    background: copied ? 'var(--accent-light)' : 'var(--bg-card)',
+                    color: copied ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  {copied ? '✓ Gekopieerd' : 'Kopieer'}
+                </button>
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                  style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border-light)',
+                    background: 'var(--bg-card)', color: 'var(--text-secondary)',
+                    fontSize: 11, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>
+                  Open
+                </a>
+              </div>
+            )
+          })}
+        </Popup>
+      )}
+
+      {/* ── Mass-shift popup ── */}
+      {shiftOpen && (
+        <Popup title="Verschuif projecten" onClose={() => setShiftOpen(false)}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Aantal dagen</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {[-7, -1, 1, 7, 14].map(d => (
+                <button key={d} onClick={() => setShiftDays(d)}
+                  style={{ padding: '6px 12px', borderRadius: 7,
+                    border: `1px solid ${shiftDays === d ? 'var(--accent)' : 'var(--border-light)'}`,
+                    background: shiftDays === d ? 'var(--accent-light)' : 'var(--bg-card)',
+                    color: shiftDays === d ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  {d > 0 ? `+${d}` : d}
+                </button>
+              ))}
+              <input type="number" value={shiftDays}
+                onChange={e => setShiftDays(parseInt(e.target.value) || 0)}
+                style={{ width: 70, background: 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '5px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>dagen</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Projecten ({shiftPicked.size})</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShiftPicked(new Set(projects.filter(p => p.startDate && p.endDate).map(p => p.id)))}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>Alles</button>
+              <button onClick={() => setShiftPicked(new Set())}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>Wis</button>
+            </div>
+          </div>
+
+          <input value={shiftFilter} onChange={e => setShiftFilter(e.target.value)}
+            placeholder="Zoek project…"
+            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', marginBottom: 8, boxSizing: 'border-box' }} />
+
+          <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--border-light)', borderRadius: 8 }}>
+            {projects
+              .filter(p => p.startDate && p.endDate)
+              .filter(p => !shiftFilter || p.name.toLowerCase().includes(shiftFilter.toLowerCase()))
+              .map(p => {
+                const checked = shiftPicked.has(p.id)
+                return (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => setShiftPicked(prev => {
+                        const next = new Set(prev)
+                        if (next.has(p.id)) next.delete(p.id); else next.add(p.id)
+                        return next
+                      })}
+                      style={{ accentColor: 'var(--accent)', flexShrink: 0 }} />
+                    <span style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[p.board] ?? '#888', flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{p.board}</span>
+                  </label>
+                )
+              })}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+            <button onClick={() => setShiftOpen(false)} style={cancelBtn}>Annuleer</button>
+            <button onClick={applyShift} disabled={shiftPicked.size === 0 || shiftDays === 0}
+              style={{ ...cancelBtn,
+                background: shiftPicked.size > 0 && shiftDays !== 0 ? 'var(--accent)' : 'var(--bg-hover)',
+                color: shiftPicked.size > 0 && shiftDays !== 0 ? '#fff' : 'var(--text-muted)',
+                border: 'none', fontWeight: 700,
+                cursor: shiftPicked.size > 0 && shiftDays !== 0 ? 'pointer' : 'not-allowed' }}>
+              Verschuif {shiftPicked.size} project(en)
+            </button>
+          </div>
         </Popup>
       )}
 
