@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import teamData from '@/data/team.json'
 import { useProfile } from './ProfileContext'
+import { supabase } from '@/lib/supabase'
+import { getCurrentUserId } from '@/lib/sync'
 import type { UserProfile } from '@/lib/profile'
 
 const MEMBERS = teamData.members
@@ -225,7 +227,28 @@ export default function ProfileSetup() {
   const [photoSrc,   setPhotoSrc]   = useState<string | null>(null)   // raw uploaded file
   const [savedPhoto, setSavedPhoto] = useState<string | null>(profile?.photo ?? null)
   const [cropMode,   setCropMode]   = useState(false)
+  const [takenIds,   setTakenIds]   = useState<Set<string>>(new Set())
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Pull list of member_ids already claimed by other users so we can hide them
+  useEffect(() => {
+    let cancelled = false
+    async function pull() {
+      if (!supabase) return
+      const myUid = await getCurrentUserId()
+      const { data } = await supabase.from('profiles').select('user_id, member_id')
+      if (cancelled || !data) return
+      const taken = new Set<string>()
+      for (const row of data as { user_id: string; member_id: string }[]) {
+        if (row.member_id && row.user_id !== myUid) taken.add(row.member_id)
+      }
+      setTakenIds(taken)
+    }
+    if (isVisible) pull()
+    return () => { cancelled = true }
+  }, [isVisible])
+
+  const visibleMembers = MEMBERS.filter(m => !takenIds.has(m.id) || m.id === profile?.memberId)
 
   // Reset state when reopened in edit mode
   useEffect(() => {
@@ -300,7 +323,7 @@ export default function ProfileSetup() {
             Wie ben jij?
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {MEMBERS.map(m => {
+            {visibleMembers.map(m => {
               const active = selected?.id === m.id
               return (
                 <button key={m.id} onClick={() => setSelected(m)} style={{

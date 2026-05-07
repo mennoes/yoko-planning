@@ -51,3 +51,5 @@ export const IconAuto       = (p: Props) => base({ ...p, children: <><circle cx=
 export const IconChart      = (p: Props) => base({ ...p, children: <><line x1="4" y1="20" x2="20" y2="20" /><rect x="6" y="11" width="3" height="9" /><rect x="11" y="6" width="3" height="14" /><rect x="16" y="14" width="3" height="6" /></> })
 export const IconCalendar   = (p: Props) => base({ ...p, children: <><rect x="3" y="5" width="18" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="3" y1="10" x2="21" y2="10" /></> })
 export const IconBoard      = (p: Props) => base({ ...p, children: <><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="9" x2="9" y2="21" /></> })
+export const IconFolder     = (p: Props) => base({ ...p, children: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> })
+export const IconFolderOpen = (p: Props) => base({ ...p, children: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2H3zm0 2h18l-2 8a2 2 0 0 1-2 1.5H5a2 2 0 0 1-2-1.5z" /> })
