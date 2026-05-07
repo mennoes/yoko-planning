@@ -307,7 +307,7 @@ const EDITABLE_FIELDS: FieldDef[] = [
   { key: 'pronouns',          label: 'Voornaamwoorden', type: 'text' },
   { key: 'languages',         label: 'Talen',           type: 'text' },
   // Beschikbaarheid
-  { key: 'days_off',          label: 'Vrije dagen',     type: 'days' },
+  { key: 'days_off',          label: 'Werkdagen',       type: 'days' },
   { key: 'vacation_until',    label: 'Vakantie tot',    type: 'date' },
   // Nood
   { key: 'emergency_contact', label: 'Noodcontact',     type: 'text' },
@@ -331,7 +331,12 @@ function renderReadValue(f: FieldDef, d: ExtendedProfile | null): React.ReactNod
   if (f.type === 'tel')    return <a href={`tel:${String(v).replace(/\s/g,'')}`} style={linkStyle}>{String(v)}</a>
   if (f.type === 'url')    return <a href={String(v)} target="_blank" rel="noopener noreferrer" style={linkStyle}>profiel ↗</a>
   if (f.type === 'date')   return fmtDate(String(v))
-  if (f.type === 'days')   return Array.isArray(v) ? v.map(d => DAY_LABELS[d as string] ?? d).join(', ') : String(v)
+  if (f.type === 'days')   {
+    if (!Array.isArray(v)) return String(v)
+    const ALL = ['mon','tue','wed','thu','fri','sat','sun']
+    const work = ALL.filter(x => !(v as string[]).includes(x))
+    return work.map(d => DAY_LABELS[d]).join(', ')
+  }
   return String(v)
 }
 
@@ -343,17 +348,22 @@ function EditableValue({ field, data, onSave }: {
   const raw = data?.[field.key]
 
   if (field.type === 'days') {
-    const set = new Set<string>(Array.isArray(raw) ? (raw as string[]) : [])
+    // Storage stays in `days_off` (= days NOT working). UI shows the COMPLEMENT
+    // as "Werkdagen": user toggles the days they work; we save the rest.
+    const ALL_DAYS = ['mon','tue','wed','thu','fri','sat','sun'] as const
+    const offSet  = new Set<string>(Array.isArray(raw) ? (raw as string[]) : [])
+    const workSet = new Set(ALL_DAYS.filter(d => !offSet.has(d)))
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Selecteer dagen waarop je <strong>niet</strong> werkt.</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Selecteer dagen waarop je werkt.</div>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {(['mon','tue','wed','thu','fri','sat','sun'] as const).map(d => {
-          const on = set.has(d)
+        {ALL_DAYS.map(d => {
+          const on = workSet.has(d)
           return (
             <button key={d} onClick={() => {
-                const next = new Set(set); on ? next.delete(d) : next.add(d)
-                onSave({ days_off: Array.from(next) })
+                const nextWork = new Set(workSet); on ? nextWork.delete(d) : nextWork.add(d)
+                const nextOff  = ALL_DAYS.filter(x => !nextWork.has(x))
+                onSave({ days_off: nextOff })
               }}
               style={{ padding: '4px 9px', borderRadius: 6,
                 border: `1px solid ${on ? 'var(--accent)' : 'var(--border-light)'}`,

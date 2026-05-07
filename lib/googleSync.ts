@@ -235,6 +235,32 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     removed = toRemove.length
   }
 
+  // Auto-cleanup: delete any non-google rows on this board whose name matches
+  // a synced Google item (catches XLSX import duplicates and stale per-instance
+  // rows from older sync versions). Strip the "(N×)" recurring suffix so the
+  // base title also matches.
+  const upsertedNames = new Set<string>()
+  for (const u of upserts) {
+    const name = String(u.name ?? '').trim()
+    if (!name) continue
+    upsertedNames.add(name)
+    upsertedNames.add(name.replace(/\s*\(\d+×\)\s*$/, '').trim())
+  }
+  if (upsertedNames.size > 0) {
+    const { data: dupRows } = await admin
+      .from('board_items')
+      .select('id, source')
+      .eq('board_id', cal.board_id)
+      .in('name', Array.from(upsertedNames))
+    const dupIds = ((dupRows as { id: string; source: string | null }[] | null) ?? [])
+      .filter(r => r.source !== 'google')
+      .map(r => r.id)
+    if (dupIds.length > 0) {
+      await admin.from('board_items').delete().in('id', dupIds)
+      removed += dupIds.length
+    }
+  }
+
   await admin.from('google_calendars').update({ last_sync_at: new Date().toISOString() }).eq('id', cal.id)
   return { added, updated, removed }
 }
