@@ -157,16 +157,23 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
   return groups.flatMap(g =>
     g.items
       .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
-      .map(i => ({
-        id: `${boardName}__${i.id}`, name: i.name, board: boardName, group: g.name,
-        ownerIds:  i.ownerIds  as string[],
-        startDate: i.startDate as string | null,
-        endDate:   i.endDate   as string | null,
-        estHours:  (i.estHours as number) ?? 0,
-        status:    (i.status as string) === 'Done' ? 'done' : 'active',
-        source:        (i.source as 'manual' | 'google' | undefined),
-        externalLink:  (i.externalLink as string | undefined),
-      } satisfies Project))
+      .map(i => {
+        const subs = (i.subitems as Array<{ estHours?: number }> | undefined) ?? []
+        const hours = subs.length > 0
+          ? subs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+          : (Number(i.estHours) || 0)
+        return {
+          id: `${boardName}__${i.id}`, name: i.name, board: boardName, group: g.name,
+          ownerIds:  i.ownerIds  as string[],
+          startDate: i.startDate as string | null,
+          endDate:   i.endDate   as string | null,
+          estHours:  hours,
+          ownerHours: (i.ownerHours as Record<string, number> | undefined),
+          status:    (i.status as string) === 'Done' ? 'done' : 'active',
+          source:        (i.source as 'manual' | 'google' | undefined),
+          externalLink:  (i.externalLink as string | undefined),
+        } satisfies Project
+      })
   )
 }
 
@@ -442,7 +449,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[] }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[]; ownerHours: Record<string, number> }>) => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const team    = teamData.members
@@ -454,6 +461,12 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
   const [newEntry,  setNewEntry]  = useState('')
+  const [ownerHours, setOwnerHours] = useState<Record<string, number>>(
+    (rawItem?.ownerHours as Record<string, number> | undefined) ?? {}
+  )
+  const hasSubitems = ((rawItem?.subitems as { estHours?: number }[] | undefined)?.length ?? 0) > 0
+  const subitemsTotal = ((rawItem?.subitems as { estHours?: number }[] | undefined) ?? [])
+    .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
   const [timerTick, setTimerTick] = useState(0)
   useEffect(() => onTimerUpdate(() => setTimerTick(t => t + 1)), [])
   const activeTimer = getActiveTimer()
@@ -465,6 +478,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
     setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
     setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
+    setOwnerHours((rawItem?.ownerHours as Record<string, number> | undefined) ?? {})
     setNewEntry('')
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -475,7 +489,15 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   }, [onClose])
 
   const isGoogle = rawItem?.source === 'google'
-  function save() { if (!isGoogle) onUpdate(project, startDate || null, endDate || null, { estHours: parseFloat(estHours) || 0, notes, journal }) }
+  function save() {
+    if (isGoogle) return
+    // When subitems exist the parent's hours are derived; don't write them.
+    const extra: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[]; ownerHours: Record<string, number> }> = {
+      notes, journal, ownerHours,
+    }
+    if (!hasSubitems) extra.estHours = parseFloat(estHours) || 0
+    onUpdate(project, startDate || null, endDate || null, extra)
+  }
   function addEntry() {
     const text = newEntry.trim()
     if (!text) return
@@ -552,12 +574,58 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
         {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
         <Row label="Est Time">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="number" value={estHours} disabled={isGoogle}
-              onChange={e => setEstHours(e.target.value)}
-              style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
+            {hasSubitems ? (
+              <>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{subitemsTotal} uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(som van subitems)</span>
+              </>
+            ) : (
+              <>
+                <input type="number" value={estHours} disabled={isGoogle}
+                  onChange={e => setEstHours(e.target.value)}
+                  style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>· {Math.round(((parseFloat(estHours) || 0) / 8) * 10) / 10} d</span>
+              </>
+            )}
           </div>
         </Row>
+        {!isGoogle && project.ownerIds.length > 1 && (
+          <Row label="Verdeling">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Standaard verdeeld; vul in om handmatig per persoon te splitsen.
+              </div>
+              {project.ownerIds.map(oid => {
+                const m = team.find(t => t.id === oid)
+                if (!m) return null
+                const total = hasSubitems ? subitemsTotal : (parseFloat(estHours) || 0)
+                const def   = total / Math.max(project.ownerIds.length, 1)
+                const cur   = ownerHours[oid]
+                return (
+                  <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <UserAvatar memberId={oid} size={20} />
+                    <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)' }}>{m.name}</span>
+                    <input type="number" step="0.5" min="0"
+                      placeholder={String(Math.round(def * 10) / 10)}
+                      value={cur === undefined ? '' : cur}
+                      onChange={e => {
+                        const v = e.target.value
+                        setOwnerHours(prev => {
+                          const n = { ...prev }
+                          if (v === '') delete n[oid]
+                          else n[oid] = parseFloat(v) || 0
+                          return n
+                        })
+                      }}
+                      style={{ ...dateInput, width: 70 }} />
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>uur</span>
+                  </div>
+                )
+              })}
+            </div>
+          </Row>
+        )}
         <Row label="Tijd">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {isTimingThis ? (
@@ -1030,7 +1098,7 @@ export default function PlanningPage() {
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     pushUndo(() => apply(prevStart, prevEnd))
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[] }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[]; ownerHours: Record<string, number> }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     const groups = (allGroups[boardName] ?? []).map(g => ({

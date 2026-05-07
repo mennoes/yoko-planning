@@ -47,7 +47,7 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     journal:        (r.journal as BoardItem['journal']) ?? undefined,
     source:         (r.source as BoardItem['source']) ?? undefined,
     externalLink:   (r.external_link as string | undefined) ?? undefined,
-    ...((r.extra as Record<string, unknown>) ?? {}),
+    ...((r.extra as Record<string, unknown>) ?? {}),    // includes ownerHours
   } as BoardItem
 }
 
@@ -89,6 +89,8 @@ const STANDARD_FIELDS = new Set([
   'id','name','ownerIds','status','startDate','endDate','deadline','estHours',
   'dagen','notes','contactpersoon','uitzenddag','framelink','nummers','subitems','journal',
   'source','externalLink',
+  // 'ownerHours' is intentionally NOT here — it lives in the `extra` JSON
+  // column since the board_items table has no dedicated column for it.
 ])
 function itemToRow(boardName: string, groupId: string, position: number, item: BoardItem): Record<string, unknown> {
   const extra: Record<string, unknown> = {}

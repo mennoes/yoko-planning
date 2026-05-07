@@ -44,6 +44,7 @@ export type BoardItem = {
   journal?:       JournalEntry[]
   source?:        'manual' | 'google'   // origin of this item
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
+  ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
   [key: string]:  unknown
 }
 
