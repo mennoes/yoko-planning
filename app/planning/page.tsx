@@ -62,6 +62,8 @@ function vc(vs: ViewSize) {
 }
 // Column widths per zoom
 const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 46, week: 104, maand: 120 }
+// How many columns of history to render before today on first load.
+const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 14, week: 4, maand: 2 }
 // Column counts per zoom
 const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 60, week: 56, maand: 18 }
 const NL_DAY = ['zo','ma','di','wo','do','vr','za']
@@ -695,6 +697,7 @@ export default function PlanningPage() {
   const gridRef = useRef<HTMLDivElement>(null)
   const dragScrollRef = useRef<{ startX: number; scrollLeft: number } | null>(null)
   const [isDragScrolling, setIsDragScrolling] = useState(false)
+  const initialScrollDoneRef = useRef(false)
 
   useEffect(() => {
     function refresh() {
@@ -827,20 +830,33 @@ export default function PlanningPage() {
   const weekW = viewSize === 'extra' ? 220 : viewSize === 'large' ? 140 : 104
   const colW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : weekW
 
+  // On first render (and when zoom changes back to colOffset 0), scroll the grid
+  // so "today" is near the left of the viewport — past columns are reachable
+  // by scrolling left without first jumping back.
+  useEffect(() => {
+    if (colOffset !== 0) return
+    const el = gridRef.current
+    if (!el) return
+    const back = HISTORY_BACK[zoom]
+    el.scrollLeft = back * colW
+    initialScrollDoneRef.current = true
+  }, [zoom, colW, colOffset])
+
   // Compute from-date based on zoom and offset.
-  // Default (offset 0): today / this week / this month at the LEFT edge.
-  // User can scroll back via colOffset (negative) or forward (positive).
+  // Default: render some history before today so the user can scroll left
+  // to see past weeks/days/months without first hitting the "jump back" button.
+  // User can scroll further via colOffset (negative) or forward (positive).
   const now   = new Date()
   const baseFrom: Date = useMemo(() => {
     if (zoom === 'dag') {
-      const d = new Date(now); d.setDate(d.getDate() + colOffset); d.setHours(0,0,0,0); return d
+      const d = new Date(now); d.setDate(d.getDate() + colOffset - HISTORY_BACK.dag); d.setHours(0,0,0,0); return d
     }
     if (zoom === 'maand') {
-      const d = new Date(now.getFullYear(), now.getMonth() + colOffset, 1); return d
+      const d = new Date(now.getFullYear(), now.getMonth() + colOffset - HISTORY_BACK.maand, 1); return d
     }
     // week
     const ws = getWeekStart(now)
-    const d  = new Date(ws); d.setDate(d.getDate() + colOffset * 7); return d
+    const d  = new Date(ws); d.setDate(d.getDate() + (colOffset - HISTORY_BACK.week) * 7); return d
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, colOffset])
 

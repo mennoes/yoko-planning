@@ -173,7 +173,16 @@ export default function HomePage() {
         }
       }))
     }
-    const cap = teamData.members.find(m => m.id === memberId)?.weeklyCapacity ?? 40
+    // Capacity: prefer the override the user set in the planning tool
+    // (localStorage 'yoko-capacities'), fall back to teamData default.
+    let cap = teamData.members.find(m => m.id === memberId)?.weeklyCapacity ?? 40
+    try {
+      const raw = localStorage.getItem('yoko-capacities')
+      if (raw) {
+        const map = JSON.parse(raw) as Record<string, number>
+        if (memberId in map) cap = map[memberId]
+      }
+    } catch {}
     setWeekCapacity(cap)
 
     // Restore mobile section order
