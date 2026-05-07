@@ -204,20 +204,22 @@ function SectionBlock({
   return (
     <div style={{
       marginTop: 8,
-      background: open ? 'var(--overlay-subtle)' : 'transparent',
+      background: 'var(--bg-card)',
       border: '1px solid var(--border-light)',
       borderRadius: 10,
-      paddingBottom: open ? 6 : 0,
-      transition: 'background 0.15s, padding-bottom 0.15s',
+      overflow: 'hidden',
+      transition: 'background 0.15s',
     }}>
-      {/* Section header — folder style */}
+      {/* Section header — tinted bg, white items below */}
       <div onClick={e => {
         // Click anywhere on the header (except buttons / inputs) toggles open state
         const t = e.target as HTMLElement
         if (t.closest('button') || t.closest('input')) return
         setOpen(o => !o)
       }}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 12px', cursor: 'pointer', borderRadius: 10 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 12px', cursor: 'pointer',
+          background: 'var(--overlay-subtle)',
+          borderBottom: open ? '1px solid var(--border-light)' : 'none' }}
         onMouseEnter={e => {
           e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '1'))
         }}
@@ -663,10 +665,12 @@ export default function Sidebar({
                     style={{
                       display: 'flex', alignItems: 'center', gap: 11, flex: 1,
                       padding: '10px 12px', borderRadius: 8,
-                      color: 'var(--text-primary)',
-                      background: active ? 'var(--bg-hover)' : 'transparent',
+                      color: active ? 'var(--accent)' : 'var(--text-primary)',
+                      background: active ? 'var(--accent-light)' : 'transparent',
                       textDecoration: 'none', fontSize: 17, fontWeight: active ? 700 : 600,
                       letterSpacing: '-0.01em',
+                      borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
+                      paddingLeft: active ? 9 : 12,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}

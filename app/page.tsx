@@ -7,7 +7,7 @@ import { useProfile } from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
-import { IconCheckList, IconHourglass, IconDocument, IconRocket, IconBuilding, IconUsers, IconKey } from '@/components/Icon'
+import { IconCheckList, IconHourglass, IconDocument } from '@/components/Icon'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
@@ -27,8 +27,8 @@ const RAW: Record<string, { groups: unknown[] }> = {
 
 type TodoItem = { id: string; text: string; done: boolean }
 
-type SectionId = 'taken' | 'werkdruk' | 'documenten' | 'lopend' | 'algemeen' | 'paginas'
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'paginas', 'documenten', 'lopend', 'algemeen']
+type SectionId = 'taken' | 'werkdruk' | 'documenten' | 'paginas'
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'paginas', 'documenten']
 
 const QUICK_LINKS: { groups: { name: string; items: { label: string; href: string; emoji: string }[] }[] } = {
   groups: [
@@ -107,8 +107,6 @@ export default function HomePage() {
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
   const [weekItems,    setWeekItems]    = useState<{ name: string; board: string; hours: number }[]>([])
-  const [lopendItems,  setLopendItems]  = useState<{ name: string; board: string; endDate: string | null }[]>([])
-  const [algemeenTodos, setAlgemeenTodos] = useState<TodoItem[]>([])
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
@@ -123,21 +121,13 @@ export default function HomePage() {
     const section = todosData.sections.find(s => s.id === memberId)
     if (section) setMyTodos(section.items as TodoItem[])
 
-    // Algemeen todos (non-member sections)
-    const memberIds = new Set(teamData.members.map(m => m.id))
-    const algSections = todosData.sections.filter(s => !memberIds.has(s.id))
-    const algItems = algSections.flatMap(s => s.items as TodoItem[]).filter(t => !t.done).slice(0, 5)
-    setAlgemeenTodos(algItems)
-
-    // Board projects
-    const allProjects: Project[] = []
-    for (const [name, raw] of Object.entries(RAW)) {
-      const groups = loadGroups(name, raw.groups as BoardGroup[])
-      allProjects.push(...groupsToProjects(name, groups))
-    }
-
     // Workload this week
     if (memberId) {
+      const allProjects: Project[] = []
+      for (const [name, raw] of Object.entries(RAW)) {
+        const groups = loadGroups(name, raw.groups as BoardGroup[])
+        allProjects.push(...groupsToProjects(name, groups))
+      }
       const week    = getWeekStart(new Date())
       const contribs = memberContributions(allProjects, memberId, week)
       setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
@@ -145,20 +135,6 @@ export default function HomePage() {
     }
     const cap = teamData.members.find(m => m.id === memberId)?.weeklyCapacity ?? 40
     setWeekCapacity(cap)
-
-    // Lopend: active projects spanning today
-    const today = new Date(); today.setHours(0,0,0,0)
-    const todayMs = today.getTime()
-    const lopend = allProjects
-      .filter(p => p.status !== 'done' && p.startDate && p.endDate)
-      .filter(p => {
-        const s = new Date(p.startDate!).getTime()
-        const e = new Date(p.endDate!).getTime() + 86400000
-        return s <= todayMs + 14 * 86400000 && e >= todayMs
-      })
-      .slice(0, 6)
-      .map(p => ({ name: p.name, board: p.board, endDate: p.endDate }))
-    setLopendItems(lopend)
 
     // Restore mobile section order
     try {
@@ -331,53 +307,6 @@ export default function HomePage() {
         )}
       </div>
     ),
-    lopend: (
-      <div style={card}>
-        <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconRocket size={isMobile ? 17 : 15} />Lopend</h2>
-          <Link href="/planning" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Planning →</Link>
-        </div>
-        <div style={{ padding: '6px 0 8px' }}>
-          {lopendItems.length === 0 ? (
-            <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen lopende projecten</p>
-          ) : lopendItems.map((item, i) => {
-            const dc = deadlineColor(item.endDate)
-            return (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                {item.endDate && (
-                  <span style={{ fontSize: 11, fontWeight: dc ? 700 : 400,
-                    color: dc?.fg ?? 'var(--text-muted)',
-                    background: dc?.bg ?? 'transparent',
-                    padding: dc ? '2px 7px' : 0, borderRadius: 6, flexShrink: 0 }}>
-                    {fmtDate(item.endDate)}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    ),
-    algemeen: (
-      <div style={card}>
-        <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconCheckList size={isMobile ? 17 : 15} />Algemeen</h2>
-          <Link href="/todos" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Alle →</Link>
-        </div>
-        <div style={{ padding: '6px 0 8px' }}>
-          {algemeenTodos.length === 0 ? (
-            <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen open algemene taken</p>
-          ) : algemeenTodos.map(t => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '5px 18px' }}>
-              <div style={{ width: 13, height: 13, borderRadius: 3, border: '2px solid var(--border)', flexShrink: 0, marginTop: 3 }} />
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{t.text}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
   }
 
   return (
@@ -437,14 +366,10 @@ export default function HomePage() {
             {sections.taken}
             {sections.werkdruk}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start', marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 18, alignItems: 'start' }}>
             {sections.documenten}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {sections.lopend}
-              {sections.algemeen}
-            </div>
+            {sections.paginas}
           </div>
-          {sections.paginas}
         </>
       )}
 

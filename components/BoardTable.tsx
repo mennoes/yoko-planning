@@ -609,10 +609,15 @@ function SubItemsSection({ subitems, onUpdate }: { subitems: SubItem[]; onUpdate
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, onUpdate, onDelete }: {
+function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
   selected: boolean
   onToggleSelect: () => void
+  reorderMode: boolean
+  isFirst: boolean
+  isLast: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
   onUpdate: (u: Partial<BoardItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -680,10 +685,17 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, onUpdate
           </div>
         ))}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%' }}>
-          {hover && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%', gap: 2 }}>
+          {reorderMode ? (
+            <>
+              <button onClick={onMoveUp} disabled={isFirst} title="Omhoog"
+                style={{ background: isFirst ? 'transparent' : 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 4, color: isFirst ? 'var(--text-muted)' : 'var(--text-primary)', cursor: isFirst ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700, padding: '1px 4px', opacity: isFirst ? 0.4 : 1 }}>↑</button>
+              <button onClick={onMoveDown} disabled={isLast} title="Omlaag"
+                style={{ background: isLast ? 'transparent' : 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 4, color: isLast ? 'var(--text-muted)' : 'var(--text-primary)', cursor: isLast ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700, padding: '1px 4px', opacity: isLast ? 0.4 : 1 }}>↓</button>
+            </>
+          ) : hover ? (
             <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -695,11 +707,14 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, onUpdate
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, onUpdateGroup, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onDeleteGroup, onResizeCol }: {
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
   onSelectGroup: (groupId: string, allSelected: boolean) => void
+  sortBy: { key: string; dir: 'asc' | 'desc' } | null
+  onToggleSort: (key: string) => void
+  reorderMode: boolean
   onUpdateGroup: (g: BoardGroup) => void
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
@@ -723,6 +738,46 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
   function deleteItem(itemId: string) {
     onUpdateGroup({ ...group, items: group.items.filter(i => i.id !== itemId) })
   }
+  function moveItem(itemId: string, dir: -1 | 1) {
+    const idx = group.items.findIndex(i => i.id === itemId)
+    const next = idx + dir
+    if (idx < 0 || next < 0 || next >= group.items.length) return
+    const items = [...group.items]
+    items[idx] = items[next]; items[next] = group.items[idx]
+    onUpdateGroup({ ...group, items })
+  }
+
+  // Sorted view of items — does not mutate saved order
+  function sortValue(item: BoardItem, key: string): string | number | null {
+    if (key === 'name')      return item.name?.toLowerCase() ?? ''
+    if (key === 'ownerIds') {
+      const id = item.ownerIds?.[0]
+      const m  = id ? teamData.members.find(t => t.id === id) : null
+      return (m?.name ?? '~').toLowerCase()
+    }
+    if (key === 'status')    return STATUS_OPTIONS.findIndex(o => o.label === item.status)
+    if (key === 'estHours' || key === 'dagen' || key === 'nummers') return Number(item[key] ?? 0)
+    if (key === 'startDate' || key === 'endDate' || key === 'deadline' || key === 'uitzenddag' || key === 'timeline') {
+      const dKey = key === 'timeline' ? 'startDate' : key
+      const v    = item[dKey] as string | null
+      return v ? new Date(v).getTime() : Number.MAX_SAFE_INTEGER
+    }
+    const v = item[key]
+    if (v == null) return ''
+    return typeof v === 'number' ? v : String(v).toLowerCase()
+  }
+  const renderItems = sortBy
+    ? [...group.items].sort((a, b) => {
+        const av = sortValue(a, sortBy.key)
+        const bv = sortValue(b, sortBy.key)
+        if (av === null && bv === null) return 0
+        if (av === null) return 1
+        if (bv === null) return -1
+        if (av < bv) return sortBy.dir === 'asc' ? -1 : 1
+        if (av > bv) return sortBy.dir === 'asc' ? 1 : -1
+        return 0
+      })
+    : group.items
   function addItem() {
     onUpdateGroup({ ...group, items: [...group.items, {
       id: Date.now().toString(), name: 'Nieuw item', ownerIds: [], status: '',
@@ -824,15 +879,20 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
                   onChange={e => onSelectGroup(group.id, e.target.checked)}
                   style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15 }} />
               </div>
-              <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Item</div>
+              <button onClick={() => onToggleSort('name')}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 11, fontWeight: 700, color: sortBy?.key === 'name' ? 'var(--accent)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
+                Item {sortBy?.key === 'name' && (sortBy.dir === 'asc' ? '↑' : '↓')}
+              </button>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none' }}>
+                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 11, fontWeight: 700, color: sortBy?.key === col.key ? 'var(--accent)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                  onClick={() => onToggleSort(col.key)}>
                   {col.label}
+                  {sortBy?.key === col.key && (sortBy.dir === 'asc' ? '↑' : '↓')}
                   <div
                     title="Kolom breder/smaller slepen"
                     style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }}
                     onMouseDown={e => {
-                      e.preventDefault()
+                      e.preventDefault(); e.stopPropagation()
                       const startX = e.clientX
                       const startW = colWidths[col.key] ?? col.width
                       function onMove(ev: MouseEvent) { onResizeCol(col.key, startW + ev.clientX - startX) }
@@ -849,25 +909,33 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
               <div style={{ borderLeft: '1px solid var(--border)' }} />
             </div>
 
-            {group.items.map((item, idx) => (
-              <div key={item.id} draggable
-                onDragStart={e => { dragRowRef.current = idx; e.dataTransfer.effectAllowed = 'move' }}
+            {renderItems.map((item) => {
+              const realIdx = group.items.findIndex(i => i.id === item.id)
+              return (
+              <div key={item.id} draggable={!sortBy && !reorderMode}
+                onDragStart={e => { dragRowRef.current = realIdx; e.dataTransfer.effectAllowed = 'move' }}
                 onDragOver={e => {
                   e.preventDefault()
-                  if (dragRowRef.current === null || dragRowRef.current === idx) return
+                  if (dragRowRef.current === null || dragRowRef.current === realIdx) return
                   const next = [...group.items]
                   const [moved] = next.splice(dragRowRef.current, 1)
-                  next.splice(idx, 0, moved)
-                  dragRowRef.current = idx
+                  next.splice(realIdx, 0, moved)
+                  dragRowRef.current = realIdx
                   onUpdateGroup({ ...group, items: next })
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate}
                   selected={selectedIds.has(item.id)}
                   onToggleSelect={() => onToggleSelect(item.id)}
+                  reorderMode={reorderMode}
+                  isFirst={realIdx === 0}
+                  isLast={realIdx === group.items.length - 1}
+                  onMoveUp={() => moveItem(item.id, -1)}
+                  onMoveDown={() => moveItem(item.id, 1)}
                   onUpdate={u => updateItem(item.id, u)} onDelete={() => deleteItem(item.id)} />
               </div>
-            ))}
+              )
+            })}
 
             <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
               <button onClick={addItem} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: 0 }}
@@ -921,6 +989,8 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
   const [filterStatus,  setFilterStatus] = useState('')
   const [editingTitle,  setEditingTitle] = useState(false)
   const [selectedIds,   setSelectedIds]  = useState<Set<string>>(new Set())
+  const [sortBy,        setSortBy]       = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+  const [reorderMode,   setReorderMode]  = useState(false)
   const [titleDraft,    setTitleDraft]   = useState(title)
 
   function resizeCol(key: string, newWidth: number) {
@@ -1035,6 +1105,14 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
     onChange(groups.map(g => ({ ...g, items: g.items.filter(i => !selectedIds.has(i.id)) })))
     clearSelection()
   }
+  function toggleSort(key: string) {
+    setSortBy(prev => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' }
+      if (prev.dir === 'asc') return { key, dir: 'desc' }
+      return null
+    })
+  }
+
   function bulkMoveTo(targetGroupId: string) {
     if (selectedIds.size === 0) return
     const moved: BoardItem[] = []
@@ -1073,6 +1151,20 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
           )}
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setReorderMode(r => !r)}
+            title={reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+            style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              background: reorderMode ? 'var(--accent-light)' : 'var(--bg-card)',
+              border: `1px solid ${reorderMode ? 'var(--accent)' : 'var(--border)'}`,
+              color: reorderMode ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>
+            ↕ {reorderMode ? 'Klaar' : 'Volgorde'}
+          </button>
+          {sortBy && (
+            <button onClick={() => setSortBy(null)} title="Sortering wissen"
+              style={{ padding: '7px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              × sortering
+            </button>
+          )}
           <button onClick={exportCSV} title="Exporteer als CSV"
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             ↓ CSV
@@ -1168,6 +1260,8 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onSelectGroup={selectGroup}
+            sortBy={sortBy} onToggleSort={toggleSort}
+            reorderMode={reorderMode}
             onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
             onDeleteGroup={() => handleDeleteGroup(group.id)} />
         ))}

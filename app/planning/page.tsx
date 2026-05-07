@@ -926,7 +926,7 @@ export default function PlanningPage() {
         {/* Title + nav */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 10 : 16 }}>
           <div style={{ minWidth: 0, flex: 1, paddingRight: isMobile ? 90 : 0 }}>
-            <h1 style={{ fontSize: isMobile ? 22 : 30, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em', lineHeight: 1 }}>
+            <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 900, color: '#000', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
               Planning
             </h1>
             <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
