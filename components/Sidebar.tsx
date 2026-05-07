@@ -539,6 +539,9 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
           </div>
         </div>
 
+        {/* Set / change password */}
+        {requiresAuth && <PasswordSetter />}
+
         {/* Sign out */}
         {requiresAuth && (
           <button onClick={() => { onClose(); signOut() }}
@@ -552,6 +555,76 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
       </div>
     </>
   )
+}
+
+// ─── Password setter (in Settings popup) ─────────────────────────────────────
+function PasswordSetter() {
+  const [open,    setOpen]    = useState(false)
+  const [pw,      setPw]      = useState('')
+  const [pw2,     setPw2]     = useState('')
+  const [busy,    setBusy]    = useState(false)
+  const [msg,     setMsg]     = useState<{ text: string; ok: boolean } | null>(null)
+
+  async function save() {
+    if (!supabase) return
+    if (pw.length < 6) { setMsg({ text: 'Minimaal 6 tekens.', ok: false }); return }
+    if (pw !== pw2)    { setMsg({ text: 'Wachtwoorden komen niet overeen.', ok: false }); return }
+    setBusy(true); setMsg(null)
+    const { error } = await supabase.auth.updateUser({ password: pw })
+    setBusy(false)
+    if (error) { setMsg({ text: error.message, ok: false }); return }
+    setMsg({ text: 'Wachtwoord opgeslagen.', ok: true })
+    setPw(''); setPw2('')
+    setTimeout(() => { setMsg(null); setOpen(false) }, 1500)
+  }
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Wachtwoord</div>
+      {!open ? (
+        <button onClick={() => setOpen(true)}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--bg-hover)',
+            color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'left' }}>
+          Stel een wachtwoord in
+          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            Zo kan je ook met email + wachtwoord inloggen, geen mail nodig.
+          </span>
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input type="password" autoFocus value={pw} onChange={e => setPw(e.target.value)}
+            placeholder="Nieuw wachtwoord (min 6 tekens)" style={pwInputStyle} />
+          <input type="password" value={pw2} onChange={e => setPw2(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && save()}
+            placeholder="Herhaal wachtwoord" style={pwInputStyle} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => { setOpen(false); setPw(''); setPw2(''); setMsg(null) }}
+              style={{ flex: 1, padding: '8px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              Annuleer
+            </button>
+            <button onClick={save} disabled={busy}
+              style={{ flex: 2, padding: '8px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>
+              {busy ? 'Opslaan…' : 'Opslaan'}
+            </button>
+          </div>
+          {msg && (
+            <div style={{ padding: '7px 10px', borderRadius: 6, fontSize: 12,
+              background: msg.ok ? 'rgba(0,200,117,0.12)' : 'rgba(196,69,58,0.12)',
+              color: msg.ok ? '#037f4c' : '#C4453A' }}>
+              {msg.text}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const pwInputStyle: React.CSSProperties = {
+  width: '100%', padding: '8px 10px', borderRadius: 7,
+  border: '1px solid var(--border)', background: 'var(--bg-base)',
+  color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
 }
 
 const tinyAddBtn: React.CSSProperties = {
