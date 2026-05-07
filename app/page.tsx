@@ -122,7 +122,7 @@ export default function HomePage() {
   const [myTodos,      setMyTodos]      = useState<TodoItem[]>([])
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
-  const [weekItems,    setWeekItems]    = useState<{ name: string; board: string; hours: number }[]>([])
+  const [weekItems,    setWeekItems]    = useState<{ name: string; board: string; hours: number; day: number; source?: 'manual' | 'google'; externalLink?: string }[]>([])
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
@@ -158,12 +158,20 @@ export default function HomePage() {
     allDeadlines.sort((a, b) => new Date(a.item.deadline as string).getTime() - new Date(b.item.deadline as string).getTime())
     setDeadlineItems(allDeadlines)
 
-    // Workload this week (own)
+    // Workload this week (own) — group items by start day-of-week (Mon=0..Sun=6)
     if (memberId) {
       const week    = getWeekStart(new Date())
       const contribs = memberContributions(projectList, memberId, week)
       setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
-      setWeekItems(contribs.map(c => ({ name: c.project.name, board: c.project.board, hours: c.hours })))
+      setWeekItems(contribs.map(c => {
+        const sd = c.project.startDate ? new Date(c.project.startDate) : null
+        const dayJs = sd ? sd.getDay() : 1   // 0=Sun..6=Sat
+        const day   = (dayJs + 6) % 7         // 0=Mon..6=Sun
+        return {
+          name: c.project.name, board: c.project.board, hours: c.hours, day,
+          source: c.project.source, externalLink: c.project.externalLink,
+        }
+      }))
     }
     const cap = teamData.members.find(m => m.id === memberId)?.weeklyCapacity ?? 40
     setWeekCapacity(cap)
@@ -306,15 +314,36 @@ export default function HomePage() {
               {weekItems.length === 0 ? (
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen gepland werk</p>
               ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {weekItems.map((item, i) => (
-                    <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>{item.hours}u</span>
-                    </li>
-                  ))}
-                </ul>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {(['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'] as const).map((dayLabel, dayIdx) => {
+                    const dayItems = weekItems.filter(i => i.day === dayIdx)
+                    if (dayItems.length === 0) return null
+                    const dayTotal = Math.round(dayItems.reduce((s, i) => s + i.hours, 0) * 10) / 10
+                    return (
+                      <div key={dayIdx}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>{dayLabel}</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{dayTotal}u</span>
+                        </div>
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {dayItems.map((item, i) => (
+                            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
+                              <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                              {item.source === 'google' && (
+                                <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
+                                  title="Google Calendar — bewerk in Google"
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
+                              )}
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </>
           ) : (

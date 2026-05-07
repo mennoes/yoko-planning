@@ -481,17 +481,13 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     <>
     {/* Backdrop — click to close */}
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: isGoogle ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.25)', zIndex: 299,
-        backdropFilter: isGoogle ? 'blur(4px)' : undefined, WebkitBackdropFilter: isGoogle ? 'blur(4px)' : undefined }} />
-    <div style={isGoogle ? {
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 299,
+        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} />
+    <div style={{
       position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
       width: 'min(480px, 92vw)', maxHeight: '85vh', zIndex: 300,
       background: 'var(--bg-card)', borderRadius: 14, border: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', overflow: 'hidden',
-    } : {
-      position: 'fixed', right: 0, top: 0, bottom: 0, width: 'min(420px, 92vw)', zIndex: 300,
-      background: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
-      display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.35)',
     }}>
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>

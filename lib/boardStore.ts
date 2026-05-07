@@ -18,9 +18,11 @@ export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGrou
 }
 
 export function saveGroups(boardName: string, groups: BoardGroup[]): void {
-  localStorage.setItem(key(boardName), JSON.stringify(groups))
+  const next = JSON.stringify(groups)
+  const prev = localStorage.getItem(key(boardName))
+  if (prev === next) return            // no-op: breaks the realtime ping-pong loop
+  localStorage.setItem(key(boardName), next)
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
-  // Fire-and-forget remote push
   pushBoardToRemote(boardName, groups).catch(() => {})
 }
 
@@ -76,7 +78,9 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   }))
 
   if (groups.length === 0) return false  // remote is empty — keep local fallback
-  localStorage.setItem(key(boardName), JSON.stringify(groups))
+  const serialized = JSON.stringify(groups)
+  if (localStorage.getItem(key(boardName)) === serialized) return true  // no change
+  localStorage.setItem(key(boardName), serialized)
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
   return true
 }

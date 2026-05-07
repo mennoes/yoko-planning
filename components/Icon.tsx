@@ -55,3 +55,4 @@ export const IconCalendar   = (p: Props) => base({ ...p, children: <><rect x="3"
 export const IconBoard      = (p: Props) => base({ ...p, children: <><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="9" x2="9" y2="21" /></> })
 export const IconFolder     = (p: Props) => base({ ...p, children: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> })
 export const IconFolderOpen = (p: Props) => base({ ...p, children: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2H3zm0 2h18l-2 8a2 2 0 0 1-2 1.5H5a2 2 0 0 1-2-1.5z" /> })
+export const IconRefresh    = (p: Props) => base({ ...p, children: <><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" /><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14" /></> })
