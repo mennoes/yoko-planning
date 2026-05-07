@@ -18,6 +18,9 @@ export type Project = {
   status: 'active' | 'done'
   source?: 'manual' | 'google'
   externalLink?: string
+  // Set on virtual projects produced by merging same-name Google items in
+  // the planner. The detail panel uses it to render a sub-event list.
+  mergedFrom?: Project[]
 }
 
 export const BOARD_COLORS: Record<string, string> = {

@@ -296,12 +296,14 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom }: {
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
 type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; origStart: string | null; origEnd: string | null }
 
-function DraggableBar({ project, left, width, colW, onDragMove, onDragEnd, onClick }: {
+function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd, onClick }: {
   project: Project; left: number; width: number; colW: number
+  small?: boolean
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick:    () => void
 }) {
+  const barH = small ? 14 : BAR_H
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
@@ -357,17 +359,19 @@ function DraggableBar({ project, left, width, colW, onDragMove, onDragEnd, onCli
   const g = ghost ?? { left, width }
   return (
     <>
-      {ghost && <div style={{ position: 'absolute', top: BAR_GAP, left: ghost.left + 2, width: ghost.width, height: BAR_H, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
+      {ghost && <div style={{ position: 'absolute', top: BAR_GAP + (small ? (BAR_H - barH) / 2 : 0), left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
       <div
         onMouseDown={e => startDrag(e, 'move')}
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
-        style={{ position: 'absolute', top: BAR_GAP, left: g.left + 2, width: g.width, height: BAR_H,
+        style={{ position: 'absolute', top: BAR_GAP + (small ? (BAR_H - barH) / 2 : 0), left: g.left + 2, width: g.width, height: barH,
           background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
-          overflow: 'hidden', fontSize: 10.5, fontWeight: 600, color: '#fff',
+          overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 600, color: '#fff',
           cursor: isReadOnly ? 'pointer' : ghost ? 'grabbing' : 'grab', userSelect: 'none',
           boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
+        {/* Invisible hit-area expander so small bars are still easy to click */}
+        {small && <div style={{ position: 'absolute', inset: '-6px 0', cursor: 'pointer' }} onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }} />}
         <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
           style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
@@ -411,9 +415,41 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDrag
   const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
   const isWeek      = zoom === 'week'
 
-  const rawBars = projects
-    .filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
-    .map(p => {
+  // Pre-group: same-name Google items for this member become one virtual
+  // bar spanning min(start)..max(end). Detail panel shows the underlying list.
+  const owned = projects.filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
+  const googleByName = new Map<string, Project[]>()
+  const standalone:  Project[] = []
+  for (const p of owned) {
+    if (p.source === 'google') {
+      const k = (p.name || '').trim().toLowerCase()
+      if (!k) { standalone.push(p); continue }
+      const arr = googleByName.get(k) ?? []
+      arr.push(p)
+      googleByName.set(k, arr)
+    } else {
+      standalone.push(p)
+    }
+  }
+  const merged: Project[] = []
+  for (const arr of googleByName.values()) {
+    if (arr.length === 1) { merged.push(arr[0]); continue }
+    const sorted = [...arr].sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
+    const minStart = sorted.find(p => p.startDate)?.startDate ?? null
+    const maxEnd   = [...arr].map(p => p.endDate ?? p.startDate ?? '').sort().slice(-1)[0] || null
+    merged.push({
+      ...sorted[0],
+      id:        `merged_${memberId}_${(arr[0].name || '').slice(0, 32)}`,
+      name:      `${arr[0].name} × ${arr.length}`,
+      startDate: minStart,
+      endDate:   maxEnd,
+      estHours:  arr.reduce((s, p) => s + (p.estHours || 0), 0),
+      mergedFrom: arr,
+    })
+  }
+  const effective = [...standalone, ...merged]
+
+  const rawBars = effective.map(p => {
       const sDate = p.startDate ? new Date(p.startDate) : new Date(gridStartMs)
       const eDate = p.endDate   ? new Date(p.endDate)   : new Date(gridEndMs - 86400000)
       const s = sDate.getTime()
@@ -433,9 +469,11 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDrag
         left  = (cs - gridStartMs) / msPerPx
         width = Math.max((ce - cs) / msPerPx - 2, 6)
       }
-      return { p, left, width }
+      // Meetings: short Google events render at reduced height
+      const isMeeting = p.source === 'google' && !p.mergedFrom && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
+      return { p, left, width, isMeeting }
     })
-    .filter(Boolean) as { p: Project; left: number; width: number }[]
+    .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
 
   // Lane-pack: sort by start, place each bar on the lowest lane where it
   // doesn't overlap an earlier bar. Non-overlapping bars share a row.
@@ -457,9 +495,9 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDrag
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border)', pointerEvents: 'none' }} />
       ))}
-      {bars.map(({ p, left, width, lane }) => (
+      {bars.map(({ p, left, width, lane, isMeeting }) => (
         <div key={p.id} style={{ position: 'absolute', top: lane * (BAR_H + BAR_GAP), left: 0, right: 0, height: BAR_H + BAR_GAP }}>
-          <DraggableBar project={p} left={left} width={width} colW={colW}
+          <DraggableBar project={p} left={left} width={width} colW={colW} small={isMeeting}
             onDragMove={(s, e) => onDragMove(p, s, e)}
             onDragEnd={(s, e) => onDragEnd(p, s, e)}
             onClick={() => onBarClick(p)} />
@@ -513,7 +551,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const isGoogle = rawItem?.source === 'google'
+  const isGoogle = rawItem?.source === 'google' || project.source === 'google'
+  const isMerged = !!project.mergedFrom && project.mergedFrom.length > 1
   function save() {
     if (isGoogle) return
     // When subitems exist the parent's hours are derived; don't write them.
@@ -561,7 +600,36 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
         </div>
       </div>
-      {isGoogle && (
+      {isMerged && (
+        <div style={{ padding: '10px 18px', background: 'rgba(176,198,235,0.18)', borderBottom: '1px solid var(--border)', fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          {project.mergedFrom!.length} terugkerende afspraken — onderstaand alle data.
+        </div>
+      )}
+      {isMerged && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[...project.mergedFrom!]
+            .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
+            .map(sub => {
+              const sd  = sub.startDate ? new Date(sub.startDate) : null
+              const fmt = sd ? sd.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
+              return (
+                <a key={sub.id}
+                  href={sub.externalLink ?? '#'}
+                  target={sub.externalLink ? '_blank' : undefined}
+                  rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8,
+                    border: '1px solid var(--border-light)', background: 'var(--bg-hover)',
+                    color: 'var(--text-primary)', textDecoration: 'none', fontSize: 13 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>G</span>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmt}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{sub.estHours}u</span>
+                  {sub.externalLink && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>↗</span>}
+                </a>
+              )
+            })}
+        </div>
+      )}
+      {!isMerged && isGoogle && (
         <div style={{ padding: '10px 18px', background: 'rgba(216,182,46,0.18)', borderBottom: '1px solid var(--border)', fontSize: 12.5, fontWeight: 600, color: '#7a5a0a', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span>Read-only — wijzig dit item in Google Calendar.</span>
           {rawItem?.externalLink && (
@@ -572,7 +640,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
           )}
         </div>
       )}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+      {!isMerged && <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
         <Row label="Owner">
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {owners.length > 0 ? owners.map(m => (
@@ -711,10 +779,10 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
             </div>
           </div>
         </Row>
-      </div>
+      </div>}
       <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button onClick={onClose} style={cancelBtn}>Sluiten</button>
-        {!isGoogle && (
+        {!isGoogle && !isMerged && (
           <button onClick={save} style={{ ...cancelBtn, background: color, color: '#000', border: 'none', fontWeight: 800 }}>Opslaan</button>
         )}
       </div>
@@ -1608,10 +1676,18 @@ export default function PlanningPage() {
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
                 {expanded.size >= team.length ? '▾' : '▸'} Alles
               </button>
-              <input type="range" min={50} max={300} step={5}
-                value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
-                title={`Kolom-breedte ${colWZoom}%`}
-                style={{ width: 80, marginLeft: 8, accentColor: 'var(--accent)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginLeft: 8, border: '1px solid var(--border-light)', borderRadius: 6, overflow: 'hidden' }}>
+                <button onClick={() => setColWZoom(z => Math.max(50, z - 25))}
+                  title="Smaller (zoom uit)"
+                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                <span title={`Kolom-breedte ${colWZoom}%`}
+                  style={{ minWidth: 44, padding: '0 6px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center', borderLeft: '1px solid var(--border-light)', borderRight: '1px solid var(--border-light)', height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {colWZoom}%
+                </span>
+                <button onClick={() => setColWZoom(z => Math.min(300, z + 25))}
+                  title="Breder (zoom in)"
+                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+              </div>
             </div>
             {cols.map(col => {
               const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
