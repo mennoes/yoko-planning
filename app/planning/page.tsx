@@ -1237,41 +1237,23 @@ export default function PlanningPage() {
         </div>
 
         {/* KPI strip — horizontally scrollable on mobile */}
-        {isMobile ? (
-          <div style={{
-            display: 'flex', gap: 8,
-            overflowX: 'auto', overflowY: 'hidden',
-            paddingBottom: 12,
-            marginBottom: 4,
-            borderBottom: '1px solid var(--border-light)',
-            scrollbarWidth: 'none',
-          }}>
-            <KpiCard label="Capaciteit" value={`${kpis.pctUsed}%`}
-              sub={`${kpis.totalHours} / ${kpis.totalCap} uur`}
-              tone={kpis.pctUsed > 100 ? 'red' : kpis.pctUsed > 85 ? 'amber' : 'normal'} compact />
-            <KpiCard label="Overbelast" value={String(kpis.overbooked)}
-              sub={kpis.overbooked === 1 ? 'persoon' : 'personen'}
-              tone={kpis.overbooked > 0 ? 'red' : 'normal'} compact />
-            <KpiCard label="Actief" value={String(kpis.activeProjects)} sub="deze week" compact />
-            <KpiCard label="Deadlines" value={String(kpis.deadlinesThis)} sub="deze week"
-              tone={kpis.deadlinesThis > 0 ? 'amber' : 'normal'} compact />
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12,
-            paddingBottom: 18, borderBottom: '1px solid var(--border-light)',
-          }}>
-            <KpiCard label="Capaciteit deze week" value={`${kpis.pctUsed}%`}
-              sub={`${kpis.totalHours} / ${kpis.totalCap} uur`}
-              tone={kpis.pctUsed > 100 ? 'red' : kpis.pctUsed > 85 ? 'amber' : 'normal'} />
-            <KpiCard label="Overbelast" value={String(kpis.overbooked)}
-              sub={kpis.overbooked === 0 ? 'iedereen onder cap' : kpis.overbooked === 1 ? 'persoon' : 'personen'}
-              tone={kpis.overbooked > 0 ? 'red' : 'normal'} />
-            <KpiCard label="Actieve projecten" value={String(kpis.activeProjects)} sub="lopen deze week" />
-            <KpiCard label="Deadlines" value={String(kpis.deadlinesThis)} sub="deze week"
-              tone={kpis.deadlinesThis > 0 ? 'amber' : 'normal'} />
-          </div>
-        )}
+        <div style={{
+          display: 'flex', gap: 14, alignItems: 'center',
+          padding: '6px 0 10px', marginBottom: 4,
+          borderBottom: '1px solid var(--border-light)',
+          fontSize: 13, color: 'var(--text-secondary)',
+          flexWrap: 'wrap',
+        }}>
+          <span>
+            <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
+            <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>capaciteit · {kpis.totalHours} / {kpis.totalCap}u</span>
+          </span>
+          <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
+          <span>
+            <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+            <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>deadlines deze week</span>
+          </span>
+        </div>
       </header>
 
       {/* ── Mobile overflow menu ── */}
