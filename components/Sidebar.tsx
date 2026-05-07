@@ -9,7 +9,7 @@ import {
   type NavItem, type SidebarSection,
 } from '@/lib/navStore'
 import { loadRecentPages, savePage, loadDocFolders, saveDocFolders, type PageDoc, type DocFolder } from '@/lib/pagesStore'
-import { requiresAuth } from '@/lib/supabase'
+import { requiresAuth, supabase } from '@/lib/supabase'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
