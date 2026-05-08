@@ -472,9 +472,42 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     })
     .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
 
+  // Group same-day meetings into one badge so 5 calls on Wednesday don't
+  // become 5 separate lanes. Singles + non-meetings stay as bars.
+  type ClusterBar = { kind: 'cluster'; left: number; width: number; meetings: Project[]; isMeeting: true }
+  type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; isMeeting: boolean }
+  type Bar = ClusterBar | SingleBar
+
+  const meetingByDay = new Map<string, typeof rawBars>()
+  const finalBars: Bar[] = []
+  for (const b of rawBars) {
+    if (b.isMeeting) {
+      const key = `${b.p.startDate ?? '?'}@${Math.round(b.left)}`
+      const arr = meetingByDay.get(key) ?? []
+      arr.push(b); meetingByDay.set(key, arr)
+    } else {
+      finalBars.push({ kind: 'single', ...b })
+    }
+  }
+  for (const arr of meetingByDay.values()) {
+    if (arr.length === 1) {
+      finalBars.push({ kind: 'single', ...arr[0] })
+    } else {
+      const minLeft = Math.min(...arr.map(b => b.left))
+      const maxRight = Math.max(...arr.map(b => b.left + b.width))
+      finalBars.push({
+        kind: 'cluster',
+        left: minLeft,
+        width: Math.max(maxRight - minLeft - 2, 18),
+        meetings: arr.map(b => b.p),
+        isMeeting: true,
+      })
+    }
+  }
+
   // Lane-pack: sort by start, place each bar on the lowest lane where it
   // doesn't overlap an earlier bar. Non-overlapping bars share a row.
-  const sorted = [...rawBars].sort((a, b) => a.left - b.left)
+  const sorted = [...finalBars].sort((a, b) => a.left - b.left)
   const laneEnds: number[] = []
   const bars = sorted.map(b => {
     const start = b.left
@@ -492,15 +525,61 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border)', pointerEvents: 'none' }} />
       ))}
-      {bars.map(({ p, left, width, lane, isMeeting }) => (
-        <div key={p.id} style={{ position: 'absolute', top: lane * (BAR_H + BAR_GAP), left: 0, right: 0, height: BAR_H + BAR_GAP }}>
-          <DraggableBar project={p} left={left} width={width} colW={colW} small={isMeeting}
-            onDragMove={(s, e) => onDragMove(p, s, e)}
-            onDragEnd={(s, e) => onDragEnd(p, s, e)}
-            onClick={() => onBarClick(p)} />
-        </div>
-      ))}
+      {bars.map((b, i) => {
+        if (b.kind === 'cluster') {
+          return (
+            <div key={`cl_${i}`} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP) + BAR_GAP + 2, left: b.left + 2, height: 14, zIndex: 1 }}>
+              <MeetingCluster meetings={b.meetings} onPick={onBarClick} />
+            </div>
+          )
+        }
+        return (
+          <div key={b.p.id} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP), left: 0, right: 0, height: BAR_H + BAR_GAP }}>
+            <DraggableBar project={b.p} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
+              onDragMove={(s, e) => onDragMove(b.p, s, e)}
+              onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
+              onClick={() => onBarClick(b.p)} />
+          </div>
+        )
+      })}
     </div>
+  )
+}
+
+// Compact clickable badge for N meetings on the same day. Click → popup
+// list of all underlying meetings; click a row → open its detail panel.
+function MeetingCluster({ meetings, onPick }: { meetings: Project[]; onPick: (p: Project) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span style={{ position: 'relative' }}>
+      <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        title={`${meetings.length} meetings — klik voor lijst`}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 7px', height: 14, borderRadius: 7,
+          background: '#D8B62E', color: '#000', border: 'none', cursor: 'pointer',
+          fontSize: 9.5, fontWeight: 800, lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>
+        📅 {meetings.length}
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 95 }} />
+          <div style={{ position: 'absolute', top: 18, left: 0, zIndex: 96, minWidth: 240, maxHeight: 280, overflowY: 'auto',
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: 4,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
+            {meetings.map(m => (
+              <button key={m.id} onClick={e => { e.stopPropagation(); setOpen(false); onPick(m) }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 5,
+                  background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <span style={{ width: 12, height: 12, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>G</span>
+                <span style={{ flex: 1, fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>{m.estHours}u</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </span>
   )
 }
 
@@ -1854,22 +1933,31 @@ export default function PlanningPage() {
                         <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
                       )}
-                      <MemberAvatar member={member} size={av} />
-                      <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</span>
-                        {(() => {
-                          const v = vacations[member.id]
-                          if (!v?.until) return null
-                          const ms = new Date(v.until).getTime()
-                          if (isNaN(ms) || ms < Date.now()) return null
-                          const fromTxt = v.from ? new Date(v.from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : ''
-                          const untilTxt = new Date(v.until).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-                          return (
-                            <span title={`Op vakantie ${fromTxt ? `${fromTxt} – ` : 'tot '}${untilTxt}`}
-                              style={{ fontSize: 14, flexShrink: 0 }}>🏝</span>
-                          )
-                        })()}
-                      </div>
+                      <button onClick={() => {
+                          if (editOrder) return
+                          // Toggle focus: if already isolated to this member → clear; else isolate
+                          if (filterMembers.size === 1 && filterMembers.has(member.id)) setFilterMembers(new Set())
+                          else setFilterMembers(new Set([member.id]))
+                        }}
+                        title={filterMembers.size === 1 && filterMembers.has(member.id) ? 'Toon iedereen' : `Focus op ${member.name}`}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', minWidth: 0, flex: 1, padding: 0, textAlign: 'left' }}>
+                        <MemberAvatar member={member} size={av} />
+                        <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</span>
+                          {(() => {
+                            const v = vacations[member.id]
+                            if (!v?.until) return null
+                            const ms = new Date(v.until).getTime()
+                            if (isNaN(ms) || ms < Date.now()) return null
+                            const fromTxt = v.from ? new Date(v.from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : ''
+                            const untilTxt = new Date(v.until).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                            return (
+                              <span title={`Op vakantie ${fromTxt ? `${fromTxt} – ` : 'tot '}${untilTxt}`}
+                                style={{ fontSize: 14, flexShrink: 0 }}>🏝</span>
+                            )
+                          })()}
+                        </div>
+                      </button>
                       {editOrder && (() => {
                         const realIdx  = team.findIndex(t => t.id === member.id)
                         const isFirst  = realIdx === 0
