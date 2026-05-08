@@ -63,6 +63,13 @@ export type SyncResult = {
   error?:     string
 }
 
+export async function importBoardsFromBundle(): Promise<{ ok: boolean; stats?: Record<string, { groups: number; items: number; subitems: number }>; error?: string } | null> {
+  const headers = await authHeaders()
+  if (!headers) return null
+  const res = await fetch('/api/admin/import-boards', { method: 'POST', headers })
+  return res.json().catch(() => ({ ok: false, error: 'Bad response' }))
+}
+
 export async function cleanupGoogleDuplicates(): Promise<{ deleted: number; perBoard: Record<string, number> } | null> {
   const headers = await authHeaders()
   if (!headers) return null

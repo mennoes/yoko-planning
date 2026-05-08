@@ -101,11 +101,12 @@ function fmtRelative(iso: string) {
 const card: React.CSSProperties = {
   background: 'var(--bg-card)', borderRadius: 14,
   border: '1px solid var(--border-light)', overflow: 'hidden',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.04)',
 }
 const cardHeader: React.CSSProperties = {
-  padding: '13px 18px 11px', borderBottom: '1px solid var(--border-light)',
+  padding: '14px 18px 12px', borderBottom: '1px solid var(--border-light)',
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  background: 'var(--overlay-subtle)',
+  background: 'var(--overlay-faint)',
 }
 const cardLink: React.CSSProperties = {
   fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none',
@@ -560,21 +561,21 @@ export default function HomePage() {
           ))}
         </div>
       ) : (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
-            {sections.taken}
-            {sections.werkdruk}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 18, marginBottom: 18, alignItems: 'start' }}>
-            {sections.team}
-            {sections.deadlines}
-          </div>
-          <div style={{ marginBottom: 18 }}>{sections.overload}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 18, alignItems: 'start' }}>
-            {sections.documenten}
-            {sections.paginas}
-          </div>
-        </>
+        // Masonry-style two-column flow on desktop. Each card sizes to its
+        // own content; the browser fills the left column first, then balances
+        // into the right. Single column on mobile.
+        <div style={{
+          columnCount: isMobile ? 1 : 2,
+          columnGap: 18,
+        }}>
+          {(['taken','werkdruk','team','deadlines','overload','documenten','paginas'] as SectionId[])
+            .filter(id => sectionOrder.includes(id))
+            .map(id => (
+              <div key={id} style={{ breakInside: 'avoid', marginBottom: 18 }}>
+                {sections[id]}
+              </div>
+            ))}
+        </div>
       )}
 
     </div>
