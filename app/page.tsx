@@ -341,9 +341,6 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-              <div style={{ height: 7, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', marginBottom: 12 }}>
-                <div style={{ height: '100%', width: `${pct * 100}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
-              </div>
               {weekItems.length === 0 ? (
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen gepland werk</p>
               ) : (() => {
@@ -352,14 +349,15 @@ export default function HomePage() {
                 const makenHours = weekItems.filter(i => classifyItem(i) === 'maken').reduce((s, i) => s + i.hours, 0)
                 const total = meetingHours + overheadHours + makenHours
                 const r = (n: number) => Math.round(n * 10) / 10
+                const cap = Math.max(weekCapacity, total)  // bar is at least the total so overflow stays visible
                 return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {/* Categorie samenvatting */}
+                  {/* One bar: segments per category, relative to capacity */}
                   <div>
-                    <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: 'var(--border)', marginBottom: 8 }}>
-                      <div style={{ width: total > 0 ? `${(makenHours/total)*100}%` : 0, background: '#5fa06e' }} />
-                      <div style={{ width: total > 0 ? `${(overheadHours/total)*100}%` : 0, background: '#9aadbd' }} />
-                      <div style={{ width: total > 0 ? `${(meetingHours/total)*100}%` : 0, background: '#D8B62E' }} />
+                    <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: 'var(--border)', marginBottom: 8 }}>
+                      <div style={{ width: cap > 0 ? `${(makenHours/cap)*100}%` : 0, background: '#5fa06e', transition: 'width 0.4s ease' }} />
+                      <div style={{ width: cap > 0 ? `${(overheadHours/cap)*100}%` : 0, background: '#9aadbd', transition: 'width 0.4s ease' }} />
+                      <div style={{ width: cap > 0 ? `${(meetingHours/cap)*100}%` : 0, background: '#D8B62E', transition: 'width 0.4s ease' }} />
                     </div>
                     <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
