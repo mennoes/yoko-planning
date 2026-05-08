@@ -342,11 +342,11 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
     function onMove(ev: MouseEvent) {
       if (!dragRef.current) return
       const dx = ev.clientX - dragRef.current.startX
-      // Only treat as drag once the mouse has moved at least 5px — otherwise
-      // a tiny twitch would steal a click.
-      if (Math.abs(dx) < 5 && !didDrag.current) return
+      // 10px threshold — drag only kicks in once the user has clearly moved
+      // the mouse, so single clicks always reach the click handler.
+      if (Math.abs(dx) < 10 && !didDrag.current) return
       const ddays = Math.round(dx * dpx)
-      if (Math.abs(dx) >= 5) didDrag.current = true
+      if (Math.abs(dx) >= 10) didDrag.current = true
       const { mode, origStart, origEnd } = dragRef.current
       let newL = left, newW = width
       if (mode === 'move')       { newL = left + ddays * (colW / 7) }
@@ -389,7 +389,7 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
         style={{ position: 'absolute', top: BAR_GAP + (small ? (BAR_H - barH) / 2 : 0), left: g.left + 2, width: g.width, height: barH,
           background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 600, color: '#fff',
-          cursor: isReadOnly ? 'pointer' : ghost ? 'grabbing' : 'grab', userSelect: 'none',
+          cursor: ghost ? 'grabbing' : 'pointer', userSelect: 'none',
           boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
