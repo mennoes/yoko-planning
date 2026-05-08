@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentUserId } from '@/lib/sync'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { fmtMinutes, loadEntries } from '@/lib/timerStore'
+import { VacationModal } from '@/components/VacationModal'
 
 type ExtendedProfile = {
   user_id?:           string
@@ -29,6 +30,7 @@ type ExtendedProfile = {
   slack_handle?:      string | null
   linkedin?:          string | null
   days_off?:          string[] | null
+  vacation_from?:     string | null
   vacation_until?:    string | null
   fun_fact?:          string | null
   bio?:               string | null
@@ -134,8 +136,8 @@ export default function PublicProfilePage() {
                   cursor: 'pointer' }}>
                 Bewerk profiel
               </button>
-              <VacationButton current={data?.vacation_until ?? null}
-                onSave={v => persistField({ vacation_until: v })} />
+              <VacationButton from={data?.vacation_from ?? null} until={data?.vacation_until ?? null}
+                onSave={(f, u) => persistField({ vacation_from: f, vacation_until: u })} />
             </div>
           )}
         </div>
@@ -410,67 +412,38 @@ function EditableValue({ field, data, onSave }: {
   )
 }
 
-function VacationButton({ current, onSave }: { current: string | null; onSave: (v: string | null) => void }) {
+function VacationButton({ from, until, onSave }: { from: string | null; until: string | null; onSave: (from: string | null, until: string | null) => void }) {
   const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState(current ?? '')
-  const onVacation = !!current && new Date(current).getTime() > Date.now()
+  const [fromDraft,  setFromDraft]  = useState(from  ?? '')
+  const [untilDraft, setUntilDraft] = useState(until ?? '')
+  const onVacation = !!until && new Date(until).getTime() > Date.now()
+  const fmt = (d: string) => new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+  const label = onVacation
+    ? (from ? `🏝 ${fmt(from)} – ${fmt(until!)}` : `🏝 Vakantie tot ${fmt(until!)}`)
+    : '🏝 Vakantie aangeven'
 
   return (
     <>
-      <button onClick={() => { setDraft(current ?? ''); setOpen(true) }}
+      <button onClick={() => { setFromDraft(from ?? ''); setUntilDraft(until ?? ''); setOpen(true) }}
         style={{ padding: '7px 14px', borderRadius: 8,
           border: `1px solid ${onVacation ? 'rgba(255,123,36,0.4)' : 'var(--border)'}`,
           background: onVacation ? 'rgba(255,123,36,0.12)' : 'var(--bg-card)',
           color: onVacation ? '#a05400' : 'var(--text-secondary)',
           fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-        🏝 {onVacation ? `Vakantie tot ${new Date(current).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}` : 'Vakantie aangeven'}
+        {label}
       </button>
 
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            zIndex: 251, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
-            padding: '20px 22px', width: 320, maxWidth: '92vw',
-            boxShadow: '0 14px 40px rgba(0,0,0,0.35)' }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Vakantie aangeven</h3>
-            <p style={{ margin: '0 0 14px', fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Tot wanneer ben je weg? Het team ziet dit direct op de homepagina.
-            </p>
-            <input type="date" value={draft} autoFocus
-              onChange={e => setDraft(e.target.value)}
-              style={{ width: '100%', padding: '9px 11px', borderRadius: 8,
-                border: '1px solid var(--border)', background: 'var(--bg-base)',
-                color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              {current && (
-                <button onClick={() => { onSave(null); setOpen(false) }}
-                  style={{ flex: 1, padding: '9px', borderRadius: 8,
-                    border: '1px solid var(--border)', background: 'transparent',
-                    color: 'var(--red)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  Wissen
-                </button>
-              )}
-              <button onClick={() => setOpen(false)}
-                style={{ flex: 1, padding: '9px', borderRadius: 8,
-                  border: '1px solid var(--border)', background: 'transparent',
-                  color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                Annuleer
-              </button>
-              <button onClick={() => { onSave(draft || null); setOpen(false) }}
-                style={{ flex: 2, padding: '9px', borderRadius: 8,
-                  border: 'none', background: 'var(--accent)',
-                  color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                Opslaan
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      {open && <VacationModal
+        fromDraft={fromDraft} setFromDraft={setFromDraft}
+        untilDraft={untilDraft} setUntilDraft={setUntilDraft}
+        canClear={!!from || !!until}
+        onClose={() => setOpen(false)}
+        onSave={() => { onSave(fromDraft || null, untilDraft || null); setOpen(false) }}
+        onClear={() => { onSave(null, null); setOpen(false) }} />}
     </>
   )
 }
+
 
 function AddFieldPicker({ fields, onPick }: { fields: FieldDef[]; onPick: (k: string) => void }) {
   const [open, setOpen] = useState(false)
