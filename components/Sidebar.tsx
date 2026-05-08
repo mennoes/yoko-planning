@@ -13,7 +13,7 @@ import { loadRecentPages, savePage, loadDocFolders, saveDocFolders, type PageDoc
 import { requiresAuth, supabase } from '@/lib/supabase'
 import {
   startGoogleOAuth, fetchGoogleCalendars, updateGoogleCalendar,
-  disconnectGoogle, syncGoogleNow, cleanupGoogleDuplicates,
+  disconnectGoogle, syncGoogleNow, cleanupGoogleDuplicates, importBoardsFromBundle,
   type GoogleConnection, type GoogleCalAvailable,
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
@@ -559,6 +559,8 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
           </div>
         )}
 
+        {requiresAuth && <ImportBundleButton />}
+
         {requiresAuth && <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />}
 
         {/* Sign out */}
@@ -578,6 +580,39 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
 }
 
 // ─── Quick Google sync button (footer) ───────────────────────────────────────
+// ─── Import XLSX bundle into Supabase ────────────────────────────────────────
+function ImportBundleButton() {
+  const [busy, setBusy] = useState(false)
+  const [msg,  setMsg]  = useState<string | null>(null)
+  async function go() {
+    if (busy) return
+    if (!confirm('Importeer alle agenda-data uit de bundle naar Supabase? Dit overschrijft handmatige rijen op alle boards (Google-synced items blijven staan).')) return
+    setBusy(true); setMsg(null)
+    const r = await importBoardsFromBundle()
+    if (!r || !r.ok) { setMsg('Import mislukt: ' + (r?.error ?? 'unknown')); setBusy(false); return }
+    const stats = r.stats ?? {}
+    const totals = Object.entries(stats).map(([b, s]) => `${b}: ${s.items}+${s.subitems}sub`).join(' · ')
+    setMsg('Geïmporteerd — ' + totals)
+    // Pull every board so the UI reflects the fresh data
+    const { pullBoardFromRemote, BOARD_NAMES } = await import('@/lib/boardStore')
+    await Promise.all(BOARD_NAMES.map(b => pullBoardFromRemote(b)))
+    setBusy(false)
+    setTimeout(() => setMsg(null), 6000)
+  }
+  return (
+    <div style={{ padding: '0 6px 4px' }}>
+      <button onClick={go} disabled={busy}
+        style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
+          border: '1px solid var(--border)', background: 'var(--bg-hover)',
+          color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }}>
+        📥 {busy ? 'Importeren…' : 'Importeer XLSX naar Supabase'}
+      </button>
+      {msg && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', padding: '0 4px' }}>{msg}</div>}
+    </div>
+  )
+}
+
 // ─── Vacation request quick-button (sidebar) ──────────────────────────────────
 function VacationSidebarButton() {
   const [open, setOpen]           = useState(false)
