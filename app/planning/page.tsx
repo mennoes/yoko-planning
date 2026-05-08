@@ -323,7 +323,7 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick:    () => void
 }) {
-  const barH = small ? 14 : BAR_H
+  const barH = small ? 10 : BAR_H
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
@@ -424,9 +424,10 @@ function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
   return weekIdx * weekColW + (cellInWeek / 5) * weekColW
 }
 
-function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDragEnd, onBarClick }: {
+function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDragMove, onDragEnd, onBarClick }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   zoom: ZoomLevel
+  hideMeetings?: boolean
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
@@ -464,6 +465,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, onDragMove, onDrag
       }
       // Meetings: short Google events render at reduced height
       const isMeeting = p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
+      if (hideMeetings && isMeeting) return null
       return { p, left, width, isMeeting }
     })
     .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
@@ -974,6 +976,11 @@ export default function PlanningPage() {
     return Number.isFinite(v) ? Math.max(50, Math.min(300, v)) : 100
   })
   useEffect(() => { localStorage.setItem('planning-colW-zoom', String(colWZoom)) }, [colWZoom])
+  const [hideMeetings, setHideMeetings] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('planning-hide-meetings') === '1'
+  })
+  useEffect(() => { localStorage.setItem('planning-hide-meetings', hideMeetings ? '1' : '0') }, [hideMeetings])
 
   // Keyboard shortcuts: +/= zooms in, - zooms out (skip when typing in inputs)
   useEffect(() => {
@@ -1730,6 +1737,15 @@ export default function PlanningPage() {
                 <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
                   title="Breder (sneltoets: +)"
                   style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                <button onClick={() => setHideMeetings(v => !v)}
+                  title={hideMeetings ? 'Meetings tonen' : 'Korte meetings (≤2u) verbergen'}
+                  style={{ marginLeft: 6, padding: '0 8px', height: 22, borderRadius: 5,
+                    background: hideMeetings ? 'var(--accent-light)' : 'var(--bg-card)',
+                    border: `1px solid ${hideMeetings ? 'var(--accent)' : 'var(--border-light)'}`,
+                    cursor: 'pointer', color: hideMeetings ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 11, fontWeight: 600 }}>
+                  {hideMeetings ? '👁 Tonen' : '🚫 Meetings'}
+                </button>
               </div>
             </div>
             {cols.map(col => {
@@ -1853,7 +1869,7 @@ export default function PlanningPage() {
                   <div style={{ display: 'flex' }}>
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
-                      <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom}
+                      <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)} />
                     </div>
                   </div>
