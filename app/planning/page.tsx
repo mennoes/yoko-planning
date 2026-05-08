@@ -324,7 +324,9 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
   onClick:    () => void
 }) {
   const barH = small ? 10 : BAR_H
-  const color   = BOARD_COLORS[project.board] ?? '#888'
+  // Meetings (small=true) get the yellow accent so they stand apart from
+  // real project bars in the timeline at a glance.
+  const color   = small ? '#D8B62E' : (BOARD_COLORS[project.board] ?? '#888')
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
   const didDrag = useRef(false)
@@ -1393,6 +1395,11 @@ export default function PlanningPage() {
               <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden" style={ghostBtn(editOrder)}>
                 <IconSort size={14} style={{ marginRight: 6 }} />{editOrder ? 'Klaar' : 'Sorteren'}
               </button>
+              <button onClick={() => setHideMeetings(v => !v)}
+                title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
+                style={ghostBtn(hideMeetings)}>
+                {hideMeetings ? '👁 Meetings' : '🚫 Meetings'}
+              </button>
               <span style={separator} />
               <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
                 + Nieuw item
@@ -1737,15 +1744,6 @@ export default function PlanningPage() {
                 <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
                   title="Breder (sneltoets: +)"
                   style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
-                <button onClick={() => setHideMeetings(v => !v)}
-                  title={hideMeetings ? 'Meetings tonen' : 'Korte meetings (≤2u) verbergen'}
-                  style={{ marginLeft: 6, padding: '0 8px', height: 22, borderRadius: 5,
-                    background: hideMeetings ? 'var(--accent-light)' : 'var(--bg-card)',
-                    border: `1px solid ${hideMeetings ? 'var(--accent)' : 'var(--border-light)'}`,
-                    cursor: 'pointer', color: hideMeetings ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: 11, fontWeight: 600 }}>
-                  {hideMeetings ? '👁 Tonen' : '🚫 Meetings'}
-                </button>
               </div>
             </div>
             {cols.map(col => {
