@@ -159,23 +159,26 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
       .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
       .flatMap((i): Project[] => {
         const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; ownerIds?: string[] }> | undefined) ?? []
-        // Recurring Google meeting: render one tiny bar per instance instead of
-        // one stretched parent bar.
-        if (i.source === 'google' && subs.length > 1) {
-          return subs.map((si, idx): Project => ({
+        // Subitems with their own dates → render each one as a separate bar
+        // so the planner shows when each piece actually happens. Parent bar
+        // is suppressed to avoid double-counting hours.
+        const subsWithDates = subs.filter(si => si.startDate || si.endDate)
+        if (subsWithDates.length > 0) {
+          return subsWithDates.map((si, idx): Project => ({
             id:        `${boardName}__${i.id}__si${idx}`,
-            name:      i.name as string,
+            name:      `${i.name}${si.name ? ' · ' + si.name : ''}`,
             board:     boardName,
             group:     g.name,
             ownerIds:  (si.ownerIds && si.ownerIds.length ? si.ownerIds : (i.ownerIds as string[])),
             startDate: si.startDate ?? null,
             endDate:   si.endDate ?? si.startDate ?? null,
             estHours:  Number(si.estHours) || 0,
-            status:    'active',
-            source:    'google',
+            status:    (i.status as string) === 'Done' ? 'done' : 'active',
+            source:    (i.source as 'manual' | 'google' | undefined),
             externalLink: (i.externalLink as string | undefined),
           }))
         }
+        // Subitems without their own dates: keep parent bar with summed hours.
         const hours = subs.length > 0
           ? subs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
           : (Number(i.estHours) || 0)
