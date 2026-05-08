@@ -1022,19 +1022,18 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
 }
 
 // ─── Auto-move "Done" items into a dedicated "Done" group ───────────────────
-// Items with status === 'Done' end up in the Done group; if that group does
-// not exist yet, it's created at the bottom. Items in the Done group whose
-// status is no longer Done are bumped back to the first non-Done group.
+// Items with status === 'Done' that are currently in a non-Done group get
+// pulled into the Done group (created on first use). Items that are already
+// in the Done group are LEFT ALONE — preserves manually placed items + items
+// imported with localized status labels (e.g. "Klaar").
 function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
   const doneIdx   = next.findIndex(g => g.name.toLowerCase() === 'done')
   const doneGroup = doneIdx >= 0 ? next[doneIdx] : null
 
   const additions: BoardItem[] = []
-  const evictions: BoardItem[] = []
 
-  // Build new arrays per non-Done group: pull out Done items.
   const updated = next.map(g => {
-    if (doneGroup && g.id === doneGroup.id) return g  // handled below
+    if (doneGroup && g.id === doneGroup.id) return g  // never disturb the Done group
     const stay = g.items.filter(i => {
       if (i.status === 'Done') { additions.push(i); return false }
       return true
@@ -1042,38 +1041,19 @@ function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
     return stay.length === g.items.length ? g : { ...g, items: stay }
   })
 
-  // Items already in Done group: keep status===Done, evict the rest.
-  const newDoneItems: BoardItem[] = []
-  if (doneGroup) {
-    for (const i of doneGroup.items) {
-      if (i.status === 'Done') newDoneItems.push(i)
-      else evictions.push(i)
-    }
-  }
-  // Append the newly-Done items, deduping by id.
-  const doneIds = new Set(newDoneItems.map(i => i.id))
-  for (const i of additions) if (!doneIds.has(i.id)) newDoneItems.push(i)
-
-  // Nothing changed? Bail out so React reference equality still holds.
-  if (additions.length === 0 && evictions.length === 0) return next
-
-  let result = updated
-  if (evictions.length > 0) {
-    const firstNonDone = result.findIndex(g => !doneGroup || g.id !== doneGroup.id)
-    if (firstNonDone >= 0) {
-      result = result.map((g, i) => i === firstNonDone ? { ...g, items: [...g.items, ...evictions] } : g)
-    }
-  }
+  if (additions.length === 0) return next
 
   if (doneGroup) {
-    result = result.map(g => g.id === doneGroup.id ? { ...g, items: newDoneItems } : g)
-  } else if (newDoneItems.length > 0) {
-    result = [...result, {
-      id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: false,
-      items: newDoneItems,
-    }]
+    return updated.map(g =>
+      g.id === doneGroup.id
+        ? { ...g, items: [...g.items, ...additions.filter(a => !g.items.some(b => b.id === a.id))] }
+        : g
+    )
   }
-  return result
+  return [...updated, {
+    id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: false,
+    items: additions,
+  }]
 }
 
 // ─── BoardTable (hoofd component) ─────────────────────────────────────────────

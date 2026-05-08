@@ -549,8 +549,6 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
         {requiresAuth && <GoogleCalendarMenuRow />}
 
 
-        {requiresAuth && <ImportBundleButton />}
-
         {requiresAuth && <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />}
 
         {/* Sign out */}
