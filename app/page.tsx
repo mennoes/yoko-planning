@@ -98,6 +98,58 @@ function fmtRelative(iso: string) {
   return fmtDate(iso)
 }
 
+type WorkloadItem = { id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }
+
+// One row in the workload list. Hover → detail popover, click → /projects/{board}.
+function WorkloadItemRow({ item }: { item: WorkloadItem }) {
+  const [hover, setHover] = useState(false)
+  const cat = classifyItem(item)
+  const dotColor = cat === 'meeting' ? '#D8B62E' : cat === 'overhead' ? '#9aadbd' : '#5fa06e'
+  const catLabel = cat === 'meeting' ? 'Meeting' : cat === 'overhead' ? 'Overhead' : 'Maken'
+  const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : '—'
+  const range = item.startDate || item.endDate
+    ? `${fmt(item.startDate)} – ${fmt(item.endDate)}`
+    : 'Geen datums'
+
+  return (
+    <li style={{ position: 'relative' }}
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <Link href={`/projects/${item.board}`}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', margin: '0 -6px', borderRadius: 6, textDecoration: 'none',
+          background: hover ? 'var(--bg-hover)' : 'transparent', transition: 'background 0.12s' }}>
+        <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+        <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+        {item.source === 'google' && (
+          <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
+            title="Open in Google Calendar"
+            onClick={e => e.stopPropagation()}
+            style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
+        )}
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
+      </Link>
+      {hover && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+          padding: '10px 12px', minWidth: 240, maxWidth: 320,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
+          fontSize: 12, lineHeight: 1.5, pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{catLabel}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{item.board}</span>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{item.name}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+            <span>{range}</span>
+            <span><strong style={{ color: 'var(--text-primary)' }}>{item.hours}u</strong> deze week</span>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>Klik om naar de agenda te gaan{item.source === 'google' ? ' · G-icoon: open in Google' : ''}</div>
+        </div>
+      )}
+    </li>
+  )
+}
+
 // Classify a workload item by its name. Used for the workload colour breakdown
 // (maken / overhead / meetings).
 const MEETING_PATTERNS = [
@@ -144,7 +196,7 @@ export default function HomePage() {
   const [myTodos,      setMyTodos]      = useState<TodoItem[]>([])
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
-  const [weekItems,    setWeekItems]    = useState<{ name: string; board: string; hours: number; day: number; source?: 'manual' | 'google'; externalLink?: string }[]>([])
+  const [weekItems,    setWeekItems]    = useState<{ id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }[]>([])
   const [weekOffset,   setWeekOffset]   = useState(0)
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
@@ -221,7 +273,9 @@ export default function HomePage() {
       const dayJs = sd ? sd.getDay() : 1
       const day   = (dayJs + 6) % 7
       return {
+        id: c.project.id,
         name: c.project.name, board: c.project.board, hours: c.hours, day,
+        startDate: c.project.startDate, endDate: c.project.endDate,
         source: c.project.source, externalLink: c.project.externalLink,
       }
     }))
@@ -407,24 +461,9 @@ export default function HomePage() {
                           <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{dayTotal}u</span>
                         </div>
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {dayItems.map((item, i) => {
-                            const cat = classifyItem(item)
-                            const dotColor = cat === 'meeting' ? '#D8B62E'
-                                           : cat === 'overhead' ? '#9aadbd'
-                                           : '#5fa06e'
-                            return (
-                            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span title={cat === 'meeting' ? 'Meeting' : cat === 'overhead' ? 'Overhead' : 'Maken'} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-                              <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                              {item.source === 'google' && (
-                                <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
-                                  title="Google Calendar — bewerk in Google"
-                                  onClick={e => e.stopPropagation()}
-                                  style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
-                              )}
-                              <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
-                            </li>
-                          )})}
+                          {dayItems.map((item, i) => (
+                            <WorkloadItemRow key={i} item={item} />
+                          ))}
                         </ul>
                       </div>
                     )
