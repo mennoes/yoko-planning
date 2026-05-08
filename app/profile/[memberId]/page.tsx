@@ -463,11 +463,12 @@ function EditableValue({ field, data, onSave }: {
                 const nextOff  = ALL_DAYS.filter(x => !nextWork.has(x))
                 onSave({ days_off: nextOff })
               }}
-              style={{ padding: '4px 9px', borderRadius: 6,
+              style={{ padding: '5px 11px', borderRadius: 6,
                 border: `1px solid ${on ? 'var(--accent)' : 'var(--border-light)'}`,
-                background: on ? 'var(--accent-light)' : 'transparent',
-                color: on ? 'var(--accent)' : 'var(--text-secondary)',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                background: on ? 'var(--accent)' : 'transparent',
+                color: on ? '#000' : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: on ? 800 : 600, cursor: 'pointer',
+                boxShadow: on ? '0 1px 3px rgba(0,0,0,0.15)' : 'none' }}>
               {DAY_LABELS[d]}
             </button>
           )
