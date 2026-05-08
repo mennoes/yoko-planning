@@ -472,12 +472,14 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     })
     .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
 
-  // Group same-day meetings into one badge so 5 calls on Wednesday don't
-  // become 5 separate lanes. Singles + non-meetings stay as bars.
+  // Collapse all meetings on the same start day into ONE wide bar that fills
+  // the day cell — so we get the full width to spell out the meeting names
+  // instead of N tiny stacked pills no one can click.
   type ClusterBar = { kind: 'cluster'; left: number; width: number; meetings: Project[]; isMeeting: true }
   type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; isMeeting: boolean }
   type Bar = ClusterBar | SingleBar
 
+  const dayCellW = isWeek ? colW / 5 : (zoom === 'maand' ? Math.max(colW / 6, 40) : colW)
   const meetingByDay = new Map<string, typeof rawBars>()
   const finalBars: Bar[] = []
   for (const b of rawBars) {
@@ -490,19 +492,14 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     }
   }
   for (const arr of meetingByDay.values()) {
-    if (arr.length === 1) {
-      finalBars.push({ kind: 'single', ...arr[0] })
-    } else {
-      const minLeft = Math.min(...arr.map(b => b.left))
-      const maxRight = Math.max(...arr.map(b => b.left + b.width))
-      finalBars.push({
-        kind: 'cluster',
-        left: minLeft,
-        width: Math.max(maxRight - minLeft - 2, 18),
-        meetings: arr.map(b => b.p),
-        isMeeting: true,
-      })
-    }
+    const left = arr[0].left
+    finalBars.push({
+      kind: 'cluster',
+      left,
+      width: Math.max(dayCellW - 4, 60),
+      meetings: arr.map(b => b.p),
+      isMeeting: true,
+    })
   }
 
   // Lane-pack: sort by start, place each bar on the lowest lane where it
@@ -528,8 +525,8 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       {bars.map((b, i) => {
         if (b.kind === 'cluster') {
           return (
-            <div key={`cl_${i}`} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP) + BAR_GAP + 2, left: b.left + 2, height: 14, zIndex: 1 }}>
-              <MeetingCluster meetings={b.meetings} onPick={onBarClick} />
+            <div key={`cl_${i}`} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP) + BAR_GAP, left: b.left + 2, width: b.width, height: 14, zIndex: 1 }}>
+              <MeetingCluster meetings={b.meetings} width={b.width} onPick={onBarClick} />
             </div>
           )
         }
@@ -546,23 +543,28 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   )
 }
 
-// Compact clickable badge for N meetings on the same day. Click → popup
-// list of all underlying meetings; click a row → open its detail panel.
-function MeetingCluster({ meetings, onPick }: { meetings: Project[]; onPick: (p: Project) => void }) {
+// One bar per day for all meetings — yellow strip filling the day cell with
+// comma-separated names (truncated to fit). Click → popup list to drill in.
+function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; width: number; onPick: (p: Project) => void }) {
   const [open, setOpen] = useState(false)
+  const label = meetings.map(m => m.name).join(' · ')
+  const totalH = meetings.reduce((s, m) => s + (m.estHours || 0), 0)
   return (
-    <span style={{ position: 'relative' }}>
+    <span style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
-        title={`${meetings.length} meetings — klik voor lijst`}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 7px', height: 14, borderRadius: 7,
+        title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
+        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px', width, height: 14, borderRadius: 4,
           background: '#D8B62E', color: '#000', border: 'none', cursor: 'pointer',
-          fontSize: 9.5, fontWeight: 800, lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>
-        📅 {meetings.length}
+          fontSize: 10, fontWeight: 700, lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+          overflow: 'hidden', whiteSpace: 'nowrap' }}>
+        {meetings.length > 1 && <span style={{ flexShrink: 0 }}>📅 {meetings.length}</span>}
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+        <span style={{ flexShrink: 0, opacity: 0.7 }}>{totalH}u</span>
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 95 }} />
-          <div style={{ position: 'absolute', top: 18, left: 0, zIndex: 96, minWidth: 240, maxHeight: 280, overflowY: 'auto',
+          <div style={{ position: 'absolute', top: 18, left: 0, zIndex: 96, minWidth: 260, maxHeight: 320, overflowY: 'auto',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: 4,
             boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
             {meetings.map(m => (
