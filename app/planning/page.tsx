@@ -939,6 +939,7 @@ export default function PlanningPage() {
   const { profile }    = useProfile()
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
+  const [vacations,    setVacations]    = useState<Record<string, { from: string | null; until: string | null }>>({})
   // Always start at this week (don't persist colOffset between sessions)
   const [colOffset,    setColOffset]    = useState<number>(0)
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
@@ -1008,6 +1009,20 @@ export default function PlanningPage() {
     refresh()
     function onBoardUpdate() { refresh() }
     window.addEventListener('yoko-board-update', onBoardUpdate)
+    // Vacation lookup for the palm-tree marker
+    if (typeof window !== 'undefined') {
+      import('@/lib/supabase').then(({ supabase }) => {
+        if (!supabase) return
+        supabase.from('profiles').select('member_id, vacation_from, vacation_until').then(({ data }) => {
+          if (!data) return
+          const map: Record<string, { from: string | null; until: string | null }> = {}
+          for (const r of data as { member_id: string; vacation_from: string | null; vacation_until: string | null }[]) {
+            map[r.member_id] = { from: r.vacation_from, until: r.vacation_until }
+          }
+          setVacations(map)
+        })
+      })
+    }
     return () => window.removeEventListener('yoko-board-update', onBoardUpdate)
   }, [])
 
@@ -1779,8 +1794,20 @@ export default function PlanningPage() {
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
                       )}
                       <MemberAvatar member={member} size={av} />
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</div>
+                      <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</span>
+                        {(() => {
+                          const v = vacations[member.id]
+                          if (!v?.until) return null
+                          const ms = new Date(v.until).getTime()
+                          if (isNaN(ms) || ms < Date.now()) return null
+                          const fromTxt = v.from ? new Date(v.from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : ''
+                          const untilTxt = new Date(v.until).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                          return (
+                            <span title={`Op vakantie ${fromTxt ? `${fromTxt} – ` : 'tot '}${untilTxt}`}
+                              style={{ fontSize: 14, flexShrink: 0 }}>🏝</span>
+                          )
+                        })()}
                       </div>
                       {editOrder && (() => {
                         const realIdx  = team.findIndex(t => t.id === member.id)

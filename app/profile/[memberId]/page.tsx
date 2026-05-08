@@ -99,90 +99,112 @@ export default function PublicProfilePage() {
   const visibleFields = EDITABLE_FIELDS.filter(f => fieldHasValue(data, f) || revealedKeys.has(f.key as string))
   const hiddenFields  = EDITABLE_FIELDS.filter(f => !fieldHasValue(data, f) && !revealedKeys.has(f.key as string))
 
-  return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: isMobile ? '24px 16px 80px' : '52px 36px 100px' }}>
+  // Group fields into sections for the redesign
+  const FIELD_SECTIONS: { label: string; keys: string[] }[] = [
+    { label: 'Werk',           keys: ['role', 'office'] },
+    { label: 'Contact',        keys: ['email', 'phone', 'slack_handle', 'linkedin'] },
+    { label: 'Persoonlijk',    keys: ['birthday', 'pronouns', 'languages'] },
+    { label: 'Beschikbaarheid',keys: ['days_off', 'vacation_until'] },
+    { label: 'Nood',           keys: ['emergency_contact', 'emergency_phone'] },
+    { label: 'Extra',          keys: ['fun_fact'] },
+  ]
 
-      {/* Hero */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, marginBottom: 24 }}>
-        <ClickableAvatar
-          photo={photo}
-          name={name}
-          color={color}
-          editable={isMe}
-          onPicked={async (dataUrl) => {
-            // Save to profile + DB if available
-            if (myProfile) {
-              if (supabase && await getCurrentUserId()) {
-                await supabase.from('profiles').update({ photo: dataUrl }).eq('member_id', memberId)
+  const onVacationNow = !!data?.vacation_until && new Date(data.vacation_until).getTime() > Date.now()
+
+  return (
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: isMobile ? '24px 16px 80px' : '40px 36px 100px' }}>
+
+      {/* Banner card with photo + meta */}
+      <div style={{
+        position: 'relative',
+        background: `linear-gradient(135deg, ${color}28, ${color}08)`,
+        border: '1px solid var(--border-light)', borderRadius: 18,
+        padding: isMobile ? '24px 18px 18px' : '32px 28px 24px',
+        marginBottom: 24,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 16 : 22, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+          <ClickableAvatar
+            photo={photo}
+            name={name}
+            color={color}
+            editable={isMe}
+            onPicked={async (dataUrl) => {
+              if (myProfile) {
+                if (supabase && await getCurrentUserId()) {
+                  await supabase.from('profiles').update({ photo: dataUrl }).eq('member_id', memberId)
+                }
+                setData(d => ({ ...(d ?? {}), photo: dataUrl }))
               }
-              // also reflect immediately via context (profileSet not exposed here — fall back to localStorage)
-              setData(d => ({ ...(d ?? {}), photo: dataUrl }))
-            }
-          }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-            Studio Yoko · Teamlid
-          </div>
-          <h1 style={{ fontSize: isMobile ? 30 : 40, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em', lineHeight: 1 }}>
-            {name}
-          </h1>
-          {data?.role && <div style={{ marginTop: 6, fontSize: 14, color: 'var(--text-secondary)' }}>{data.role}</div>}
-          {isMe && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-              <button onClick={openEdit}
-                style={{ padding: '7px 14px', borderRadius: 8,
-                  border: '1px solid var(--border)', background: 'var(--bg-card)',
-                  color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
-                  cursor: 'pointer' }}>
-                Bewerk profiel
-              </button>
-              <VacationButton from={data?.vacation_from ?? null} until={data?.vacation_until ?? null}
-                onSave={(f, u) => persistField({ vacation_from: f, vacation_until: u })} />
+            }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+              Studio Yoko · Teamlid
             </div>
-          )}
+            <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.035em', lineHeight: 1 }}>
+              {name}
+            </h1>
+            {data?.role && <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>{data.role}{data.office ? ` · ${data.office}` : ''}</div>}
+            {onVacationNow && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,123,36,0.18)', color: '#a05400', fontSize: 12, fontWeight: 700 }}>
+                🏝 Op vakantie {data?.vacation_from ? `${fmtDate(data.vacation_from)} – ${fmtDate(data.vacation_until!)}` : `tot ${fmtDate(data.vacation_until!)}`}
+              </div>
+            )}
+            {isMe && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                <button onClick={openEdit}
+                  style={{ padding: '8px 14px', borderRadius: 8,
+                    border: '1px solid var(--border)', background: 'var(--bg-card)',
+                    color: 'var(--text-primary)', fontSize: 12.5, fontWeight: 600,
+                    cursor: 'pointer' }}>
+                  Bewerk profiel
+                </button>
+                <VacationButton from={data?.vacation_from ?? null} until={data?.vacation_until ?? null}
+                  onSave={(f, u) => persistField({ vacation_from: f, vacation_until: u })} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Bio */}
-      {data?.bio && (
-        <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-secondary)', margin: '0 0 24px', whiteSpace: 'pre-wrap' }}>
-          {data.bio}
-        </p>
-      )}
-
-      {/* Vacation banner */}
-      {data?.vacation_until && new Date(data.vacation_until).getTime() > Date.now() && (
-        <div style={{ background: 'rgba(255,123,36,0.12)', border: '1px solid rgba(255,123,36,0.3)', color: '#a05400', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 24 }}>
-          Op vakantie tot {fmtDate(data.vacation_until)}
-        </div>
-      )}
-
-      {/* Bio (editable when isMe) */}
       {(data?.bio || isMe) && (
         <BioField value={data?.bio ?? ''} editable={isMe}
           onSave={v => persistField({ bio: v })} />
       )}
 
-      {/* Field grid */}
+      {/* Sectioned field grid */}
       {visibleFields.length > 0 && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 14, overflow: 'hidden', marginTop: 24 }}>
-          {visibleFields.map((f, i, arr) => (
-            <div key={f.key} style={{
-              display: 'grid', gridTemplateColumns: isMobile ? '110px 1fr' : '160px 1fr',
-              gap: 12, padding: '12px 18px',
-              borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none',
-              alignItems: 'center',
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</span>
-              {isMe ? (
-                <EditableValue field={f} data={data} onSave={persistField} />
-              ) : (
-                <span style={{ fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
-                  {renderReadValue(f, data)}
-                </span>
-              )}
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 4 }}>
+          {FIELD_SECTIONS.map(section => {
+            const fields = visibleFields.filter(f => section.keys.includes(f.key as string))
+            if (fields.length === 0) return null
+            return (
+              <div key={section.label}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0 6px 6px' }}>
+                  {section.label}
+                </div>
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 12, overflow: 'hidden' }}>
+                  {fields.map((f, i, arr) => (
+                    <div key={f.key} style={{
+                      display: 'grid', gridTemplateColumns: isMobile ? '110px 1fr' : '160px 1fr',
+                      gap: 12, padding: '12px 18px',
+                      borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none',
+                      alignItems: 'center',
+                    }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</span>
+                      {isMe ? (
+                        <EditableValue field={f} data={data} onSave={persistField} />
+                      ) : (
+                        <span style={{ fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                          {renderReadValue(f, data)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -196,9 +218,83 @@ export default function PublicProfilePage() {
         <AddFieldPicker fields={hiddenFields} onPick={k => setRevealedKeys(s => new Set(s).add(k))} />
       )}
 
+      {/* Password (own profile, when supabase auth is enabled) */}
+      {isMe && supabase && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0 6px 6px' }}>
+            Wachtwoord
+          </div>
+          <PasswordResetCard />
+        </div>
+      )}
+
       {isMe && myMinutesThisWeek !== null && (
-        <div style={{ marginTop: 24, fontSize: 12, color: 'var(--text-muted)' }}>
+        <div style={{ marginTop: 24, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
           Jij hebt deze week {fmtMinutes(myMinutesThisWeek)} gelogd via de timer.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PasswordResetCard() {
+  const [open,    setOpen]    = useState(false)
+  const [pw,      setPw]      = useState('')
+  const [pw2,     setPw2]     = useState('')
+  const [busy,    setBusy]    = useState(false)
+  const [msg,     setMsg]     = useState<{ text: string; ok: boolean } | null>(null)
+
+  async function save() {
+    if (!supabase) return
+    if (pw.length < 6) { setMsg({ text: 'Minimaal 6 tekens.', ok: false }); return }
+    if (pw !== pw2)    { setMsg({ text: 'Wachtwoorden komen niet overeen.', ok: false }); return }
+    setBusy(true); setMsg(null)
+    const { error } = await supabase.auth.updateUser({ password: pw })
+    setBusy(false)
+    if (error) { setMsg({ text: error.message, ok: false }); return }
+    setMsg({ text: 'Wachtwoord opgeslagen.', ok: true })
+    setPw(''); setPw2('')
+    setTimeout(() => { setMsg(null); setOpen(false) }, 1500)
+  }
+
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 12, padding: 14 }}>
+      {!open ? (
+        <button onClick={() => setOpen(true)}
+          style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
+            border: '1px solid var(--border)', background: 'var(--bg-hover)',
+            color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+          Stel een nieuw wachtwoord in
+          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginTop: 2 }}>
+            Zo log je in zonder mailtje.
+          </span>
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <input type="password" autoFocus value={pw} onChange={e => setPw(e.target.value)}
+            placeholder="Nieuw wachtwoord (min 6 tekens)"
+            style={{ width: '100%', padding: '9px 11px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+          <input type="password" value={pw2} onChange={e => setPw2(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && save()}
+            placeholder="Herhaal wachtwoord"
+            style={{ width: '100%', padding: '9px 11px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => { setOpen(false); setPw(''); setPw2(''); setMsg(null) }}
+              style={{ flex: 1, padding: '8px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              Annuleer
+            </button>
+            <button onClick={save} disabled={busy}
+              style={{ flex: 2, padding: '8px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>
+              {busy ? 'Opslaan…' : 'Opslaan'}
+            </button>
+          </div>
+          {msg && (
+            <div style={{ padding: '7px 10px', borderRadius: 6, fontSize: 12,
+              background: msg.ok ? 'rgba(0,200,117,0.12)' : 'rgba(196,69,58,0.12)',
+              color: msg.ok ? '#037f4c' : '#C4453A' }}>
+              {msg.text}
+            </div>
+          )}
         </div>
       )}
     </div>
