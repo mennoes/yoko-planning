@@ -1296,13 +1296,28 @@ export default function PlanningPage() {
 
         {/* Title + nav */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 10 : 16 }}>
-          <div style={{ minWidth: 0, flex: 1, paddingRight: isMobile ? 90 : 0 }}>
-            <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 900, color: '#000', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
-              Planning
-            </h1>
-            <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-              {todayLabel}
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 12 : 24, flex: 1, paddingRight: isMobile ? 90 : 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
+                Planning
+              </h1>
+              <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                {todayLabel}
+              </div>
             </div>
+            {!isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 4, fontSize: 13, color: 'var(--text-secondary)' }}>
+                <span>
+                  <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
+                  <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>cap · {kpis.totalHours}/{kpis.totalCap}u</span>
+                </span>
+                <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
+                <span>
+                  <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+                  <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>deadlines</span>
+                </span>
+              </div>
+            )}
           </div>
           {!isMobile && (
             <div style={segGroup}>
@@ -1408,24 +1423,26 @@ export default function PlanningPage() {
           )}
         </div>
 
-        {/* KPI strip — horizontally scrollable on mobile */}
-        <div style={{
-          display: 'flex', gap: 14, alignItems: 'center',
-          padding: '6px 0 10px', marginBottom: 4,
-          borderBottom: '1px solid var(--border-light)',
-          fontSize: 13, color: 'var(--text-secondary)',
-          flexWrap: 'wrap',
-        }}>
-          <span>
-            <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
-            <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>capaciteit · {kpis.totalHours} / {kpis.totalCap}u</span>
-          </span>
-          <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
-          <span>
-            <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
-            <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>deadlines deze week</span>
-          </span>
-        </div>
+        {/* Mobile-only KPI bar (desktop has it inline next to title) */}
+        {isMobile && (
+          <div style={{
+            display: 'flex', gap: 14, alignItems: 'center',
+            padding: '6px 0 10px', marginBottom: 4,
+            borderBottom: '1px solid var(--border-light)',
+            fontSize: 13, color: 'var(--text-secondary)',
+            flexWrap: 'wrap',
+          }}>
+            <span>
+              <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
+              <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>cap · {kpis.totalHours}/{kpis.totalCap}u</span>
+            </span>
+            <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
+            <span>
+              <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+              <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>deadlines</span>
+            </span>
+          </div>
+        )}
       </header>
 
       {/* ── Mobile overflow menu ── */}

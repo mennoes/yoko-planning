@@ -218,7 +218,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
         style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: 'nowrap', minWidth: 24 }}>
         {value.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
-          : value.map(id => <MemberAvatar key={id} id={id} size={24} />)
+          : value.map(id => <MemberAvatar key={id} id={id} size={30} />)
         }
       </div>
 
@@ -915,15 +915,36 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
                   onChange={e => onSelectGroup(group.id, e.target.checked)}
                   style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15 }} />
               </div>
-              <button onClick={() => onToggleSort('name')}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 11, fontWeight: 700, color: sortBy?.key === 'name' ? 'var(--accent)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
-                Item {sortBy?.key === 'name' && (sortBy.dir === 'asc' ? '↑' : '↓')}
-              </button>
+              <div style={{ position: 'relative', display: 'flex' }}>
+                <button onClick={() => onToggleSort('name')}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 11, fontWeight: 800, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
+                  Item
+                  {sortBy?.key === 'name' && (
+                    <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
+                  )}
+                </button>
+                <div title="Sleep om Item-kolom te verbreden of versmallen"
+                  style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }}
+                  onMouseDown={e => {
+                    e.preventDefault(); e.stopPropagation()
+                    const startX = e.clientX
+                    const startW = colWidths['name'] ?? 200
+                    function onMove(ev: MouseEvent) { onResizeCol('name', startW + ev.clientX - startX) }
+                    function onUp() {
+                      document.removeEventListener('mousemove', onMove)
+                      document.removeEventListener('mouseup', onUp)
+                    }
+                    document.addEventListener('mousemove', onMove)
+                    document.addEventListener('mouseup', onUp)
+                  }} />
+              </div>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 11, fontWeight: 700, color: sortBy?.key === col.key ? 'var(--accent)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 11, fontWeight: 800, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
                   onClick={() => onToggleSort(col.key)}>
                   {col.label}
-                  {sortBy?.key === col.key && (sortBy.dir === 'asc' ? '↑' : '↓')}
+                  {sortBy?.key === col.key && (
+                    <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
+                  )}
                   <div
                     title="Kolom breder/smaller slepen"
                     style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }}
@@ -1164,7 +1185,8 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
     document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
-  const gridTemplate = `36px 1fr ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const nameW = colWidths['name'] ?? 200
+  const gridTemplate = `36px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
 
