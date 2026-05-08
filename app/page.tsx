@@ -98,6 +98,27 @@ function fmtRelative(iso: string) {
   return fmtDate(iso)
 }
 
+// Classify a workload item by its name. Used for the workload colour breakdown
+// (maken / overhead / meetings).
+const MEETING_PATTERNS = [
+  /\bmeeting\b/i, /\boverleg\b/i, /\bcall\b/i, /\bbel\b/i, /\b1on1\b/i, /\bsync\b/i,
+  /\bcheck-?in\b/i, /\bincheck\b/i, /\bstand-?up\b/i, /\bweekstart\b/i, /\bweek-?afsluiting\b/i,
+  /\byoko check\b/i, /\bcheckout\b/i, /\bcheck out\b/i, /\bbpd\b/i, /\bketcho\b/i,
+]
+const OVERHEAD_PATTERNS = [
+  /\bvisie\b/i, /\bto.?do/i, /\bformuleer/i, /\bplanning\b/i, /\bsocials\b/i, /\bthuiswerken\b/i,
+  /\bvrij\b/i, /\bvakantie\b/i, /\bnab\b/i, /\bonbetaald\b/i, /\bemail\b/i, /\bmail\b/i,
+  /\bonboarding\b/i, /\bevaluatie\b/i, /\beind-?gesprek\b/i,
+]
+function classifyItem(item: { name: string; hours: number; source?: string }): 'meeting' | 'overhead' | 'maken' {
+  const n = item.name || ''
+  if (MEETING_PATTERNS.some(re => re.test(n))) return 'meeting'
+  // Short Google events without a clear "maken" name → meeting
+  if (item.source === 'google' && item.hours > 0 && item.hours <= 1.5) return 'meeting'
+  if (OVERHEAD_PATTERNS.some(re => re.test(n))) return 'overhead'
+  return 'maken'
+}
+
 const card: React.CSSProperties = {
   background: 'var(--bg-card)', borderRadius: 14,
   border: '1px solid var(--border-light)', overflow: 'hidden',
@@ -325,8 +346,36 @@ export default function HomePage() {
               </div>
               {weekItems.length === 0 ? (
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen gepland werk</p>
-              ) : (
+              ) : (() => {
+                const meetingHours = weekItems.filter(i => classifyItem(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
+                const overheadHours = weekItems.filter(i => classifyItem(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
+                const makenHours = weekItems.filter(i => classifyItem(i) === 'maken').reduce((s, i) => s + i.hours, 0)
+                const total = meetingHours + overheadHours + makenHours
+                const r = (n: number) => Math.round(n * 10) / 10
+                return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* Categorie samenvatting */}
+                  <div>
+                    <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: 'var(--border)', marginBottom: 8 }}>
+                      <div style={{ width: total > 0 ? `${(makenHours/total)*100}%` : 0, background: '#5fa06e' }} />
+                      <div style={{ width: total > 0 ? `${(overheadHours/total)*100}%` : 0, background: '#9aadbd' }} />
+                      <div style={{ width: total > 0 ? `${(meetingHours/total)*100}%` : 0, background: '#D8B62E' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5fa06e' }} />
+                        <strong style={{ color: 'var(--text-primary)' }}>{r(makenHours)}u</strong> maken
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9aadbd' }} />
+                        <strong style={{ color: 'var(--text-primary)' }}>{r(overheadHours)}u</strong> overhead
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#D8B62E' }} />
+                        <strong style={{ color: 'var(--text-primary)' }}>{r(meetingHours)}u</strong> meetings
+                      </span>
+                    </div>
+                  </div>
                   {(['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'] as const).map((dayLabel, dayIdx) => {
                     const dayItems = weekItems.filter(i => i.day === dayIdx)
                     if (dayItems.length === 0) return null
@@ -338,10 +387,15 @@ export default function HomePage() {
                           <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{dayTotal}u</span>
                         </div>
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {dayItems.map((item, i) => (
+                          {dayItems.map((item, i) => {
+                            const cat = classifyItem(item)
+                            const dotColor = cat === 'meeting' ? '#D8B62E'
+                                           : cat === 'overhead' ? '#9aadbd'
+                                           : '#5fa06e'
+                            return (
                             <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[item.board] ?? 'var(--accent)', flexShrink: 0 }} />
-                              <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                              <span title={cat === 'meeting' ? 'Meeting' : cat === 'overhead' ? 'Overhead' : 'Maken'} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                              <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
                               {item.source === 'google' && (
                                 <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
                                   title="Google Calendar — bewerk in Google"
@@ -350,13 +404,14 @@ export default function HomePage() {
                               )}
                               <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
                             </li>
-                          ))}
+                          )})}
                         </ul>
                       </div>
                     )
                   })}
                 </div>
-              )}
+                )
+              })()}
             </>
           ) : (
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Stel je profiel in om werkdruk te zien.</p>
