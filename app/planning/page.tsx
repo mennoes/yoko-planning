@@ -509,7 +509,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[]; ownerHours: Record<string, number> }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[] }>) => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const team    = teamData.members
@@ -524,6 +524,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   const [ownerHours, setOwnerHours] = useState<Record<string, number>>(
     (rawItem?.ownerHours as Record<string, number> | undefined) ?? {}
   )
+  const [ownerIds, setOwnerIds] = useState<string[]>(project.ownerIds)
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const hasSubitems = ((rawItem?.subitems as { estHours?: number }[] | undefined)?.length ?? 0) > 0
   const subitemsTotal = ((rawItem?.subitems as { estHours?: number }[] | undefined) ?? [])
     .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
@@ -539,6 +541,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
     setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
     setOwnerHours((rawItem?.ownerHours as Record<string, number> | undefined) ?? {})
+    setOwnerIds(project.ownerIds)
+    setOwnerPickerOpen(false)
     setNewEntry('')
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -553,8 +557,12 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   function save() {
     if (isGoogle) return
     // When subitems exist the parent's hours are derived; don't write them.
-    const extra: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[]; ownerHours: Record<string, number> }> = {
-      notes, journal, ownerHours,
+    // If only "unassigned" is left in the picker, drop it so the item ends up
+    // in real unassigned territory rather than fake-assigned to the placeholder.
+    const cleanOwners = ownerIds.length > 1 ? ownerIds.filter(id => id !== 'unassigned') : ownerIds
+    const finalOwners = cleanOwners.length === 0 ? ['unassigned'] : cleanOwners
+    const extra: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[] }> = {
+      notes, journal, ownerHours, ownerIds: finalOwners,
     }
     if (!hasSubitems) extra.estHours = parseFloat(estHours) || 0
     onUpdate(project, startDate || null, endDate || null, extra)
@@ -639,13 +647,52 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
       )}
       {!isMerged && <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
         <Row label="Owner">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {owners.length > 0 ? owners.map(m => (
-              <span key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 20, padding: '3px 10px 3px 3px', border: '1px solid var(--border-light)', fontWeight: 500 }}>
-                <UserAvatar memberId={m.id} size={22} />
-                {m.name}
-              </span>
-            )) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
+            {ownerIds.length > 0 && ownerIds.map(oid => {
+              const m = team.find(t => t.id === oid)
+              if (!m) return null
+              return (
+                <span key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 20, padding: '3px 10px 3px 3px', border: '1px solid var(--border-light)', fontWeight: 500 }}>
+                  <UserAvatar memberId={m.id} size={22} />
+                  {m.name}
+                  {!isGoogle && (
+                    <button onClick={() => setOwnerIds(ids => ids.filter(x => x !== m.id))}
+                      title="Verwijder owner"
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px', marginLeft: 2 }}>×</button>
+                  )}
+                </span>
+              )
+            })}
+            {!isGoogle && (
+              <button onClick={() => setOwnerPickerOpen(o => !o)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                + Toewijzen
+              </button>
+            )}
+            {ownerPickerOpen && (
+              <>
+                <div onClick={() => setOwnerPickerOpen(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 305 }} />
+                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 306,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+                  padding: 6, minWidth: 220, maxHeight: 280, overflowY: 'auto',
+                  boxShadow: '0 14px 40px rgba(0,0,0,0.25)' }}>
+                  {team.filter(m => m.id !== 'unassigned').map(m => {
+                    const on = ownerIds.includes(m.id)
+                    return (
+                      <button key={m.id}
+                        onClick={() => setOwnerIds(ids => on ? ids.filter(x => x !== m.id) : [...ids.filter(x => x !== 'unassigned'), m.id])}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6,
+                          background: on ? m.color + '22' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                        <UserAvatar memberId={m.id} size={22} />
+                        <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{m.name}</span>
+                        {on && <span style={{ fontSize: 11, color: m.color, fontWeight: 700 }}>✓</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </Row>
         <Row label="Status"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{project.status === 'done' ? '✅ Done' : rawItem?.status as string || '—'}</span></Row>
@@ -1226,7 +1273,7 @@ export default function PlanningPage() {
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     pushUndo(() => apply(prevStart, prevEnd))
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import('@/lib/boards').JournalEntry[]; ownerHours: Record<string, number> }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[] }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     const groups = (allGroups[boardName] ?? []).map(g => ({
