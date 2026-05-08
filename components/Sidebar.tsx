@@ -545,19 +545,9 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
 
         <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
 
-        {/* Google Calendar */}
-        {requiresAuth && (
-          <div style={{ padding: '4px 10px 8px' }}>
-            <GoogleConnector />
-          </div>
-        )}
+        {/* Google Calendar — opens a right-side drawer */}
+        {requiresAuth && <GoogleCalendarMenuRow />}
 
-        {/* Set / change password */}
-        {requiresAuth && (
-          <div style={{ padding: '0 10px 8px' }}>
-            <PasswordSetter />
-          </div>
-        )}
 
         {requiresAuth && <ImportBundleButton />}
 
@@ -704,6 +694,44 @@ function SyncButton() {
         transform: busy ? 'rotate(180deg)' : undefined, transition: 'transform 0.6s ease, color 0.2s' }}>
       <IconRefresh size={16} />
     </button>
+  )
+}
+
+// ─── Settings → Google Calendar row + drawer ──────────────────────────────────
+function GoogleCalendarMenuRow() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ width: 'calc(100% - 12px)', margin: '0 6px', padding: '8px 10px', borderRadius: 8,
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+          color: 'var(--text-primary)', fontSize: 13, fontWeight: 500 }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+        <span style={{ fontSize: 14 }}>📅</span>
+        <span style={{ flex: 1 }}>Google Calendar</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>›</span>
+      </button>
+      {open && typeof document !== 'undefined' && createPortal(
+        <>
+          <div onClick={() => setOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 10010, background: 'rgba(0,0,0,0.4)' }} />
+          <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(420px, 92vw)', zIndex: 10011,
+            background: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', boxShadow: '-12px 0 32px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '14px 18px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Google Calendar</h3>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--text-muted)', lineHeight: 1, padding: '0 4px' }}>×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+              <GoogleConnector />
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
   )
 }
 
