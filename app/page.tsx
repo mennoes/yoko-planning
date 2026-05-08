@@ -145,6 +145,7 @@ export default function HomePage() {
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
   const [weekItems,    setWeekItems]    = useState<{ name: string; board: string; hours: number; day: number; source?: 'manual' | 'google'; externalLink?: string }[]>([])
+  const [weekOffset,   setWeekOffset]   = useState(0)
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
@@ -180,21 +181,7 @@ export default function HomePage() {
     allDeadlines.sort((a, b) => new Date(a.item.deadline as string).getTime() - new Date(b.item.deadline as string).getTime())
     setDeadlineItems(allDeadlines)
 
-    // Workload this week (own) — group items by start day-of-week (Mon=0..Sun=6)
-    if (memberId) {
-      const week    = getWeekStart(new Date())
-      const contribs = memberContributions(projectList, memberId, week)
-      setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
-      setWeekItems(contribs.map(c => {
-        const sd = c.project.startDate ? new Date(c.project.startDate) : null
-        const dayJs = sd ? sd.getDay() : 1   // 0=Sun..6=Sat
-        const day   = (dayJs + 6) % 7         // 0=Mon..6=Sun
-        return {
-          name: c.project.name, board: c.project.board, hours: c.hours, day,
-          source: c.project.source, externalLink: c.project.externalLink,
-        }
-      }))
-    }
+    // Workload data per week is recomputed in a separate effect on weekOffset
     // Capacity: prefer the override the user set in the planning tool
     // (localStorage 'yoko-capacities'), fall back to teamData default.
     let cap = teamData.members.find(m => m.id === memberId)?.weeklyCapacity ?? 40
@@ -220,6 +207,25 @@ export default function HomePage() {
 
     setHydrated(true)
   }, [memberId])
+
+  // Recompute the workload list whenever the week offset (or the project list
+  // / member changes). Lets the user step through previous/next weeks.
+  useEffect(() => {
+    if (!memberId) { setWeekItems([]); setWeekHours(0); return }
+    const base = getWeekStart(new Date())
+    const week = new Date(base); week.setDate(week.getDate() + weekOffset * 7)
+    const contribs = memberContributions(allProjects, memberId, week)
+    setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
+    setWeekItems(contribs.map(c => {
+      const sd = c.project.startDate ? new Date(c.project.startDate) : null
+      const dayJs = sd ? sd.getDay() : 1
+      const day   = (dayJs + 6) % 7
+      return {
+        name: c.project.name, board: c.project.board, hours: c.hours, day,
+        source: c.project.source, externalLink: c.project.externalLink,
+      }
+    }))
+  }, [memberId, weekOffset, allProjects])
 
   // Pull all member profiles for team-status / vacation widgets
   useEffect(() => {
@@ -326,8 +332,24 @@ export default function HomePage() {
     werkdruk: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconHourglass size={isMobile ? 17 : 15} />Werkdruk deze week</h2>
-          <Link href="/planning" style={cardLink}>Planning →</Link>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <IconHourglass size={isMobile ? 17 : 15} />
+            Werkdruk
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => setWeekOffset(o => o - 1)}
+              title="Vorige week"
+              style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>‹</button>
+            <button onClick={() => setWeekOffset(0)}
+              title="Naar deze week"
+              style={{ background: weekOffset === 0 ? 'var(--accent-light)' : 'transparent', border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 6, color: weekOffset === 0 ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', padding: '3px 9px', fontSize: 11, fontWeight: 600, minWidth: 90, textAlign: 'center' }}>
+              {weekOffset === 0 ? 'Deze week' : weekOffset === -1 ? 'Vorige week' : weekOffset === 1 ? 'Volgende week' : `${weekOffset > 0 ? '+' : ''}${weekOffset} weken`}
+            </button>
+            <button onClick={() => setWeekOffset(o => o + 1)}
+              title="Volgende week"
+              style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>›</button>
+            <Link href="/planning" style={{ ...cardLink, marginLeft: 4 }}>Planning →</Link>
+          </div>
         </div>
         <div style={{ padding: '16px 20px 14px' }}>
           {memberId ? (
