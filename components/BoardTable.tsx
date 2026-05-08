@@ -436,25 +436,49 @@ function DateRangeCell({
   const hasAny  = startDate || endDate
   const pillClr = isLate ? '#e2445c' : color
 
+  // Progress bar: how far we are through the project's timeline.
+  // 0% = before start, 100% = at/past end. Late items fill 100% in red.
+  let progress = 1
+  if (startDate && endDate && !isLate) {
+    const s = new Date(startDate).getTime()
+    const e = new Date(endDate).getTime() + 86400000  // include the end day
+    const n = Date.now()
+    if (n < s) progress = 0
+    else if (n >= e) progress = 1
+    else progress = (n - s) / (e - s)
+  }
+  const progressPct = Math.round(progress * 100)
+
   return (
     <div style={{ width: '100%' }}>
       <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
+        position: 'relative', overflow: 'hidden',
         width: '100%', textAlign: 'left', cursor: 'pointer',
-        border: 'none', borderRadius: 4, padding: '3px 8px',
-        background: hasAny ? pillClr + 'cc' : 'transparent',
+        border: hasAny ? `1px solid ${pillClr}55` : 'none',
+        borderRadius: 4, padding: '3px 8px',
+        background: hasAny ? pillClr + '22' : 'transparent',
         display: 'flex', alignItems: 'center', gap: 5, minHeight: 26,
       }}>
+        {hasAny && (
+          <span style={{
+            position: 'absolute', inset: 0, width: `${progressPct}%`,
+            background: pillClr + 'cc', borderRadius: 3,
+            transition: 'width 0.4s ease', pointerEvents: 'none', zIndex: 0,
+          }} />
+        )}
         {hasAny ? (
           <>
             {isLate && (
               <span style={{
+                position: 'relative', zIndex: 1,
                 width: 14, height: 14, borderRadius: 3, flexShrink: 0,
                 background: 'rgba(0,0,0,0.25)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 9, fontWeight: 900, color: '#fff',
               }}>!</span>
             )}
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span title={`${progressPct}% verstreken`}
+              style={{ position: 'relative', zIndex: 1, fontSize: 11, fontWeight: 600, color: progressPct > 35 ? '#fff' : pillClr, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textShadow: progressPct > 35 ? '0 1px 1px rgba(0,0,0,0.15)' : 'none' }}>
               {fmtRange(startDate, endDate)}
             </span>
           </>
