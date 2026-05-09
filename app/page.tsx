@@ -19,6 +19,12 @@ import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
 import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, type Project } from '@/lib/workload'
+import {
+  CAT_COLOR, CAT_LABEL,
+  effectiveCategory,
+  loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
+  type WorkloadCategory,
+} from '@/lib/workloadCategory'
 import { supabase } from '@/lib/supabase'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 
@@ -98,41 +104,116 @@ function fmtRelative(iso: string) {
   return fmtDate(iso)
 }
 
+// ─── Greeting summary helpers ────────────────────────────────────────────────
+// Used to build a short, concrete recap under the greeting: which projects
+// the user works on this week, who they collaborate with, and a tone for
+// last and next week's load.
+function joinAnd(names: string[]): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} en ${names[1]}`
+  return `${names.slice(0, -1).join(', ')} en ${names[names.length - 1]}`
+}
+function pastTone(hours: number, cap: number): string {
+  const r = Math.round
+  if (hours <= 0)          return 'vorige week stond er niets op de planning'
+  if (hours > cap * 1.05)  return `vorige week was pittig (${r(hours)}u 💪)`
+  if (hours >= cap * 0.85) return `vorige week zat lekker vol (${r(hours)}u)`
+  if (hours >= cap * 0.5)  return `vorige week was prima behapbaar (${r(hours)}u)`
+  return `vorige week was rustig (${r(hours)}u)`
+}
+function nextTone(hours: number, cap: number): string {
+  const r = Math.round
+  if (hours <= 0)          return 'volgende week is nog leeg ✨'
+  if (hours > cap * 1.05)  return `volgende week schiet je over je cap met ${r(hours)}u — pas op je tempo`
+  if (hours >= cap * 0.85) return `volgende week wordt vol (${r(hours)}u)`
+  if (hours >= cap * 0.5)  return `volgende week zit prima (${r(hours)}u)`
+  return `volgende week is wat rustiger (${r(hours)}u)`
+}
+function helpHint({ slack, others }: { slack: number; others: { member: { name: string }; pct: number }[] }): string | null {
+  if (slack < 4 || others.length === 0) return null
+  const top   = others[0]
+  const first = top.member.name.split(' ')[0]
+  return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
+}
+
 type WorkloadItem = { id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }
 
-// One row in the workload list. Hover → detail popover, click → /projects/{board}.
-function WorkloadItemRow({ item }: { item: WorkloadItem }) {
-  const [hover, setHover] = useState(false)
-  const cat = classifyItem(item)
-  const dotColor = cat === 'meeting' ? '#D8B62E' : cat === 'overhead' ? '#9aadbd' : '#5fa06e'
-  const catLabel = cat === 'meeting' ? 'Meeting' : cat === 'overhead' ? 'Overhead' : 'Maken'
+type Category = WorkloadCategory
+
+// Workload row. Click → opens the detail popover (with a category picker
+// and an explicit "Open agenda" link). Hover on desktop also previews the
+// popover. The row never navigates by itself — only the link inside does.
+function WorkloadItemRow({ item, override, onSetCategory }: {
+  item: WorkloadItem
+  override: Category | null
+  onSetCategory: (id: string, cat: Category | null) => void
+}) {
+  const [hoverRow, setHoverRow] = useState(false)
+  const [hoverPop, setHoverPop] = useState(false)
+  const [tapOpen,  setTapOpen]  = useState(false)
+  const cat       = effectiveCategory(item, override)
+  const dotColor  = CAT_COLOR[cat]
+  const catLabel  = CAT_LABEL[cat]
   const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : '—'
   const range = item.startDate || item.endDate
     ? `${fmt(item.startDate)} – ${fmt(item.endDate)}`
     : 'Geen datums'
 
+  const popoverOpen = tapOpen || hoverRow || hoverPop
+
+  useEffect(() => {
+    if (!tapOpen) return
+    const handler = (e: Event) => {
+      const t = e.target as HTMLElement | null
+      if (!t || !t.closest(`[data-workload-row="${item.id}"]`)) setTapOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [tapOpen, item.id])
+
+  const rowVisualStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '4px 6px', margin: '0 -6px', borderRadius: 6,
+    textDecoration: 'none',
+    background: hoverRow || tapOpen ? 'var(--bg-hover)' : 'transparent',
+    transition: 'background 0.12s',
+    width: '100%', textAlign: 'left',
+    border: 'none', font: 'inherit', color: 'inherit',
+    cursor: 'pointer',
+  }
+
+  const rowContent = (
+    <>
+      <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+      <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+      {item.source === 'google' && (
+        <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
+          title="Open in Google Calendar"
+          onClick={e => e.stopPropagation()}
+          style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
+      )}
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
+    </>
+  )
+
   return (
-    <li style={{ position: 'relative' }}
-        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <Link href={`/projects/${item.board}`}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', margin: '0 -6px', borderRadius: 6, textDecoration: 'none',
-          background: hover ? 'var(--bg-hover)' : 'transparent', transition: 'background 0.12s' }}>
-        <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-        <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-        {item.source === 'google' && (
-          <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
-            title="Open in Google Calendar"
-            onClick={e => e.stopPropagation()}
-            style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
-        )}
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
-      </Link>
-      {hover && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
-          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
-          padding: '10px 12px', minWidth: 240, maxWidth: 320,
-          boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
-          fontSize: 12, lineHeight: 1.5, pointerEvents: 'none' }}>
+    <li data-workload-row={item.id} style={{ position: 'relative' }}
+        onMouseEnter={() => setHoverRow(true)} onMouseLeave={() => setHoverRow(false)}>
+      <button type="button" onClick={() => setTapOpen(o => !o)} style={rowVisualStyle}>
+        {rowContent}
+      </button>
+      {popoverOpen && (
+        <div onMouseEnter={() => setHoverPop(true)} onMouseLeave={() => setHoverPop(false)}
+          style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: '10px 12px', minWidth: 240, maxWidth: 320,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
+            fontSize: 12, lineHeight: 1.5 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor }} />
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{catLabel}</span>
@@ -143,32 +224,46 @@ function WorkloadItemRow({ item }: { item: WorkloadItem }) {
             <span>{range}</span>
             <span><strong style={{ color: 'var(--text-primary)' }}>{item.hours}u</strong> deze week</span>
           </div>
-          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>Klik om naar de agenda te gaan{item.source === 'google' ? ' · G-icoon: open in Google' : ''}</div>
+          <div style={{ marginTop: 10, marginBottom: 5, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Categorie</div>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {(['maken','overhead','meeting'] as const).map(c => {
+              const active = cat === c
+              const color  = CAT_COLOR[c]
+              return (
+                <button key={c} type="button"
+                  onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, c) }}
+                  style={{
+                    flex: 1, padding: '5px 6px', borderRadius: 6,
+                    border: active ? `1.5px solid ${color}` : '1px solid var(--border)',
+                    background: active ? `${color}22` : 'var(--bg-card)',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 11, fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+                  {CAT_LABEL[c]}
+                </button>
+              )
+            })}
+          </div>
+          {override && (
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, null) }}
+              style={{ marginTop: 6, fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+              Reset naar automatisch
+            </button>
+          )}
+          <Link href={`/projects/${item.board}`}
+            style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
+              fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
+              background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
+            Open agenda →
+          </Link>
         </div>
       )}
     </li>
   )
-}
-
-// Classify a workload item by its name. Used for the workload colour breakdown
-// (maken / overhead / meetings).
-const MEETING_PATTERNS = [
-  /\bmeeting\b/i, /\boverleg\b/i, /\bcall\b/i, /\bbel\b/i, /\b1on1\b/i, /\bsync\b/i,
-  /\bcheck-?in\b/i, /\bincheck\b/i, /\bstand-?up\b/i, /\bweekstart\b/i, /\bweek-?afsluiting\b/i,
-  /\byoko check\b/i, /\bcheckout\b/i, /\bcheck out\b/i, /\bbpd\b/i, /\bketcho\b/i,
-]
-const OVERHEAD_PATTERNS = [
-  /\bvisie\b/i, /\bto.?do/i, /\bformuleer/i, /\bplanning\b/i, /\bsocials\b/i, /\bthuiswerken\b/i,
-  /\bvrij\b/i, /\bvakantie\b/i, /\bnab\b/i, /\bonbetaald\b/i, /\bemail\b/i, /\bmail\b/i,
-  /\bonboarding\b/i, /\bevaluatie\b/i, /\beind-?gesprek\b/i,
-]
-function classifyItem(item: { name: string; hours: number; source?: string }): 'meeting' | 'overhead' | 'maken' {
-  const n = item.name || ''
-  if (MEETING_PATTERNS.some(re => re.test(n))) return 'meeting'
-  // Short Google events without a clear "maken" name → meeting
-  if (item.source === 'google' && item.hours > 0 && item.hours <= 1.5) return 'meeting'
-  if (OVERHEAD_PATTERNS.some(re => re.test(n))) return 'overhead'
-  return 'maken'
 }
 
 const card: React.CSSProperties = {
@@ -204,10 +299,12 @@ export default function HomePage() {
   const [profilesById, setProfilesById] = useState<Record<string, RemoteProfile>>({})
   const [allProjects,  setAllProjects]  = useState<Project[]>([])
   const [deadlineItems, setDeadlineItems] = useState<{ board: string; item: BoardItem }[]>([])
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, Category>>({})
 
   const memberId = profile?.memberId ?? ''
 
   useEffect(() => {
+    setCategoryOverrides(loadCategoryOverrides())
     setRecentPages(loadRecentPages().slice(0, 9))
 
     // My todos
@@ -281,6 +378,11 @@ export default function HomePage() {
     }))
   }, [memberId, weekOffset, allProjects])
 
+  // Re-load category overrides if another view changes them.
+  useEffect(() => {
+    return onCategoryOverridesChange(() => setCategoryOverrides(loadCategoryOverrides()))
+  }, [])
+
   // Pull all member profiles for team-status / vacation widgets
   useEffect(() => {
     if (!supabase) return
@@ -293,6 +395,10 @@ export default function HomePage() {
     })
     return () => { cancelled = true }
   }, [])
+
+  function setItemCategory(id: string, cat: Category | null) {
+    setCategoryOverrides(setCategoryOverride(id, cat))
+  }
 
   function moveSection(id: SectionId, dir: -1 | 1) {
     setSectionOrder(prev => {
@@ -359,6 +465,39 @@ export default function HomePage() {
     .filter(x => x.hours > x.cap)
     .sort((a, b) => b.pct - a.pct)
 
+  const myLastWeekStart = new Date(weekStartTeam); myLastWeekStart.setDate(myLastWeekStart.getDate() - 7)
+  const myNextWeekStart = new Date(weekStartTeam); myNextWeekStart.setDate(myNextWeekStart.getDate() + 7)
+  const myThisContribs = memberId
+    ? memberContributions(allProjects, memberId, weekStartTeam).slice().sort((a, b) => b.hours - a.hours)
+    : []
+  const myLastHours = memberId
+    ? Math.round(memberContributions(allProjects, memberId, myLastWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
+    : 0
+  const myNextHours = memberId
+    ? Math.round(memberContributions(allProjects, memberId, myNextWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
+    : 0
+  const myThisHours = Math.round(myThisContribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+
+  const firstNameOf = (id: string) => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? null
+  const projectParts = myThisContribs
+    .filter(c => effectiveCategory({ name: c.project.name, hours: c.hours, source: c.project.source }, categoryOverrides[c.project.id]) === 'maken')
+    .slice(0, 2)
+    .map(({ project }) => ({
+      name: project.name,
+      withNames: (project.ownerIds || [])
+        .filter(id => id !== memberId)
+        .map(firstNameOf)
+        .filter((n): n is string => Boolean(n)),
+    }))
+
+  const showSummary = !!memberId && (projectParts.length > 0 || weekCapacity > 0)
+  const tonePast    = weekCapacity > 0 ? pastTone(myLastHours, weekCapacity) : ''
+  const toneNext    = weekCapacity > 0 ? nextTone(myNextHours, weekCapacity) : ''
+  const tonePastCap = tonePast ? tonePast[0].toUpperCase() + tonePast.slice(1) : ''
+  const help        = memberId
+    ? helpHint({ slack: weekCapacity - myThisHours, others: overloaded.filter(o => o.member.id !== memberId) })
+    : null
+
   const sections: Record<SectionId, React.ReactNode> = {
     taken: (
       <div style={card}>
@@ -420,9 +559,10 @@ export default function HomePage() {
               {weekItems.length === 0 ? (
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen gepland werk</p>
               ) : (() => {
-                const meetingHours = weekItems.filter(i => classifyItem(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
-                const overheadHours = weekItems.filter(i => classifyItem(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
-                const makenHours = weekItems.filter(i => classifyItem(i) === 'maken').reduce((s, i) => s + i.hours, 0)
+                const catOf = (i: WorkloadItem) => effectiveCategory(i, categoryOverrides[i.id])
+                const meetingHours  = weekItems.filter(i => catOf(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
+                const overheadHours = weekItems.filter(i => catOf(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
+                const makenHours    = weekItems.filter(i => catOf(i) === 'maken').reduce((s, i) => s + i.hours, 0)
                 const total = meetingHours + overheadHours + makenHours
                 const r = (n: number) => Math.round(n * 10) / 10
                 const cap = Math.max(weekCapacity, total)  // bar is at least the total so overflow stays visible
@@ -462,7 +602,9 @@ export default function HomePage() {
                         </div>
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {dayItems.map((item, i) => (
-                            <WorkloadItemRow key={i} item={item} />
+                            <WorkloadItemRow key={i} item={item}
+                              override={categoryOverrides[item.id] ?? null}
+                              onSetCategory={setItemCategory} />
                           ))}
                         </ul>
                       </div>
@@ -634,25 +776,49 @@ export default function HomePage() {
     <div style={{ maxWidth: 1160, padding: isMobile ? '20px 16px 60px' : '48px 40px 100px' }}>
 
       {/* ── Greeting ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18, marginBottom: isMobile ? 18 : 40 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobile ? 14 : 18,
+        marginBottom: isMobile ? 18 : 32,
+        background: 'var(--yellow)',
+        padding: isMobile ? '18px 18px 20px' : '26px 30px',
+        borderRadius: 16,
+        boxShadow: '0 6px 22px rgba(216, 182, 46, 0.30)' }}>
         {memberId && (
           <UserAvatar memberId={memberId} size={isMobile ? 48 : 60}
             onClick={e => showMember(memberId, e)} />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: '#1a1a1a', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
             {greeting}{firstName ? `, ${firstName}` : ''}
           </h1>
-          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
+          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'rgba(26,26,26,0.65)', fontWeight: 600 }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
+          {showSummary && (
+            <p style={{ margin: '10px 0 0', fontSize: isMobile ? 13 : 14, color: 'rgba(26,26,26,0.85)', lineHeight: 1.55, maxWidth: 720 }}>
+              {projectParts.length > 0 && (
+                <>
+                  Deze week werk je vooral aan{' '}
+                  {projectParts.map((p, i) => (
+                    <span key={i}>
+                      {i > 0 && (i === projectParts.length - 1 ? ' en ' : ', ')}
+                      <strong style={{ color: '#1a1a1a' }}>{p.name}</strong>
+                      {p.withNames.length > 0 && <> (met {joinAnd(p.withNames)})</>}
+                    </span>
+                  ))}
+                  .{tonePast ? ' ' : ''}
+                </>
+              )}
+              {tonePast && <>{tonePastCap}, {toneNext}.</>}
+              {help && <> {help}</>}
+            </p>
+          )}
         </div>
         {isMobile && (
           <button onClick={() => setEditOrder(o => !o)}
-            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
-              background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
-              color: editOrder ? '#fff' : 'var(--text-secondary)',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(26,26,26,0.25)',
+              background: editOrder ? '#1a1a1a' : 'rgba(255,255,255,0.5)',
+              color: editOrder ? 'var(--yellow)' : '#1a1a1a',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
             {editOrder ? 'Klaar' : 'Volgorde'}
           </button>
         )}
