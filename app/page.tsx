@@ -141,15 +141,14 @@ type WorkloadItem = { id: string; name: string; board: string; hours: number; da
 
 type Category = WorkloadCategory
 
-// Workload row. Desktop: click → /projects/{board}, hover → interactive
-// detail popover with category picker. Mobile: tap → same popover, with an
-// explicit "Open agenda" link inside.
+// Workload row. Click → opens the detail popover (with a category picker
+// and an explicit "Open agenda" link). Hover on desktop also previews the
+// popover. The row never navigates by itself — only the link inside does.
 function WorkloadItemRow({ item, override, onSetCategory }: {
   item: WorkloadItem
   override: Category | null
   onSetCategory: (id: string, cat: Category | null) => void
 }) {
-  const isMobile = useIsMobile()
   const [hoverRow, setHoverRow] = useState(false)
   const [hoverPop, setHoverPop] = useState(false)
   const [tapOpen,  setTapOpen]  = useState(false)
@@ -161,10 +160,10 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
     ? `${fmt(item.startDate)} – ${fmt(item.endDate)}`
     : 'Geen datums'
 
-  const popoverOpen = isMobile ? tapOpen : (hoverRow || hoverPop)
+  const popoverOpen = tapOpen || hoverRow || hoverPop
 
   useEffect(() => {
-    if (!isMobile || !tapOpen) return
+    if (!tapOpen) return
     const handler = (e: Event) => {
       const t = e.target as HTMLElement | null
       if (!t || !t.closest(`[data-workload-row="${item.id}"]`)) setTapOpen(false)
@@ -175,13 +174,13 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
       document.removeEventListener('mousedown', handler)
       document.removeEventListener('touchstart', handler)
     }
-  }, [isMobile, tapOpen, item.id])
+  }, [tapOpen, item.id])
 
   const rowVisualStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 8,
     padding: '4px 6px', margin: '0 -6px', borderRadius: 6,
     textDecoration: 'none',
-    background: hoverRow || (isMobile && tapOpen) ? 'var(--bg-hover)' : 'transparent',
+    background: hoverRow || tapOpen ? 'var(--bg-hover)' : 'transparent',
     transition: 'background 0.12s',
     width: '100%', textAlign: 'left',
     border: 'none', font: 'inherit', color: 'inherit',
@@ -205,15 +204,9 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
   return (
     <li data-workload-row={item.id} style={{ position: 'relative' }}
         onMouseEnter={() => setHoverRow(true)} onMouseLeave={() => setHoverRow(false)}>
-      {isMobile ? (
-        <button type="button" onClick={() => setTapOpen(o => !o)} style={rowVisualStyle}>
-          {rowContent}
-        </button>
-      ) : (
-        <Link href={`/projects/${item.board}`} style={rowVisualStyle}>
-          {rowContent}
-        </Link>
-      )}
+      <button type="button" onClick={() => setTapOpen(o => !o)} style={rowVisualStyle}>
+        {rowContent}
+      </button>
       {popoverOpen && (
         <div onMouseEnter={() => setHoverPop(true)} onMouseLeave={() => setHoverPop(false)}
           style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
@@ -261,14 +254,12 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
               Reset naar automatisch
             </button>
           )}
-          {isMobile && (
-            <Link href={`/projects/${item.board}`}
-              style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
-                fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
-                background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
-              Open agenda →
-            </Link>
-          )}
+          <Link href={`/projects/${item.board}`}
+            style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
+              fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
+              background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
+            Open agenda →
+          </Link>
         </div>
       )}
     </li>
