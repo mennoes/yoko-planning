@@ -100,39 +100,113 @@ function fmtRelative(iso: string) {
 
 type WorkloadItem = { id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }
 
-// One row in the workload list. Hover → detail popover, click → /projects/{board}.
-function WorkloadItemRow({ item }: { item: WorkloadItem }) {
-  const [hover, setHover] = useState(false)
-  const cat = classifyItem(item)
-  const dotColor = cat === 'meeting' ? '#D8B62E' : cat === 'overhead' ? '#9aadbd' : '#5fa06e'
-  const catLabel = cat === 'meeting' ? 'Meeting' : cat === 'overhead' ? 'Overhead' : 'Maken'
+type Category = 'meeting' | 'overhead' | 'maken'
+
+const CATEGORY_OVERRIDES_KEY = 'yoko-workload-categories'
+
+function loadCategoryOverrides(): Record<string, Category> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(CATEGORY_OVERRIDES_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, Category>
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch { return {} }
+}
+
+function saveCategoryOverrides(map: Record<string, Category>) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(CATEGORY_OVERRIDES_KEY, JSON.stringify(map)) } catch {}
+}
+
+function effectiveCategory(item: WorkloadItem, override?: Category | null): Category {
+  if (override === 'meeting' || override === 'overhead' || override === 'maken') return override
+  return classifyItem(item)
+}
+
+const CAT_COLOR: Record<Category, string> = { meeting: '#D8B62E', overhead: '#9aadbd', maken: '#5fa06e' }
+const CAT_LABEL: Record<Category, string> = { meeting: 'Meeting', overhead: 'Overhead', maken: 'Maken' }
+
+// Workload row. Desktop: click → /projects/{board}, hover → interactive
+// detail popover with category picker. Mobile: tap → same popover, with an
+// explicit "Open agenda" link inside.
+function WorkloadItemRow({ item, override, onSetCategory }: {
+  item: WorkloadItem
+  override: Category | null
+  onSetCategory: (id: string, cat: Category | null) => void
+}) {
+  const isMobile = useIsMobile()
+  const [hoverRow, setHoverRow] = useState(false)
+  const [hoverPop, setHoverPop] = useState(false)
+  const [tapOpen,  setTapOpen]  = useState(false)
+  const cat       = effectiveCategory(item, override)
+  const dotColor  = CAT_COLOR[cat]
+  const catLabel  = CAT_LABEL[cat]
   const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : '—'
   const range = item.startDate || item.endDate
     ? `${fmt(item.startDate)} – ${fmt(item.endDate)}`
     : 'Geen datums'
 
+  const popoverOpen = isMobile ? tapOpen : (hoverRow || hoverPop)
+
+  useEffect(() => {
+    if (!isMobile || !tapOpen) return
+    const handler = (e: Event) => {
+      const t = e.target as HTMLElement | null
+      if (!t || !t.closest(`[data-workload-row="${item.id}"]`)) setTapOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [isMobile, tapOpen, item.id])
+
+  const rowVisualStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '4px 6px', margin: '0 -6px', borderRadius: 6,
+    textDecoration: 'none',
+    background: hoverRow || (isMobile && tapOpen) ? 'var(--bg-hover)' : 'transparent',
+    transition: 'background 0.12s',
+    width: '100%', textAlign: 'left',
+    border: 'none', font: 'inherit', color: 'inherit',
+    cursor: 'pointer',
+  }
+
+  const rowContent = (
+    <>
+      <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+      <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+      {item.source === 'google' && (
+        <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
+          title="Open in Google Calendar"
+          onClick={e => e.stopPropagation()}
+          style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
+      )}
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
+    </>
+  )
+
   return (
-    <li style={{ position: 'relative' }}
-        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <Link href={`/projects/${item.board}`}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', margin: '0 -6px', borderRadius: 6, textDecoration: 'none',
-          background: hover ? 'var(--bg-hover)' : 'transparent', transition: 'background 0.12s' }}>
-        <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-        <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-        {item.source === 'google' && (
-          <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
-            title="Open in Google Calendar"
-            onClick={e => e.stopPropagation()}
-            style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
-        )}
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
-      </Link>
-      {hover && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
-          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
-          padding: '10px 12px', minWidth: 240, maxWidth: 320,
-          boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
-          fontSize: 12, lineHeight: 1.5, pointerEvents: 'none' }}>
+    <li data-workload-row={item.id} style={{ position: 'relative' }}
+        onMouseEnter={() => setHoverRow(true)} onMouseLeave={() => setHoverRow(false)}>
+      {isMobile ? (
+        <button type="button" onClick={() => setTapOpen(o => !o)} style={rowVisualStyle}>
+          {rowContent}
+        </button>
+      ) : (
+        <Link href={`/projects/${item.board}`} style={rowVisualStyle}>
+          {rowContent}
+        </Link>
+      )}
+      {popoverOpen && (
+        <div onMouseEnter={() => setHoverPop(true)} onMouseLeave={() => setHoverPop(false)}
+          style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: '10px 12px', minWidth: 240, maxWidth: 320,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
+            fontSize: 12, lineHeight: 1.5 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor }} />
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{catLabel}</span>
@@ -143,7 +217,44 @@ function WorkloadItemRow({ item }: { item: WorkloadItem }) {
             <span>{range}</span>
             <span><strong style={{ color: 'var(--text-primary)' }}>{item.hours}u</strong> deze week</span>
           </div>
-          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>Klik om naar de agenda te gaan{item.source === 'google' ? ' · G-icoon: open in Google' : ''}</div>
+          <div style={{ marginTop: 10, marginBottom: 5, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Categorie</div>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {(['maken','overhead','meeting'] as const).map(c => {
+              const active = cat === c
+              const color  = CAT_COLOR[c]
+              return (
+                <button key={c} type="button"
+                  onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, c) }}
+                  style={{
+                    flex: 1, padding: '5px 6px', borderRadius: 6,
+                    border: active ? `1.5px solid ${color}` : '1px solid var(--border)',
+                    background: active ? `${color}22` : 'var(--bg-card)',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 11, fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+                  {CAT_LABEL[c]}
+                </button>
+              )
+            })}
+          </div>
+          {override && (
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, null) }}
+              style={{ marginTop: 6, fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+              Reset naar automatisch
+            </button>
+          )}
+          {isMobile && (
+            <Link href={`/projects/${item.board}`}
+              style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
+                fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
+                background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
+              Open agenda →
+            </Link>
+          )}
         </div>
       )}
     </li>
@@ -204,10 +315,12 @@ export default function HomePage() {
   const [profilesById, setProfilesById] = useState<Record<string, RemoteProfile>>({})
   const [allProjects,  setAllProjects]  = useState<Project[]>([])
   const [deadlineItems, setDeadlineItems] = useState<{ board: string; item: BoardItem }[]>([])
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, Category>>({})
 
   const memberId = profile?.memberId ?? ''
 
   useEffect(() => {
+    setCategoryOverrides(loadCategoryOverrides())
     setRecentPages(loadRecentPages().slice(0, 9))
 
     // My todos
@@ -293,6 +406,16 @@ export default function HomePage() {
     })
     return () => { cancelled = true }
   }, [])
+
+  function setItemCategory(id: string, cat: Category | null) {
+    setCategoryOverrides(prev => {
+      const next = { ...prev }
+      if (cat === null) delete next[id]
+      else              next[id] = cat
+      saveCategoryOverrides(next)
+      return next
+    })
+  }
 
   function moveSection(id: SectionId, dir: -1 | 1) {
     setSectionOrder(prev => {
@@ -420,9 +543,10 @@ export default function HomePage() {
               {weekItems.length === 0 ? (
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen gepland werk</p>
               ) : (() => {
-                const meetingHours = weekItems.filter(i => classifyItem(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
-                const overheadHours = weekItems.filter(i => classifyItem(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
-                const makenHours = weekItems.filter(i => classifyItem(i) === 'maken').reduce((s, i) => s + i.hours, 0)
+                const catOf = (i: WorkloadItem) => effectiveCategory(i, categoryOverrides[i.id])
+                const meetingHours  = weekItems.filter(i => catOf(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
+                const overheadHours = weekItems.filter(i => catOf(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
+                const makenHours    = weekItems.filter(i => catOf(i) === 'maken').reduce((s, i) => s + i.hours, 0)
                 const total = meetingHours + overheadHours + makenHours
                 const r = (n: number) => Math.round(n * 10) / 10
                 const cap = Math.max(weekCapacity, total)  // bar is at least the total so overflow stays visible
@@ -462,7 +586,9 @@ export default function HomePage() {
                         </div>
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {dayItems.map((item, i) => (
-                            <WorkloadItemRow key={i} item={item} />
+                            <WorkloadItemRow key={i} item={item}
+                              override={categoryOverrides[item.id] ?? null}
+                              onSetCategory={setItemCategory} />
                           ))}
                         </ul>
                       </div>
