@@ -776,27 +776,32 @@ export default function HomePage() {
     <div style={{ maxWidth: 1160, padding: isMobile ? '20px 16px 60px' : '48px 40px 100px' }}>
 
       {/* ── Greeting ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18, marginBottom: isMobile ? 18 : 40 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobile ? 14 : 18,
+        marginBottom: isMobile ? 18 : 32,
+        background: 'var(--yellow)',
+        padding: isMobile ? '18px 18px 20px' : '26px 30px',
+        borderRadius: 16,
+        boxShadow: '0 6px 22px rgba(216, 182, 46, 0.30)' }}>
         {memberId && (
           <UserAvatar memberId={memberId} size={isMobile ? 48 : 60}
             onClick={e => showMember(memberId, e)} />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: '#1a1a1a', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
             {greeting}{firstName ? `, ${firstName}` : ''}
           </h1>
-          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
+          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'rgba(26,26,26,0.65)', fontWeight: 600 }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
           {showSummary && (
-            <p style={{ margin: '8px 0 0', fontSize: isMobile ? 13 : 14, color: 'var(--text-secondary)', lineHeight: 1.55, maxWidth: 720 }}>
+            <p style={{ margin: '10px 0 0', fontSize: isMobile ? 13 : 14, color: 'rgba(26,26,26,0.85)', lineHeight: 1.55, maxWidth: 720 }}>
               {projectParts.length > 0 && (
                 <>
                   Deze week werk je vooral aan{' '}
                   {projectParts.map((p, i) => (
                     <span key={i}>
                       {i > 0 && (i === projectParts.length - 1 ? ' en ' : ', ')}
-                      <strong style={{ color: 'var(--text-primary)' }}>{p.name}</strong>
+                      <strong style={{ color: '#1a1a1a' }}>{p.name}</strong>
                       {p.withNames.length > 0 && <> (met {joinAnd(p.withNames)})</>}
                     </span>
                   ))}
@@ -810,10 +815,10 @@ export default function HomePage() {
         </div>
         {isMobile && (
           <button onClick={() => setEditOrder(o => !o)}
-            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
-              background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
-              color: editOrder ? '#fff' : 'var(--text-secondary)',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(26,26,26,0.25)',
+              background: editOrder ? '#1a1a1a' : 'rgba(255,255,255,0.5)',
+              color: editOrder ? 'var(--yellow)' : '#1a1a1a',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
             {editOrder ? 'Klaar' : 'Volgorde'}
           </button>
         )}
