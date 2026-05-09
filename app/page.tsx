@@ -486,56 +486,90 @@ export default function HomePage() {
   )
   const makenContribs = myThisContribs.filter(c => cat(c) === 'maken')
 
+  // ── Day-aware partition: where are we in the week? ─────────────────────
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const todayDay  = (today.getDay() + 6) % 7  // Mon=0..Sun=6
+  const isWeekend = todayDay >= 5
+
+  type GroupedProj = {
+    name: string
+    hours: number
+    ownerIds: Set<string>
+    startDay: number | null
+  }
+
   // Combine contribs that share a project name (subitems / split bars) into
-  // one entry, with summed hours and the union of owners.
-  const groupedByName = new Map<string, { name: string; hours: number; ownerIds: Set<string> }>()
+  // one entry. Track the earliest start day so we can place the project in
+  // the past / today / future bucket.
+  const grouped = new Map<string, GroupedProj>()
   for (const c of makenContribs) {
     const key = c.project.name.trim().toLowerCase()
-    const cur = groupedByName.get(key)
+    const sd  = c.project.startDate ? new Date(c.project.startDate) : null
+    const day = sd && !isNaN(sd.getTime()) ? (sd.getDay() + 6) % 7 : null
+    const cur = grouped.get(key)
     if (cur) {
       cur.hours += c.hours
       for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
+      if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
     } else {
-      groupedByName.set(key, {
-        name:     c.project.name,
-        hours:    c.hours,
-        ownerIds: new Set(c.project.ownerIds || []),
-      })
+      grouped.set(key, { name: c.project.name, hours: c.hours,
+        ownerIds: new Set(c.project.ownerIds || []), startDay: day })
     }
   }
-  const projectParts = [...groupedByName.values()]
-    .sort((a, b) => b.hours - a.hours)
-    .slice(0, 3)
-    .map(g => ({
-      name:      g.name,
-      hours:     r1(g.hours),
-      withNames: [...g.ownerIds]
-        .filter(id => id !== memberId)
-        .map(firstNameOf)
-        .filter((n): n is string => Boolean(n)),
-    }))
+  const groupedArr = [...grouped.values()].sort((a, b) => b.hours - a.hours)
+
+  const withNamesOf = (p: GroupedProj) => [...p.ownerIds]
+    .filter(id => id !== memberId)
+    .map(firstNameOf)
+    .filter((n): n is string => Boolean(n))
+
+  const pastProjects   = groupedArr.filter(p => p.startDay !== null && p.startDay <  todayDay).slice(0, 2)
+  const todayProjects  = groupedArr.filter(p => p.startDay === todayDay).slice(0, 2)
+  const futureProjects = groupedArr.filter(p => p.startDay !== null && p.startDay >  todayDay).slice(0, 2)
+  const weekendProjects = isWeekend ? groupedArr.slice(0, 3) : []
+
+  // Items that should have been wrapped up by today but are still active.
+  // Limited to the past 14 days so we don't surface ancient projects.
+  const fortnightAgoMs = today.getTime() - 14 * 86400000
+  const behindSchedule = memberId
+    ? allProjects
+        .filter(p => p.status !== 'done' && (p.ownerIds || []).includes(memberId))
+        .filter(p => {
+          if (!p.endDate) return false
+          const e = new Date(p.endDate); e.setHours(23, 59, 59, 999)
+          return e.getTime() < today.getTime() && e.getTime() >= fortnightAgoMs
+        })
+        .slice(0, 2)
+    : []
 
   const meetingHours  = r1(myThisContribs.filter(c => cat(c) === 'meeting').reduce((s, c) => s + c.hours, 0))
   const overheadHours = r1(myThisContribs.filter(c => cat(c) === 'overhead').reduce((s, c) => s + c.hours, 0))
-  const daysWithWork  = new Set(
-    myThisContribs
-      .map(c => c.project.startDate ? new Date(c.project.startDate) : null)
-      .filter((d): d is Date => !!d && !isNaN(d.getTime()))
-      .map(d => (d.getDay() + 6) % 7)
-  ).size
 
   const otherSegments: string[] = []
   if (meetingHours  >= 0.5) otherSegments.push(`${meetingHours}u aan meetings`)
   if (overheadHours >= 0.5) otherSegments.push(`${overheadHours}u overhead`)
   const otherInfo = otherSegments.length > 0 ? joinAnd(otherSegments) : ''
 
-  const showSummary = !!memberId && (projectParts.length > 0 || weekCapacity > 0)
+  const hasAnyWeekProject = pastProjects.length + todayProjects.length + futureProjects.length + weekendProjects.length > 0
+  const showSummary = !!memberId && (hasAnyWeekProject || weekCapacity > 0 || behindSchedule.length > 0)
   const tonePast    = weekCapacity > 0 ? pastTone(myLastHours, weekCapacity) : ''
   const toneNext    = weekCapacity > 0 ? nextTone(myNextHours, weekCapacity) : ''
   const tonePastCap = tonePast ? tonePast[0].toUpperCase() + tonePast.slice(1) : ''
   const help        = memberId
     ? helpHint({ slack: weekCapacity - myThisHours, others: overloaded.filter(o => o.member.id !== memberId) })
     : null
+
+  // Render a comma/and-joined list of bold project names with collaborator hints.
+  const renderProjects = (items: GroupedProj[], showCollabs = true) => items.map((p, i) => {
+    const wn = showCollabs ? withNamesOf(p) : []
+    return (
+      <span key={p.name}>
+        {i > 0 && (i === items.length - 1 ? ' en ' : ', ')}
+        <strong style={{ color: '#000' }}>{p.name}</strong>
+        {wn.length > 0 && <> (met {joinAnd(wn)})</>}
+      </span>
+    )
+  })
 
   const sections: Record<SectionId, React.ReactNode> = {
     taken: (
@@ -850,21 +884,48 @@ export default function HomePage() {
           boxShadow: '0 6px 22px rgba(216, 182, 46, 0.30)',
         }}>
           <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, color: '#1a1a1a', lineHeight: 1.6, maxWidth: 760 }}>
-            {projectParts.length > 0 && (
+            {isWeekend ? (
               <>
-                Deze week werk je vooral aan{' '}
-                {projectParts.map((p, i) => (
-                  <span key={i}>
-                    {i > 0 && (i === projectParts.length - 1 ? ' en ' : ', ')}
-                    <strong style={{ color: '#000' }}>{p.name}</strong>
-                    {p.withNames.length > 0 && <> (met {joinAnd(p.withNames)})</>}
-                  </span>
-                ))}
-                {daysWithWork > 1 && <>, verspreid over {daysWithWork} dagen</>}
-                .{' '}
+                Lekker weekend!
+                {weekendProjects.length > 0 && (
+                  <> Deze week ging het vooral over {renderProjects(weekendProjects)}.</>
+                )}
+                {' '}
+              </>
+            ) : (
+              <>
+                {pastProjects.length > 0 && (
+                  <>Tot nu toe deze week heb je gewerkt aan {renderProjects(pastProjects)}. </>
+                )}
+                {todayProjects.length > 0 && (
+                  <>
+                    {pastProjects.length > 0 ? 'Vandaag staat ' : 'Vandaag begint met '}
+                    {renderProjects(todayProjects)} op de planning.{' '}
+                  </>
+                )}
+                {futureProjects.length > 0 && (
+                  <>
+                    {(pastProjects.length > 0 || todayProjects.length > 0)
+                      ? 'Voor de rest van de week komt nog '
+                      : 'Deze week komt nog '}
+                    {renderProjects(futureProjects)}.{' '}
+                  </>
+                )}
               </>
             )}
             {otherInfo && <>Daarnaast staat er {otherInfo} op de planning. </>}
+            {behindSchedule.length > 0 && (
+              <>
+                Check even:{' '}
+                {behindSchedule.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 && (i === behindSchedule.length - 1 ? ' en ' : ', ')}
+                    <strong style={{ color: '#000' }}>{p.name}</strong>
+                  </span>
+                ))}
+                {' '}{behindSchedule.length === 1 ? 'staat' : 'staan'} nog op actief terwijl de einddatum al voorbij is — afronden? ⏳{' '}
+              </>
+            )}
             {tonePast && <>{tonePastCap}, {toneNext}.</>}
             {help && <> {help}</>}
           </p>
