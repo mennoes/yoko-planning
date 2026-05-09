@@ -260,9 +260,10 @@ type Contrib = { project: Project; hours: number }
 
 const NL_DAY_FULL = ['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag']
 
-function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom }: {
+function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenDetails }: {
   contribs: Contrib[]; total: number; capacity: number
   cs: number; or: number; zoom: ZoomLevel
+  onOpenDetails?: (p: Project) => void
 }) {
   const [open, setOpen] = useState(false)
   const [overrides, setOverrides] = useState<Record<string, WorkloadCategory>>({})
@@ -303,6 +304,7 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom }: {
       overrides={overrides} setCat={setCat}
       groupByDay={zoom !== 'dag'}
       onClose={() => setOpen(false)}
+      onOpenDetails={onOpenDetails}
     />
   )
 
@@ -351,12 +353,13 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom }: {
 // Floating detail popover: items grouped by start-day, each with a category
 // (Maken / Overhead / Meeting) picker. Layout matches the home page workload
 // rows so the experience is the same across views.
-function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupByDay, onClose }: {
+function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupByDay, onClose, onOpenDetails }: {
   contribs: Contrib[]; total: number; capacity: number
   overrides: Record<string, WorkloadCategory>
   setCat: (id: string, cat: WorkloadCategory | null) => void
   groupByDay: boolean
   onClose: () => void
+  onOpenDetails?: (p: Project) => void
 }) {
   const pct = capacity > 0 ? total / capacity : 0
   const r   = (n: number) => Math.round(n * 10) / 10
@@ -437,7 +440,19 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
               <div key={project.id} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-light)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
                   <span title={CAT_LABEL[cat]} style={{ width: 8, height: 8, borderRadius: '50%', background: CAT_COLOR[cat], flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{project.name}</span>
+                  {onOpenDetails ? (
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); onOpenDetails(project); onClose() }}
+                      title="Open detailvenster"
+                      style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        textAlign: 'left', background: 'none', border: 'none', padding: 0, font: 'inherit',
+                        color: 'var(--text-primary)', cursor: 'pointer', textDecoration: 'underline',
+                        textDecorationColor: 'var(--border)', textUnderlineOffset: 3 }}>
+                      {project.name}
+                    </button>
+                  ) : (
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{project.name}</span>
+                  )}
                   <span title={project.board} style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[project.board] ?? '#888', flexShrink: 0 }} />
                   <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{r(hours)}u</span>
                 </div>
@@ -772,6 +787,21 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   )
   const [ownerIds, setOwnerIds] = useState<string[]>(project.ownerIds)
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
+  const [categoryOverride, setCategoryOverrideState] = useState<WorkloadCategory | null>(loadCategoryOverrides()[project.id] ?? null)
+  useEffect(() => {
+    setCategoryOverrideState(loadCategoryOverrides()[project.id] ?? null)
+    return onCategoryOverridesChange(() => {
+      setCategoryOverrideState(loadCategoryOverrides()[project.id] ?? null)
+    })
+  }, [project.id])
+  const currentCategory = effectiveCategory(
+    { name: project.name, hours: project.estHours ?? 0, source: project.source },
+    categoryOverride,
+  )
+  function changeCategory(c: WorkloadCategory | null) {
+    setCategoryOverrideState(c)
+    setCategoryOverride(project.id, c)
+  }
   const hasSubitems = ((rawItem?.subitems as { estHours?: number }[] | undefined)?.length ?? 0) > 0
   const subitemsTotal = ((rawItem?.subitems as { estHours?: number }[] | undefined) ?? [])
     .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
@@ -942,6 +972,36 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
           </div>
         </Row>
         <Row label="Status"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{project.status === 'done' ? '✅ Done' : rawItem?.status as string || '—'}</span></Row>
+        <Row label="Categorie">
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {(['maken','overhead','meeting'] as const).map(c => {
+              const active = currentCategory === c
+              const colorC = CAT_COLOR[c]
+              return (
+                <button key={c} type="button" onClick={() => changeCategory(c)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', borderRadius: 16,
+                    border: active ? `1.5px solid ${colorC}` : '1px solid var(--border)',
+                    background: active ? `${colorC}22` : 'var(--bg-card)',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 12, fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                  }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: colorC }} />
+                  {CAT_LABEL[c]}
+                </button>
+              )
+            })}
+            {categoryOverride && (
+              <button type="button" onClick={() => changeCategory(null)}
+                title="Reset naar automatisch"
+                style={{ padding: '4px 8px', borderRadius: 16, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
+                ↺ auto
+              </button>
+            )}
+          </div>
+        </Row>
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="date" value={startDate} disabled={isGoogle}
@@ -2158,7 +2218,7 @@ export default function PlanningPage() {
                     return (
                       <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-light)', padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent', position: 'relative' }}>
-                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} />
+                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => setDetailProject(p)} />
                       </div>
                     )
                   })}
