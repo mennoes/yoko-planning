@@ -104,52 +104,37 @@ function fmtRelative(iso: string) {
   return fmtDate(iso)
 }
 
-// Short, friendly two-sentence recap shown under the greeting: a tone for
-// last week, a tone for next week, and an optional nudge to help out a
-// teammate when the user has slack and someone else is overloaded.
-function buildGreetingSummary({ lastHours, nextHours, capacity, thisHours, overloadedOthers }: {
-  lastHours: number
-  nextHours: number
-  capacity: number
-  thisHours: number
-  overloadedOthers: { member: { id: string; name: string }; pct: number }[]
-}): string | null {
-  if (capacity <= 0) return null
-  if (lastHours === 0 && nextHours === 0 && thisHours === 0 && overloadedOthers.length === 0) return null
-  const cap = capacity
-  const r = (n: number) => Math.round(n)
-
-  const past = lastHours <= 0
-    ? 'vorige week stond er niets op de planning'
-    : lastHours > cap * 1.05
-      ? `vorige week was pittig (${r(lastHours)}u 💪)`
-      : lastHours >= cap * 0.85
-        ? `vorige week zat lekker vol (${r(lastHours)}u)`
-        : lastHours >= cap * 0.5
-          ? `vorige week was prima behapbaar (${r(lastHours)}u)`
-          : `vorige week was rustig (${r(lastHours)}u)`
-
-  const next = nextHours <= 0
-    ? 'volgende week is nog leeg — pak iets leuks op ✨'
-    : nextHours > cap * 1.05
-      ? `volgende week schiet je over je cap met ${r(nextHours)}u — pas op je tempo`
-      : nextHours >= cap * 0.85
-        ? `volgende week wordt vol (${r(nextHours)}u)`
-        : nextHours >= cap * 0.5
-          ? `volgende week zit prima (${r(nextHours)}u)`
-          : `volgende week is wat rustiger (${r(nextHours)}u)`
-
-  let sentence = `${past}, ${next}.`
-  sentence = sentence[0].toUpperCase() + sentence.slice(1)
-
-  const slack = cap - thisHours
-  if (slack >= 4 && overloadedOthers.length > 0) {
-    const top   = overloadedOthers[0]
-    const first = top.member.name.split(' ')[0]
-    sentence += ` Je hebt deze week nog ~${r(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
-  }
-
-  return sentence
+// ─── Greeting summary helpers ────────────────────────────────────────────────
+// Used to build a short, concrete recap under the greeting: which projects
+// the user works on this week, who they collaborate with, and a tone for
+// last and next week's load.
+function joinAnd(names: string[]): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} en ${names[1]}`
+  return `${names.slice(0, -1).join(', ')} en ${names[names.length - 1]}`
+}
+function pastTone(hours: number, cap: number): string {
+  const r = Math.round
+  if (hours <= 0)          return 'vorige week stond er niets op de planning'
+  if (hours > cap * 1.05)  return `vorige week was pittig (${r(hours)}u 💪)`
+  if (hours >= cap * 0.85) return `vorige week zat lekker vol (${r(hours)}u)`
+  if (hours >= cap * 0.5)  return `vorige week was prima behapbaar (${r(hours)}u)`
+  return `vorige week was rustig (${r(hours)}u)`
+}
+function nextTone(hours: number, cap: number): string {
+  const r = Math.round
+  if (hours <= 0)          return 'volgende week is nog leeg ✨'
+  if (hours > cap * 1.05)  return `volgende week schiet je over je cap met ${r(hours)}u — pas op je tempo`
+  if (hours >= cap * 0.85) return `volgende week wordt vol (${r(hours)}u)`
+  if (hours >= cap * 0.5)  return `volgende week zit prima (${r(hours)}u)`
+  return `volgende week is wat rustiger (${r(hours)}u)`
+}
+function helpHint({ slack, others }: { slack: number; others: { member: { name: string }; pct: number }[] }): string | null {
+  if (slack < 4 || others.length === 0) return null
+  const top   = others[0]
+  const first = top.member.name.split(' ')[0]
+  return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
 }
 
 type WorkloadItem = { id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }
@@ -491,22 +476,36 @@ export default function HomePage() {
 
   const myLastWeekStart = new Date(weekStartTeam); myLastWeekStart.setDate(myLastWeekStart.getDate() - 7)
   const myNextWeekStart = new Date(weekStartTeam); myNextWeekStart.setDate(myNextWeekStart.getDate() + 7)
+  const myThisContribs = memberId
+    ? memberContributions(allProjects, memberId, weekStartTeam).slice().sort((a, b) => b.hours - a.hours)
+    : []
   const myLastHours = memberId
     ? Math.round(memberContributions(allProjects, memberId, myLastWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
     : 0
   const myNextHours = memberId
     ? Math.round(memberContributions(allProjects, memberId, myNextWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
     : 0
-  const myThisHours = memberId
-    ? Math.round(memberContributions(allProjects, memberId, weekStartTeam).reduce((s, c) => s + c.hours, 0) * 10) / 10
-    : 0
-  const greetingSummary = memberId ? buildGreetingSummary({
-    lastHours: myLastHours,
-    nextHours: myNextHours,
-    capacity:  weekCapacity,
-    thisHours: myThisHours,
-    overloadedOthers: overloaded.filter(o => o.member.id !== memberId),
-  }) : null
+  const myThisHours = Math.round(myThisContribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+
+  const firstNameOf = (id: string) => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? null
+  const projectParts = myThisContribs
+    .filter(c => effectiveCategory({ name: c.project.name, hours: c.hours, source: c.project.source }, categoryOverrides[c.project.id]) === 'maken')
+    .slice(0, 2)
+    .map(({ project }) => ({
+      name: project.name,
+      withNames: (project.ownerIds || [])
+        .filter(id => id !== memberId)
+        .map(firstNameOf)
+        .filter((n): n is string => Boolean(n)),
+    }))
+
+  const showSummary = !!memberId && (projectParts.length > 0 || weekCapacity > 0)
+  const tonePast    = weekCapacity > 0 ? pastTone(myLastHours, weekCapacity) : ''
+  const toneNext    = weekCapacity > 0 ? nextTone(myNextHours, weekCapacity) : ''
+  const tonePastCap = tonePast ? tonePast[0].toUpperCase() + tonePast.slice(1) : ''
+  const help        = memberId
+    ? helpHint({ slack: weekCapacity - myThisHours, others: overloaded.filter(o => o.member.id !== memberId) })
+    : null
 
   const sections: Record<SectionId, React.ReactNode> = {
     taken: (
@@ -798,9 +797,23 @@ export default function HomePage() {
           <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          {greetingSummary && (
-            <p style={{ margin: '8px 0 0', fontSize: isMobile ? 13 : 14, color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: 720 }}>
-              {greetingSummary}
+          {showSummary && (
+            <p style={{ margin: '8px 0 0', fontSize: isMobile ? 13 : 14, color: 'var(--text-secondary)', lineHeight: 1.55, maxWidth: 720 }}>
+              {projectParts.length > 0 && (
+                <>
+                  Deze week werk je vooral aan{' '}
+                  {projectParts.map((p, i) => (
+                    <span key={i}>
+                      {i > 0 && (i === projectParts.length - 1 ? ' en ' : ', ')}
+                      <strong style={{ color: 'var(--text-primary)' }}>{p.name}</strong>
+                      {p.withNames.length > 0 && <> (met {joinAnd(p.withNames)})</>}
+                    </span>
+                  ))}
+                  .{tonePast ? ' ' : ''}
+                </>
+              )}
+              {tonePast && <>{tonePastCap}, {toneNext}.</>}
+              {help && <> {help}</>}
             </p>
           )}
         </div>
