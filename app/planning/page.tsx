@@ -2062,7 +2062,7 @@ export default function PlanningPage() {
           {/* Member rows (filtered by people-picker if active),
               grouped: TEAM YOKO > UNASSIGNED > FREELANCERS (collapsible) */}
           {(() => {
-            const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur'])
+            const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
             const visible = team.filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
             const yokoTeam     = visible.filter(m => YOKO_IDS.has(m.id))
             const unassigned   = visible.filter(m => m.id === 'unassigned')

@@ -448,7 +448,7 @@ export default function HomePage() {
   }
 
   // Hours per member this week
-  const YOKO_IDS = ['menno','vincent','odette','anne-fleur']
+  const YOKO_IDS = ['menno','vincent','odette','anne-fleur','kars']
   const yokoMembers = teamData.members.filter(m => YOKO_IDS.includes(m.id))
   const weekStartTeam = getWeekStart(new Date())
   const memberHoursThisWeek: Record<string, number> = {}
