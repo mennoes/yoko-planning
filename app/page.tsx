@@ -19,6 +19,12 @@ import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
 import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, type Project } from '@/lib/workload'
+import {
+  CAT_COLOR, CAT_LABEL,
+  effectiveCategory,
+  loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
+  type WorkloadCategory,
+} from '@/lib/workloadCategory'
 import { supabase } from '@/lib/supabase'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 
@@ -100,32 +106,7 @@ function fmtRelative(iso: string) {
 
 type WorkloadItem = { id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }
 
-type Category = 'meeting' | 'overhead' | 'maken'
-
-const CATEGORY_OVERRIDES_KEY = 'yoko-workload-categories'
-
-function loadCategoryOverrides(): Record<string, Category> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = localStorage.getItem(CATEGORY_OVERRIDES_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as Record<string, Category>
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch { return {} }
-}
-
-function saveCategoryOverrides(map: Record<string, Category>) {
-  if (typeof window === 'undefined') return
-  try { localStorage.setItem(CATEGORY_OVERRIDES_KEY, JSON.stringify(map)) } catch {}
-}
-
-function effectiveCategory(item: WorkloadItem, override?: Category | null): Category {
-  if (override === 'meeting' || override === 'overhead' || override === 'maken') return override
-  return classifyItem(item)
-}
-
-const CAT_COLOR: Record<Category, string> = { meeting: '#D8B62E', overhead: '#9aadbd', maken: '#5fa06e' }
-const CAT_LABEL: Record<Category, string> = { meeting: 'Meeting', overhead: 'Overhead', maken: 'Maken' }
+type Category = WorkloadCategory
 
 // Workload row. Desktop: click → /projects/{board}, hover → interactive
 // detail popover with category picker. Mobile: tap → same popover, with an
@@ -261,27 +242,6 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
   )
 }
 
-// Classify a workload item by its name. Used for the workload colour breakdown
-// (maken / overhead / meetings).
-const MEETING_PATTERNS = [
-  /\bmeeting\b/i, /\boverleg\b/i, /\bcall\b/i, /\bbel\b/i, /\b1on1\b/i, /\bsync\b/i,
-  /\bcheck-?in\b/i, /\bincheck\b/i, /\bstand-?up\b/i, /\bweekstart\b/i, /\bweek-?afsluiting\b/i,
-  /\byoko check\b/i, /\bcheckout\b/i, /\bcheck out\b/i, /\bbpd\b/i, /\bketcho\b/i,
-]
-const OVERHEAD_PATTERNS = [
-  /\bvisie\b/i, /\bto.?do/i, /\bformuleer/i, /\bplanning\b/i, /\bsocials\b/i, /\bthuiswerken\b/i,
-  /\bvrij\b/i, /\bvakantie\b/i, /\bnab\b/i, /\bonbetaald\b/i, /\bemail\b/i, /\bmail\b/i,
-  /\bonboarding\b/i, /\bevaluatie\b/i, /\beind-?gesprek\b/i,
-]
-function classifyItem(item: { name: string; hours: number; source?: string }): 'meeting' | 'overhead' | 'maken' {
-  const n = item.name || ''
-  if (MEETING_PATTERNS.some(re => re.test(n))) return 'meeting'
-  // Short Google events without a clear "maken" name → meeting
-  if (item.source === 'google' && item.hours > 0 && item.hours <= 1.5) return 'meeting'
-  if (OVERHEAD_PATTERNS.some(re => re.test(n))) return 'overhead'
-  return 'maken'
-}
-
 const card: React.CSSProperties = {
   background: 'var(--bg-card)', borderRadius: 14,
   border: '1px solid var(--border-light)', overflow: 'hidden',
@@ -394,6 +354,11 @@ export default function HomePage() {
     }))
   }, [memberId, weekOffset, allProjects])
 
+  // Re-load category overrides if another view changes them.
+  useEffect(() => {
+    return onCategoryOverridesChange(() => setCategoryOverrides(loadCategoryOverrides()))
+  }, [])
+
   // Pull all member profiles for team-status / vacation widgets
   useEffect(() => {
     if (!supabase) return
@@ -408,13 +373,7 @@ export default function HomePage() {
   }, [])
 
   function setItemCategory(id: string, cat: Category | null) {
-    setCategoryOverrides(prev => {
-      const next = { ...prev }
-      if (cat === null) delete next[id]
-      else              next[id] = cat
-      saveCategoryOverrides(next)
-      return next
-    })
+    setCategoryOverrides(setCategoryOverride(id, cat))
   }
 
   function moveSection(id: SectionId, dir: -1 | 1) {
