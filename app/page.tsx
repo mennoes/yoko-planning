@@ -479,16 +479,55 @@ export default function HomePage() {
   const myThisHours = Math.round(myThisContribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
 
   const firstNameOf = (id: string) => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? null
-  const projectParts = myThisContribs
-    .filter(c => effectiveCategory({ name: c.project.name, hours: c.hours, source: c.project.source }, categoryOverrides[c.project.id]) === 'maken')
-    .slice(0, 2)
-    .map(({ project }) => ({
-      name: project.name,
-      withNames: (project.ownerIds || [])
+  const r1 = (n: number) => Math.round(n * 10) / 10
+  const cat = (c: typeof myThisContribs[number]) => effectiveCategory(
+    { name: c.project.name, hours: c.hours, source: c.project.source },
+    categoryOverrides[c.project.id],
+  )
+  const makenContribs = myThisContribs.filter(c => cat(c) === 'maken')
+
+  // Combine contribs that share a project name (subitems / split bars) into
+  // one entry, with summed hours and the union of owners.
+  const groupedByName = new Map<string, { name: string; hours: number; ownerIds: Set<string> }>()
+  for (const c of makenContribs) {
+    const key = c.project.name.trim().toLowerCase()
+    const cur = groupedByName.get(key)
+    if (cur) {
+      cur.hours += c.hours
+      for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
+    } else {
+      groupedByName.set(key, {
+        name:     c.project.name,
+        hours:    c.hours,
+        ownerIds: new Set(c.project.ownerIds || []),
+      })
+    }
+  }
+  const projectParts = [...groupedByName.values()]
+    .sort((a, b) => b.hours - a.hours)
+    .slice(0, 3)
+    .map(g => ({
+      name:      g.name,
+      hours:     r1(g.hours),
+      withNames: [...g.ownerIds]
         .filter(id => id !== memberId)
         .map(firstNameOf)
         .filter((n): n is string => Boolean(n)),
     }))
+
+  const meetingHours  = r1(myThisContribs.filter(c => cat(c) === 'meeting').reduce((s, c) => s + c.hours, 0))
+  const overheadHours = r1(myThisContribs.filter(c => cat(c) === 'overhead').reduce((s, c) => s + c.hours, 0))
+  const daysWithWork  = new Set(
+    myThisContribs
+      .map(c => c.project.startDate ? new Date(c.project.startDate) : null)
+      .filter((d): d is Date => !!d && !isNaN(d.getTime()))
+      .map(d => (d.getDay() + 6) % 7)
+  ).size
+
+  const otherSegments: string[] = []
+  if (meetingHours  >= 0.5) otherSegments.push(`${meetingHours}u aan meetings`)
+  if (overheadHours >= 0.5) otherSegments.push(`${overheadHours}u overhead`)
+  const otherInfo = otherSegments.length > 0 ? joinAnd(otherSegments) : ''
 
   const showSummary = !!memberId && (projectParts.length > 0 || weekCapacity > 0)
   const tonePast    = weekCapacity > 0 ? pastTone(myLastHours, weekCapacity) : ''
@@ -776,53 +815,61 @@ export default function HomePage() {
     <div style={{ maxWidth: 1160, padding: isMobile ? '20px 16px 60px' : '48px 40px 100px' }}>
 
       {/* ── Greeting ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobile ? 14 : 18,
-        marginBottom: isMobile ? 18 : 32,
-        background: 'var(--yellow)',
-        padding: isMobile ? '18px 18px 20px' : '26px 30px',
-        borderRadius: 16,
-        boxShadow: '0 6px 22px rgba(216, 182, 46, 0.30)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18,
+        marginBottom: showSummary ? (isMobile ? 14 : 22) : (isMobile ? 18 : 40) }}>
         {memberId && (
           <UserAvatar memberId={memberId} size={isMobile ? 48 : 60}
             onClick={e => showMember(memberId, e)} />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: '#1a1a1a', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
             {greeting}{firstName ? `, ${firstName}` : ''}
           </h1>
-          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'rgba(26,26,26,0.65)', fontWeight: 600 }}>
+          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          {showSummary && (
-            <p style={{ margin: '10px 0 0', fontSize: isMobile ? 13 : 14, color: 'rgba(26,26,26,0.85)', lineHeight: 1.55, maxWidth: 720 }}>
-              {projectParts.length > 0 && (
-                <>
-                  Deze week werk je vooral aan{' '}
-                  {projectParts.map((p, i) => (
-                    <span key={i}>
-                      {i > 0 && (i === projectParts.length - 1 ? ' en ' : ', ')}
-                      <strong style={{ color: '#1a1a1a' }}>{p.name}</strong>
-                      {p.withNames.length > 0 && <> (met {joinAnd(p.withNames)})</>}
-                    </span>
-                  ))}
-                  .{tonePast ? ' ' : ''}
-                </>
-              )}
-              {tonePast && <>{tonePastCap}, {toneNext}.</>}
-              {help && <> {help}</>}
-            </p>
-          )}
         </div>
         {isMobile && (
           <button onClick={() => setEditOrder(o => !o)}
-            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(26,26,26,0.25)',
-              background: editOrder ? '#1a1a1a' : 'rgba(255,255,255,0.5)',
-              color: editOrder ? 'var(--yellow)' : '#1a1a1a',
-              fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
+              background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
+              color: editOrder ? '#fff' : 'var(--text-secondary)',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
             {editOrder ? 'Klaar' : 'Volgorde'}
           </button>
         )}
       </div>
+
+      {/* ── Yellow week summary card ── */}
+      {showSummary && (
+        <div style={{
+          background: 'var(--yellow)',
+          padding: isMobile ? '16px 18px' : '20px 26px',
+          borderRadius: 16,
+          marginBottom: isMobile ? 18 : 32,
+          boxShadow: '0 6px 22px rgba(216, 182, 46, 0.30)',
+        }}>
+          <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, color: '#1a1a1a', lineHeight: 1.6, maxWidth: 760 }}>
+            {projectParts.length > 0 && (
+              <>
+                Deze week werk je vooral aan{' '}
+                {projectParts.map((p, i) => (
+                  <span key={i}>
+                    {i > 0 && (i === projectParts.length - 1 ? ' en ' : ', ')}
+                    <strong style={{ color: '#000' }}>{p.name}</strong>
+                    {p.withNames.length > 0 && <> (met {joinAnd(p.withNames)})</>}
+                  </span>
+                ))}
+                {daysWithWork > 1 && <>, verspreid over {daysWithWork} dagen</>}
+                .{' '}
+              </>
+            )}
+            {otherInfo && <>Daarnaast staat er {otherInfo} op de planning. </>}
+            {tonePast && <>{tonePastCap}, {toneNext}.</>}
+            {help && <> {help}</>}
+          </p>
+        </div>
+      )}
 
       {isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
