@@ -104,6 +104,54 @@ function fmtRelative(iso: string) {
   return fmtDate(iso)
 }
 
+// Short, friendly two-sentence recap shown under the greeting: a tone for
+// last week, a tone for next week, and an optional nudge to help out a
+// teammate when the user has slack and someone else is overloaded.
+function buildGreetingSummary({ lastHours, nextHours, capacity, thisHours, overloadedOthers }: {
+  lastHours: number
+  nextHours: number
+  capacity: number
+  thisHours: number
+  overloadedOthers: { member: { id: string; name: string }; pct: number }[]
+}): string | null {
+  if (capacity <= 0) return null
+  if (lastHours === 0 && nextHours === 0 && thisHours === 0 && overloadedOthers.length === 0) return null
+  const cap = capacity
+  const r = (n: number) => Math.round(n)
+
+  const past = lastHours <= 0
+    ? 'vorige week stond er niets op de planning'
+    : lastHours > cap * 1.05
+      ? `vorige week was pittig (${r(lastHours)}u 💪)`
+      : lastHours >= cap * 0.85
+        ? `vorige week zat lekker vol (${r(lastHours)}u)`
+        : lastHours >= cap * 0.5
+          ? `vorige week was prima behapbaar (${r(lastHours)}u)`
+          : `vorige week was rustig (${r(lastHours)}u)`
+
+  const next = nextHours <= 0
+    ? 'volgende week is nog leeg — pak iets leuks op ✨'
+    : nextHours > cap * 1.05
+      ? `volgende week schiet je over je cap met ${r(nextHours)}u — pas op je tempo`
+      : nextHours >= cap * 0.85
+        ? `volgende week wordt vol (${r(nextHours)}u)`
+        : nextHours >= cap * 0.5
+          ? `volgende week zit prima (${r(nextHours)}u)`
+          : `volgende week is wat rustiger (${r(nextHours)}u)`
+
+  let sentence = `${past}, ${next}.`
+  sentence = sentence[0].toUpperCase() + sentence.slice(1)
+
+  const slack = cap - thisHours
+  if (slack >= 4 && overloadedOthers.length > 0) {
+    const top   = overloadedOthers[0]
+    const first = top.member.name.split(' ')[0]
+    sentence += ` Je hebt deze week nog ~${r(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
+  }
+
+  return sentence
+}
+
 type WorkloadItem = { id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }
 
 type Category = WorkloadCategory
@@ -441,6 +489,25 @@ export default function HomePage() {
     .filter(x => x.hours > x.cap)
     .sort((a, b) => b.pct - a.pct)
 
+  const myLastWeekStart = new Date(weekStartTeam); myLastWeekStart.setDate(myLastWeekStart.getDate() - 7)
+  const myNextWeekStart = new Date(weekStartTeam); myNextWeekStart.setDate(myNextWeekStart.getDate() + 7)
+  const myLastHours = memberId
+    ? Math.round(memberContributions(allProjects, memberId, myLastWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
+    : 0
+  const myNextHours = memberId
+    ? Math.round(memberContributions(allProjects, memberId, myNextWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
+    : 0
+  const myThisHours = memberId
+    ? Math.round(memberContributions(allProjects, memberId, weekStartTeam).reduce((s, c) => s + c.hours, 0) * 10) / 10
+    : 0
+  const greetingSummary = memberId ? buildGreetingSummary({
+    lastHours: myLastHours,
+    nextHours: myNextHours,
+    capacity:  weekCapacity,
+    thisHours: myThisHours,
+    overloadedOthers: overloaded.filter(o => o.member.id !== memberId),
+  }) : null
+
   const sections: Record<SectionId, React.ReactNode> = {
     taken: (
       <div style={card}>
@@ -731,6 +798,11 @@ export default function HomePage() {
           <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
+          {greetingSummary && (
+            <p style={{ margin: '8px 0 0', fontSize: isMobile ? 13 : 14, color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: 720 }}>
+              {greetingSummary}
+            </p>
+          )}
         </div>
         {isMobile && (
           <button onClick={() => setEditOrder(o => !o)}
