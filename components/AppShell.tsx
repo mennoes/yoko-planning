@@ -16,6 +16,7 @@ import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
 import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
+import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
 // (BOARD_NAMES re-used by the auto-sync tick below)
 import { onAuthChange, isSyncing } from '@/lib/sync'
 import { syncGoogleNow } from '@/lib/googleClient'
@@ -72,6 +73,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Pages
       pullPagesFromRemote()
       unsubs.push(subscribeRemotePages())
+      // Workload category overrides
+      pullCategoryOverrides()
+      unsubs.push(subscribeRemoteCategories())
       // Boards: pull + subscribe + first-time migrate from localStorage
       for (const b of BOARD_NAMES) {
         const ok = await pullBoardFromRemote(b)
