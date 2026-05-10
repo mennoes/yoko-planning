@@ -699,36 +699,77 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     })
   }
 
-  // Lane-pack: sort by start, place each bar on the lowest lane where it
-  // doesn't overlap an earlier bar. Non-overlapping bars share a row.
-  const sorted = [...finalBars].sort((a, b) => a.left - b.left)
-  const laneEnds: number[] = []
-  const bars = sorted.map(b => {
-    const start = b.left
-    let lane = laneEnds.findIndex(end => end <= start + 1)
-    if (lane < 0) { lane = laneEnds.length; laneEnds.push(b.left + b.width) }
-    else laneEnds[lane] = b.left + b.width
-    return { ...b, lane }
-  })
-  const numLanes = Math.max(1, laneEnds.length)
+  // Lane-pack meetings and projects SEPARATELY so meetings get their own
+  // dedicated track at the top — they never compete for vertical space with
+  // real project bars. Within each track we still pack horizontally so
+  // adjacent days don't stack unnecessarily.
+  function packLanes<T extends { left: number; width: number }>(items: T[]) {
+    const sorted   = [...items].sort((a, b) => a.left - b.left)
+    const laneEnds: number[] = []
+    const packed   = sorted.map(b => {
+      let lane = laneEnds.findIndex(end => end <= b.left + 1)
+      if (lane < 0) { lane = laneEnds.length; laneEnds.push(b.left + b.width) }
+      else          laneEnds[lane] = b.left + b.width
+      return { ...b, lane }
+    })
+    return { items: packed, numLanes: laneEnds.length }
+  }
+
+  const meetingItems = finalBars.filter((b): b is ClusterBar => b.kind === 'cluster')
+  const projectItems = finalBars.filter((b): b is SingleBar => b.kind === 'single')
+  const meetingPacked = packLanes(meetingItems)
+  const projectPacked = packLanes(projectItems)
+  const meetingLanes  = meetingPacked.numLanes
+  const projectLanes  = projectPacked.numLanes
+
+  const MEETING_LANE_H = MEETING_BAR_H + 4   // tighter than project lanes
+  const PROJECT_LANE_H = BAR_H + BAR_GAP
+
+  function meetingLaneTop(lane: number) { return BAR_GAP + lane * MEETING_LANE_H }
+  function projectLaneTop(lane: number) { return BAR_GAP + meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 6 : 0) + lane * PROJECT_LANE_H }
+
+  type Cluster = ClusterBar & { lane: number; track: 'meeting' }
+  type Single  = SingleBar  & { lane: number; track: 'project' }
+  const bars: (Cluster | Single)[] = [
+    ...meetingPacked.items.map(b => ({ ...b, track: 'meeting' as const })),
+    ...projectPacked.items.map(b => ({ ...b, track: 'project' as const })),
+  ]
 
   if (bars.length === 0) return null
-  const height = numLanes * (BAR_H + BAR_GAP) + BAR_GAP + 6
+  const height = BAR_GAP
+    + meetingLanes * MEETING_LANE_H
+    + (meetingLanes > 0 ? 6 : 0)
+    + projectLanes * PROJECT_LANE_H
+    + 6
+
   return (
     <div style={{ position: 'relative', height, overflow: 'visible' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border)', pointerEvents: 'none' }} />
       ))}
+      {/* Subtle yellow tint behind the meetings track so it reads as its own
+          area, plus a faint divider before the project bars. */}
+      {meetingLanes > 0 && (
+        <>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0,
+            height: BAR_GAP + meetingLanes * MEETING_LANE_H + 2,
+            background: 'rgba(216,182,46,0.06)', pointerEvents: 'none', zIndex: 0 }} />
+          {projectLanes > 0 && (
+            <div style={{ position: 'absolute', top: BAR_GAP + meetingLanes * MEETING_LANE_H + 2, left: 0, right: 0,
+              height: 1, background: 'var(--border-light)', pointerEvents: 'none', zIndex: 0 }} />
+          )}
+        </>
+      )}
       {bars.map((b, i) => {
         if (b.kind === 'cluster') {
           return (
-            <div key={`cl_${i}`} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP) + BAR_GAP, left: b.left + 2, width: b.width, height: MEETING_BAR_H, zIndex: 1 }}>
+            <div key={`cl_${i}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: b.left + 2, width: b.width, height: MEETING_BAR_H, zIndex: 1 }}>
               <MeetingCluster meetings={b.meetings} width={b.width} onPick={onBarClick} />
             </div>
           )
         }
         return (
-          <div key={b.p.id} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP), left: 0, right: 0, height: BAR_H + BAR_GAP }}>
+          <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H }}>
             <DraggableBar project={b.p} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
