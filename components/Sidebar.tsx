@@ -18,7 +18,7 @@ import {
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
 import { pullBoardFromRemote, BOARD_NAMES } from '@/lib/boardStore'
-import { VacationModal } from './VacationModal'
+import { VacationButton } from './VacationButton'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
@@ -548,6 +548,12 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
         {/* Google Calendar — opens a right-side drawer */}
         {requiresAuth && <GoogleCalendarMenuRow />}
 
+        {requiresAuth && profile && (
+          <>
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
+            <VacationButton variant="row" />
+          </>
+        )}
 
         {requiresAuth && <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />}
 
@@ -597,67 +603,6 @@ function ImportBundleButton() {
         📥 {busy ? 'Importeren…' : 'Importeer XLSX naar Supabase'}
       </button>
       {msg && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)', padding: '0 4px' }}>{msg}</div>}
-    </div>
-  )
-}
-
-// ─── Vacation request quick-button (sidebar) ──────────────────────────────────
-function VacationSidebarButton() {
-  const [open, setOpen]           = useState(false)
-  const [fromDraft, setFromDraft] = useState('')
-  const [untilDraft, setUntilDraft] = useState('')
-  const [active, setActive]       = useState<{ from: string | null; until: string | null }>({ from: null, until: null })
-
-  useEffect(() => {
-    if (!supabase) return
-    let cancelled = false
-    supabase.auth.getSession().then(({ data }) => {
-      const uid = data.session?.user?.id; if (!uid || cancelled) return
-      supabase!.from('profiles').select('vacation_from, vacation_until').eq('user_id', uid).maybeSingle()
-        .then(({ data: row }) => {
-          if (cancelled || !row) return
-          const r = row as { vacation_from?: string | null; vacation_until?: string | null }
-          setActive({ from: r.vacation_from ?? null, until: r.vacation_until ?? null })
-        })
-    })
-    return () => { cancelled = true }
-  }, [])
-
-  const onVacation = !!active.until && new Date(active.until).getTime() > Date.now()
-  const fmt = (d: string) => new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-  const label = onVacation
-    ? (active.from ? `${fmt(active.from)} – ${fmt(active.until!)}` : `tot ${fmt(active.until!)}`)
-    : 'Vakantie aanvragen'
-
-  async function save(f: string | null, u: string | null) {
-    if (!supabase) return
-    const { data } = await supabase.auth.getSession()
-    const uid = data.session?.user?.id; if (!uid) return
-    await supabase.from('profiles').update({ vacation_from: f, vacation_until: u }).eq('user_id', uid)
-    setActive({ from: f, until: u })
-  }
-
-  return (
-    <div style={{ padding: '0 12px 6px' }}>
-      <button onClick={() => { setFromDraft(active.from ?? ''); setUntilDraft(active.until ?? ''); setOpen(true) }}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          padding: '7px 10px', borderRadius: 7,
-          border: `1px solid ${onVacation ? 'rgba(255,123,36,0.4)' : 'var(--border-light)'}`,
-          background: onVacation ? 'rgba(255,123,36,0.10)' : 'transparent',
-          color: onVacation ? '#a05400' : 'var(--text-secondary)',
-          fontSize: 12.5, fontWeight: 500, cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ fontSize: 14 }}>🏝</span>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      </button>
-      {open && createPortal(
-        <VacationModal
-          fromDraft={fromDraft} setFromDraft={setFromDraft}
-          untilDraft={untilDraft} setUntilDraft={setUntilDraft}
-          canClear={!!active.from || !!active.until}
-          onClose={() => setOpen(false)}
-          onSave={() => { save(fromDraft || null, untilDraft || null); setOpen(false) }}
-          onClear={() => { save(null, null); setOpen(false) }} />,
-        document.body)}
     </div>
   )
 }
@@ -1281,9 +1226,6 @@ export default function Sidebar({
             )}
           </div>
         </nav>
-
-        {/* Vacation request quick-button */}
-        {requiresAuth && profile && <VacationSidebarButton />}
 
         {/* Reorder toggle — small, just above footer */}
         <div style={{ padding: '4px 12px 6px' }}>
