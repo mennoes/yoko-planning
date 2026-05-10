@@ -592,7 +592,8 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
         style={{ position: 'absolute', top: barTop - 6, left: g.left + 2 - 8,
           width: g.width + 16, height: barH + 12,
-          cursor: ghost ? 'grabbing' : 'pointer' }}
+          cursor: ghost ? 'grabbing' : 'pointer',
+          pointerEvents: 'auto' }}
       />
       <div
         onMouseDown={e => startDrag(e, 'move')}
@@ -601,6 +602,7 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
           background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 600, color: '#fff',
           cursor: ghost ? 'grabbing' : 'pointer', userSelect: 'none',
+          pointerEvents: 'auto',
           boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
@@ -775,7 +777,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
           )
         }
         return (
-          <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H }}>
+          <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H, pointerEvents: 'none' }}>
             <DraggableBar project={b.p} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
