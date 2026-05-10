@@ -18,6 +18,7 @@ import {
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
+import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange } from '@/lib/popoverState'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
@@ -268,7 +269,14 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
   const [open, setOpen] = useState(false)
   const [overrides, setOverrides] = useState<Record<string, WorkloadCategory>>({})
   const wrapRef = useRef<HTMLDivElement>(null)
+  const popoverId = useRef(`wc:${Math.random().toString(36).slice(2)}`).current
   const pct = capacity > 0 ? total / capacity : 0
+
+  function setOpenExclusive(next: boolean) {
+    setOpen(next)
+    if (next) openExclusivePopover(popoverId)
+    else      closeExclusivePopover(popoverId)
+  }
 
   // Sync overrides with the shared store while the popover is open, so a change
   // made elsewhere (home page, another cell) is reflected here.
@@ -278,13 +286,21 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
     return onCategoryOverridesChange(() => setOverrides(loadCategoryOverrides()))
   }, [open])
 
+  // Close when another popover opens.
+  useEffect(() => {
+    if (!open) return
+    return onExclusivePopoverChange(activeId => {
+      if (activeId !== popoverId) setOpen(false)
+    })
+  }, [open, popoverId])
+
   // Close on outside click / tap
   useEffect(() => {
     if (!open) return
     const handler = (e: Event) => {
       const root = wrapRef.current
       if (!root) return
-      if (!root.contains(e.target as Node)) setOpen(false)
+      if (!root.contains(e.target as Node)) setOpenExclusive(false)
     }
     document.addEventListener('mousedown', handler)
     document.addEventListener('touchstart', handler)
@@ -303,7 +319,7 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
       contribs={contribs} total={total} capacity={capacity}
       overrides={overrides} setCat={setCat}
       groupByDay={zoom !== 'dag'}
-      onClose={() => setOpen(false)}
+      onClose={() => setOpenExclusive(false)}
       onOpenDetails={onOpenDetails}
     />
   )
@@ -314,7 +330,7 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
     const alpha = pct > 0 ? Math.min(0.15 + Math.min(pct, 1) * 0.45, 0.65) : 0
     return (
       <div ref={wrapRef} style={{ position: 'relative', height: '100%' }}>
-        <button onClick={() => total > 0 && setOpen(o => !o)} disabled={total === 0}
+        <button onClick={() => total > 0 && setOpenExclusive(!open)} disabled={total === 0}
           style={{ width: '100%', height: '100%', padding: 0, border: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: pct > 0 ? `${baseColor}${Math.round(alpha * 255).toString(16).padStart(2, '0')}` : 'transparent',
@@ -334,7 +350,7 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
   // Week / month zoom: circle + total label
   return (
     <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}>
-      <button onClick={() => total > 0 && setOpen(o => !o)} style={{
+      <button onClick={() => total > 0 && setOpenExclusive(!open)} style={{
         background: 'none', border: 'none', cursor: total > 0 ? 'pointer' : 'default',
         padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
       }}>
@@ -705,7 +721,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       {bars.map((b, i) => {
         if (b.kind === 'cluster') {
           return (
-            <div key={`cl_${i}`} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP) + BAR_GAP, left: b.left + 2, width: b.width, height: 14, zIndex: 1 }}>
+            <div key={`cl_${i}`} style={{ position: 'absolute', top: b.lane * (BAR_H + BAR_GAP) + BAR_GAP, left: b.left + 2, width: b.width, height: MEETING_BAR_H, zIndex: 1 }}>
               <MeetingCluster meetings={b.meetings} width={b.width} onPick={onBarClick} />
             </div>
           )
@@ -723,39 +739,68 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   )
 }
 
-// One bar per day for all meetings — yellow strip filling the day cell with
-// comma-separated names (truncated to fit). Click → popup list to drill in.
+// Meetings collapse to ONE clean pill per day. For a single meeting we show
+// its name; for multiple we show "N meetings". Hours sum into the trailing
+// label. Click opens a popover with the full list — and the popover is
+// exclusive (opening this one closes any other open popover on the page).
+const MEETING_BAR_H = 18
+
 function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; width: number; onPick: (p: Project) => void }) {
   const [open, setOpen] = useState(false)
-  const label = meetings.map(m => m.name).join(' · ')
-  const totalH = meetings.reduce((s, m) => s + (m.estHours || 0), 0)
+  const popoverId = useRef(`mc:${Math.random().toString(36).slice(2)}`).current
+  const totalH = Math.round(meetings.reduce((s, m) => s + (m.estHours || 0), 0) * 10) / 10
+  const isSingle = meetings.length === 1
+  const label    = isSingle ? meetings[0].name : `${meetings.length} meetings`
+
+  useEffect(() => {
+    if (!open) return
+    return onExclusivePopoverChange(activeId => {
+      if (activeId !== popoverId) setOpen(false)
+    })
+  }, [open, popoverId])
+
+  function toggle() {
+    setOpen(prev => {
+      const next = !prev
+      if (next) openExclusivePopover(popoverId)
+      else      closeExclusivePopover(popoverId)
+      return next
+    })
+  }
+
   return (
     <span style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-      <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+      <button onClick={e => { e.stopPropagation(); toggle() }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
-        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px', width, height: 14, borderRadius: 4,
-          background: '#D8B62E', color: '#000', border: 'none', cursor: 'pointer',
-          fontSize: 10, fontWeight: 700, lineHeight: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
+          width, height: MEETING_BAR_H, borderRadius: 6,
+          background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
+          fontSize: 11.5, fontWeight: 700, lineHeight: 1,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
           overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        {meetings.length > 1 && <span style={{ flexShrink: 0 }}>📅 {meetings.length}</span>}
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-        <span style={{ flexShrink: 0, opacity: 0.7 }}>{totalH}u</span>
+        <span style={{ flexShrink: 0, opacity: 0.85 }}>📅</span>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{label}</span>
+        <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
       </button>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 95 }} />
-          <div style={{ position: 'absolute', top: 18, left: 0, zIndex: 96, minWidth: 260, maxHeight: 320, overflowY: 'auto',
-            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: 4,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
+          <div onClick={() => { setOpen(false); closeExclusivePopover(popoverId) }}
+            style={{ position: 'fixed', inset: 0, zIndex: 95 }} />
+          <div style={{ position: 'absolute', top: MEETING_BAR_H + 4, left: 0, zIndex: 96, minWidth: 280, maxHeight: 320, overflowY: 'auto',
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 4,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '6px 10px 4px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {meetings.length} meeting{meetings.length === 1 ? '' : 's'} · {totalH}u totaal
+            </div>
             {meetings.map(m => (
-              <button key={m.id} onClick={e => { e.stopPropagation(); setOpen(false); onPick(m) }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 5,
+              <button key={m.id} onClick={e => { e.stopPropagation(); setOpen(false); closeExclusivePopover(popoverId); onPick(m) }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6,
                   background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <span style={{ width: 12, height: 12, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>G</span>
-                <span style={{ flex: 1, fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>{m.estHours}u</span>
+                <span style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>G</span>
+                <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{m.estHours}u</span>
               </button>
             ))}
           </div>
