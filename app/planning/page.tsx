@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 import teamData          from '@/data/team.json'
@@ -748,12 +749,21 @@ const MEETING_BAR_H = 18
 function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; width: number; onPick: (p: Project) => void }) {
   const [open, setOpen] = useState(false)
   const wrapRef   = useRef<HTMLSpanElement>(null)
+  const btnRef    = useRef<HTMLButtonElement>(null)
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null)
   const popoverId = useRef(`mc:${Math.random().toString(36).slice(2)}`).current
   const totalH    = Math.round(meetings.reduce((s, m) => s + (m.estHours || 0), 0) * 10) / 10
   const isSingle  = meetings.length === 1
   const label     = isSingle ? meetings[0].name : `${meetings.length} meetings`
 
   function setOpenExclusive(next: boolean) {
+    if (next && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      // Anchor below the button; if it would clip the right edge, nudge left.
+      const popW = 320
+      const left = Math.min(r.left, window.innerWidth - popW - 8)
+      setPopPos({ top: r.bottom + 4, left: Math.max(8, left) })
+    }
     setOpen(next)
     if (next) openExclusivePopover(popoverId)
     else      closeExclusivePopover(popoverId)
@@ -777,7 +787,6 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
       if (!root) return
       const target = e.target as Node | null
       if (!target) return
-      // Stay open if the click landed inside this cluster or its popover.
       if (root.contains(target)) return
       if ((target as HTMLElement).closest?.(`[data-mc-popover="${popoverId}"]`)) return
       setOpenExclusive(false)
@@ -792,7 +801,7 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
 
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-      <button onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
+      <button ref={btnRef} onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
           width, height: MEETING_BAR_H, borderRadius: 6,
@@ -804,11 +813,12 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{label}</span>
         <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
       </button>
-      {open && (
+      {open && popPos && typeof document !== 'undefined' && createPortal(
         <div data-mc-popover={popoverId}
-          style={{ position: 'absolute', top: MEETING_BAR_H + 4, left: 0, zIndex: 96, minWidth: 280, maxHeight: 320, overflowY: 'auto',
+          style={{ position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9000,
+            width: 320, maxHeight: 360, overflowY: 'auto',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 4,
-            boxShadow: '0 12px 32px rgba(0,0,0,0.25)' }}>
+            boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.12)' }}>
           <div style={{ padding: '6px 10px 4px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {meetings.length} meeting{meetings.length === 1 ? '' : 's'} · {totalH}u totaal
           </div>
@@ -823,8 +833,8 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
               <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{m.estHours}u</span>
             </button>
           ))}
-        </div>
-      )}
+        </div>,
+        document.body)}
     </span>
   )
 }
