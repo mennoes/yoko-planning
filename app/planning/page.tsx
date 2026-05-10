@@ -244,9 +244,22 @@ function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
 }
 
 // ─── Workload circle ──────────────────────────────────────────────────────────
+// Colour reflects capacity state, not just the over-cap edge case:
+//   < 30%  → muted blue   (light week, ruimte)
+//   30–80% → green        (gezond)
+//   80–100% → orange      (vol)
+//   > 100% → red          (over cap)
+function workloadColor(pct: number): string {
+  if (pct <= 0)    return '#3a4250'
+  if (pct < 0.30)  return '#579bfc'   // light/blue: under-utilised
+  if (pct < 0.80)  return '#5fa06e'   // green: healthy
+  if (pct <= 1.00) return '#ff9a3c'   // orange: getting full
+  return '#e2445c'                    // red: over capacity
+}
+
 function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; or: number }) {
   const cx    = cs / 2, cy = cs / 2
-  const color = pct > 1 ? '#e2445c' : '#579bfc'
+  const color = workloadColor(pct)
   const fillR = pct > 0 ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * Math.sqrt(Math.min(pct, 1)))) : 0
   const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.06) : fillR
   return (
@@ -279,13 +292,13 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
     else      closeExclusivePopover(popoverId)
   }
 
-  // Sync overrides with the shared store while the popover is open, so a change
-  // made elsewhere (home page, another cell) is reflected here.
+  // Always keep overrides in sync — the tiny category breakdown bar shows
+  // even when the popover is closed, so it needs to react to changes from
+  // the home page or other cells.
   useEffect(() => {
-    if (!open) return
     setOverrides(loadCategoryOverrides())
     return onCategoryOverridesChange(() => setOverrides(loadCategoryOverrides()))
-  }, [open])
+  }, [])
 
   // Close when another popover opens.
   useEffect(() => {
@@ -348,18 +361,39 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
     )
   }
 
-  // Week / month zoom: circle + total label
+  // Week / month zoom: circle + total label + tiny category breakdown bar
+  const catBreakdown = (() => {
+    if (total <= 0) return null
+    const tally: Record<WorkloadCategory, number> = { maken: 0, overhead: 0, meeting: 0 }
+    for (const c of contribs) {
+      const cat = effectiveCategory(
+        { name: c.project.name, hours: c.hours, source: c.project.source },
+        overrides[c.project.id],
+      )
+      tally[cat] += c.hours
+    }
+    return tally
+  })()
+
+  const barW = Math.max(cs - 6, 28)
   return (
     <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}>
       <button onClick={() => total > 0 && setOpenExclusive(!open)} style={{
         background: 'none', border: 'none', cursor: total > 0 ? 'pointer' : 'default',
-        padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
       }}>
         <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
         {total > 0 && (
           <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
             {total}u
           </span>
+        )}
+        {catBreakdown && (
+          <div style={{ display: 'flex', width: barW, height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--border)' }}>
+            <div style={{ flex: catBreakdown.maken,    background: CAT_COLOR.maken }} />
+            <div style={{ flex: catBreakdown.overhead, background: CAT_COLOR.overhead }} />
+            <div style={{ flex: catBreakdown.meeting,  background: CAT_COLOR.meeting }} />
+          </div>
         )}
       </button>
       {popover}
@@ -579,23 +613,30 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
   }
 
   const g = ghost ?? { left, width }
+  const barTop = BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
   return (
     <>
-      {ghost && <div style={{ position: 'absolute', top: BAR_GAP + (small ? (BAR_H - barH) / 2 : 0), left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
+      {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
+      {/* Hit-area expander — sibling of the bar (not clipped by its
+          overflow:hidden) so thin bars are easy to click. Rendered BEFORE
+          the bar so the bar's handles stay on top. */}
       <div
         onMouseDown={e => startDrag(e, 'move')}
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
-        style={{ position: 'absolute', top: BAR_GAP + (small ? (BAR_H - barH) / 2 : 0), left: g.left + 2, width: g.width, height: barH,
+        style={{ position: 'absolute', top: barTop - 6, left: g.left + 2 - 8,
+          width: g.width + 16, height: barH + 12,
+          cursor: ghost ? 'grabbing' : 'pointer' }}
+      />
+      <div
+        onMouseDown={e => startDrag(e, 'move')}
+        onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
+        style={{ position: 'absolute', top: barTop, left: g.left + 2, width: g.width, height: barH,
           background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 600, color: '#fff',
           cursor: ghost ? 'grabbing' : 'pointer', userSelect: 'none',
           boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
-        {/* Invisible hit-area expander — adds 6px above/below so even thin
-            bars are easy to click without lining the cursor up exactly. */}
-        <div style={{ position: 'absolute', inset: '-6px 0', cursor: 'pointer' }}
-          onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }} />
         <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
           style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
@@ -2157,19 +2198,27 @@ export default function PlanningPage() {
         style={{ flex: 1, overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
         <div style={{ minWidth: totalWidth, position: 'relative' }}>
 
-          {/* "Now" indicator: vertical accent line at today's exact position */}
+          {/* "Now" indicator — yoko-yellow vertical line at today's exact
+              position with a VANDAAG pill at the top so the marker is hard
+              to miss when scrolling through time. */}
           {nowOffset !== null && (
             <div aria-hidden style={{
               position: 'absolute', top: 0, bottom: 0,
               left: nowOffset, width: 0,
-              borderLeft: '2px solid var(--accent)',
-              opacity: 0.55, pointerEvents: 'none', zIndex: 6,
+              borderLeft: '2px solid var(--yellow)',
+              pointerEvents: 'none', zIndex: 14,
+              boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
             }}>
               <div style={{
-                position: 'absolute', top: 0, left: -4,
-                width: 10, height: 10, borderRadius: '50%',
-                background: 'var(--accent)',
-              }} />
+                position: 'sticky', top: 4,
+                marginLeft: -32, width: 64,
+                padding: '2px 0',
+                background: 'var(--yellow)', color: '#1a1a1a',
+                fontSize: 9.5, fontWeight: 800,
+                letterSpacing: '0.08em', textAlign: 'center',
+                borderRadius: 999,
+                boxShadow: '0 2px 6px rgba(216, 182, 46, 0.4)',
+              }}>VANDAAG</div>
             </div>
           )}
 
