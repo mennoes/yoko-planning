@@ -747,11 +747,19 @@ const MEETING_BAR_H = 18
 
 function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; width: number; onPick: (p: Project) => void }) {
   const [open, setOpen] = useState(false)
+  const wrapRef   = useRef<HTMLSpanElement>(null)
   const popoverId = useRef(`mc:${Math.random().toString(36).slice(2)}`).current
-  const totalH = Math.round(meetings.reduce((s, m) => s + (m.estHours || 0), 0) * 10) / 10
-  const isSingle = meetings.length === 1
-  const label    = isSingle ? meetings[0].name : `${meetings.length} meetings`
+  const totalH    = Math.round(meetings.reduce((s, m) => s + (m.estHours || 0), 0) * 10) / 10
+  const isSingle  = meetings.length === 1
+  const label     = isSingle ? meetings[0].name : `${meetings.length} meetings`
 
+  function setOpenExclusive(next: boolean) {
+    setOpen(next)
+    if (next) openExclusivePopover(popoverId)
+    else      closeExclusivePopover(popoverId)
+  }
+
+  // Close when another popover opens elsewhere.
   useEffect(() => {
     if (!open) return
     return onExclusivePopoverChange(activeId => {
@@ -759,18 +767,32 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
     })
   }, [open, popoverId])
 
-  function toggle() {
-    setOpen(prev => {
-      const next = !prev
-      if (next) openExclusivePopover(popoverId)
-      else      closeExclusivePopover(popoverId)
-      return next
-    })
-  }
+  // Outside click closes the popover — but unlike a full-screen overlay
+  // the click still reaches whatever element the user actually clicked on,
+  // so clicking another cluster opens it in one step.
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: Event) => {
+      const root = wrapRef.current
+      if (!root) return
+      const target = e.target as Node | null
+      if (!target) return
+      // Stay open if the click landed inside this cluster or its popover.
+      if (root.contains(target)) return
+      if ((target as HTMLElement).closest?.(`[data-mc-popover="${popoverId}"]`)) return
+      setOpenExclusive(false)
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [open, popoverId])
 
   return (
-    <span style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-      <button onClick={e => { e.stopPropagation(); toggle() }}
+    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+      <button onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
           width, height: MEETING_BAR_H, borderRadius: 6,
@@ -783,28 +805,25 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
         <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
       </button>
       {open && (
-        <>
-          <div onClick={() => { setOpen(false); closeExclusivePopover(popoverId) }}
-            style={{ position: 'fixed', inset: 0, zIndex: 95 }} />
-          <div style={{ position: 'absolute', top: MEETING_BAR_H + 4, left: 0, zIndex: 96, minWidth: 280, maxHeight: 320, overflowY: 'auto',
+        <div data-mc-popover={popoverId}
+          style={{ position: 'absolute', top: MEETING_BAR_H + 4, left: 0, zIndex: 96, minWidth: 280, maxHeight: 320, overflowY: 'auto',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 4,
             boxShadow: '0 12px 32px rgba(0,0,0,0.25)' }}>
-            <div style={{ padding: '6px 10px 4px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {meetings.length} meeting{meetings.length === 1 ? '' : 's'} · {totalH}u totaal
-            </div>
-            {meetings.map(m => (
-              <button key={m.id} onClick={e => { e.stopPropagation(); setOpen(false); closeExclusivePopover(popoverId); onPick(m) }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6,
-                  background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <span style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>G</span>
-                <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{m.estHours}u</span>
-              </button>
-            ))}
+          <div style={{ padding: '6px 10px 4px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {meetings.length} meeting{meetings.length === 1 ? '' : 's'} · {totalH}u totaal
           </div>
-        </>
+          {meetings.map(m => (
+            <button key={m.id} onClick={e => { e.stopPropagation(); setOpenExclusive(false); onPick(m) }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6,
+                background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              <span style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>G</span>
+              <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{m.estHours}u</span>
+            </button>
+          ))}
+        </div>
       )}
     </span>
   )
