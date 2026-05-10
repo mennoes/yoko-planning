@@ -8,6 +8,7 @@ import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconAlert } from '@/components/Icon'
 import { UserAvatar } from '@/components/UserAvatar'
+import { VacationButton } from '@/components/VacationButton'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
@@ -862,6 +863,11 @@ export default function HomePage() {
           <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
+          {memberId && (
+            <div style={{ marginTop: 10 }}>
+              <VacationButton variant="chip" />
+            </div>
+          )}
         </div>
         {isMobile && (
           <button onClick={() => setEditOrder(o => !o)}
