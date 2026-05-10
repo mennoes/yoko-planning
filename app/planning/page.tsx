@@ -244,22 +244,10 @@ function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
 }
 
 // ─── Workload circle ──────────────────────────────────────────────────────────
-// Colour reflects capacity state, not just the over-cap edge case:
-//   < 30%  → muted blue   (light week, ruimte)
-//   30–80% → green        (gezond)
-//   80–100% → orange      (vol)
-//   > 100% → red          (over cap)
-function workloadColor(pct: number): string {
-  if (pct <= 0)    return '#3a4250'
-  if (pct < 0.30)  return '#579bfc'   // light/blue: under-utilised
-  if (pct < 0.80)  return '#5fa06e'   // green: healthy
-  if (pct <= 1.00) return '#ff9a3c'   // orange: getting full
-  return '#e2445c'                    // red: over capacity
-}
-
+// Simpel: blauw als alles goed gaat, rood bij overload. Geen regenboog.
 function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; or: number }) {
   const cx    = cs / 2, cy = cs / 2
-  const color = workloadColor(pct)
+  const color = pct > 1 ? '#e2445c' : '#579bfc'
   const fillR = pct > 0 ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * Math.sqrt(Math.min(pct, 1)))) : 0
   const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.06) : fillR
   return (
@@ -361,39 +349,18 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
     )
   }
 
-  // Week / month zoom: circle + total label + tiny category breakdown bar
-  const catBreakdown = (() => {
-    if (total <= 0) return null
-    const tally: Record<WorkloadCategory, number> = { maken: 0, overhead: 0, meeting: 0 }
-    for (const c of contribs) {
-      const cat = effectiveCategory(
-        { name: c.project.name, hours: c.hours, source: c.project.source },
-        overrides[c.project.id],
-      )
-      tally[cat] += c.hours
-    }
-    return tally
-  })()
-
-  const barW = Math.max(cs - 6, 28)
+  // Week / month zoom: circle + total label
   return (
     <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}>
       <button onClick={() => total > 0 && setOpenExclusive(!open)} style={{
         background: 'none', border: 'none', cursor: total > 0 ? 'pointer' : 'default',
-        padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+        padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
       }}>
         <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
         {total > 0 && (
           <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
             {total}u
           </span>
-        )}
-        {catBreakdown && (
-          <div style={{ display: 'flex', width: barW, height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--border)' }}>
-            <div style={{ flex: catBreakdown.maken,    background: CAT_COLOR.maken }} />
-            <div style={{ flex: catBreakdown.overhead, background: CAT_COLOR.overhead }} />
-            <div style={{ flex: catBreakdown.meeting,  background: CAT_COLOR.meeting }} />
-          </div>
         )}
       </button>
       {popover}
@@ -794,18 +761,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border)', pointerEvents: 'none' }} />
       ))}
-      {/* Subtle yellow tint behind the meetings track so it reads as its own
-          area, plus a faint divider before the project bars. */}
-      {meetingLanes > 0 && (
-        <>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0,
-            height: BAR_GAP + meetingLanes * MEETING_LANE_H + 2,
-            background: 'rgba(216,182,46,0.06)', pointerEvents: 'none', zIndex: 0 }} />
-          {projectLanes > 0 && (
-            <div style={{ position: 'absolute', top: BAR_GAP + meetingLanes * MEETING_LANE_H + 2, left: 0, right: 0,
-              height: 1, background: 'var(--border-light)', pointerEvents: 'none', zIndex: 0 }} />
-          )}
-        </>
+      {/* Subtle divider between meetings and project bars when both exist. */}
+      {meetingLanes > 0 && projectLanes > 0 && (
+        <div style={{ position: 'absolute', top: BAR_GAP + meetingLanes * MEETING_LANE_H + 2, left: 0, right: 0,
+          height: 1, background: 'var(--border-light)', pointerEvents: 'none', zIndex: 0 }} />
       )}
       {bars.map((b, i) => {
         if (b.kind === 'cluster') {
