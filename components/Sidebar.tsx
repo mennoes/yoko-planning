@@ -1210,7 +1210,7 @@ export default function Sidebar({
                     style={{
                       display: 'flex', alignItems: 'center', gap: 11, flex: 1,
                       padding: '11px 12px', borderRadius: 8,
-                      color: '#000',
+                      color: 'var(--text-primary)',
                       background: active ? 'var(--accent-light)' : 'transparent',
                       textDecoration: 'none', fontSize: 18, fontWeight: active ? 800 : 600,
                       letterSpacing: '-0.02em',
