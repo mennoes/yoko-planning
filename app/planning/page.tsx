@@ -592,8 +592,10 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
           boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
-        {/* Invisible hit-area expander so small bars are still easy to click */}
-        {small && <div style={{ position: 'absolute', inset: '-6px 0', cursor: 'pointer' }} onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }} />}
+        {/* Invisible hit-area expander — adds 6px above/below so even thin
+            bars are easy to click without lining the cursor up exactly. */}
+        <div style={{ position: 'absolute', inset: '-6px 0', cursor: 'pointer' }}
+          onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }} />
         <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
           style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
@@ -650,17 +652,21 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       if (e < gridStartMs || s > gridEndMs) return null
 
       let left: number, width: number
+      // Minimum visible width — short events were impossible to click. The
+      // bar overhangs slightly to the right past its actual end date, which
+      // is a small lie but a much better UX than a 6px target.
+      const MIN_BAR_W = 22
       if (isWeek) {
         const csDate = s < gridStartMs ? new Date(gridStartMs) : sDate
         const ceDate = new Date(Math.min(e, gridEndMs))
         left  = dateToWeekPx(csDate, gridStart, colW)
         const right = dateToWeekPx(ceDate, gridStart, colW)
-        width = Math.max(right - left - 2, 6)
+        width = Math.max(right - left - 2, MIN_BAR_W)
       } else {
         const cs = Math.max(s, gridStartMs)
         const ce = Math.min(e, gridEndMs)
         left  = (cs - gridStartMs) / msPerPx
-        width = Math.max((ce - cs) / msPerPx - 2, 6)
+        width = Math.max((ce - cs) / msPerPx - 2, MIN_BAR_W)
       }
       // Meetings: short Google events render at reduced height
       const isMeeting = p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
