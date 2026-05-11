@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { IconSearch } from './Icon'
+import { useProfile } from './ProfileContext'
 import { loadRecentPages } from '@/lib/pagesStore'
 import { loadGroups, BOARD_NAMES } from '@/lib/boardStore'
+import { markAllRead } from '@/lib/notificationsStore'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -24,6 +26,7 @@ type Result = {
   subtitle: string
   href:     string
   emoji:    string
+  action?:  () => void  // wanneer gezet wordt deze i.p.v. de href uitgevoerd
 }
 
 type TodoSection = { id: string; title: string; emoji: string; items: { id: string; text: string; done: boolean }[] }
@@ -35,6 +38,7 @@ function loadTodoSections(): TodoSection[] {
 
 export default function SearchPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter()
+  const { profile } = useProfile()
   const [query, setQuery] = useState('')
   const [data, setData]   = useState<Result[]>([])
   const [highlight, setHighlight] = useState(0)
@@ -45,7 +49,46 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
 
     const all: Result[] = []
 
-    // Pages
+    // ─── Acties bovenaan ──────────────────────────────────────────────────
+    // Komen eerst zodat ze direct boven de search-results staan zodra je
+    // ze typt ('mark', 'thema', 'naar', etc.)
+    all.push({
+      id: 'cmd-new-todo', title: 'Nieuwe todo toevoegen…', subtitle: 'Actie · type een naam en druk Enter',
+      href: '/todos', emoji: '➕',
+    })
+    if (profile?.memberId) {
+      const me = profile.memberId
+      all.push({
+        id: 'cmd-mark-read', title: 'Markeer alle meldingen als gelezen', subtitle: 'Actie · 🔔',
+        href: '', emoji: '✓', action: () => { onClose(); markAllRead(me).catch(() => {}) },
+      })
+    }
+    for (const t of ['auto','dark','light'] as const) {
+      const label = t === 'auto' ? 'Thema: automatisch' : t === 'dark' ? 'Thema: donker' : 'Thema: licht'
+      all.push({
+        id: `cmd-theme-${t}`, title: label, subtitle: 'Actie · 🎨',
+        href: '', emoji: t === 'dark' ? '🌙' : t === 'light' ? '☀️' : '⚙️',
+        action: () => {
+          try {
+            localStorage.setItem('theme', t)
+            // Direct toepassen op <html> zodat het zonder refresh werkt.
+            const applied = t === 'auto'
+              ? (new Date().getHours() >= 7 && new Date().getHours() < 19 ? 'light' : 'dark')
+              : t
+            document.documentElement.setAttribute('data-theme', applied)
+          } catch {}
+          onClose()
+        },
+      })
+    }
+    for (const b of BOARD_NAMES) {
+      all.push({
+        id: `cmd-open-board-${b}`, title: `Open agenda ${b}`, subtitle: 'Actie · agenda',
+        href: `/projects/${b}`, emoji: '📋',
+      })
+    }
+
+    // ─── Pages ────────────────────────────────────────────────────────────
     for (const p of loadRecentPages()) {
       all.push({ id: `page-${p.id}`, title: p.title || 'Naamloos', subtitle: 'Document', href: `/pages/${p.id}`, emoji: p.emoji || '📄' })
     }
@@ -69,15 +112,16 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
     }
 
     // Static pages
-    all.push({ id: 'nav-planning', title: 'Planning', subtitle: 'Pagina',  href: '/planning', emoji: '📅' })
-    all.push({ id: 'nav-todos',    title: "Todo's",   subtitle: 'Pagina',  href: '/todos',    emoji: '✅' })
-    all.push({ id: 'nav-team',     title: 'Team',     subtitle: 'Pagina',  href: '/team',     emoji: '👥' })
-    all.push({ id: 'nav-kantoor',  title: 'Kantoor',  subtitle: 'Pagina',  href: '/kantoor',  emoji: '🏢' })
-    all.push({ id: 'nav-activity', title: 'Activiteit', subtitle: 'Pagina', href: '/activity', emoji: '📜' })
-    all.push({ id: 'nav-accounts', title: 'Accounts', subtitle: 'Pagina',  href: '/accounts', emoji: '🔑' })
+    all.push({ id: 'nav-home',     title: 'Home',       subtitle: 'Pagina',  href: '/',          emoji: '🏠' })
+    all.push({ id: 'nav-planning', title: 'Planning',   subtitle: 'Pagina',  href: '/planning',  emoji: '📅' })
+    all.push({ id: 'nav-todos',    title: "Todo's",     subtitle: 'Pagina',  href: '/todos',     emoji: '✅' })
+    all.push({ id: 'nav-team',     title: 'Team',       subtitle: 'Pagina',  href: '/team',      emoji: '👥' })
+    all.push({ id: 'nav-kantoor',  title: 'Kantoor',    subtitle: 'Pagina',  href: '/kantoor',   emoji: '🏢' })
+    all.push({ id: 'nav-activity', title: 'Activiteit', subtitle: 'Pagina',  href: '/activity',  emoji: '📜' })
+    all.push({ id: 'nav-accounts', title: 'Accounts',   subtitle: 'Pagina',  href: '/accounts',  emoji: '🔑' })
 
     setData(all)
-  }, [open])
+  }, [open, profile?.memberId, onClose])
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -89,7 +133,10 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
 
   useEffect(() => { setHighlight(0) }, [query])
 
-  function go(r: Result) { onClose(); router.push(r.href) }
+  function go(r: Result) {
+    if (r.action) { r.action(); return }
+    onClose(); router.push(r.href)
+  }
 
   function quickAddTodo() {
     const text = query.trim()
