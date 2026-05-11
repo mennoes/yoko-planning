@@ -23,6 +23,8 @@ import {
   loadCommentsFor, saveComment, onCommentsUpdate,
   newCommentId, type CommentThread,
 } from '@/lib/commentsStore'
+import { createNotification } from '@/lib/notificationsStore'
+import { MentionTextarea } from '@/components/MentionTextarea'
 
 type ProjectLink = { board: string; itemId: string; name: string }
 type TodoItem    = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
@@ -391,6 +393,7 @@ function TodoCommentModal({ todoId, todoText, onClose }: {
   const { profile } = useProfile()
   const [threads, setThreads] = useState<CommentThread[]>([])
   const [newReply, setNewReply] = useState('')
+  const [mentionIds, setMentionIds] = useState<string[]>([])
 
   useEffect(() => {
     const refresh = () => setThreads(loadCommentsFor('todo:' + todoId))
@@ -429,7 +432,22 @@ function TodoCommentModal({ todoId, todoText, onClose }: {
         createdAt: new Date().toISOString(),
       })
     }
+    // Notificatie per @mention. We sturen 'm naar elke unieke member_id
+    // die in de tekst voorkwam (de afzender wordt automatisch overgeslagen
+    // in createNotification).
+    for (const rid of mentionIds) {
+      createNotification({
+        recipientId: rid,
+        actorId:     profile?.memberId ?? null,
+        kind:        'mention',
+        contextKind: 'todo',
+        contextId:   todoId,
+        href:        '/todos',
+        body:        body.length > 90 ? body.slice(0, 90) + '…' : body,
+      }).catch(() => {})
+    }
     setNewReply('')
+    setMentionIds([])
   }
 
   if (typeof document === 'undefined') return null
@@ -461,12 +479,14 @@ function TodoCommentModal({ todoId, todoText, onClose }: {
           ))}
         </div>
         <div style={{ padding: '10px 16px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6 }}>
-          <textarea value={newReply}
-            onChange={e => setNewReply(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addReply() }}
-            placeholder="Schrijf een opmerking…  (Cmd+Enter om te plaatsen)"
+          <MentionTextarea
+            value={newReply}
+            onChange={setNewReply}
+            onMentionsChange={setMentionIds}
+            onSubmit={addReply}
+            placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, Cmd+Enter om te plaatsen)"
             rows={2}
-            style={{ flex: 1, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+          />
           <button onClick={addReply} disabled={!newReply.trim()}
             style={{ padding: '8px 14px', borderRadius: 6, border: 'none',
               background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
