@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { createPortal } from 'react-dom'
 import { useProfile } from './ProfileContext'
 import { useTeamPhotos } from './TeamPhotosContext'
 import teamData from '@/data/team.json'
@@ -38,6 +39,39 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<Notification[]>([])
   const wrapRef = useRef<HTMLDivElement>(null)
+  const btnRef  = useRef<HTMLButtonElement>(null)
+  const [popPos, setPopPos] = useState<{ top: number; right: number } | null>(null)
+
+  function toggleOpen() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      // Anker rechts onder de bell-knop, maar gaat nooit van het scherm af.
+      setPopPos({
+        top:   Math.min(r.bottom + 6, window.innerHeight - 24),
+        right: Math.max(8, window.innerWidth - r.right),
+      })
+    }
+    setOpen(o => !o)
+  }
+
+  // herbereken positie tijdens scrollen/resizen zolang open
+  useEffect(() => {
+    if (!open) return
+    const recompute = () => {
+      if (!btnRef.current) return
+      const r = btnRef.current.getBoundingClientRect()
+      setPopPos({
+        top:   Math.min(r.bottom + 6, window.innerHeight - 24),
+        right: Math.max(8, window.innerWidth - r.right),
+      })
+    }
+    window.addEventListener('resize', recompute)
+    window.addEventListener('scroll', recompute, true)
+    return () => {
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll', recompute, true)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!memberId) return
@@ -51,14 +85,22 @@ export function NotificationBell() {
     return () => { offEvent(); offRemote() }
   }, [memberId])
 
-  // sluit op klik buiten
+  // sluit op klik buiten — popup leeft via portal, dus check zowel de
+  // bell-wrapper als het popup-element
   useEffect(() => {
     if (!open) return
     const handler = (e: Event) => {
-      if (!wrapRef.current?.contains(e.target as Node | null)) setOpen(false)
+      const t = e.target as HTMLElement | null
+      if (wrapRef.current?.contains(t)) return
+      if (t?.closest?.('[data-bell-popover]')) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
   }, [open])
 
   if (!memberId) return null
@@ -66,7 +108,7 @@ export function NotificationBell() {
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(o => !o)} aria-label="Meldingen"
+      <button ref={btnRef} onClick={toggleOpen} aria-label="Meldingen"
         title={unread > 0 ? `${unread} ongelezen meldingen` : 'Geen nieuwe meldingen'}
         style={{
           background: 'transparent', border: 'none', cursor: 'pointer',
@@ -89,10 +131,10 @@ export function NotificationBell() {
           </span>
         )}
       </button>
-      {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', marginTop: 6, zIndex: 9050,
-          width: 360, maxWidth: '92vw', maxHeight: '70vh', overflowY: 'auto',
+      {open && popPos && typeof document !== 'undefined' && createPortal(
+        <div data-bell-popover style={{
+          position: 'fixed', top: popPos.top, right: popPos.right, zIndex: 9050,
+          width: 'min(360px, calc(100vw - 16px))', maxHeight: '70vh', overflowY: 'auto',
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 12, padding: 4,
           boxShadow: '0 16px 40px rgba(0,0,0,0.30), 0 2px 6px rgba(0,0,0,0.10)',
@@ -158,7 +200,8 @@ export function NotificationBell() {
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
