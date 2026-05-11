@@ -21,6 +21,8 @@ import {
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
 import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange } from '@/lib/popoverState'
+import { createNotification } from '@/lib/notificationsStore'
+import { MentionTextarea } from '@/components/MentionTextarea'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
@@ -935,6 +937,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   )
   const [ownerIds, setOwnerIds] = useState<string[]>(project.ownerIds)
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
+  const [entryMentions, setEntryMentions] = useState<string[]>([])
+  const { profile } = useProfile()
   const [categoryOverride, setCategoryOverrideState] = useState<WorkloadCategory | null>(loadCategoryOverrides()[project.id] ?? null)
   useEffect(() => {
     setCategoryOverrideState(loadCategoryOverrides()[project.id] ?? null)
@@ -990,12 +994,41 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     }
     if (!hasSubitems) extra.estHours = parseFloat(estHours) || 0
     onUpdate(project, startDate || null, endDate || null, extra)
+    // Notificatie voor nieuw toegewezen eigenaren — alleen voor mensen die
+    // er nog niet op stonden.
+    const wasOwner = new Set(project.ownerIds ?? [])
+    for (const newId of finalOwners) {
+      if (newId === 'unassigned') continue
+      if (wasOwner.has(newId)) continue
+      createNotification({
+        recipientId: newId,
+        actorId:     profile?.memberId ?? null,
+        kind:        'assigned',
+        contextKind: 'board_item',
+        contextId:   project.id,
+        href:        `/projects/${project.board}`,
+        body:        project.name,
+      }).catch(() => {})
+    }
   }
   function addEntry() {
     const text = newEntry.trim()
     if (!text) return
-    setJournal(j => [...j, { id: Date.now().toString(), ts: new Date().toISOString(), text }])
+    setJournal(j => [...j, { id: Date.now().toString(), ts: new Date().toISOString(), text, authorId: profile?.memberId }])
+    // Notificatie per @mention in deze journal-entry
+    for (const rid of entryMentions) {
+      createNotification({
+        recipientId: rid,
+        actorId:     profile?.memberId ?? null,
+        kind:        'mention',
+        contextKind: 'board_item',
+        contextId:   project.id,
+        href:        `/projects/${project.board}`,
+        body:        text.length > 90 ? text.slice(0, 90) + '…' : text,
+      }).catch(() => {})
+    }
     setNewEntry('')
+    setEntryMentions([])
   }
   function deleteEntry(id: string) { setJournal(j => j.filter(x => x.id !== id)) }
   const owners = team.filter(m => project.ownerIds.includes(m.id))
@@ -1296,10 +1329,12 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
               )
             })}
             <div style={{ display: 'flex', gap: 6 }}>
-              <input value={newEntry} onChange={e => setNewEntry(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addEntry() }}
-                placeholder="+ Voeg entry toe…"
-                style={{ flex: 1, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+              <MentionTextarea value={newEntry}
+                onChange={setNewEntry}
+                onMentionsChange={setEntryMentions}
+                onSubmit={addEntry}
+                placeholder="+ Voeg entry toe… (typ @ om te taggen, ⌘+Enter om te plaatsen)"
+                rows={1} />
               <button onClick={addEntry} disabled={!newEntry.trim()}
                 style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
                   background: newEntry.trim() ? color : 'var(--bg-hover)',

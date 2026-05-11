@@ -10,6 +10,8 @@ import {
 import { useProfile } from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { IconClose, IconCheck } from '@/components/Icon'
+import { createNotification } from '@/lib/notificationsStore'
+import { MentionTextarea } from '@/components/MentionTextarea'
 
 const EMOJIS = ['📄','📝','📌','🗒','💡','🔖','📋','🗂','📊','🎨','🚀','⭐']
 
@@ -37,6 +39,8 @@ export default function PageEditor() {
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeQuote, setComposeQuote] = useState('')
   const [composeBody, setComposeBody] = useState('')
+  const [composeMentions, setComposeMentions] = useState<string[]>([])
+  const [replyMentions, setReplyMentions] = useState<string[]>([])
   const [openCommentId, setOpenCommentId] = useState<string | null>(null)
   const [openCommentPos, setOpenCommentPos] = useState<{ x: number; y: number } | null>(null)
   const [activeComment, setActiveComment] = useState<CommentThread | null>(null)
@@ -137,6 +141,19 @@ export default function PageEditor() {
       createdAt: new Date().toISOString(),
     }
     saveComment(thread)
+    // Notify mentioned members
+    for (const rid of composeMentions) {
+      createNotification({
+        recipientId: rid,
+        actorId:     profile?.memberId ?? null,
+        kind:        'mention',
+        contextKind: 'page',
+        contextId:   id,
+        href:        `/pages/${id}`,
+        body:        composeBody.trim().length > 90 ? composeBody.trim().slice(0, 90) + '…' : composeBody.trim(),
+      }).catch(() => {})
+    }
+    setComposeMentions([])
 
     // Wrap selection in a <mark> element
     try {
@@ -180,7 +197,18 @@ export default function PageEditor() {
     }
     const updated = { ...activeComment, thread: [...activeComment.thread, reply] }
     saveComment(updated)
-    setActiveComment(updated); setReplyDraft('')
+    for (const rid of replyMentions) {
+      createNotification({
+        recipientId: rid,
+        actorId:     profile?.memberId ?? null,
+        kind:        'mention',
+        contextKind: 'page',
+        contextId:   id,
+        href:        `/pages/${id}`,
+        body:        reply.body.length > 90 ? reply.body.slice(0, 90) + '…' : reply.body,
+      }).catch(() => {})
+    }
+    setActiveComment(updated); setReplyDraft(''); setReplyMentions([])
   }
 
   function resolveComment() {
@@ -353,11 +381,12 @@ export default function PageEditor() {
             <div style={{ background: 'rgba(255,230,100,0.25)', borderLeft: '3px solid var(--sup-yellow)', padding: '8px 10px', borderRadius: 4, marginBottom: 10, fontSize: 13, color: 'var(--text-secondary)', maxHeight: 80, overflowY: 'auto' }}>
               {composeQuote}
             </div>
-            <textarea autoFocus value={composeBody} onChange={e => setComposeBody(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitComment() }}
-              placeholder="Schrijf een opmerking…  (⌘+Enter om te plaatsen)"
-              rows={3}
-              style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            <MentionTextarea autoFocus value={composeBody}
+              onChange={setComposeBody}
+              onMentionsChange={setComposeMentions}
+              onSubmit={submitComment}
+              placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, ⌘+Enter om te plaatsen)"
+              rows={3} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button onClick={() => setComposeOpen(false)}
                 style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -407,10 +436,12 @@ export default function PageEditor() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <input value={replyDraft} onChange={e => setReplyDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addReply() }}
-                placeholder="Reageer…"
-                style={{ flex: 1, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 9px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+              <MentionTextarea value={replyDraft}
+                onChange={setReplyDraft}
+                onMentionsChange={setReplyMentions}
+                onSubmit={addReply}
+                placeholder="Reageer… (typ @ om te taggen)"
+                rows={1} />
               <button onClick={addReply} disabled={!replyDraft.trim()}
                 style={{ padding: '6px 11px', borderRadius: 6, border: 'none',
                   background: replyDraft.trim() ? 'var(--accent)' : 'var(--bg-hover)',
