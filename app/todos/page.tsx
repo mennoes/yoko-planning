@@ -635,10 +635,11 @@ export default function TodosPage() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '44px 36px 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 20 : 32,
-        // op mobiel staan rechts de fixed bell/zoek/menu knoppen; reserveer
-        // alleen die rechter-strook ipv extra padding-top, zodat de titel
-        // gewoon bovenaan blijft.
-        paddingRight: isMobile ? 138 : 0 }}>
+        // op mobiel zit linksboven het menu en rechtsboven bell+zoek;
+        // reserveer aan beide kanten ruimte zodat de titel niet onder
+        // een van de knoppen valt.
+        paddingLeft:  isMobile ? 48 : 0,
+        paddingRight: isMobile ? 96 : 0 }}>
         <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
           <IconCheckList size={isMobile ? 22 : 28} />
           To do&apos;s

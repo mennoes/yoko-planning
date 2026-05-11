@@ -2005,7 +2005,8 @@ export default function PlanningPage() {
 
         {/* Title + nav */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 10 : 16 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 12 : 24, flex: 1, paddingRight: isMobile ? 90 : 0 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 12 : 24, flex: 1,
+            paddingLeft: isMobile ? 48 : 0, paddingRight: isMobile ? 96 : 0 }}>
             <div style={{ minWidth: 0 }}>
               <h1 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
                 Planning
