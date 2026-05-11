@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
@@ -27,17 +27,22 @@ import { createNotification } from '@/lib/notificationsStore'
 import { MentionTextarea } from '@/components/MentionTextarea'
 import { ReactionRow } from '@/components/ReactionRow'
 
-type ProjectLink = { board: string; itemId: string; name: string }
-type TodoItem    = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
-type Section     = { id: string; title: string; emoji: string; items: TodoItem[] }
+import {
+  loadSections as loadTodoSections,
+  saveSections as saveTodoSections,
+  onTodosUpdate,
+  pullFromRemote as pullTodos,
+  pushToRemote   as pushTodos,
+  subscribeRemoteTodos,
+  type Section, type TodoItem, type ProjectLink,
+} from '@/lib/todosStore'
 
 const RAW: Record<string, { groups: unknown[] }> = {
   yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
   vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
 }
 
-const STORAGE_KEY = 'yoko-todos'
-const MEMBER_IDS  = new Set(teamData.members.map(m => m.id))
+const MEMBER_IDS = new Set(teamData.members.map(m => m.id))
 
 function loadAllProjects(): ProjectLink[] {
   if (typeof window === 'undefined') return []
@@ -60,16 +65,9 @@ function fmtRelative(iso: string): string {
   return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
 }
 
-function loadSections(): Section[] {
-  if (typeof window === 'undefined') return initialData.sections as Section[]
-  try {
-    const s = localStorage.getItem(STORAGE_KEY)
-    return s ? JSON.parse(s) : (initialData.sections as Section[])
-  } catch { return initialData.sections as Section[] }
-}
-function saveSections(s: Section[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
-}
+const INITIAL_SECTIONS: Section[] = initialData.sections as Section[]
+const loadSections = () => loadTodoSections(INITIAL_SECTIONS)
+const saveSections = (s: Section[]) => saveTodoSections(s)
 
 // ─── Member avatar ─────────────────────────────────────────────────────────────
 function MemberAvatar({ memberId, size = 28 }: { memberId: string; size?: number }) {
@@ -132,6 +130,8 @@ function TodoCard({
   const [editId,  setEditId]  = useState<string | null>(null)
   const [editTxt, setEditTxt] = useState('')
   const [pickerIdx, setPickerIdx] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [popPos, setPopPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const member = teamData.members.find(m => m.id === section.id)
 
   // Slash-picker: when the user types "/", the input becomes a project search.
@@ -143,6 +143,24 @@ function TodoCard({
     ? allProjects.filter(p => !searchTerm || p.name.toLowerCase().includes(searchTerm)).slice(0, 8)
     : []
   useEffect(() => { setPickerIdx(0) }, [newText])
+
+  // Bereken popup-positie op basis van het input-veld zodat de dropdown
+  // niet door overflow:hidden van de kaart wordt geclipt.
+  useEffect(() => {
+    if (!isSearchMode || !inputRef.current) { setPopPos(null); return }
+    const compute = () => {
+      const r = inputRef.current?.getBoundingClientRect()
+      if (!r) return
+      setPopPos({ top: r.bottom + 4, left: r.left, width: r.width })
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    window.addEventListener('scroll', compute, true)
+    return () => {
+      window.removeEventListener('resize', compute)
+      window.removeEventListener('scroll', compute, true)
+    }
+  }, [isSearchMode])
 
   function moveItem(idx: number, dir: -1 | 1) {
     const next = idx + dir
@@ -253,7 +271,7 @@ function TodoCard({
 
       {/* Add — type "/" to pick an existing project from any agenda */}
       <div style={{ padding: '6px 16px 12px', position: 'relative' }}>
-        <input
+        <input ref={inputRef}
           value={newText}
           onChange={e => setNewText(e.target.value)}
           onKeyDown={e => {
@@ -271,10 +289,10 @@ function TodoCard({
           onFocus={e => { e.currentTarget.style.borderBottomColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
           onBlur={e => { e.currentTarget.style.borderBottomColor = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
         />
-        {isSearchMode && (
+        {isSearchMode && popPos && typeof document !== 'undefined' && createPortal(
           <div style={{
-            position: 'absolute', top: '100%', left: 12, right: 12, zIndex: 50,
-            marginTop: 4,
+            position: 'fixed', top: popPos.top, left: popPos.left, width: popPos.width,
+            zIndex: 9100,
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
             boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
             maxHeight: 280, overflowY: 'auto', padding: 4,
@@ -297,7 +315,8 @@ function TodoCard({
                 <span style={{ fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>{p.board}</span>
               </button>
             ))}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>
@@ -542,9 +561,29 @@ export default function TodosPage() {
     setSections(loadSections())
     setAllProjects(loadAllProjects())
     setHydrated(true)
+
+    // Sync met Supabase: pull, en als er nog niks staat seed met de lokale
+    // cache; subscribe op realtime mutaties zodat een vinkje in browser A
+    // direct in browser B verschijnt.
+    pullTodos().then(remote => {
+      if (remote) {
+        setSections(remote)
+        saveTodoSections(remote)  // ververst localStorage zonder push-loop
+      } else {
+        // Remote empty → upload de huidige (localStorage) staat
+        const local = loadSections()
+        if (local.length > 0) pushTodos(local).catch(() => {})
+      }
+    }).catch(() => {})
+
+    const offRemote = subscribeRemoteTodos()
+    const offEvent  = onTodosUpdate(() => setSections(loadSections()))
     const onBoardUpdate = () => setAllProjects(loadAllProjects())
     window.addEventListener('yoko-board-update', onBoardUpdate)
-    return () => window.removeEventListener('yoko-board-update', onBoardUpdate)
+    return () => {
+      offRemote(); offEvent()
+      window.removeEventListener('yoko-board-update', onBoardUpdate)
+    }
   }, [])
 
   function updateSection(updated: Section, prev?: Section) {
