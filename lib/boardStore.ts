@@ -214,22 +214,17 @@ export function moveItemToBoard(
   }))
 
   const tgtGroups = loadGroups(targetBoard, fallbackGroups[targetBoard] ?? [])
-  const isGoogle  = (movedItem.source as string | undefined) === 'google'
-  const preferred = isGoogle ? 'Google Agenda' : null
-  let targetIdx   = preferred
-    ? tgtGroups.findIndex(g => g.name === preferred)
-    : -1
-  if (targetIdx < 0) targetIdx = tgtGroups.length > 0 ? 0 : -1
-
+  // Land het item in de bovenste groep van het doel-bord, ongeacht source.
+  // Alleen als het bord leeg is maken we alsnog een groep aan.
   let updatedTarget: BoardGroup[]
-  if (targetIdx >= 0) {
+  if (tgtGroups.length > 0) {
     updatedTarget = tgtGroups.map((g, idx) =>
-      idx === targetIdx ? { ...g, items: [...g.items, movedItem] } : g
+      idx === 0 ? { ...g, items: [...g.items, movedItem] } : g
     )
   } else {
     const newGroup: BoardGroup = {
       id:        `g_${targetBoard}_${Date.now()}`,
-      name:      isGoogle ? 'Google Agenda' : 'Verplaatst',
+      name:      'Lopende projecten',
       color:     '#9aadbd',
       collapsed: false,
       items:     [movedItem],
