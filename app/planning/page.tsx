@@ -22,9 +22,11 @@ import {
 } from '@/lib/workloadCategory'
 import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange } from '@/lib/popoverState'
 import { createNotification } from '@/lib/notificationsStore'
+import { logItemActivity } from '@/lib/itemActivity'
 import { MentionTextarea } from '@/components/MentionTextarea'
 import { ReactionRow } from '@/components/ReactionRow'
 import { LinksRow } from '@/components/LinksRow'
+import { ItemHistory } from '@/components/ItemHistory'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
@@ -999,6 +1001,26 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
     }
     if (!hasSubitems) extra.estHours = parseFloat(estHours) || 0
     onUpdate(project, startDate || null, endDate || null, extra)
+
+    // Geschiedenis: log de belangrijkste wijzigingen (datum-shifts, nieuwe
+    // eigenaren, uren). Status wordt elders gelogd (BoardTable status-cell).
+    const rawItemId = project.id.slice(project.board.length + 2)
+    const oldStart = project.startDate ?? ''
+    const oldEnd   = project.endDate ?? ''
+    const newStart = startDate || ''
+    const newEnd   = endDate || ''
+    if (oldStart !== newStart || oldEnd !== newEnd) {
+      logItemActivity(rawItemId, 'wijzigde de timeline',
+        `${oldStart || '—'} – ${oldEnd || '—'}  →  ${newStart || '—'} – ${newEnd || '—'}`).catch(() => {})
+    }
+    if (!hasSubitems) {
+      const oldEst = project.estHours ?? 0
+      const newEst = parseFloat(estHours) || 0
+      if (oldEst !== newEst) {
+        logItemActivity(rawItemId, 'zette uren', `${oldEst}u → ${newEst}u`).catch(() => {})
+      }
+    }
+
     // Notificatie voor nieuw toegewezen eigenaren — alleen voor mensen die
     // er nog niet op stonden.
     const wasOwner = new Set(project.ownerIds ?? [])
@@ -1014,6 +1036,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
         href:        `/projects/${project.board}`,
         body:        project.name,
       }).catch(() => {})
+      const memberName = teamData.members.find(m => m.id === newId)?.name
+      logItemActivity(rawItemId, 'wees iemand toe', memberName ?? newId).catch(() => {})
     }
   }
   function addEntry() {
@@ -1370,6 +1394,9 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
               </button>
             </div>
           </div>
+        </Row>
+        <Row label="Geschiedenis">
+          <ItemHistory itemId={project.id.slice(project.board.length + 2)} />
         </Row>
       </div>}
       <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
