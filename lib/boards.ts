@@ -46,7 +46,14 @@ export type BoardItem = {
   source?:        'manual' | 'google'   // origin of this item
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
+  links?:         ItemLink[]            // gekoppelde bestanden / externe URL's
   [key: string]:  unknown
+}
+
+export type ItemLink = {
+  id:    string
+  url:   string
+  label?: string
 }
 
 export type BoardGroup = {

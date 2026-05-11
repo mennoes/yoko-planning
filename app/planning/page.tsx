@@ -24,6 +24,7 @@ import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange }
 import { createNotification } from '@/lib/notificationsStore'
 import { MentionTextarea } from '@/components/MentionTextarea'
 import { ReactionRow } from '@/components/ReactionRow'
+import { LinksRow } from '@/components/LinksRow'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
@@ -921,7 +922,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[] }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }>) => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const team    = teamData.members
@@ -932,6 +933,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
   const [estHours,  setEstHours]  = useState(String(project.estHours ?? 0))
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
+  const [links,     setLinks]     = useState<import('@/lib/boards').ItemLink[]>((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
   const [newEntry,  setNewEntry]  = useState('')
   const [ownerHours, setOwnerHours] = useState<Record<string, number>>(
     (rawItem?.ownerHours as Record<string, number> | undefined) ?? {}
@@ -969,6 +971,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
     setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
     setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
+    setLinks((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
     setOwnerHours((rawItem?.ownerHours as Record<string, number> | undefined) ?? {})
     setOwnerIds(project.ownerIds)
     setOwnerPickerOpen(false)
@@ -990,8 +993,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
     // in real unassigned territory rather than fake-assigned to the placeholder.
     const cleanOwners = ownerIds.length > 1 ? ownerIds.filter(id => id !== 'unassigned') : ownerIds
     const finalOwners = cleanOwners.length === 0 ? ['unassigned'] : cleanOwners
-    const extra: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[] }> = {
-      notes, journal, ownerHours, ownerIds: finalOwners,
+    const extra: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }> = {
+      notes, journal, ownerHours, ownerIds: finalOwners, links,
     }
     if (!hasSubitems) extra.estHours = parseFloat(estHours) || 0
     onUpdate(project, startDate || null, endDate || null, extra)
@@ -1307,6 +1310,9 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
           <textarea value={notes} disabled={isGoogle}
             onChange={e => setNotes(e.target.value)} rows={3} placeholder={isGoogle ? '' : 'Notities…'}
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+        </Row>
+        <Row label="Bestanden">
+          <LinksRow links={links} onChange={setLinks} readonly={isGoogle} />
         </Row>
         <Row label="Journaal">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1840,7 +1846,7 @@ export default function PlanningPage() {
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     pushUndo(() => apply(prevStart, prevEnd))
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[] }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     const groups = (allGroups[boardName] ?? []).map(g => ({
