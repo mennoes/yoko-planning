@@ -570,11 +570,11 @@ function Cell({ item, col, onUpdate }: {
 }
 
 // ─── Subitem grid template ────────────────────────────────────────────────────
-const SUBITEM_GRID = '22px 1fr 90px 145px 175px 80px 80px 36px'
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, onUpdate, onDelete }: {
-  subitem: SubItem; onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
+function SubItemRow({ subitem, cols, gridTemplate, onUpdate, onDelete }: {
+  subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
+  onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(false)
@@ -585,16 +585,40 @@ function SubItemRow({ subitem, onUpdate, onDelete }: {
     display: 'flex', alignItems: 'center', padding: '3px 8px', overflow: 'hidden',
   }
 
+  // Render one subitem cell per parent column key. Columns the subitem
+  // doesn't carry data for (deadline, dagen, custom fields) stay empty so
+  // the row stays visually aligned with the parent grid.
+  function renderCol(c: ColumnDef) {
+    switch (c.key) {
+      case 'owner':
+        return <div style={cellBorder}><OwnersCell value={subitem.ownerIds} onChange={v => onUpdate({ ownerIds: v })} /></div>
+      case 'status':
+        return <div style={cellBorder}><StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} /></div>
+      case 'timeline':
+        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
+      case 'estHours':
+        return <div style={cellBorder}><EditableCell value={subitem.estHours || null} inputType="number" onChange={v => onUpdate({ estHours: (v as number) ?? 0 })} /></div>
+      case 'echtGewerkt':
+        return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
+      default:
+        return <div style={cellBorder} />
+    }
+  }
+
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: SUBITEM_GRID,
+      display: 'grid', gridTemplateColumns: gridTemplate,
       alignItems: 'center', minHeight: 36,
       borderBottom: '1px solid var(--border-light)',
       background: hover ? 'var(--overlay-subtle)' : 'var(--overlay-sub)',
       transition: 'background 0.1s',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      <div style={{ height: '100%', borderRight: '2px solid var(--overlay-medium)' }} />
+      {/* Indent block under the parent's select column, with a coloured rail
+          so the nesting reads at a glance. */}
+      <div style={{ height: '100%', display: 'flex', alignItems: 'stretch', justifyContent: 'flex-end', paddingRight: 0 }}>
+        <div style={{ width: 3, background: 'var(--overlay-medium)' }} />
+      </div>
       <div style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {editName ? (
           <input autoFocus value={nameDraft}
@@ -612,13 +636,7 @@ function SubItemRow({ subitem, onUpdate, onDelete }: {
           </span>
         )}
       </div>
-      <div style={cellBorder}><OwnersCell value={subitem.ownerIds} onChange={v => onUpdate({ ownerIds: v })} /></div>
-      <div style={cellBorder}><StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} /></div>
-      <div style={cellBorder}>
-        <DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} />
-      </div>
-      <div style={cellBorder}><EditableCell value={subitem.estHours || null} inputType="number" onChange={v => onUpdate({ estHours: (v as number) ?? 0 })} /></div>
-      <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
+      {cols.map(c => <div key={c.key}>{renderCol(c)}</div>)}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border-light)', height: '100%' }}>
         {hover && (
           <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
@@ -629,7 +647,10 @@ function SubItemRow({ subitem, onUpdate, onDelete }: {
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, onUpdate }: { subitems: SubItem[]; onUpdate: (u: SubItem[]) => void }) {
+function SubItemsSection({ subitems, cols, gridTemplate, onUpdate }: {
+  subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
+  onUpdate: (u: SubItem[]) => void
+}) {
   function updateOne(id: string, u: Partial<SubItem>) { onUpdate(subitems.map(s => s.id === id ? { ...s, ...u } : s)) }
   function deleteOne(id: string) { onUpdate(subitems.filter(s => s.id !== id)) }
   function addOne() {
@@ -637,18 +658,32 @@ function SubItemsSection({ subitems, onUpdate }: { subitems: SubItem[]; onUpdate
   }
   const hdrCell: React.CSSProperties = { padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-light)' }
 
+  // Subitem-only header labels per known column key. Falls back to the
+  // parent column label so custom columns get something sensible.
+  const headerLabelFor = (key: string, fallback: string) => {
+    if (key === 'owner')       return 'Owner'
+    if (key === 'status')      return 'Status'
+    if (key === 'timeline')    return 'Timeline'
+    if (key === 'estHours')    return 'Est.'
+    if (key === 'echtGewerkt') return 'Echt gewerkt'
+    return fallback
+  }
+
   return (
     <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--overlay-sub-border)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: SUBITEM_GRID, background: 'var(--overlay-sub-header)', borderBottom: '1px solid var(--border-light)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--overlay-sub-header)', borderBottom: '1px solid var(--border-light)' }}>
         <div />
         <div style={{ padding: '4px 10px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
-        {['Owner', 'Status', 'Timeline', 'Est.', 'Echt gewerkt'].map(lbl => <div key={lbl} style={hdrCell}>{lbl}</div>)}
+        {cols.map(c => (
+          <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
+        ))}
         <div style={{ borderLeft: '1px solid var(--border-light)' }} />
       </div>
       {subitems.map(sub => (
-        <SubItemRow key={sub.id} subitem={sub} onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+        <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
+          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
-      <div style={{ padding: '6px 10px 6px 34px' }}>
+      <div style={{ padding: '6px 10px 6px 60px' }}>
         <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
@@ -760,7 +795,8 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderM
       </div>
 
       {expanded && (
-        <SubItemsSection subitems={subitems} onUpdate={updated => onUpdate({ subitems: updated })} />
+        <SubItemsSection subitems={subitems} cols={cols} gridTemplate={gridTemplate}
+          onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
     </>
   )
@@ -1411,15 +1447,25 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
 }
 
 // ─── Bulk action bar (shown when items selected) ──────────────────────────────
+// Toolbar wanneer er meerdere items in een groep aangevinkt zijn. Iedere
+// "waarde" die in een rij bewerkt kan worden, kan hier op alle geselecteerde
+// items in één keer worden gezet.
 function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMoveTo }: {
   count: number; color: string; groups: BoardGroup[]
   onClear: () => void; onDelete: () => void
   onUpdate: (patch: Partial<BoardItem>) => void
   onMoveTo: (groupId: string) => void
 }) {
-  const [statusOpen, setStatusOpen] = useState(false)
-  const [ownerOpen,  setOwnerOpen]  = useState(false)
-  const [moveOpen,   setMoveOpen]   = useState(false)
+  type OpenMenu = '' | 'status' | 'owner' | 'move' | 'timeline' | 'deadline' | 'est' | 'echt'
+  const [open, setOpen] = useState<OpenMenu>('')
+  const toggle = (m: OpenMenu) => setOpen(o => o === m ? '' : m)
+
+  const [tlStart, setTlStart] = useState('')
+  const [tlEnd,   setTlEnd]   = useState('')
+  const [deadln,  setDeadln]  = useState('')
+  const [est,     setEst]     = useState('')
+  const [echt,    setEcht]    = useState('')
+
   return (
     <div style={{
       position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
@@ -1435,41 +1481,122 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
       </span>
 
       <div style={{ position: 'relative' }}>
-        <button onClick={() => { setStatusOpen(o => !o); setOwnerOpen(false); setMoveOpen(false) }} style={barBtn}>Status…</button>
-        {statusOpen && (
+        <button onClick={() => toggle('status')} style={barBtn}>Status…</button>
+        {open === 'status' && (
           <div style={popoverStyle}>
             {STATUS_OPTIONS.filter(o => o.label).map(s => (
-              <button key={s.label} onClick={() => { onUpdate({ status: s.label }); setStatusOpen(false) }}
+              <button key={s.label} onClick={() => { onUpdate({ status: s.label }); setOpen('') }}
                 style={{ ...popoverItem, background: s.color + '22', color: s.color }}>
                 {s.label}
               </button>
             ))}
-            <button onClick={() => { onUpdate({ status: '' }); setStatusOpen(false) }}
+            <button onClick={() => { onUpdate({ status: '' }); setOpen('') }}
               style={{ ...popoverItem, color: 'var(--text-muted)' }}>Wis status</button>
           </div>
         )}
       </div>
 
       <div style={{ position: 'relative' }}>
-        <button onClick={() => { setOwnerOpen(o => !o); setStatusOpen(false); setMoveOpen(false) }} style={barBtn}>Owner…</button>
-        {ownerOpen && (
+        <button onClick={() => toggle('owner')} style={barBtn}>Owner…</button>
+        {open === 'owner' && (
           <div style={popoverStyle}>
             {teamData.members.map(m => (
-              <button key={m.id} onClick={() => { onUpdate({ ownerIds: [m.id] }); setOwnerOpen(false) }}
+              <button key={m.id} onClick={() => { onUpdate({ ownerIds: [m.id] }); setOpen('') }}
                 style={{ ...popoverItem, color: m.color }}>
                 {m.name}
               </button>
             ))}
+            <button onClick={() => { onUpdate({ ownerIds: [] }); setOpen('') }}
+              style={{ ...popoverItem, color: 'var(--text-muted)' }}>Wis owner</button>
           </div>
         )}
       </div>
 
       <div style={{ position: 'relative' }}>
-        <button onClick={() => { setMoveOpen(o => !o); setStatusOpen(false); setOwnerOpen(false) }} style={barBtn}>Verplaats…</button>
-        {moveOpen && (
+        <button onClick={() => toggle('timeline')} style={barBtn}>Timeline…</button>
+        {open === 'timeline' && (
+          <div style={{ ...popoverStyle, padding: 10, minWidth: 220 }}>
+            <label style={popoverLabel}>Van
+              <input type="date" value={tlStart} onChange={e => setTlStart(e.target.value)} style={popoverInput} />
+            </label>
+            <label style={popoverLabel}>Tot
+              <input type="date" value={tlEnd}   onChange={e => setTlEnd(e.target.value)}   style={popoverInput} />
+            </label>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <button onClick={() => { onUpdate({ startDate: tlStart || null, endDate: tlEnd || null }); setOpen('') }}
+                disabled={!tlStart && !tlEnd}
+                style={{ ...barBtn, flex: 1, padding: '6px 10px', fontWeight: 700, background: 'var(--accent-light)', borderColor: 'var(--accent)' }}>
+                Toepassen
+              </button>
+              <button onClick={() => { onUpdate({ startDate: null, endDate: null }); setOpen('') }}
+                style={{ ...barBtn, color: 'var(--text-muted)', padding: '6px 10px' }}>
+                Wis
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => toggle('deadline')} style={barBtn}>Deadline…</button>
+        {open === 'deadline' && (
+          <div style={{ ...popoverStyle, padding: 10, minWidth: 200 }}>
+            <label style={popoverLabel}>Datum
+              <input type="date" value={deadln} onChange={e => setDeadln(e.target.value)} style={popoverInput} />
+            </label>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <button onClick={() => { onUpdate({ deadline: deadln || null }); setOpen('') }}
+                disabled={!deadln}
+                style={{ ...barBtn, flex: 1, padding: '6px 10px', fontWeight: 700, background: 'var(--accent-light)', borderColor: 'var(--accent)' }}>
+                Toepassen
+              </button>
+              <button onClick={() => { onUpdate({ deadline: null }); setOpen('') }}
+                style={{ ...barBtn, color: 'var(--text-muted)', padding: '6px 10px' }}>
+                Wis
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => toggle('est')} style={barBtn}>Est tijd…</button>
+        {open === 'est' && (
+          <div style={{ ...popoverStyle, padding: 10, minWidth: 180 }}>
+            <label style={popoverLabel}>Uur
+              <input type="number" step="0.5" min="0" value={est} onChange={e => setEst(e.target.value)} style={popoverInput} />
+            </label>
+            <button onClick={() => { const v = parseFloat(est); if (!isNaN(v)) onUpdate({ estHours: v }); setOpen('') }}
+              disabled={est === ''}
+              style={{ ...barBtn, marginTop: 6, padding: '6px 10px', fontWeight: 700, background: 'var(--accent-light)', borderColor: 'var(--accent)' }}>
+              Toepassen
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => toggle('echt')} style={barBtn}>Echt gewerkt…</button>
+        {open === 'echt' && (
+          <div style={{ ...popoverStyle, padding: 10, minWidth: 180 }}>
+            <label style={popoverLabel}>Uur
+              <input type="number" step="0.5" min="0" value={echt} onChange={e => setEcht(e.target.value)} style={popoverInput} />
+            </label>
+            <button onClick={() => { const v = parseFloat(echt); if (!isNaN(v)) onUpdate({ echtGewerkt: v } as Partial<BoardItem>); setOpen('') }}
+              disabled={echt === ''}
+              style={{ ...barBtn, marginTop: 6, padding: '6px 10px', fontWeight: 700, background: 'var(--accent-light)', borderColor: 'var(--accent)' }}>
+              Toepassen
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => toggle('move')} style={barBtn}>Verplaats…</button>
+        {open === 'move' && (
           <div style={popoverStyle}>
             {groups.map(g => (
-              <button key={g.id} onClick={() => { onMoveTo(g.id); setMoveOpen(false) }}
+              <button key={g.id} onClick={() => { onMoveTo(g.id); setOpen('') }}
                 style={popoverItem}>
                 {g.name}
               </button>
@@ -1483,6 +1610,17 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
       <button onClick={onClear} style={{ ...barBtn, color: 'var(--text-muted)' }} title="Selectie wissen">×</button>
     </div>
   )
+}
+
+const popoverLabel: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600,
+  color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
+  marginBottom: 4,
+}
+const popoverInput: React.CSSProperties = {
+  background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6,
+  padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+  width: '100%', boxSizing: 'border-box',
 }
 
 const barBtn: React.CSSProperties = {
