@@ -9,6 +9,7 @@ import { useTeamPhotos }  from './TeamPhotosContext'
 import { useUndo }        from './UndoContext'
 import { GoogleBadge }    from './GoogleBadge'
 import { createNotification } from '@/lib/notificationsStore'
+import { logItemActivity }    from '@/lib/itemActivity'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -16,17 +17,17 @@ let currentActorId: string | null = null
 function setCurrentActor(id: string | null) { currentActorId = id }
 
 // Notificeer alle owners (behalve de actor zelf) wanneer de status van
-// een item verandert. Wordt aangeroepen vanuit zowel de inline status-
-// cell als de bulk-action-bar.
+// een item verandert + log in de item-geschiedenis.
 function notifyOwnersOfStatusChange(item: BoardItem, fromStatus: string, toStatus: string, boardOverride?: string) {
   if (fromStatus === toStatus) return
+  logItemActivity(item.id, 'zette status', `${fromStatus || '—'} → ${toStatus || '—'}`).catch(() => {})
   const owners = (item.ownerIds ?? []).filter(id => id && id !== 'unassigned')
   for (const rid of owners) {
     if (rid === currentActorId) continue
     createNotification({
       recipientId: rid,
       actorId:     currentActorId,
-      kind:        'comment',  // hergebruik 'comment' kind — frontend toont status-tekst via body
+      kind:        'comment',
       contextKind: 'board_item',
       contextId:   item.id,
       href:        boardOverride ? `/projects/${boardOverride}` : undefined,
