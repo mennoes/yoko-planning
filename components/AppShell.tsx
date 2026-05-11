@@ -177,29 +177,36 @@ function Inner({ children }: { children: ReactNode }) {
       )}
 
       {isMobile && !drawerOpen && (
-        <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
-          <NotificationBell />
-          <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
-            style={{
-              width: 38, height: 38, borderRadius: 9,
-              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-              color: 'var(--text-primary)', padding: 0,
-            }}>
-            <IconSearch size={18} />
-          </button>
-          <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
-            style={{
-              width: 38, height: 38, borderRadius: 9,
-              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-              color: 'var(--text-primary)', padding: 0,
-            }}>
-            <IconMenu size={20} />
-          </button>
-        </div>
+        <>
+          {/* Menu linksboven — meest gebruikte knop, sluit aan op standaard
+              mobile-conventie (hamburger linksboven). */}
+          <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 70 }}>
+            <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
+              style={{
+                width: 38, height: 38, borderRadius: 9,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                color: 'var(--text-primary)', padding: 0,
+              }}>
+              <IconMenu size={20} />
+            </button>
+          </div>
+          {/* Notificaties + zoeken rechtsboven. */}
+          <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
+            <NotificationBell />
+            <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
+              style={{
+                width: 38, height: 38, borderRadius: 9,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                color: 'var(--text-primary)', padding: 0,
+              }}>
+              <IconSearch size={18} />
+            </button>
+          </div>
+        </>
       )}
       {!isMobile && (
         <div style={{ position: 'fixed', top: 14, right: 18, zIndex: 50 }}>
