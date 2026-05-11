@@ -64,15 +64,17 @@ async function ensureGoogleGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
-  const { data: existing } = await admin
+  // Voorkeur: de eerste/bovenste groep van het bord — daar zien gebruikers
+  // hun nieuwe items meteen staan, ipv in een aparte 'Google Agenda' groep
+  // die je makkelijk over het hoofd ziet. Als het bord nog leeg is maken we
+  // alsnog een 'Google Agenda' groep aan zodat de sync ergens kan upserten.
+  const { data: topRows } = await admin
     .from('board_groups').select('*')
-    .eq('board_id', boardId).eq('name', 'Google Agenda').limit(1)
-  const found = (existing as GroupRow[] | null)?.[0]
-  if (found) return found.id
-
-  const { data: countRows } = await admin
-    .from('board_groups').select('position').eq('board_id', boardId)
-  const nextPos = (countRows as { position: number }[] | null ?? []).length
+    .eq('board_id', boardId)
+    .order('position', { ascending: true })
+    .limit(1)
+  const top = (topRows as GroupRow[] | null)?.[0]
+  if (top) return top.id
 
   const newId = `g_google_${boardId}_${Date.now()}`
   await admin.from('board_groups').insert({
@@ -81,7 +83,7 @@ async function ensureGoogleGroup(
     name:      'Google Agenda',
     color:     '#B0C6EB',
     collapsed: false,
-    position:  nextPos,
+    position:  0,
   })
   return newId
 }
