@@ -46,10 +46,13 @@ export function NotificationBell() {
   function toggleOpen() {
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect()
-      // Anker rechts onder de bell-knop, maar gaat nooit van het scherm af.
+      // Op smalle schermen rechts uitlijnen aan de schermrand zodat de
+      // popup nooit links afloopt. De popup is breder dan de afstand
+      // tussen bell en linker scherm-rand wanneer er andere knoppen
+      // rechts van de bell staan (zoek/menu).
       setPopPos({
         top:   Math.min(r.bottom + 6, window.innerHeight - 24),
-        right: Math.max(8, window.innerWidth - r.right),
+        right: 8,
       })
     }
     setOpen(o => !o)
@@ -63,7 +66,7 @@ export function NotificationBell() {
       const r = btnRef.current.getBoundingClientRect()
       setPopPos({
         top:   Math.min(r.bottom + 6, window.innerHeight - 24),
-        right: Math.max(8, window.innerWidth - r.right),
+        right: 8,
       })
     }
     window.addEventListener('resize', recompute)
