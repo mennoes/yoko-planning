@@ -190,6 +190,58 @@ export function subscribeRemoteBoard(boardName: string): () => void {
   return () => { supabase!.removeChannel(ch); delete channelByBoard[boardName] }
 }
 
+// ─── Move one item to another board ───────────────────────────────────────────
+// Removes the item from the source board's group and adds it to the target
+// board. Google items land in the target's "Google Agenda" group (auto-
+// created when missing); other items land in the target's first group, or
+// in a new "Verplaatst" group if the target board is empty. Both boards get
+// saved (which propagates to Supabase + dispatches yoko-board-update).
+export function moveItemToBoard(
+  itemId:        string,
+  sourceBoard:   string,
+  targetBoard:   string,
+  fallbackGroups: Record<string, BoardGroup[]>,
+): { ok: boolean; message?: string } {
+  if (sourceBoard === targetBoard) return { ok: false, message: 'Zelfde bord' }
+  if (typeof window === 'undefined') return { ok: false, message: 'No window' }
+
+  const srcGroups = loadGroups(sourceBoard, fallbackGroups[sourceBoard] ?? [])
+  const movedItem = srcGroups.flatMap(g => g.items).find(i => i.id === itemId) ?? null
+  if (!movedItem) return { ok: false, message: 'Item niet gevonden op bron-bord' }
+  const updatedSource = srcGroups.map(g => ({
+    ...g,
+    items: g.items.filter(i => i.id !== itemId),
+  }))
+
+  const tgtGroups = loadGroups(targetBoard, fallbackGroups[targetBoard] ?? [])
+  const isGoogle  = (movedItem.source as string | undefined) === 'google'
+  const preferred = isGoogle ? 'Google Agenda' : null
+  let targetIdx   = preferred
+    ? tgtGroups.findIndex(g => g.name === preferred)
+    : -1
+  if (targetIdx < 0) targetIdx = tgtGroups.length > 0 ? 0 : -1
+
+  let updatedTarget: BoardGroup[]
+  if (targetIdx >= 0) {
+    updatedTarget = tgtGroups.map((g, idx) =>
+      idx === targetIdx ? { ...g, items: [...g.items, movedItem] } : g
+    )
+  } else {
+    const newGroup: BoardGroup = {
+      id:        `g_${targetBoard}_${Date.now()}`,
+      name:      isGoogle ? 'Google Agenda' : 'Verplaatst',
+      color:     '#9aadbd',
+      collapsed: false,
+      items:     [movedItem],
+    }
+    updatedTarget = [newGroup]
+  }
+
+  saveGroups(sourceBoard, updatedSource)
+  saveGroups(targetBoard, updatedTarget)
+  return { ok: true }
+}
+
 // ─── Patch one item's dates across one board ──────────────────────────────────
 export function patchItemDates(
   boardName: string,

@@ -10,7 +10,7 @@ import pnpRaw            from '@/data/boards/pnp.json'
 import nederlandRaw      from '@/data/boards/nederland.json'
 import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
 import dienjaarRaw       from '@/data/boards/dienjaar.json'
-import { loadGroups, saveGroups, addDays, BOARD_NAMES } from '@/lib/boardStore'
+import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type TeamMember } from '@/lib/workload'
 import {
@@ -1095,6 +1095,39 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
           </div>
         </Row>
         <Row label="Status"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{project.status === 'done' ? '✅ Done' : rawItem?.status as string || '—'}</span></Row>
+        <Row label="Bord">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[project.board] ?? '#888' }} />
+              {project.board}
+            </span>
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const target = e.target.value
+                if (!target || target === project.board) return
+                const targetName = BOARD_CONFIGS[target]?.name ?? target
+                if (!confirm(`Verplaats '${project.name}' naar bord '${targetName}'?`)) {
+                  e.target.value = ''
+                  return
+                }
+                const rawItemId = project.id.slice(project.board.length + 2)
+                const res = moveItemToBoard(rawItemId, project.board, target, allGroups)
+                if (!res.ok) {
+                  alert(res.message ?? 'Verplaatsen mislukt')
+                  e.target.value = ''
+                  return
+                }
+                onClose()
+              }}
+              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <option value="">→ Verplaats naar…</option>
+              {BOARD_NAMES.filter(b => b !== project.board).map(b => (
+                <option key={b} value={b}>{BOARD_CONFIGS[b]?.name ?? b}</option>
+              ))}
+            </select>
+          </div>
+        </Row>
         <Row label="Categorie">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             {(['maken','overhead','meeting'] as const).map(c => {
