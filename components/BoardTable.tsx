@@ -6,6 +6,7 @@ import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
+import { useUndo }        from './UndoContext'
 import { GoogleBadge }    from './GoogleBadge'
 import { createNotification } from '@/lib/notificationsStore'
 
@@ -846,6 +847,7 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
   onResizeCol: (key: string, width: number) => void
 }) {
   const [dropHover, setDropHover] = useState(false)
+  const { pushUndo } = useUndo()
   // Collapsed-state komt rechtstreeks uit de group-data (gestored in
   // localStorage + Supabase via boardStore). Toggle persisteert via
   // onUpdateGroup, dus refresh onthoudt je keuze.
@@ -867,7 +869,12 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
     onUpdateGroup({ ...group, items: group.items.map(i => i.id === itemId ? { ...i, ...updates } : i) })
   }
   function deleteItem(itemId: string) {
+    const removed = group.items.find(i => i.id === itemId)
+    const idx = group.items.findIndex(i => i.id === itemId)
+    const snapshot = { ...group, items: [...group.items] }
     onUpdateGroup({ ...group, items: group.items.filter(i => i.id !== itemId) })
+    pushUndo(() => onUpdateGroup(snapshot), removed ? `'${removed.name}' verwijderd` : 'Item verwijderd')
+    void idx
   }
   function moveItem(itemId: string, dir: -1 | 1) {
     const idx = group.items.findIndex(i => i.id === itemId)
@@ -1204,6 +1211,7 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
   const storageKey = `board-col-widths-${title}`
   const onChange = (next: BoardGroup[]) => rawOnChange(autoMoveDoneItems(next))
   const { profile } = useProfile()
+  const { pushUndo } = useUndo()
   useEffect(() => { setCurrentActor(profile?.memberId ?? null) }, [profile?.memberId])
 
   function initWidths(): Record<string, number> {
@@ -1355,8 +1363,11 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
   }
   function bulkDelete() {
     if (selectedIds.size === 0) return
-    if (!confirm(`${selectedIds.size} item(s) verwijderen?`)) return
+    // Geen confirm-dialog meer — undo-toast vangt vergissingen op.
+    const snapshot = groups.map(g => ({ ...g, items: [...g.items] }))
+    const count = selectedIds.size
     onChange(groups.map(g => ({ ...g, items: g.items.filter(i => !selectedIds.has(i.id)) })))
+    pushUndo(() => onChange(snapshot), `${count} item${count === 1 ? '' : 's'} verwijderd`)
     clearSelection()
   }
   function toggleSort(key: string) {
