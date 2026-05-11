@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ProfileProvider, useProfile } from './ProfileContext'
 import { TeamPhotosProvider } from './TeamPhotosContext'
@@ -40,6 +40,46 @@ function Inner({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const mainRef = useRef<HTMLElement>(null)
+
+  // Scroll-positie onthouden per pad. Onze <main> scrolt intern, dus
+  // Next's eigen scroll-restore (die alleen documentScroll bewaakt) doet
+  // hier niets. We saven elke scroll-positie in sessionStorage en spelen
+  // hem terug bij elke pathname-change.
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
+    const key = `yoko-scroll:${pathname}`
+    const target = parseInt(sessionStorage.getItem(key) ?? '0', 10) || 0
+
+    // Restore in twee passes: meteen na het eerste frame, en nogmaals na
+    // 300ms zodat ook pagina's die data van Supabase laden (en daardoor
+    // hoger worden) alsnog op de juiste plek terechtkomen.
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    if (target > 0) {
+      requestAnimationFrame(() => { if (mainRef.current) mainRef.current.scrollTop = target })
+      retryTimer = setTimeout(() => {
+        if (mainRef.current && mainRef.current.scrollTop < target) {
+          mainRef.current.scrollTop = target
+        }
+      }, 320)
+    }
+
+    let raf: number | null = null
+    const onScroll = () => {
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        sessionStorage.setItem(key, String(el.scrollTop))
+      })
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+      if (retryTimer) clearTimeout(retryTimer)
+      sessionStorage.setItem(key, String(el.scrollTop))
+    }
+  }, [pathname])
 
   useEffect(() => {
     // Wait for the initial session check before redirecting — otherwise a hard
@@ -170,7 +210,7 @@ function Inner({ children }: { children: ReactNode }) {
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />
 
-      <main style={{
+      <main ref={mainRef} style={{
         flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,
         width: isMobile ? '100%' : undefined, position: 'relative',
       }}>
