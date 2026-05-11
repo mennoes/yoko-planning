@@ -11,6 +11,7 @@ import nederlandRaw      from '@/data/boards/nederland.json'
 import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
 import dienjaarRaw       from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@/lib/boardStore'
+import { supabase } from '@/lib/supabase'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type TeamMember } from '@/lib/workload'
 import {
@@ -635,14 +636,31 @@ function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
   return weekIdx * weekColW + (cellInWeek / 5) * weekColW
 }
 
-function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDragMove, onDragEnd, onBarClick }: {
+function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, stretchWeek, daysOff, onDragMove, onDragEnd, onBarClick }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   zoom: ZoomLevel
   hideMeetings?: boolean
+  stretchWeek?: boolean
+  daysOff?: string[]
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
 }) {
+  // 'Strek werkweek' helper: rek een korte project-bar zodat hij visueel
+  // doorloopt tot de laatste werkdag van zijn start-week. Werkt alleen op
+  // niet-meetings, alleen wanneer de echte einddatum vóór die laatste
+  // werkdag valt — een meerweken-project blijft dus z'n volle lengte.
+  function lastWorkingDayOfWeek(d: Date): Date {
+    const off = new Set([...(daysOff ?? []), 'sat', 'sun'])  // weekend altijd vrij
+    const codes = ['sun','mon','tue','wed','thu','fri','sat']
+    const dow = (d.getDay() + 6) % 7  // 0=Mon..6=Sun
+    const monday = new Date(d); monday.setDate(d.getDate() - dow); monday.setHours(0,0,0,0)
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(monday); day.setDate(monday.getDate() + i)
+      if (!off.has(codes[day.getDay()])) return day
+    }
+    return d
+  }
   const gridStart   = cols[0].rangeStart
   const gridStartMs = gridStart.getTime()
   const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
@@ -656,7 +674,14 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   const rawBars = owned.map(p => {
       const sDate = p.startDate ? new Date(p.startDate) : new Date(gridStartMs)
-      const eDate = p.endDate   ? new Date(p.endDate)   : new Date(gridEndMs - 86400000)
+      let   eDate = p.endDate   ? new Date(p.endDate)   : new Date(gridEndMs - 86400000)
+      // Stretch-werkweek: alleen voor niet-meeting projectjes, en alleen
+      // als de huidige einddatum vóór de laatste werkdag van die week valt.
+      const isMeetingForStretch = p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
+      if (stretchWeek && !isMeetingForStretch && p.startDate) {
+        const targetEnd = lastWorkingDayOfWeek(sDate)
+        if (targetEnd.getTime() > eDate.getTime()) eDate = targetEnd
+      }
       const s = sDate.getTime()
       const e = eDate.getTime() + 86400000
       if (e < gridStartMs || s > gridEndMs) return null
@@ -1493,6 +1518,32 @@ export default function PlanningPage() {
   })
   useEffect(() => { localStorage.setItem('planning-hide-meetings', hideMeetings ? '1' : '0') }, [hideMeetings])
 
+  // Optionele 'rek werkdagen' modus — een projectbar die op een werkdag start
+  // strekt zich uit tot de laatste werkdag van diezelfde week (rekening
+  // houdend met days_off per persoon). Visueel rekken, data ongewijzigd.
+  const [stretchWeek, setStretchWeek] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('planning-stretch-workweek') === '1'
+  })
+  useEffect(() => { localStorage.setItem('planning-stretch-workweek', stretchWeek ? '1' : '0') }, [stretchWeek])
+
+  // Profielen laden voor days_off zodat we per persoon weten welke dagen
+  // tellen voor de werkweek-stretch.
+  const [daysOffByMember, setDaysOffByMember] = useState<Record<string, string[]>>({})
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    supabase.from('profiles').select('member_id, days_off').then(({ data }) => {
+      if (cancelled || !data) return
+      const map: Record<string, string[]> = {}
+      for (const r of data as Array<{ member_id: string | null; days_off: string[] | null }>) {
+        if (r.member_id) map[r.member_id] = r.days_off ?? []
+      }
+      setDaysOffByMember(map)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   // Keyboard shortcuts: +/= zooms in, - zooms out (skip when typing in inputs)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1908,6 +1959,13 @@ export default function PlanningPage() {
                 title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
                 style={ghostBtn(hideMeetings)}>
                 {hideMeetings ? '👁 Meetings' : '🚫 Meetings'}
+              </button>
+              <button onClick={() => setStretchWeek(v => !v)}
+                title={stretchWeek
+                  ? 'Projecten weer op hun echte duur tonen'
+                  : 'Trek projecten visueel uit tot het einde van de werkweek (Sa/Zo en days-off uitgezonderd)'}
+                style={ghostBtn(stretchWeek)}>
+                {stretchWeek ? '↔ Werkweek' : '↔ Compact'}
               </button>
               <span style={separator} />
               <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
@@ -2394,6 +2452,7 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
+                        stretchWeek={stretchWeek} daysOff={daysOffByMember[member.id] ?? []}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)} />
                     </div>
                   </div>
