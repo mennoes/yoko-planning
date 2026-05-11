@@ -19,7 +19,8 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type ItemRow  = { id: string; group_id: string; external_id: string | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null }
+type Rule     = { pattern: string; board_id: string }
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
   const s = ev.start.date ?? ev.start.dateTime?.slice(0, 10) ?? null
@@ -39,6 +40,24 @@ function eventHours(ev: GoogleEvent): number {
     return days * 8
   }
   return 0
+}
+
+// ─── Routing helpers ─────────────────────────────────────────────────────────
+async function getRoutingRules(admin: SupabaseClient): Promise<Rule[]> {
+  const { data } = await admin
+    .from('calendar_routing_rules')
+    .select('pattern, board_id')
+    .eq('enabled', true)
+    .order('position', { ascending: true })
+  return ((data as Rule[] | null) ?? []).filter(r => r.pattern && r.board_id)
+}
+
+function routeEvent(name: string, defaultBoard: string, rules: Rule[]): string {
+  const lc = (name || '').toLowerCase()
+  for (const r of rules) {
+    if (lc.includes(r.pattern.toLowerCase())) return r.board_id
+  }
+  return defaultBoard
 }
 
 async function ensureGoogleGroup(
@@ -86,7 +105,21 @@ async function ensureFreshAccessToken(
 async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promise<{ added: number; updated: number; removed: number }> {
   if (!cal.board_id) return { added: 0, updated: 0, removed: 0 }
   const accessToken = await ensureFreshAccessToken(admin, cal)
-  const groupId     = await ensureGoogleGroup(admin, cal.board_id)
+
+  // Routing-regels (substring → board). Wordt per event toegepast; valt
+  // terug op cal.board_id wanneer geen enkele regel matcht.
+  const rules = await getRoutingRules(admin)
+
+  // Cache van Google Agenda groepen per bord — een event kan op elk bord
+  // landen, dus we creëren de groep lazy voor elk uniek bord dat we raken.
+  const groupCache = new Map<string, string>()
+  async function getGroupFor(boardId: string): Promise<string> {
+    const cached = groupCache.get(boardId)
+    if (cached) return cached
+    const gid = await ensureGoogleGroup(admin, boardId)
+    groupCache.set(boardId, gid)
+    return gid
+  }
 
   // Look up the connecting user's member_id so synced events show up in their
   // planning timeline.
@@ -100,12 +133,14 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   const timeMax = new Date(now.getTime() + WINDOW_DAYS_FUTURE * 86400000).toISOString()
   const events  = await listEvents(accessToken, cal.calendar_id, timeMin, timeMax)
 
+  // Bestaande items uit DEZE calendar — over alle boards heen (een event kan
+  // van bord verhuizen wanneer een routing-regel toegevoegd of gewijzigd is).
   const { data: existingRows } = await admin
     .from('board_items')
-    .select('id, group_id, external_id')
-    .eq('board_id',         cal.board_id)
+    .select('id, group_id, board_id, external_id')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
+    .eq('calendar_id',      cal.calendar_id)
 
   const existing = (existingRows as ItemRow[] | null) ?? []
   const byExt    = new Map(existing.map(r => [r.external_id, r.id]))
@@ -136,15 +171,18 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const ev = instances[0]
       const { start, end } = eventDates(ev)
       if (!start) continue
+      const name        = ev.summary ?? '(geen titel)'
+      const targetBoard = routeEvent(name, cal.board_id, rules)
+      const targetGroup = await getGroupFor(targetBoard)
       seenExt.add(ev.id)
       const existingId = byExt.get(ev.id)
       const id         = existingId ?? `it_g_${ev.id}_${cal.user_id.slice(0, 8)}`
       if (existingId) updated++; else added++
       upserts.push({
         id,
-        group_id:           groupId,
-        board_id:           cal.board_id,
-        name:               ev.summary ?? '(geen titel)',
+        group_id:           targetGroup,
+        board_id:           targetBoard,
+        name,
         owner_ids:          ownerIds,
         status:             '',
         start_date:         start,
@@ -163,6 +201,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         external_link:       ev.htmlLink ?? null,
         external_synced_at:  new Date().toISOString(),
         external_user_id:    cal.user_id,
+        calendar_id:         cal.calendar_id,
         updated_at:          new Date().toISOString(),
       })
       continue
@@ -177,6 +216,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // separate rows. If older syncs created per-instance rows, they'll
     // be missing from seenExt and get cleaned up below.
     seenExt.add(groupKey)
+    const baseName    = sorted[0].summary ?? '(geen titel)'
+    const targetBoard = routeEvent(baseName, cal.board_id, rules)
+    const targetGroup = await getGroupFor(targetBoard)
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
     const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0)
@@ -198,9 +240,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (existingId) updated++; else added++
     upserts.push({
       id,
-      group_id:           groupId,
-      board_id:           cal.board_id,
-      name:               (sorted[0].summary ?? '(geen titel)') + ` (${instances.length}×)`,
+      group_id:           targetGroup,
+      board_id:           targetBoard,
+      name:               baseName + ` (${instances.length}×)`,
       owner_ids:          ownerIds,
       status:             '',
       start_date:         minStart,
@@ -219,6 +261,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       external_link:       sorted[0].htmlLink ?? null,
       external_synced_at:  new Date().toISOString(),
       external_user_id:    cal.user_id,
+      calendar_id:         cal.calendar_id,
       updated_at:          new Date().toISOString(),
     })
   }
@@ -246,11 +289,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     upsertedNames.add(name)
     upsertedNames.add(name.replace(/\s*\(\d+×\)\s*$/, '').trim())
   }
+  // Dedup zoekt op ALLE boards die we via routing geraakt hebben, niet
+  // alleen het default-bord. Een UvVL-event landt nu op Vlaanderen, dus
+  // de XLSX-duplicaat staat ook dáár.
+  const boardsTouched = new Set<string>([cal.board_id])
+  for (const u of upserts) boardsTouched.add(String(u.board_id))
   if (upsertedNames.size > 0) {
     const { data: dupRows } = await admin
       .from('board_items')
       .select('id, source')
-      .eq('board_id', cal.board_id)
+      .in('board_id', Array.from(boardsTouched))
       .in('name', Array.from(upsertedNames))
     const dupIds = ((dupRows as { id: string; source: string | null }[] | null) ?? [])
       .filter(r => r.source !== 'google')
