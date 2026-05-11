@@ -12,6 +12,7 @@ import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
 import { IconMenu, IconSearch } from './Icon'
+import { NotificationBell } from './NotificationBell'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
@@ -136,7 +137,8 @@ function Inner({ children }: { children: ReactNode }) {
       )}
 
       {isMobile && !drawerOpen && (
-        <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6 }}>
+        <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <NotificationBell />
           <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
             style={{
               width: 38, height: 38, borderRadius: 9,
@@ -157,6 +159,11 @@ function Inner({ children }: { children: ReactNode }) {
             }}>
             <IconMenu size={20} />
           </button>
+        </div>
+      )}
+      {!isMobile && (
+        <div style={{ position: 'fixed', top: 14, right: 18, zIndex: 50 }}>
+          <NotificationBell />
         </div>
       )}
 
