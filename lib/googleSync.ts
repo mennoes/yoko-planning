@@ -148,8 +148,19 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // Group recurring events by their master ID so each recurring meeting
   // becomes ONE board_item with subitems for each instance. Single events
   // (no recurringEventId) stay as their own item.
+  //
+  // We negeren ook events waarvan:
+  //  - de status 'cancelled' is (afgezegd)
+  //  - de transparency 'transparent' is (in Google als "Free" gemarkeerd)
+  //  - de gebruiker zelf 'declined' heeft (afgewezen) of nog op 'needsAction' staat
+  //    en waar minstens één andere attendee al iets heeft beslist — dat is
+  //    typisch een uitnodiging die de gebruiker stil heeft genegeerd. We laten
+  //    'needsAction' wel staan als die persoon zelf de organizer is.
   const validEvents = events.filter(ev => {
     if (ev.status === 'cancelled') return false
+    if (ev.transparency === 'transparent') return false
+    const self = ev.attendees?.find(a => a.self)
+    if (self?.responseStatus === 'declined') return false
     const { start } = eventDates(ev)
     return !!start
   })
