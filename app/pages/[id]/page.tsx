@@ -12,6 +12,8 @@ import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { IconClose, IconCheck } from '@/components/Icon'
 import { createNotification } from '@/lib/notificationsStore'
 import { MentionTextarea } from '@/components/MentionTextarea'
+import { ReactionRow } from '@/components/ReactionRow'
+import { toggleReaction } from '@/lib/commentsStore'
 
 const EMOJIS = ['📄','📝','📌','🗒','💡','🔖','📋','🗂','📊','🎨','🚀','⭐']
 
@@ -432,7 +434,17 @@ export default function PageEditor() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10, maxHeight: 240, overflowY: 'auto' }}>
               {activeComment.thread.map(r => (
-                <CommentReplyView key={r.id} reply={r} getPhoto={getPhoto} />
+                <CommentReplyView key={r.id} reply={r} getPhoto={getPhoto}
+                  currentMemberId={profile?.memberId}
+                  onToggleReaction={emoji => {
+                    if (!profile?.memberId) return
+                    const updated = {
+                      ...activeComment,
+                      thread: activeComment.thread.map(x => x.id === r.id ? toggleReaction(x, emoji, profile.memberId!) : x),
+                    }
+                    saveComment(updated)
+                    setActiveComment(updated)
+                  }} />
               ))}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -485,7 +497,12 @@ export default function PageEditor() {
 }
 
 // ─── Comment reply view ───────────────────────────────────────────────────────
-function CommentReplyView({ reply, getPhoto }: { reply: CommentReply; getPhoto: (id: string) => string | null }) {
+function CommentReplyView({ reply, getPhoto, currentMemberId, onToggleReaction }: {
+  reply: CommentReply
+  getPhoto: (id: string) => string | null
+  currentMemberId?: string
+  onToggleReaction?: (emoji: string) => void
+}) {
   const photo = reply.authorId ? getPhoto(reply.authorId) : null
   const initials = reply.author.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
   const dt = new Date(reply.createdAt)
@@ -511,6 +528,9 @@ function CommentReplyView({ reply, getPhoto }: { reply: CommentReply; getPhoto: 
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {reply.body}
         </div>
+        {onToggleReaction && (
+          <ReactionRow reactions={reply.reactions} currentMemberId={currentMemberId} onToggle={onToggleReaction} />
+        )}
       </div>
     </div>
   )

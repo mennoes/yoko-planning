@@ -7,6 +7,32 @@ import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { GoogleBadge }    from './GoogleBadge'
+import { createNotification } from '@/lib/notificationsStore'
+
+// Cache van het lopende profiel zodat helpers buiten een hook ook de
+// actor-id kunnen meegeven aan een notification.
+let currentActorId: string | null = null
+function setCurrentActor(id: string | null) { currentActorId = id }
+
+// Notificeer alle owners (behalve de actor zelf) wanneer de status van
+// een item verandert. Wordt aangeroepen vanuit zowel de inline status-
+// cell als de bulk-action-bar.
+function notifyOwnersOfStatusChange(item: BoardItem, fromStatus: string, toStatus: string, boardOverride?: string) {
+  if (fromStatus === toStatus) return
+  const owners = (item.ownerIds ?? []).filter(id => id && id !== 'unassigned')
+  for (const rid of owners) {
+    if (rid === currentActorId) continue
+    createNotification({
+      recipientId: rid,
+      actorId:     currentActorId,
+      kind:        'comment',  // hergebruik 'comment' kind — frontend toont status-tekst via body
+      contextKind: 'board_item',
+      contextId:   item.id,
+      href:        boardOverride ? `/projects/${boardOverride}` : undefined,
+      body:        `Status: ${toStatus || '—'} (was ${fromStatus || '—'}) · ${item.name}`,
+    }).catch(() => {})
+  }
+}
 
 // ─── Status opties ────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -543,7 +569,10 @@ function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
   if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => onUpdate({ ownerIds: v })} />
-  if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => onUpdate({ status: v })} />
+  if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
+    onUpdate({ status: v })
+    notifyOwnersOfStatusChange(item, item.status, v)
+  }} />
   if (col.type === 'daterange') return <DateRangeCell startDate={item.startDate} endDate={item.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} />
   if (col.type === 'url')       return <UrlCell       value={(item[col.key] as string) ?? ''} onChange={v => onUpdate({ [col.key]: v })} />
 
@@ -1174,6 +1203,8 @@ type BoardTableProps = {
 export default function BoardTable({ title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const storageKey = `board-col-widths-${title}`
   const onChange = (next: BoardGroup[]) => rawOnChange(autoMoveDoneItems(next))
+  const { profile } = useProfile()
+  useEffect(() => { setCurrentActor(profile?.memberId ?? null) }, [profile?.memberId])
 
   function initWidths(): Record<string, number> {
     try {
@@ -1309,6 +1340,14 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
 
   function bulkUpdate(patch: Partial<BoardItem>) {
     if (selectedIds.size === 0) return
+    // Notificeer bij bulk-status-wijziging
+    if (patch.status !== undefined) {
+      for (const g of groups) for (const i of g.items) {
+        if (selectedIds.has(i.id) && i.status !== patch.status) {
+          notifyOwnersOfStatusChange(i, i.status, patch.status)
+        }
+      }
+    }
     onChange(groups.map(g => ({
       ...g,
       items: g.items.map(i => selectedIds.has(i.id) ? { ...i, ...patch } : i),

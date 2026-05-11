@@ -21,10 +21,11 @@ import { BOARD_COLORS } from '@/lib/workload'
 import type { BoardGroup } from '@/lib/boards'
 import {
   loadCommentsFor, saveComment, onCommentsUpdate,
-  newCommentId, type CommentThread,
+  newCommentId, toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { createNotification } from '@/lib/notificationsStore'
 import { MentionTextarea } from '@/components/MentionTextarea'
+import { ReactionRow } from '@/components/ReactionRow'
 
 type ProjectLink = { board: string; itemId: string; name: string }
 type TodoItem    = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
@@ -365,12 +366,24 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
       {!editOrder && (
         <button onClick={() => setShowComments(true)}
           title={commentCount > 0 ? `${commentCount} opmerking${commentCount === 1 ? '' : 'en'}` : 'Plaats opmerking'}
-          style={{ background: 'none', border: 'none', cursor: 'pointer',
-            color: commentCount > 0 ? 'var(--text-secondary)' : 'var(--text-muted)',
-            fontSize: 11, padding: '1px 5px', borderRadius: 6, flexShrink: 0,
+          style={commentCount > 0 ? {
+            // Met opmerkingen → felle 'pill' zodat je 'm in de lijst herkent
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 9px', borderRadius: 999,
+            background: 'var(--accent-light)',
+            border: '1px solid var(--accent)',
+            color: 'var(--text-primary)',
+            fontSize: 11.5, fontWeight: 700,
+            cursor: 'pointer', flexShrink: 0, lineHeight: 1,
+          } : {
+            // Geen opmerkingen → discrete iconen-knop alleen op hover prominent
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-muted)',
+            fontSize: 12, padding: '2px 5px', borderRadius: 6, flexShrink: 0,
             display: 'inline-flex', alignItems: 'center', gap: 3,
-            opacity: commentCount > 0 ? 1 : 0.5 }}>
-          💬{commentCount > 0 ? ` ${commentCount}` : ''}
+            opacity: 0.45,
+          }}>
+          💬{commentCount > 0 ? <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span> : ''}
         </button>
       )}
       {editOrder ? (
@@ -475,6 +488,19 @@ function TodoCommentModal({ todoId, todoText, onClose }: {
                 <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{fmtRelative(r.createdAt)}</span>
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>{r.body}</div>
+              {profile?.memberId && thread && (
+                <ReactionRow
+                  reactions={r.reactions}
+                  currentMemberId={profile.memberId}
+                  onToggle={emoji => {
+                    const updatedReply = toggleReaction(r, emoji, profile.memberId!)
+                    saveComment({
+                      ...thread,
+                      thread: thread.thread.map(x => x.id === r.id ? updatedReply : x),
+                    })
+                  }}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -506,6 +532,7 @@ function TodoCommentModal({ todoId, todoText, onClose }: {
 export default function TodosPage() {
   const { pushUndo } = useUndo()
   const isMobile     = useIsMobile()
+  const { profile: currentProfile } = useProfile()
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [editOrder, setEditOrder] = useState(false)
@@ -554,7 +581,15 @@ export default function TodosPage() {
   }
 
   const general  = sections.filter(s => !MEMBER_IDS.has(s.id))
-  const personal = sections.filter(s =>  MEMBER_IDS.has(s.id))
+  // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
+  // direct ziet zonder te scrollen.
+  const personal = sections.filter(s => MEMBER_IDS.has(s.id))
+    .sort((a, b) => {
+      const me = currentProfile?.memberId
+      if (a.id === me) return -1
+      if (b.id === me) return 1
+      return 0
+    })
 
   if (!hydrated) return null
 
