@@ -803,7 +803,7 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderM
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onDeleteGroup, onResizeCol }: {
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
@@ -812,10 +812,16 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
   onToggleSort: (key: string) => void
   reorderMode: boolean
   onUpdateGroup: (g: BoardGroup) => void
+  onMoveItemHere: (itemId: string, fromGroupId: string) => void
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
 }) {
-  const [collapsed,    setCollapsed]    = useState(group.collapsed ?? false)
+  const [dropHover, setDropHover] = useState(false)
+  // Collapsed-state komt rechtstreeks uit de group-data (gestored in
+  // localStorage + Supabase via boardStore). Toggle persisteert via
+  // onUpdateGroup, dus refresh onthoudt je keuze.
+  const collapsed = group.collapsed ?? false
+  const toggleCollapsed = () => onUpdateGroup({ ...group, collapsed: !collapsed })
   const [headerHover,  setHeaderHover]  = useState(false)
   const [editName,     setEditName]     = useState(false)
   const [nameDraft,    setNameDraft]    = useState(group.name)
@@ -884,15 +890,47 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
   const totHours = group.items.reduce((s, i) => s + effectiveHours(i), 0)
   const totDagen = Math.round((totHours / 8) * 10) / 10
 
+  // Cross-group drag-and-drop. Een item kan vanuit een andere groep hier
+  // gedropt worden — we accepteren alleen onze eigen dataTransfer type
+  // zodat externe drags (afbeeldingen e.d.) genegeerd worden.
+  function onContainerDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes('application/x-yoko-item')) return
+    e.preventDefault()
+    if (!dropHover) setDropHover(true)
+  }
+  function onContainerDragLeave(e: React.DragEvent) {
+    // alleen weghalen als we de container echt verlaten, niet bij child-overgangen
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropHover(false)
+  }
+  function onContainerDrop(e: React.DragEvent) {
+    setDropHover(false)
+    const raw = e.dataTransfer.getData('application/x-yoko-item')
+    if (!raw) return
+    try {
+      const { itemId, fromGroupId } = JSON.parse(raw) as { itemId: string; fromGroupId: string }
+      if (!itemId || !fromGroupId || fromGroupId === group.id) return
+      e.preventDefault()
+      onMoveItemHere(itemId, fromGroupId)
+    } catch {}
+  }
+
   return (
     <GroupCtx.Provider value={{ color: group.color }}>
-      <div style={{ marginBottom: 20 }}>
+      <div style={{
+        marginBottom: 20, borderRadius: 8,
+        outline: dropHover ? `2px dashed ${group.color}` : '2px dashed transparent',
+        outlineOffset: -2,
+        transition: 'outline-color 0.12s',
+      }}
+        onDragOver={onContainerDragOver}
+        onDragLeave={onContainerDragLeave}
+        onDrop={onContainerDrop}>
 
         {/* Groep header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderLeft: `4px solid ${group.color}`, background: 'var(--overlay-subtle)' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
 
-          <button onClick={() => setCollapsed(c => !c)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+          <button onClick={toggleCollapsed} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
             {collapsed ? '▶' : '▼'}
           </button>
 
@@ -1030,8 +1068,17 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
               const realIdx = group.items.findIndex(i => i.id === item.id)
               return (
               <div key={item.id} draggable={!sortBy && !reorderMode}
-                onDragStart={e => { dragRowRef.current = realIdx; e.dataTransfer.effectAllowed = 'move' }}
+                onDragStart={e => {
+                  dragRowRef.current = realIdx
+                  e.dataTransfer.effectAllowed = 'move'
+                  // Geef ook expliciet door welke groep + item we slepen,
+                  // zodat een andere BoardGroupSection het in de drop kan oppakken.
+                  e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({ itemId: item.id, fromGroupId: group.id }))
+                }}
                 onDragOver={e => {
+                  // Cross-group: laat de container het afhandelen
+                  const raw = e.dataTransfer.types.includes('application/x-yoko-item')
+                  if (raw && dragRowRef.current === null) return
                   e.preventDefault()
                   if (dragRowRef.current === null || dragRowRef.current === realIdx) return
                   const next = [...group.items]
@@ -1176,6 +1223,20 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
     groups.forEach(g => g.items.forEach(i => i.ownerIds.forEach(id => ids.add(id))))
     return Array.from(ids)
   }, [groups])
+
+  // Sleep een item van de ene groep naar de andere. Aangeroepen vanuit de
+  // drop-handler op de doel-groep zodra een item er overheen wordt gelaten.
+  function moveItemBetweenGroups(itemId: string, fromGroupId: string, toGroupId: string) {
+    if (fromGroupId === toGroupId) return
+    const fromGroup = groups.find(g => g.id === fromGroupId)
+    const item = fromGroup?.items.find(i => i.id === itemId)
+    if (!item) return
+    onChange(groups.map(g => {
+      if (g.id === fromGroupId) return { ...g, items: g.items.filter(i => i.id !== itemId) }
+      if (g.id === toGroupId)   return { ...g, items: [...g.items, item] }
+      return g
+    }))
+  }
 
   function handleUpdateGroup(updatedGroup: BoardGroup) {
     if (!hasFilter) {
@@ -1417,6 +1478,7 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
             sortBy={sortBy} onToggleSort={toggleSort}
             reorderMode={reorderMode}
             onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
+            onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
             onDeleteGroup={() => handleDeleteGroup(group.id)} />
         ))}
         {filteredGroups.length === 0 && (
