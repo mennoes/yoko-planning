@@ -4,6 +4,8 @@ export type CommentReply = {
   authorId?: string
   body:      string
   createdAt: string
+  // emoji → list of member_ids die dat icoontje hebben aangeklikt
+  reactions?: Record<string, string[]>
 }
 
 export type CommentThread = {
@@ -13,6 +15,19 @@ export type CommentThread = {
   thread:    CommentReply[]
   resolved:  boolean
   createdAt: string
+}
+
+// Vaste set 'quick reactions'; matches Linear/Notion/Slack-vibe.
+export const QUICK_REACTIONS = ['👍', '❤️', '🎉', '🤔', '👀'] as const
+
+export function toggleReaction(reply: CommentReply, emoji: string, memberId: string): CommentReply {
+  const reactions = { ...(reply.reactions ?? {}) }
+  const arr = new Set(reactions[emoji] ?? [])
+  if (arr.has(memberId)) arr.delete(memberId)
+  else                   arr.add(memberId)
+  if (arr.size === 0) delete reactions[emoji]
+  else                reactions[emoji] = [...arr]
+  return { ...reply, reactions }
 }
 
 const KEY        = 'yoko-comments'
