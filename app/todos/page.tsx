@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile } from '@/components/ProfileContext'
 import { useMemberPopup } from '@/components/MemberPopup'
@@ -9,12 +11,51 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { IconCheckList } from '@/components/Icon'
 import initialData from '@/data/todos.json'
 import teamData    from '@/data/team.json'
+import yokoRaw       from '@/data/boards/yoko.json'
+import pnpRaw        from '@/data/boards/pnp.json'
+import nederlandRaw  from '@/data/boards/nederland.json'
+import vlaanderenRaw from '@/data/boards/vlaanderen.json'
+import dienjaarRaw   from '@/data/boards/dienjaar.json'
+import { loadGroups } from '@/lib/boardStore'
+import { BOARD_COLORS } from '@/lib/workload'
+import type { BoardGroup } from '@/lib/boards'
+import {
+  loadCommentsFor, saveComment, onCommentsUpdate,
+  newCommentId, type CommentThread,
+} from '@/lib/commentsStore'
 
-type TodoItem = { id: string; text: string; done: boolean }
-type Section  = { id: string; title: string; emoji: string; items: TodoItem[] }
+type ProjectLink = { board: string; itemId: string; name: string }
+type TodoItem    = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
+type Section     = { id: string; title: string; emoji: string; items: TodoItem[] }
+
+const RAW: Record<string, { groups: unknown[] }> = {
+  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
+  vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
+}
 
 const STORAGE_KEY = 'yoko-todos'
 const MEMBER_IDS  = new Set(teamData.members.map(m => m.id))
+
+function loadAllProjects(): ProjectLink[] {
+  if (typeof window === 'undefined') return []
+  const out: ProjectLink[] = []
+  for (const [board, raw] of Object.entries(RAW)) {
+    const groups = loadGroups(board, raw.groups as BoardGroup[])
+    for (const g of groups) for (const item of g.items) {
+      if (!item.name) continue
+      out.push({ board, itemId: item.id, name: item.name })
+    }
+  }
+  return out
+}
+
+function fmtRelative(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (diff < 1)    return 'zojuist'
+  if (diff < 60)   return `${diff}m geleden`
+  if (diff < 1440) return `${Math.floor(diff / 60)}u geleden`
+  return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+}
 
 function loadSections(): Section[] {
   if (typeof window === 'undefined') return initialData.sections as Section[]
@@ -72,12 +113,13 @@ function reorderArrowBtn(disabled: boolean): React.CSSProperties {
 
 // ─── Todo card ─────────────────────────────────────────────────────────────────
 function TodoCard({
-  section, isMember, onUpdate,
+  section, isMember, onUpdate, allProjects,
   editOrder, isFirstCard, isLastCard, onMoveCard,
 }: {
   section: Section
   isMember: boolean
   onUpdate: (s: Section, prev?: Section) => void
+  allProjects: ProjectLink[]
   editOrder: boolean
   isFirstCard: boolean
   isLastCard: boolean
@@ -86,7 +128,18 @@ function TodoCard({
   const [newText, setNewText] = useState('')
   const [editId,  setEditId]  = useState<string | null>(null)
   const [editTxt, setEditTxt] = useState('')
+  const [pickerIdx, setPickerIdx] = useState(0)
   const member = teamData.members.find(m => m.id === section.id)
+
+  // Slash-picker: when the user types "/", the input becomes a project search.
+  // The text after the slash filters the list. Selecting a project adds a
+  // todo that's linked to it (visible as a chip on the row).
+  const isSearchMode  = newText.startsWith('/')
+  const searchTerm    = isSearchMode ? newText.slice(1).trim().toLowerCase() : ''
+  const matches       = isSearchMode
+    ? allProjects.filter(p => !searchTerm || p.name.toLowerCase().includes(searchTerm)).slice(0, 8)
+    : []
+  useEffect(() => { setPickerIdx(0) }, [newText])
 
   function moveItem(idx: number, dir: -1 | 1) {
     const next = idx + dir
@@ -104,6 +157,14 @@ function TodoCard({
     if (!newText.trim()) return
     const prev = { ...section, items: [...section.items] }
     onUpdate({ ...section, items: [...section.items, { id: Date.now().toString(), text: newText.trim(), done: false }] }, prev)
+    setNewText('')
+  }
+  function addLinked(p: ProjectLink) {
+    const prev = { ...section, items: [...section.items] }
+    onUpdate({ ...section, items: [...section.items, {
+      id: Date.now().toString(), text: p.name, done: false,
+      projectRef: { board: p.board, itemId: p.itemId, name: p.name },
+    }]}, prev)
     setNewText('')
   }
   function remove(id: string) {
@@ -187,17 +248,54 @@ function TodoCard({
         </details>
       )}
 
-      {/* Add */}
-      <div style={{ padding: '6px 16px 12px' }}>
+      {/* Add — type "/" to pick an existing project from any agenda */}
+      <div style={{ padding: '6px 16px 12px', position: 'relative' }}>
         <input
           value={newText}
           onChange={e => setNewText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && add()}
-          placeholder="+ Voeg toe..."
+          onKeyDown={e => {
+            if (isSearchMode) {
+              if (e.key === 'Enter')      { const p = matches[pickerIdx]; if (p) addLinked(p) }
+              else if (e.key === 'ArrowDown') { e.preventDefault(); setPickerIdx(i => Math.min(matches.length - 1, i + 1)) }
+              else if (e.key === 'ArrowUp')   { e.preventDefault(); setPickerIdx(i => Math.max(0, i - 1)) }
+              else if (e.key === 'Escape')    setNewText('')
+            } else if (e.key === 'Enter') {
+              add()
+            }
+          }}
+          placeholder="+ Voeg toe of typ / om een project te koppelen"
           style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid transparent', color: 'var(--text-muted)', fontSize: 14.3, padding: '4px 0', outline: 'none', boxSizing: 'border-box' }}
           onFocus={e => { e.currentTarget.style.borderBottomColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
           onBlur={e => { e.currentTarget.style.borderBottomColor = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
         />
+        {isSearchMode && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 12, right: 12, zIndex: 50,
+            marginTop: 4,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
+            maxHeight: 280, overflowY: 'auto', padding: 4,
+          }}>
+            {matches.length === 0 ? (
+              <div style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen matches</div>
+            ) : matches.map((p, i) => (
+              <button key={`${p.board}__${p.itemId}`}
+                onMouseDown={e => { e.preventDefault(); addLinked(p) }}
+                onMouseEnter={() => setPickerIdx(i)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 10px', borderRadius: 5, textAlign: 'left',
+                  background: i === pickerIdx ? 'var(--bg-hover)' : 'transparent',
+                  border: 'none', cursor: 'pointer', fontSize: 13,
+                  color: 'var(--text-primary)',
+                }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[p.board] ?? '#888', flexShrink: 0 }} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>{p.board}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -215,6 +313,19 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
 }) {
   const member = teamData.members.find(m => m.id === memberId)
   const color  = member?.color ?? 'var(--accent)'
+
+  // Comment count badge — refreshes when the threads change.
+  const [commentCount, setCommentCount] = useState(0)
+  const [showComments, setShowComments] = useState(false)
+  useEffect(() => {
+    const refresh = () => {
+      const threads = loadCommentsFor('todo:' + item.id)
+      setCommentCount(threads.reduce((s, t) => s + t.thread.length, 0))
+    }
+    refresh()
+    return onCommentsUpdate(refresh)
+  }, [item.id])
+
   return (
     <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 14px', position: 'relative' }}
       onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '1' }}
@@ -223,18 +334,43 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
       <button onClick={onToggle} style={{ width: 16, height: 16, minWidth: 16, borderRadius: 4, border: item.done ? 'none' : '2px solid var(--border)', background: item.done ? color : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 2, padding: 0, flexShrink: 0 }}>
         {item.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
       </button>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {editing ? (
           <input autoFocus value={editTxt} onChange={e => onEditChange(e.target.value)}
             onBlur={onEditSave}
             onKeyDown={e => { if (e.key === 'Enter') onEditSave(); if (e.key === 'Escape') onEditCancel() }}
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 14.85, outline: 'none' }} />
         ) : (
-          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 14.85, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', display: 'block', lineHeight: 1.4 }}>
+          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 14.85, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0 }}>
             {item.text}
           </span>
         )}
+        {item.projectRef && (
+          <Link href={`/projects/${item.projectRef.board}`}
+            title={`Open ${item.projectRef.board}-agenda`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '1px 7px', borderRadius: 10,
+              background: (BOARD_COLORS[item.projectRef.board] ?? '#888') + '22',
+              border: `1px solid ${BOARD_COLORS[item.projectRef.board] ?? '#888'}55`,
+              fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)',
+              textTransform: 'uppercase', letterSpacing: '0.04em',
+              textDecoration: 'none', flexShrink: 0 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 2, background: BOARD_COLORS[item.projectRef.board] ?? '#888' }} />
+            {item.projectRef.board}
+          </Link>
+        )}
       </div>
+      {!editOrder && (
+        <button onClick={() => setShowComments(true)}
+          title={commentCount > 0 ? `${commentCount} opmerking${commentCount === 1 ? '' : 'en'}` : 'Plaats opmerking'}
+          style={{ background: 'none', border: 'none', cursor: 'pointer',
+            color: commentCount > 0 ? 'var(--text-secondary)' : 'var(--text-muted)',
+            fontSize: 11, padding: '1px 5px', borderRadius: 6, flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            opacity: commentCount > 0 ? 1 : 0.5 }}>
+          💬{commentCount > 0 ? ` ${commentCount}` : ''}
+        </button>
+      )}
       {editOrder ? (
         <>
           <button onClick={onMoveUp} disabled={isFirstItem} title="Omhoog" style={reorderArrowBtn(isFirstItem)}>↑</button>
@@ -243,7 +379,106 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
       ) : (
         <button className="del-btn" onClick={onRemove} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px', opacity: 0, flexShrink: 0 }}>×</button>
       )}
+      {showComments && <TodoCommentModal todoId={item.id} todoText={item.text} onClose={() => setShowComments(false)} />}
     </li>
+  )
+}
+
+// ─── Comment thread modal ─────────────────────────────────────────────────────
+function TodoCommentModal({ todoId, todoText, onClose }: {
+  todoId: string; todoText: string; onClose: () => void
+}) {
+  const { profile } = useProfile()
+  const [threads, setThreads] = useState<CommentThread[]>([])
+  const [newReply, setNewReply] = useState('')
+
+  useEffect(() => {
+    const refresh = () => setThreads(loadCommentsFor('todo:' + todoId))
+    refresh()
+    return onCommentsUpdate(refresh)
+  }, [todoId])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const thread = threads[0]
+  const replies = thread?.thread ?? []
+
+  function addReply() {
+    const body = newReply.trim()
+    if (!body) return
+    const reply = {
+      id:        newCommentId(),
+      author:    profile?.name ?? 'Iemand',
+      authorId:  profile?.memberId,
+      body,
+      createdAt: new Date().toISOString(),
+    }
+    if (thread) {
+      saveComment({ ...thread, thread: [...thread.thread, reply] })
+    } else {
+      saveComment({
+        id:        newCommentId(),
+        contextId: 'todo:' + todoId,
+        quote:     todoText,
+        thread:    [reply],
+        resolved:  false,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    setNewReply('')
+  }
+
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, backdropFilter: 'blur(4px)' }} />
+      <div onClick={e => e.stopPropagation()} style={{
+        position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+        width: 'min(440px, 92vw)', maxHeight: '80vh', zIndex: 9001,
+        background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+      }}>
+        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Opmerkingen</div>
+          <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.3 }}>{todoText}</div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
+          {replies.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '8px 0' }}>Nog geen opmerkingen.</p>
+          ) : replies.map(r => (
+            <div key={r.id} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                <strong style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>{r.author}</strong>
+                <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{fmtRelative(r.createdAt)}</span>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>{r.body}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '10px 16px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6 }}>
+          <textarea value={newReply}
+            onChange={e => setNewReply(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addReply() }}
+            placeholder="Schrijf een opmerking…  (Cmd+Enter om te plaatsen)"
+            rows={2}
+            style={{ flex: 1, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+          <button onClick={addReply} disabled={!newReply.trim()}
+            style={{ padding: '8px 14px', borderRadius: 6, border: 'none',
+              background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+              color: newReply.trim() ? '#000' : 'var(--text-muted)',
+              fontSize: 12.5, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed',
+              alignSelf: 'flex-end' }}>
+            Plaats
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body,
   )
 }
 
@@ -254,10 +489,15 @@ export default function TodosPage() {
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [editOrder, setEditOrder] = useState(false)
+  const [allProjects, setAllProjects] = useState<ProjectLink[]>([])
 
   useEffect(() => {
     setSections(loadSections())
+    setAllProjects(loadAllProjects())
     setHydrated(true)
+    const onBoardUpdate = () => setAllProjects(loadAllProjects())
+    window.addEventListener('yoko-board-update', onBoardUpdate)
+    return () => window.removeEventListener('yoko-board-update', onBoardUpdate)
   }, [])
 
   function updateSection(updated: Section, prev?: Section) {
@@ -318,6 +558,7 @@ export default function TodosPage() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start', marginBottom: 28 }}>
         {general.map((s, i) => (
           <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
+            allProjects={allProjects}
             editOrder={editOrder}
             isFirstCard={i === 0}
             isLastCard={i === general.length - 1}
@@ -338,6 +579,7 @@ export default function TodosPage() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start' }}>
         {personal.map((s, i) => (
           <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
+            allProjects={allProjects}
             editOrder={editOrder}
             isFirstCard={i === 0}
             isLastCard={i === personal.length - 1}
