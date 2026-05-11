@@ -847,13 +847,11 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ maxWidth: 1160, padding: isMobile ? '20px 16px 60px' : '48px 40px 100px' }}>
+    <div style={{ maxWidth: 1160, padding: isMobile ? '60px 16px 60px' : '48px 40px 100px' }}>
 
       {/* ── Greeting ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18,
-        marginBottom: showSummary ? (isMobile ? 14 : 22) : (isMobile ? 18 : 40),
-        paddingLeft:  isMobile ? 48 : 0,
-        paddingRight: isMobile ? 96 : 0 }}>
+        marginBottom: showSummary ? (isMobile ? 14 : 22) : (isMobile ? 18 : 40) }}>
         {memberId && (
           <UserAvatar memberId={memberId} size={isMobile ? 48 : 60}
             onClick={e => showMember(memberId, e)} />
