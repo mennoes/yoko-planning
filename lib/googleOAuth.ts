@@ -13,7 +13,7 @@ const STATE_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? 'dev-fallback-secret'
 
 export type GoogleEvent = {
   id:                 string
-  status?:            string                       // 'confirmed' | 'cancelled'
+  status?:            string                       // 'confirmed' | 'tentative' | 'cancelled'
   summary?:           string
   description?:       string
   htmlLink?:          string
@@ -21,6 +21,12 @@ export type GoogleEvent = {
   end:                { dateTime?: string; date?: string; timeZone?: string }
   updated?:           string
   recurringEventId?:  string                       // master ID for recurring instances
+  transparency?:      'opaque' | 'transparent'     // 'transparent' = "Free" (doesn't take time)
+  attendees?: Array<{
+    email?:          string
+    self?:           boolean
+    responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted'
+  }>
 }
 
 export type CalendarSummary = {
