@@ -918,11 +918,12 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
-function DetailPanel({ project, allGroups, onClose, onUpdate }: {
+function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
   onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }>) => void
+  onDuplicate?: () => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const team    = teamData.members
@@ -1373,6 +1374,12 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
       </div>}
       <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button onClick={onClose} style={cancelBtn}>Sluiten</button>
+        {!isMerged && onDuplicate && (
+          <button onClick={onDuplicate} title="Dupliceer dit item naar dezelfde groep"
+            style={{ ...cancelBtn, color: 'var(--text-secondary)' }}>
+            ⎘ Dupliceer
+          </button>
+        )}
         {!isGoogle && !isMerged && (
           <button onClick={save} style={{ ...cancelBtn, background: color, color: '#000', border: 'none', fontWeight: 800 }}>Opslaan</button>
         )}
@@ -1856,6 +1863,37 @@ export default function PlanningPage() {
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     logActivity('Project opgeslagen', project.name)
     setDetailProject(null)
+  }
+
+  function handleDetailDuplicate(project: Project) {
+    const boardName = project.board
+    const origItemId = project.id.slice(boardName.length + 2)
+    const groupsBefore = allGroups[boardName] ?? []
+    const newCloneId = 'd-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6)
+    let cloneName = project.name
+    const groupsAfter = groupsBefore.map(g => {
+      const idx = g.items.findIndex(i => i.id === origItemId)
+      if (idx < 0) return g
+      const orig = g.items[idx]
+      // Stripeen google/external markers — een clone is een nieuw, lokaal item.
+      const clone: BoardItem = {
+        ...orig,
+        id:           newCloneId,
+        name:         orig.name + ' (kopie)',
+        source:       undefined,
+        externalLink: undefined,
+      }
+      cloneName = clone.name
+      return { ...g, items: [...g.items.slice(0, idx + 1), clone, ...g.items.slice(idx + 1)] }
+    })
+    saveGroups(boardName, groupsAfter)
+    setAllGroups(prev => ({ ...prev, [boardName]: groupsAfter }))
+    logActivity('Project gedupliceerd', cloneName)
+    setDetailProject(null)
+    pushUndo(() => {
+      saveGroups(boardName, groupsBefore)
+      setAllGroups(prev => ({ ...prev, [boardName]: groupsBefore }))
+    }, `'${cloneName}' gedupliceerd`)
   }
 
   const nameW       = isMobile ? 130 : NAME_W
@@ -2556,7 +2594,8 @@ export default function PlanningPage() {
 
       {detailProject && (
         <DetailPanel project={detailProject} allGroups={allGroups}
-          onClose={() => setDetailProject(null)} onUpdate={handleDetailUpdate} />
+          onClose={() => setDetailProject(null)} onUpdate={handleDetailUpdate}
+          onDuplicate={() => handleDetailDuplicate(detailProject)} />
       )}
 
       {newItemOpen && (
