@@ -2001,12 +2001,11 @@ export default function PlanningPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
       {/* ── Fixed header (never scrolls) ── */}
-      <header style={{ flexShrink: 0, padding: isMobile ? '14px 14px 0' : '24px 32px 0' }}>
+      <header style={{ flexShrink: 0, padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
 
         {/* Title + nav */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 10 : 16 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 12 : 24, flex: 1,
-            paddingLeft: isMobile ? 48 : 0, paddingRight: isMobile ? 96 : 0 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 12 : 24, flex: 1 }}>
             <div style={{ minWidth: 0 }}>
               <h1 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
                 Planning
