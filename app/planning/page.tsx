@@ -23,6 +23,7 @@ import {
 import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange } from '@/lib/popoverState'
 import { createNotification } from '@/lib/notificationsStore'
 import { MentionTextarea } from '@/components/MentionTextarea'
+import { ReactionRow } from '@/components/ReactionRow'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useIsMobile }   from '@/lib/useIsMobile'
@@ -1320,6 +1321,24 @@ function DetailPanel({ project, allGroups, onClose, onUpdate }: {
                     {d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} · {d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e.text}</div>
+                  {profile?.memberId && (
+                    <ReactionRow
+                      reactions={e.reactions}
+                      currentMemberId={profile.memberId}
+                      onToggle={emoji => {
+                        const me = profile.memberId!
+                        setJournal(j => j.map(x => {
+                          if (x.id !== e.id) return x
+                          const reactions = { ...(x.reactions ?? {}) }
+                          const set = new Set(reactions[emoji] ?? [])
+                          if (set.has(me)) set.delete(me); else set.add(me)
+                          if (set.size === 0) delete reactions[emoji]
+                          else                reactions[emoji] = [...set]
+                          return { ...x, reactions }
+                        }))
+                      }}
+                    />
+                  )}
                   <button onClick={() => deleteEntry(e.id)}
                     style={{ position: 'absolute', top: 2, right: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', padding: '2px 4px' }}
                     onMouseEnter={ev => (ev.currentTarget.style.color = '#e2445c')}
