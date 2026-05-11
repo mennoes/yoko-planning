@@ -23,6 +23,7 @@ export type JournalEntry = {
   ts:        string  // ISO datetime
   text:      string
   authorId?: string
+  reactions?: Record<string, string[]>   // emoji → member_id[]
 }
 
 export type BoardItem = {

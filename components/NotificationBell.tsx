@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import { useProfile } from './ProfileContext'
 import { useTeamPhotos } from './TeamPhotosContext'
+import { IconBell } from './Icon'
 import teamData from '@/data/team.json'
 import {
   loadNotifications, markAllRead, markRead, onNotificationsChange,
@@ -111,21 +112,23 @@ export function NotificationBell() {
       <button ref={btnRef} onClick={toggleOpen} aria-label="Meldingen"
         title={unread > 0 ? `${unread} ongelezen meldingen` : 'Geen nieuwe meldingen'}
         style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          padding: '6px 8px', borderRadius: 8, position: 'relative',
-          fontSize: 16, color: 'var(--text-secondary)',
+          background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+          cursor: 'pointer',
+          width: 38, height: 38, borderRadius: 9, position: 'relative',
+          color: unread > 0 ? 'var(--accent)' : 'var(--text-secondary)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
         }}
         onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-        🔔
+        onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-card)')}>
+        <IconBell size={18} strokeWidth={1.7} />
         {unread > 0 && (
           <span style={{
-            position: 'absolute', top: 2, right: 0,
+            position: 'absolute', top: -3, right: -3,
             minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8,
             background: '#e2445c', color: '#fff', fontSize: 10, fontWeight: 700,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            lineHeight: 1,
+            lineHeight: 1, border: '2px solid var(--bg-base)',
           }}>
             {unread > 99 ? '99+' : unread}
           </span>
