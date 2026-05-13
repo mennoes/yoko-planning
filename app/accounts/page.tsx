@@ -73,18 +73,18 @@ export default function AccountsPage() {
   }
 
   const columns: { key: keyof Account; label: string; width?: number }[] = [
-    { key: 'account', label: 'Account', width: 200 },
-    { key: 'url', label: 'URL', width: 160 },
-    { key: 'username', label: 'Username', width: 210 },
-    { key: 'password', label: 'Password', width: 220 },
-    { key: 'licensedBy', label: 'License van', width: 120 },
+    { key: 'account', label: 'Account', width: 260 },
+    { key: 'url', label: 'URL', width: 200 },
+    { key: 'username', label: 'Username', width: 270 },
+    { key: 'password', label: 'Password', width: 280 },
+    { key: 'licensedBy', label: 'License van', width: 150 },
   ]
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 32px' }}>
-        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 28px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <IconKey size={28} />Accounts
+      <div style={{ maxWidth: 1400, padding: '48px 36px' }}>
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 28px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconKey size={32} />Accounts
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Laden…</p>
       </div>
@@ -93,9 +93,9 @@ export default function AccountsPage() {
 
   if (authBlocked) {
     return (
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 32px' }}>
-        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 28px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <IconKey size={28} />Accounts
+      <div style={{ maxWidth: 1400, padding: '48px 36px' }}>
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 28px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconKey size={32} />Accounts
         </h1>
         <div style={{ padding: '32px 28px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
           <p style={{ margin: 0 }}>
@@ -108,10 +108,10 @@ export default function AccountsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 32px' }}>
+    <div style={{ maxWidth: 1400, padding: '48px 36px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <IconKey size={28} />Accounts
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconKey size={32} />Accounts
         </h1>
         <button
           onClick={() => setShowPasswords(!showPasswords)}
@@ -151,9 +151,9 @@ export default function AccountsPage() {
             <div
               key={col.key}
               style={{
-                padding: '10px 14px',
-                fontSize: 12,
-                fontWeight: 600,
+                padding: '14px 18px',
+                fontSize: 13,
+                fontWeight: 700,
                 color: 'var(--text-muted)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -190,7 +190,7 @@ export default function AccountsPage() {
               return (
                 <div
                   key={col.key}
-                  style={{ padding: '9px 14px', display: 'flex', alignItems: 'center' }}
+                  style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', minHeight: 52 }}
                   onDoubleClick={() => startEdit(account, col.key)}
                 >
                   {isEditing ? (
@@ -210,7 +210,7 @@ export default function AccountsPage() {
                         borderRadius: 4,
                         padding: '3px 7px',
                         color: 'var(--text-primary)',
-                        fontSize: 13.5,
+                        fontSize: 15,
                         outline: 'none',
                       }}
                     />
@@ -221,7 +221,7 @@ export default function AccountsPage() {
                       rel="noopener noreferrer"
                       style={{
                         color: 'var(--blue)',
-                        fontSize: 13.5,
+                        fontSize: 15,
                         textDecoration: 'none',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -234,7 +234,7 @@ export default function AccountsPage() {
                   ) : col.key === 'password' && value ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
                       <span style={{
-                        fontSize: 13.5, color: 'var(--text-secondary)',
+                        fontSize: 15, color: 'var(--text-secondary)',
                         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
                       }}>
@@ -257,7 +257,7 @@ export default function AccountsPage() {
                   ) : (
                     <span
                       style={{
-                        fontSize: 13.5,
+                        fontSize: 15,
                         color: col.key === 'account' ? 'var(--text-primary)' : 'var(--text-secondary)',
                         fontWeight: col.key === 'account' ? 500 : 400,
                         overflow: 'hidden',

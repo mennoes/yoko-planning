@@ -212,7 +212,7 @@ function TodoCard({
         ) : (
           <span style={{ fontSize: 17 }}>{section.emoji}</span>
         )}
-        <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.01em' }}>
           {section.title}
         </h2>
         {editOrder ? (
@@ -362,9 +362,9 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
           <input autoFocus value={editTxt} onChange={e => onEditChange(e.target.value)}
             onBlur={onEditSave}
             onKeyDown={e => { if (e.key === 'Enter') onEditSave(); if (e.key === 'Escape') onEditCancel() }}
-            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 14.85, outline: 'none' }} />
+            style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 16, outline: 'none' }} />
         ) : (
-          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 14.85, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0 }}>
+          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 16, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0 }}>
             <TextWithItemRefs text={item.text} compact />
           </span>
         )}
@@ -636,7 +636,7 @@ export default function TodosPage() {
   if (!hydrated) return null
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '60px 16px 60px' : '44px 36px 80px' }}>
+    <div style={{ maxWidth: 1400, padding: isMobile ? '60px 16px 60px' : '44px 36px 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 20 : 32 }}>
         <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
           <IconCheckList size={isMobile ? 22 : 28} />
