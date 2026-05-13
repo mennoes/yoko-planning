@@ -3,6 +3,18 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
+import teamData from '@/data/team.json'
+
+// Map @studioyoko.nl emails → member-id, opgebouwd uit team.json. Bij
+// shared meetings (Teamdag, weekstart, etc.) trekken we hieruit alle
+// Yoko-deelnemers als mede-eigenaar van het item.
+const EMAIL_TO_MEMBER: Record<string, string> = (() => {
+  const out: Record<string, string> = {}
+  for (const m of teamData.members as Array<{ id: string; email?: string }>) {
+    if (m.email) out[m.email.toLowerCase()] = m.id
+  }
+  return out
+})()
 
 const WINDOW_DAYS_FUTURE = 56  // ~8 weeks ahead
 const WINDOW_DAYS_PAST   = 14  // 2 weeks back
@@ -141,6 +153,30 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
   const ownerIds = memberId ? [memberId] : []
 
+  // Voor een event: alle Yoko-deelnemers die niet hebben afgezegd worden
+  // mede-eigenaar. Valt terug op de calendar-owner als er geen attendees
+  // zijn (bv. private events). Per-persoon-uren = de eventduur (iedereen
+  // is de hele meeting aanwezig); totaal-est-hours = duur × N personen
+  // zodat de planning-werkbelasting de werkelijke groepsuren toont.
+  function ownersForEvent(ev: GoogleEvent): { owners: string[]; perPerson: number; total: number } {
+    const dur = eventHours(ev)
+    const ats = ev.attendees ?? []
+    const yokos = new Set<string>()
+    for (const a of ats) {
+      const email = a.email?.toLowerCase()
+      if (!email) continue
+      if (a.responseStatus === 'declined') continue
+      const id = EMAIL_TO_MEMBER[email]
+      if (id) yokos.add(id)
+    }
+    // De calendar-owner zélf staat soms niet in de attendees-lijst (single-
+    // person events) — toch meenemen.
+    if (memberId) yokos.add(memberId)
+    const owners = [...yokos]
+    if (owners.length === 0) return { owners: ownerIds, perPerson: dur, total: dur }
+    return { owners, perPerson: dur, total: dur * owners.length }
+  }
+
   const now     = new Date()
   const timeMin = new Date(now.getTime() - WINDOW_DAYS_PAST   * 86400000).toISOString()
   const timeMax = new Date(now.getTime() + WINDOW_DAYS_FUTURE * 86400000).toISOString()
@@ -211,25 +247,31 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // weer terugsturen naar de target-groep volgens de route-regels.
       const keepBoard = existingRow?.board_id ?? targetBoard
       const keepGroup = existingRow?.group_id ?? targetGroup
+      const eventOwners = ownersForEvent(ev)
+      const finalOwners = (existingRow?.owner_ids && existingRow.owner_ids.length > 0)
+        ? existingRow.owner_ids
+        : eventOwners.owners
+      // per-persoon uren in ownerHours, totaal in est_hours zodat
+      // workload-berekeningen per persoon kloppen.
+      const ownerHoursMap: Record<string, number> = {}
+      for (const oid of finalOwners) ownerHoursMap[oid] = eventOwners.perPerson
       upserts.push({
         id,
         group_id:           keepGroup,
         board_id:           keepBoard,
         name,
-        // owner_ids/status/journal blijven van de gebruiker — overschrijven
-        // wordt gedaan vóórdat-ie z'n Done-markering kon bewaren.
-        owner_ids:          (existingRow?.owner_ids && existingRow.owner_ids.length > 0) ? existingRow.owner_ids : ownerIds,
+        owner_ids:          finalOwners,
         status:             existingRow?.status ?? '',
         start_date:         start,
         end_date:           end ?? start,
         deadline:           null,
-        est_hours:          eventHours(ev),
+        est_hours:          eventOwners.perPerson * finalOwners.length,
         dagen:              0,
         notes:              ev.description ?? null,
         contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
         subitems:           [],
         journal:            existingRow?.journal ?? [],
-        extra:              {},
+        extra:              { ownerHours: ownerHoursMap },
         position:            0,
         source:              'google',
         external_id:         ev.id,
@@ -256,22 +298,31 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const targetGroup = await getGroupFor(targetBoard)
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
-    const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0)
+    // Voor recurring nemen we de owners van de meeste recente instantie —
+    // attendee-lijsten zijn meestal hetzelfde over alle herhalingen.
+    const groupOwners = ownersForEvent(sorted[sorted.length - 1])
+    const existingId  = byExt.get(groupKey)
+    const existingRow = byExtFull.get(groupKey)
+    const finalOwners = (existingRow?.owner_ids && existingRow.owner_ids.length > 0)
+      ? existingRow.owner_ids
+      : groupOwners.owners
+    const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0) * finalOwners.length
+    const ownerHoursMap: Record<string, number> = {}
+    const perPersonTotal = sorted.reduce((s, ev) => s + eventHours(ev), 0)
+    for (const oid of finalOwners) ownerHoursMap[oid] = perPersonTotal
     const subitems = sorted.map(ev => {
       const { start, end } = eventDates(ev)
       const dateLabel = start ? new Date(start).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
       return {
         id:        `si_g_${ev.id}`,
         name:      dateLabel,
-        ownerIds:  ownerIds,
+        ownerIds:  finalOwners,
         status:    '',
         startDate: start,
         endDate:   end ?? start,
-        estHours:  eventHours(ev),
+        estHours:  eventHours(ev) * finalOwners.length,
       }
     })
-    const existingId  = byExt.get(groupKey)
-    const existingRow = byExtFull.get(groupKey)
     const id          = existingId ?? `it_g_${groupKey}_${cal.user_id.slice(0, 8)}`
     if (existingId) updated++; else added++
     const keepBoard = existingRow?.board_id ?? targetBoard
@@ -281,7 +332,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       group_id:           keepGroup,
       board_id:           keepBoard,
       name:               baseName + ` (${instances.length}×)`,
-      owner_ids:          (existingRow?.owner_ids && existingRow.owner_ids.length > 0) ? existingRow.owner_ids : ownerIds,
+      owner_ids:          finalOwners,
       status:             existingRow?.status ?? '',
       start_date:         minStart,
       end_date:           maxEnd ?? minStart,
@@ -292,7 +343,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
       subitems,
       journal:            existingRow?.journal ?? [],
-      extra:              {},
+      extra:              { ownerHours: ownerHoursMap },
       position:            0,
       source:              'google',
       external_id:         groupKey,
