@@ -134,6 +134,7 @@ function TodoCard({
   const inputRef = useRef<HTMLInputElement>(null)
   const [popPos, setPopPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const member = teamData.members.find(m => m.id === section.id)
+  const { showMember } = useMemberPopup()
 
   // Slash-picker: when the user types "/", the input becomes a project search.
   // The text after the slash filters the list. Selecting a project adds a
@@ -213,7 +214,15 @@ function TodoCard({
           <span style={{ fontSize: 17 }}>{section.emoji}</span>
         )}
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.01em' }}>
-          {section.title}
+          {isMember && member ? (
+            <span onClick={e => showMember(section.id, e)}
+              title="Klik voor profiel"
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-primary)')}>
+              {section.title}
+            </span>
+          ) : section.title}
         </h2>
         {editOrder ? (
           <>
