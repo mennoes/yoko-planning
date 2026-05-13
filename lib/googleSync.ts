@@ -206,10 +206,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const existingRow = byExtFull.get(ev.id)
       const id          = existingId ?? `it_g_${ev.id}_${cal.user_id.slice(0, 8)}`
       if (existingId) updated++; else added++
+      // Bewaar handmatige verplaatsingen — als de gebruiker het item naar
+      // een Done-groep of ander bord heeft gesleept, mag Google die niet
+      // weer terugsturen naar de target-groep volgens de route-regels.
+      const keepBoard = existingRow?.board_id ?? targetBoard
+      const keepGroup = existingRow?.group_id ?? targetGroup
       upserts.push({
         id,
-        group_id:           targetGroup,
-        board_id:           targetBoard,
+        group_id:           keepGroup,
+        board_id:           keepBoard,
         name,
         // owner_ids/status/journal blijven van de gebruiker — overschrijven
         // wordt gedaan vóórdat-ie z'n Done-markering kon bewaren.
@@ -269,10 +274,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const existingRow = byExtFull.get(groupKey)
     const id          = existingId ?? `it_g_${groupKey}_${cal.user_id.slice(0, 8)}`
     if (existingId) updated++; else added++
+    const keepBoard = existingRow?.board_id ?? targetBoard
+    const keepGroup = existingRow?.group_id ?? targetGroup
     upserts.push({
       id,
-      group_id:           targetGroup,
-      board_id:           targetBoard,
+      group_id:           keepGroup,
+      board_id:           keepBoard,
       name:               baseName + ` (${instances.length}×)`,
       owner_ids:          (existingRow?.owner_ids && existingRow.owner_ids.length > 0) ? existingRow.owner_ids : ownerIds,
       status:             existingRow?.status ?? '',
