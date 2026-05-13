@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/components/ProfileContext'
@@ -21,7 +22,7 @@ import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, type Project } from '@/lib/workload'
 import {
-  CAT_COLOR, CAT_LABEL,
+  CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
   effectiveCategory,
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
@@ -153,6 +154,8 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
   const [hoverRow, setHoverRow] = useState(false)
   const [hoverPop, setHoverPop] = useState(false)
   const [tapOpen,  setTapOpen]  = useState(false)
+  const rowRef = useRef<HTMLLIElement>(null)
+  const [popPos, setPopPos] = useState<{ top: number; left: number; placeAbove: boolean } | null>(null)
   const cat       = effectiveCategory(item, override)
   const dotColor  = CAT_COLOR[cat]
   const catLabel  = CAT_LABEL[cat]
@@ -162,6 +165,32 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
     : 'Geen datums'
 
   const popoverOpen = tapOpen || hoverRow || hoverPop
+
+  // Bereken positie op basis van de row: voorkomt clipping door card-overflow
+  // (we renderen de popover via een portal in document.body) en flipt boven
+  // de row als-ie anders onder de viewport zou vallen.
+  useEffect(() => {
+    if (!popoverOpen || !rowRef.current) { setPopPos(null); return }
+    const place = () => {
+      const r = rowRef.current?.getBoundingClientRect()
+      if (!r) return
+      const popH = 260   // geschatte hoogte — flip-trigger is een kwestie van smaak
+      const room = window.innerHeight - r.bottom
+      const placeAbove = room < popH && r.top > popH
+      setPopPos({
+        top:  placeAbove ? r.top - 4 : r.bottom + 4,
+        left: r.left,
+        placeAbove,
+      })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [popoverOpen])
 
   useEffect(() => {
     if (!tapOpen) return
@@ -203,14 +232,16 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
   )
 
   return (
-    <li data-workload-row={item.id} style={{ position: 'relative' }}
+    <li ref={rowRef} data-workload-row={item.id} style={{ position: 'relative' }}
         onMouseEnter={() => setHoverRow(true)} onMouseLeave={() => setHoverRow(false)}>
       <button type="button" onClick={() => setTapOpen(o => !o)} style={rowVisualStyle}>
         {rowContent}
       </button>
-      {popoverOpen && (
-        <div onMouseEnter={() => setHoverPop(true)} onMouseLeave={() => setHoverPop(false)}
-          style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
+      {popoverOpen && popPos && typeof document !== 'undefined' && createPortal(
+        <div data-workload-row={item.id}
+          onMouseEnter={() => setHoverPop(true)} onMouseLeave={() => setHoverPop(false)}
+          style={{ position: 'fixed', top: popPos.top, left: popPos.left,
+            transform: popPos.placeAbove ? 'translateY(-100%)' : 'none', zIndex: 9050,
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
             padding: '10px 12px', minWidth: 240, maxWidth: 320,
             boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
@@ -226,15 +257,15 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
             <span><strong style={{ color: 'var(--text-primary)' }}>{item.hours}u</strong> deze week</span>
           </div>
           <div style={{ marginTop: 10, marginBottom: 5, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Categorie</div>
-          <div style={{ display: 'flex', gap: 5 }}>
-            {(['maken','overhead','meeting'] as const).map(c => {
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {ALL_CATEGORIES.map(c => {
               const active = cat === c
               const color  = CAT_COLOR[c]
               return (
                 <button key={c} type="button"
                   onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, c) }}
                   style={{
-                    flex: 1, padding: '5px 6px', borderRadius: 6,
+                    flex: '1 1 calc(50% - 3px)', padding: '5px 6px', borderRadius: 6,
                     border: active ? `1.5px solid ${color}` : '1px solid var(--border)',
                     background: active ? `${color}22` : 'var(--bg-card)',
                     color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -261,7 +292,8 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
               background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
             Open agenda →
           </Link>
-        </div>
+        </div>,
+        document.body,
       )}
     </li>
   )
