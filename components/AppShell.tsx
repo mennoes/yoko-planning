@@ -17,6 +17,7 @@ import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
 import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
+import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistry'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
 import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
@@ -112,6 +113,10 @@ function Inner({ children }: { children: ReactNode }) {
     async function start() {
       const syncing = await isSyncing()
       if (!syncing) return
+      // Boards registry — eerst pullen zodat BOARD_NAMES gevuld is
+      // voordat we per bord gaan pullen.
+      await pullBoardsFromRemote()
+      unsubs.push(subscribeRemoteBoards())
       // Pages
       pullPagesFromRemote()
       unsubs.push(subscribeRemotePages())

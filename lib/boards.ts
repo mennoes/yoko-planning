@@ -72,66 +72,17 @@ export type BoardConfig = {
   columns: ColumnDef[]
 }
 
-export const BOARD_CONFIGS: Record<string, BoardConfig> = {
-  yoko: {
-    id: 'yoko', name: 'yoko', emoji: '📋', color: '#579bfc',
-    columns: [
-      { key: 'ownerIds',  label: 'Owner',    type: 'owners',    width: 90  },
-      { key: 'status',    label: 'Status',   type: 'status',    width: 145 },
-      { key: 'timeline',  label: 'Timeline', type: 'daterange', width: 175 },
-      { key: 'deadline',  label: 'Deadline', type: 'date',      width: 105 },
-      { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
-      { key: 'dagen',     label: 'Dagen',    type: 'number',    width: 70  },
-      { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
-    ],
+// BOARD_CONFIGS is nu een Proxy bovenop de dynamische registry — bestaande
+// code die `BOARD_CONFIGS['yoko']` doet blijft werken, maar nieuwe borden
+// (toegevoegd via de + in de sidebar → boards-tabel) komen er automatisch
+// bij zonder code-wijziging. Zie lib/boardsRegistry.ts voor de bron.
+import { getBoardConfig, getBoards } from './boardsRegistry'
+export const BOARD_CONFIGS = new Proxy({} as Record<string, BoardConfig>, {
+  get(_t, prop: string) { return getBoardConfig(prop) ?? undefined },
+  has(_t, prop: string) { return getBoardConfig(prop) != null },
+  ownKeys() { return getBoards().map(b => b.id) },
+  getOwnPropertyDescriptor(_t, prop: string) {
+    const c = getBoardConfig(prop)
+    return c ? { enumerable: true, configurable: true, value: c } : undefined
   },
-  pnp: {
-    id: 'pnp', name: 'PnP', emoji: '📋', color: '#e2445c',
-    columns: [
-      { key: 'ownerIds',       label: 'Persoon',        type: 'owners',    width: 90  },
-      { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
-      { key: 'timeline',       label: 'Tijdlijn',       type: 'daterange', width: 175 },
-      { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
-      { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
-      { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
-      { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
-    ],
-  },
-  nederland: {
-    id: 'nederland', name: 'Nederland', emoji: '📋', color: '#9c7ee8',
-    columns: [
-      { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
-      { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
-      { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
-      { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 175 },
-      { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
-      { key: 'uitzenddag',     label: 'Uitzenddag',     type: 'date',      width: 105 },
-      { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
-    ],
-  },
-  vlaanderen: {
-    id: 'vlaanderen', name: 'Vlaanderen', emoji: '📋', color: '#ff7a00',
-    columns: [
-      { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
-      { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
-      { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
-      { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
-      { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
-      { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
-      { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
-      { key: 'framelink',      label: 'Frame link',     type: 'url',       width: 110 },
-    ],
-  },
-  dienjaar: {
-    id: 'dienjaar', name: 'Dienjaar', emoji: '📋', color: '#00c875',
-    columns: [
-      { key: 'ownerIds', label: 'Owner',    type: 'owners',    width: 90  },
-      { key: 'timeline', label: 'Tijdlijn', type: 'daterange', width: 175 },
-      { key: 'status',   label: 'Status',   type: 'status',    width: 145 },
-      { key: 'estHours', label: 'Uren',     type: 'number',    width: 80  },
-      { key: 'dagen',    label: 'Dagen',    type: 'number',    width: 70  },
-      { key: 'deadline', label: 'Deadline', type: 'date',      width: 105 },
-      { key: 'nummers',  label: 'Nummers',  type: 'currency',  width: 110 },
-    ],
-  },
-}
+})

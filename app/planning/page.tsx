@@ -1824,14 +1824,19 @@ export default function PlanningPage() {
   useEffect(() => {
     function refresh() {
       const loaded: Record<string, BoardGroup[]> = {}
-      for (const [name, raw] of Object.entries(RAW)) {
-        loaded[name] = loadGroups(name, raw.groups as BoardGroup[])
+      // Dynamische bord-lijst (uit registry) + fallback-seed waar
+      // beschikbaar voor de bekende 5 borden zodat een verse install
+      // niet leeg start.
+      for (const name of BOARD_NAMES) {
+        const seed = (RAW[name]?.groups as BoardGroup[] | undefined) ?? []
+        loaded[name] = loadGroups(name, seed)
       }
       setAllGroups(loaded)
     }
     refresh()
     function onBoardUpdate() { refresh() }
     window.addEventListener('yoko-board-update', onBoardUpdate)
+    window.addEventListener('yoko-boards-registry-update', onBoardUpdate)
     // Vacation lookup for the palm-tree marker
     if (typeof window !== 'undefined') {
       import('@/lib/supabase').then(({ supabase }) => {
@@ -1846,7 +1851,10 @@ export default function PlanningPage() {
         })
       })
     }
-    return () => window.removeEventListener('yoko-board-update', onBoardUpdate)
+    return () => {
+      window.removeEventListener('yoko-board-update', onBoardUpdate)
+      window.removeEventListener('yoko-boards-registry-update', onBoardUpdate)
+    }
   }, [])
 
   useEffect(() => {

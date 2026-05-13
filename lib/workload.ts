@@ -23,13 +23,13 @@ export type Project = {
   mergedFrom?: Project[]
 }
 
-export const BOARD_COLORS: Record<string, string> = {
-  yoko:       '#579bfc',
-  pnp:        '#e2445c',
-  nederland:  '#9c7ee8',
-  vlaanderen: '#ff7a00',
-  dienjaar:   '#00c875',
-}
+import { getBoardColor } from './boardsRegistry'
+// Proxy zodat code als BOARD_COLORS[boardId] blijft werken, maar nu
+// dynamisch op de registry. Toegevoegde borden krijgen hun eigen kleur
+// uit de boards-tabel; onbekende keys vallen terug op grijs.
+export const BOARD_COLORS = new Proxy({} as Record<string, string>, {
+  get(_t, prop: string) { return getBoardColor(prop) },
+})
 
 /** Returns the Monday of the week containing `date` */
 export function getWeekStart(date: Date): Date {

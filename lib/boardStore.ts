@@ -1,6 +1,7 @@
 import type { BoardGroup, BoardItem } from './boards'
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
+import { getBoardIds } from './boardsRegistry'
 
 // ─── Per-board localStorage keys ─────────────────────────────────────────────
 function key(boardName: string)      { return `yoko-board-${boardName}` }
@@ -9,8 +10,23 @@ function key(boardName: string)      { return `yoko-board-${boardName}` }
 // eigen wijzigingen na refresh als de push wegviel.
 function dirtyKey(boardName: string) { return `yoko-board-${boardName}-dirty` }
 
-export const BOARD_NAMES = ['yoko', 'pnp', 'nederland', 'vlaanderen', 'dienjaar'] as const
-export type  BoardName   = typeof BOARD_NAMES[number]
+// BOARD_NAMES is dynamisch — leeg op SSR, gevuld op client zodra de
+// registry is geladen. Bestaande code die `for (const b of BOARD_NAMES)`
+// doet werkt nog (Proxy levert array-iteratie).
+export const BOARD_NAMES: string[] = new Proxy([] as string[], {
+  get(_t, prop) {
+    const ids = getBoardIds()
+    if (prop === 'length') return ids.length
+    if (prop === Symbol.iterator) return ids[Symbol.iterator].bind(ids)
+    if (typeof prop === 'string' && /^\d+$/.test(prop)) return ids[Number(prop)]
+    if (prop === 'map' || prop === 'filter' || prop === 'forEach' || prop === 'includes' || prop === 'indexOf' || prop === 'find' || prop === 'some' || prop === 'every' || prop === 'slice' || prop === 'concat' || prop === 'reduce') {
+      const fn = ids[prop as keyof typeof ids] as unknown as (...args: unknown[]) => unknown
+      return fn.bind(ids)
+    }
+    return (ids as unknown as Record<string | symbol, unknown>)[prop as string]
+  },
+})
+export type BoardName = string
 
 // ─── Load / save ──────────────────────────────────────────────────────────────
 export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGroup[] {

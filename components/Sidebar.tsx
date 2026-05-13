@@ -17,8 +17,9 @@ import {
   type GoogleConnection, type GoogleCalAvailable,
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
-import { pullBoardFromRemote, BOARD_NAMES, moveItemToBoard, loadGroups } from '@/lib/boardStore'
+import { pullBoardFromRemote, BOARD_NAMES, moveItemToBoard, loadGroups, saveGroups } from '@/lib/boardStore'
 import type { BoardGroup } from '@/lib/boards'
+import { upsertBoard, defaultColumnsForNewBoard, pullBoardsFromRemote } from '@/lib/boardsRegistry'
 import { VacationButton } from './VacationButton'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
@@ -313,12 +314,44 @@ function SectionBlock({
   }
   function renameItem(id: string, label: string) { updateItems(section.items.map(i => i.id === id ? { ...i, label } : i)) }
   function removeItem(id: string) { updateItems(section.items.filter(i => i.id !== id)) }
-  function addItem() {
+  async function addItem() {
     const lbl = newLabel.trim()
     if (!lbl) { setAddingItem(false); return }
     const slug  = lbl.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     const href  = section.type === 'projects' ? `/projects/${slug}` : `/${slug}`
     const color = PALETTE[section.items.length % PALETTE.length]
+
+    // Voor Agenda's: registreer ook het bord in de boards-registry (Supabase
+    // + cache). Default-kolom-set van yoko, eigen kleur, lege eerste groep.
+    if (section.type === 'projects') {
+      const cfg = {
+        id:      slug,
+        name:    lbl,
+        emoji:   '📋',
+        color,
+        columns: defaultColumnsForNewBoard(),
+      }
+      // localStorage cache eerst zetten zodat de page direct werkt;
+      // Supabase upsert + refresh van de registry gebeurt async.
+      try {
+        const cur = localStorage.getItem('yoko-boards-registry')
+        const list = cur ? JSON.parse(cur) : []
+        const next = Array.isArray(list) ? [...list.filter((b: { id: string }) => b.id !== cfg.id), cfg] : [cfg]
+        localStorage.setItem('yoko-boards-registry', JSON.stringify(next))
+        window.dispatchEvent(new CustomEvent('yoko-boards-registry-update'))
+      } catch {}
+      // Een lege eerste groep zodat de tabel niet helemaal leeg start.
+      saveGroups(slug, [{
+        id: `g_${slug}_${Date.now()}`,
+        name: 'Lopende projecten',
+        color,
+        collapsed: false,
+        items: [],
+      }])
+      // Push naar Supabase + refresh van de registry op de achtergrond.
+      void upsertBoard(cfg, section.items.length).then(() => pullBoardsFromRemote())
+    }
+
     updateItems([...section.items, {
       id: Date.now().toString(), label: lbl, href,
       ...(section.type === 'projects' ? { color } : { icon: '📄' }),
