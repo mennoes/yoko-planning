@@ -3,7 +3,11 @@ import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 
 // ─── Per-board localStorage keys ─────────────────────────────────────────────
-function key(boardName: string) { return `yoko-board-${boardName}` }
+function key(boardName: string)      { return `yoko-board-${boardName}` }
+// "Dirty" markeert dat lokale state nog niet bevestigd-gepushed is naar
+// Supabase. Een pull mag deze NIET overschrijven, anders verlies je je
+// eigen wijzigingen na refresh als de push wegviel.
+function dirtyKey(boardName: string) { return `yoko-board-${boardName}-dirty` }
 
 export const BOARD_NAMES = ['yoko', 'pnp', 'nederland', 'vlaanderen', 'dienjaar'] as const
 export type  BoardName   = typeof BOARD_NAMES[number]
@@ -22,8 +26,17 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
   const prev = localStorage.getItem(key(boardName))
   if (prev === next) return            // no-op: breaks the realtime ping-pong loop
   localStorage.setItem(key(boardName), next)
+  localStorage.setItem(dirtyKey(boardName), Date.now().toString())
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
-  pushBoardToRemote(boardName, groups).catch(() => {})
+  pushBoardToRemote(boardName, groups).then(ok => {
+    if (!ok) return
+    // Alleen flag wissen als wat we nét gepusht hebben nog steeds = wat
+    // er in localStorage staat. Tussentijdse wijzigingen → flag blijft
+    // staan, volgende push schoont 'm op.
+    if (localStorage.getItem(key(boardName)) === next) {
+      localStorage.removeItem(dirtyKey(boardName))
+    }
+  }).catch(() => {})
 }
 
 // ─── Remote sync ─────────────────────────────────────────────────────────────
@@ -54,6 +67,21 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
 export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
+  // Niet-bevestigde lokale wijzigingen mogen NOOIT worden overschreven door
+  // een pull. Push 'em eerst omhoog; faalt dat, dan slaan we de pull over.
+  if (typeof window !== 'undefined' && localStorage.getItem(dirtyKey(boardName))) {
+    const localRaw = localStorage.getItem(key(boardName))
+    if (localRaw) {
+      try {
+        const localGroups = JSON.parse(localRaw) as BoardGroup[]
+        const ok = await pushBoardToRemote(boardName, localGroups)
+        if (!ok) return false  // push failed, niet pullen want we zouden lokale changes verliezen
+        if (localStorage.getItem(key(boardName)) === localRaw) {
+          localStorage.removeItem(dirtyKey(boardName))
+        }
+      } catch { return false }
+    }
+  }
   const { data: groupRows, error: gErr } = await supabase
     .from('board_groups').select('*').eq('board_id', boardName).order('position')
   if (gErr || !groupRows) return false
