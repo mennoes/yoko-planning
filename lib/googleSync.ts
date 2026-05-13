@@ -124,10 +124,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
 
   // Look up the connecting user's member_id so synced events show up in their
-  // planning timeline.
+  // planning timeline. Fallback: als member_id (nog) leeg is — bv. omdat de
+  // gebruiker net is aangemaakt en zijn ProfileSetup tegelijk met de eerste
+  // sync werd ingevuld — proberen we te raden via de voornaam in profiles.name.
   const { data: profileRow } = await admin
-    .from('profiles').select('member_id').eq('user_id', cal.user_id).single()
-  const memberId = (profileRow as { member_id: string } | null)?.member_id
+    .from('profiles').select('member_id, name').eq('user_id', cal.user_id).single()
+  const pRow = profileRow as { member_id: string | null; name: string | null } | null
+  let memberId = pRow?.member_id ?? null
+  if (!memberId && pRow?.name) {
+    const first = pRow.name.split(' ')[0]?.toLowerCase() ?? ''
+    // Match tegen een vaste set teamleden — voorkomt dat een andere
+    // gebruiker per ongeluk wordt geclaimd.
+    const known = ['menno','vincent','odette','anne-fleur','kars']
+    const hit = known.find(k => k === first || k.startsWith(first) || first.startsWith(k))
+    if (hit) memberId = hit
+  }
   const ownerIds = memberId ? [memberId] : []
 
   const now     = new Date()
