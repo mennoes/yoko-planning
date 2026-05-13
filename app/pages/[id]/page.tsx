@@ -12,7 +12,9 @@ import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { IconClose, IconCheck } from '@/components/Icon'
 import { createNotification } from '@/lib/notificationsStore'
 import { MentionTextarea } from '@/components/MentionTextarea'
+import { TextWithItemRefs } from '@/components/ItemRefChip'
 import { ReactionRow } from '@/components/ReactionRow'
+import { loadAllItemsFlat, itemRefHrefFor, type ItemRefResolved } from '@/lib/itemRefs'
 import { toggleReaction } from '@/lib/commentsStore'
 
 const EMOJIS = ['📄','📝','📌','🗒','💡','🔖','📋','🗂','📊','🎨','🚀','⭐']
@@ -47,6 +49,90 @@ export default function PageEditor() {
   const [openCommentPos, setOpenCommentPos] = useState<{ x: number; y: number } | null>(null)
   const [activeComment, setActiveComment] = useState<CommentThread | null>(null)
   const [replyDraft, setReplyDraft] = useState('')
+
+  // ─── #item-referentie picker ────────────────────────────────────────────────
+  // Werkt zoals @ in MentionTextarea, maar voor de contentEditable: detecteert
+  // `#filter` net vóór de caret, opent een dropdown, en vervangt bij selectie
+  // de tekst door een chip-element (<a class="yoko-item-ref">) zodat de page
+  // een echte link naar het bord bevat — zonder runtime parse-stap.
+  const [itemPicker, setItemPicker] = useState<{ top: number; left: number; filter: string; idx: number } | null>(null)
+  const [allItems, setAllItems] = useState<ItemRefResolved[]>([])
+  useEffect(() => {
+    const refresh = () => setAllItems(loadAllItemsFlat())
+    refresh()
+    window.addEventListener('yoko-board-update', refresh)
+    return () => window.removeEventListener('yoko-board-update', refresh)
+  }, [])
+  const itemPickerFiltered = itemPicker
+    ? allItems.filter(i => !itemPicker.filter || i.name.toLowerCase().includes(itemPicker.filter.toLowerCase())).slice(0, 8)
+    : []
+
+  function detectItemPicker() {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) { setItemPicker(null); return }
+    const node = sel.focusNode
+    if (!node || node.nodeType !== Node.TEXT_NODE) { setItemPicker(null); return }
+    if (!editorRef.current?.contains(node)) { setItemPicker(null); return }
+    const text = (node as Text).data ?? ''
+    const before = text.slice(0, sel.focusOffset)
+    const m = before.match(/(?:^|\s)#([A-Za-z0-9\-_ ]*)$/)
+    if (!m) { setItemPicker(null); return }
+    const r = sel.getRangeAt(0).cloneRange()
+    r.collapse(true)
+    const rect = r.getBoundingClientRect()
+    setItemPicker({
+      top:    rect.bottom + window.scrollY + 4,
+      left:   rect.left + window.scrollX,
+      filter: m[1],
+      idx:    0,
+    })
+  }
+
+  function insertItemChip(it: ItemRefResolved) {
+    if (!itemPicker) return
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const node = sel.focusNode
+    if (!node || node.nodeType !== Node.TEXT_NODE) return
+    const text = (node as Text).data ?? ''
+    const before = text.slice(0, sel.focusOffset)
+    const m = before.match(/(?:^|\s)#([A-Za-z0-9\-_ ]*)$/)
+    if (!m) return
+    const start = sel.focusOffset - m[1].length - 1  // include '#'
+    // Vervang `#filter` door chip-element + spatie en zet caret er net achter.
+    const range = document.createRange()
+    range.setStart(node, start)
+    range.setEnd(node, sel.focusOffset)
+    range.deleteContents()
+    const a = document.createElement('a')
+    a.className = 'yoko-item-ref'
+    a.setAttribute('data-itemref', `${it.boardId}:${it.itemId}`)
+    a.setAttribute('href', itemRefHrefFor(it.boardId, it.itemId))
+    a.setAttribute('contentEditable', 'false')
+    a.style.setProperty('--ref-color', it.color)
+    a.textContent = it.name
+    range.insertNode(a)
+    // Spatie achter de chip zodat je kunt blijven typen.
+    const space = document.createTextNode(' ')
+    a.parentNode?.insertBefore(space, a.nextSibling)
+    // Caret naar achter de spatie.
+    const after = document.createRange()
+    after.setStart(space, 1); after.setEnd(space, 1)
+    sel.removeAllRanges(); sel.addRange(after)
+    setItemPicker(null)
+    scheduleSave(title, emoji)
+  }
+
+  function onEditorKeyDown(e: React.KeyboardEvent) {
+    if (itemPicker && itemPickerFiltered.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setItemPicker(p => p && { ...p, idx: Math.min(itemPickerFiltered.length - 1, p.idx + 1) }); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setItemPicker(p => p && { ...p, idx: Math.max(0, p.idx - 1) }); return }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault(); insertItemChip(itemPickerFiltered[itemPicker.idx]); return
+      }
+      if (e.key === 'Escape') { setItemPicker(null); return }
+    }
+  }
 
   // Load or create
   useEffect(() => {
@@ -97,6 +183,7 @@ export default function PageEditor() {
   }
   function onInput() {
     scheduleSave(title, emoji)
+    detectItemPicker()
   }
 
   // ─── Selection toolbar ──────────────────────────────────────────────────────
@@ -337,12 +424,45 @@ export default function PageEditor() {
         suppressContentEditableWarning
         onInput={onInput}
         onClick={onEditorClick}
+        onKeyDown={onEditorKeyDown}
+        onBlur={() => setTimeout(() => setItemPicker(null), 150)}
         data-placeholder="Begin met typen..."
         style={{
           minHeight: 480, outline: 'none', fontSize: 15, lineHeight: 1.75,
           color: 'var(--text-secondary)', padding: '16px 0',
         }}
       />
+
+      {/* #item-referentie picker — verschijnt onder de caret zodra je `#` typt. */}
+      {itemPicker && itemPickerFiltered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: itemPicker.top, left: itemPicker.left,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: 4, minWidth: 280, maxWidth: 360, maxHeight: 280, overflowY: 'auto',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
+          zIndex: 9100,
+        }}>
+          <div style={{ padding: '4px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            Items · {itemPickerFiltered.length}
+          </div>
+          {itemPickerFiltered.map((it, i) => (
+            <button key={`${it.boardId}-${it.itemId}`}
+              onMouseDown={e => { e.preventDefault(); insertItemChip(it) }}
+              onMouseEnter={() => setItemPicker(p => p && { ...p, idx: i })}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 5, textAlign: 'left',
+                background: i === itemPicker.idx ? 'var(--bg-hover)' : 'transparent',
+                border: 'none', cursor: 'pointer', fontSize: 13,
+                color: 'var(--text-primary)',
+              }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: it.color, flexShrink: 0 }} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
+              <span style={{ fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{it.boardId}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Floating selection toolbar */}
       {selToolbar && !composeOpen && (
@@ -526,7 +646,7 @@ function CommentReplyView({ reply, getPhoto, currentMemberId, onToggleReaction }
           </span>
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {reply.body}
+          <TextWithItemRefs text={reply.body} compact />
         </div>
         {onToggleReaction && (
           <ReactionRow reactions={reply.reactions} currentMemberId={currentMemberId} onToggle={onToggleReaction} />

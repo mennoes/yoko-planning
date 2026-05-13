@@ -18,6 +18,7 @@ import vlaanderenRaw from '@/data/boards/vlaanderen.json'
 import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import { loadGroups } from '@/lib/boardStore'
 import { BOARD_COLORS } from '@/lib/workload'
+import { TextWithItemRefs } from '@/components/ItemRefChip'
 import type { BoardGroup } from '@/lib/boards'
 import {
   loadCommentsFor, saveComment, onCommentsUpdate,
@@ -364,7 +365,7 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 14.85, outline: 'none' }} />
         ) : (
           <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 14.85, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0 }}>
-            {item.text}
+            <TextWithItemRefs text={item.text} compact />
           </span>
         )}
         {item.projectRef && (
@@ -506,7 +507,9 @@ function TodoCommentModal({ todoId, todoText, onClose }: {
                 <strong style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>{r.author}</strong>
                 <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{fmtRelative(r.createdAt)}</span>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>{r.body}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>
+                <TextWithItemRefs text={r.body} compact />
+              </div>
               {profile?.memberId && thread && (
                 <ReactionRow
                   reactions={r.reactions}

@@ -889,39 +889,45 @@ export default function HomePage() {
           marginBottom: isMobile ? 18 : 32,
           boxShadow: '0 6px 22px rgba(216, 182, 46, 0.30)',
         }}>
-          <p style={{ margin: 0, fontSize: isMobile ? 14 : 15, color: '#1a1a1a', lineHeight: 1.6, maxWidth: 760 }}>
-            {isWeekend ? (
-              <>
-                Lekker weekend!
-                {weekendProjects.length > 0 && (
-                  <> Deze week ging het vooral over {renderProjects(weekendProjects)}.</>
-                )}
-                {' '}
-              </>
-            ) : (
-              <>
-                {pastProjects.length > 0 && (
-                  <>Tot nu toe deze week heb je gewerkt aan {renderProjects(pastProjects)}. </>
-                )}
-                {todayProjects.length > 0 && (
-                  <>
-                    {pastProjects.length > 0 ? 'Vandaag staat ' : 'Vandaag begint met '}
-                    {renderProjects(todayProjects)} op de planning.{' '}
-                  </>
-                )}
-                {futureProjects.length > 0 && (
-                  <>
-                    {(pastProjects.length > 0 || todayProjects.length > 0)
-                      ? 'Voor de rest van de week komt nog '
-                      : 'Deze week komt nog '}
-                    {renderProjects(futureProjects)}.{' '}
-                  </>
-                )}
-              </>
+          {/* Wat-deze-week + vandaag + rest van de week → één paragraaf.
+              Daarnaast / Check even / Capaciteit-tip → elk hun eigen alinea
+              zodat het bij langere tekst leesbaar blijft. */}
+          <div style={{ fontSize: isMobile ? 14 : 15, color: '#1a1a1a', lineHeight: 1.6, maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p style={{ margin: 0 }}>
+              {isWeekend ? (
+                <>
+                  Lekker weekend!
+                  {weekendProjects.length > 0 && (
+                    <> Deze week ging het vooral over {renderProjects(weekendProjects)}.</>
+                  )}
+                </>
+              ) : (
+                <>
+                  {pastProjects.length > 0 && (
+                    <>Tot nu toe deze week heb je gewerkt aan {renderProjects(pastProjects)}. </>
+                  )}
+                  {todayProjects.length > 0 && (
+                    <>
+                      {pastProjects.length > 0 ? 'Vandaag staat ' : 'Vandaag begint met '}
+                      {renderProjects(todayProjects)} op de planning.{' '}
+                    </>
+                  )}
+                  {futureProjects.length > 0 && (
+                    <>
+                      {(pastProjects.length > 0 || todayProjects.length > 0)
+                        ? 'Voor de rest van de week komt nog '
+                        : 'Deze week komt nog '}
+                      {renderProjects(futureProjects)}.
+                    </>
+                  )}
+                </>
+              )}
+            </p>
+            {otherInfo && (
+              <p style={{ margin: 0 }}>Daarnaast staat er {otherInfo} op de planning.</p>
             )}
-            {otherInfo && <>Daarnaast staat er {otherInfo} op de planning. </>}
             {behindSchedule.length > 0 && (
-              <>
+              <p style={{ margin: 0 }}>
                 Check even:{' '}
                 {behindSchedule.map((p, i) => (
                   <span key={p.id}>
@@ -929,12 +935,16 @@ export default function HomePage() {
                     <strong style={{ color: '#000' }}>{p.name}</strong>
                   </span>
                 ))}
-                {' '}{behindSchedule.length === 1 ? 'staat' : 'staan'} nog op actief terwijl de einddatum al voorbij is — afronden? ⏳{' '}
-              </>
+                {' '}{behindSchedule.length === 1 ? 'staat' : 'staan'} nog op actief terwijl de einddatum al voorbij is — afronden? ⏳
+              </p>
             )}
-            {tonePast && <>{tonePastCap}, {toneNext}.</>}
-            {help && <> {help}</>}
-          </p>
+            {(tonePast || help) && (
+              <p style={{ margin: 0 }}>
+                {tonePast && <>{tonePastCap}, {toneNext}.</>}
+                {help && <> {help}</>}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
