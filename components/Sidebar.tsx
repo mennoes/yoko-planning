@@ -35,13 +35,11 @@ const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   '/':         IconHome,
   '/planning': IconPlanning,
   '/todos':    IconCheckList,
-  '/activity': IconActivity,
 }
 const DEFAULT_MAIN = [
   { id: 'home',     href: '/',         label: 'Home' },
   { id: 'planning', href: '/planning', label: 'Planning' },
   { id: 'todos',    href: '/todos',    label: "To do's" },
-  { id: 'activity', href: '/activity', label: 'Activiteit' },
 ]
 type MainNavItem = typeof DEFAULT_MAIN[number]
 
@@ -632,6 +630,19 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
             <VacationButton variant="row" />
           </>
         )}
+
+        {/* Activiteitenlogboek — discreet ergens in settings ipv in de
+            hoofdnav want het is geen dagelijks-gebruik-feature. */}
+        <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
+        <Link href="/activity" onClick={onClose}
+          style={{ width: '100%', padding: '8px 10px', borderRadius: 8,
+            background: 'transparent', color: 'var(--text-secondary)',
+            fontSize: 13, textDecoration: 'none',
+            display: 'flex', alignItems: 'center', gap: 8 }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+          <IconActivity size={14} /> Activiteitenlogboek
+        </Link>
 
         {requiresAuth && <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />}
 
