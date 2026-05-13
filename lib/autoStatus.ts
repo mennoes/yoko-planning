@@ -5,6 +5,7 @@
 import type { BoardGroup, BoardItem, SubItem } from './boards'
 import { loadGroups, saveGroups, pushBoardToRemote } from './boardStore'
 import { getBoardIds } from './boardsRegistry'
+import { createNotification } from './notificationsStore'
 
 const WORKING = 'Working on...'
 
@@ -66,4 +67,57 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
   }
   void dirty
   return { changed }
+}
+
+// Voor items DIE DOOR JEZELF (of het team) zijn aangemaakt, willen we NIET
+// automatisch afvinken zoals bij Google-events. Wel een seintje wanneer de
+// eind-datum voorbij is en je nog niets hebt afgevinkt. notifyOverdueItems
+// stuurt eenmalig een notificatie aan de huidige gebruiker per item — daarna
+// stempelen we 't item met expiryNotifiedAt zodat 't niet bij elke pull weer
+// een melding triggert.
+export async function notifyOverdueItems(currentMemberId: string | null | undefined): Promise<{ notified: number }> {
+  if (!currentMemberId) return { notified: 0 }
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const boardIds = getBoardIds()
+  let notified = 0
+
+  for (const boardId of boardIds) {
+    const groups = loadGroups(boardId, [])
+    let boardChanged = false
+    const nextGroups: BoardGroup[] = groups.map(g => {
+      const items = g.items.map(item => {
+        // Skip Google-items (die handelen we via auto-Done in googleSync af)
+        if (item.source === 'google') return item
+        const owners = item.ownerIds ?? []
+        if (!owners.includes(currentMemberId)) return item
+        const end = item.endDate ?? item.startDate ?? null
+        if (!end) return item
+        if (end >= todayIso) return item                       // nog niet voorbij
+        const status = (item.status ?? '').trim()
+        if (status === 'Done' || status === 'Stuck') return item
+        const stamped = item as BoardItem & { expiryNotifiedAt?: string }
+        if (stamped.expiryNotifiedAt) return item              // al genotificeerd
+
+        createNotification({
+          recipientId: currentMemberId,
+          actorId:     null,
+          kind:        'comment',
+          contextKind: 'board_item',
+          contextId:   item.id,
+          href:        `/projects/${boardId}`,
+          body:        `'${item.name}' is over z'n eind-datum — klaar?`,
+        }).catch(() => {})
+
+        notified++
+        boardChanged = true
+        return { ...item, expiryNotifiedAt: todayIso } as BoardItem
+      })
+      return { ...g, items }
+    })
+    if (boardChanged) {
+      saveGroups(boardId, nextGroups)
+      pushBoardToRemote(boardId, nextGroups).catch(() => {})
+    }
+  }
+  return { notified }
 }

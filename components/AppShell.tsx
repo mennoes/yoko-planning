@@ -25,7 +25,7 @@ import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 import { onAuthChange, isSyncing } from '@/lib/sync'
 import { syncGoogleNow } from '@/lib/googleClient'
 import { applySubitemRules } from '@/lib/subitemRules'
-import { applyAutoStatus }   from '@/lib/autoStatus'
+import { applyAutoStatus, notifyOverdueItems } from '@/lib/autoStatus'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -39,7 +39,11 @@ const BOARD_INITIALS: Record<string, { groups: unknown[] }> = {
 }
 
 function Inner({ children }: { children: ReactNode }) {
-  const { needsSetup, editOpen, isAuthenticated, authChecked } = useProfile()
+  const { needsSetup, editOpen, isAuthenticated, authChecked, profile } = useProfile()
+  // Profile leeft in een ref zodat de sync-effecten (met empty deps) altijd
+  // de laatste memberId zien zonder herstart van pulls/subscriptions.
+  const profileRef = useRef(profile)
+  useEffect(() => { profileRef.current = profile }, [profile])
   const pathname = usePathname()
   const router   = useRouter()
   const isMobile = useIsMobile()
@@ -147,6 +151,7 @@ function Inner({ children }: { children: ReactNode }) {
       // Google-sync (de tweede useEffect-tick) zodat een nieuwe dag direct
       // het juiste status-beeld geeft.
       try { await applyAutoStatus() } catch {}
+      try { await notifyOverdueItems(profileRef.current?.memberId) } catch {}
     }
     start()
     const offAuth = onAuthChange(() => {
@@ -173,6 +178,10 @@ function Inner({ children }: { children: ReactNode }) {
       // Items waarvan de timeline 'nu' is en die nog geen status hebben
       // krijgen automatisch 'Working on...'. Manuele statussen blijven staan.
       try { await applyAutoStatus() } catch {}
+      // Niet-Google items waarvan de eind-datum voorbij is sturen één keer
+      // een 'klaar?'-notificatie aan de eigenaar (de huidige user). Google-
+      // items handelen we via auto-Done in de server-sync af.
+      try { await notifyOverdueItems(profileRef.current?.memberId) } catch {}
     }
     tick()
     const id = setInterval(tick, 5 * 60 * 1000)
