@@ -1494,6 +1494,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
     // wijziging op alle geselecteerde items binnen deze groep toe. Cross-
     // group bulk (zelden gebruikt) blijft per-groep.
     const bulk = selectedIds.size > 1 && selectedIds.has(itemId)
+    // Snapshot voor undo — alleen bij geen-bulk en als er daadwerkelijk
+    // iets verandert. Subitem-edits (onUpdate met subitems-array) doen we
+    // ook mee, anders is een uren-correctie niet terug te draaien.
+    const snapshot = { ...group, items: group.items.map(i => ({ ...i, subitems: i.subitems ? [...i.subitems] : i.subitems })) }
     onUpdateGroup({
       ...group,
       items: group.items.map(i => {
@@ -1501,20 +1505,37 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
         return i
       }),
     })
-    // Toast met bulk-bewustzijn — Cell-handlers zelf zijn silent.
+    // Toast + undo. Cell-handlers zelf zijn silent, dus we maken hier per
+    // type een leesbare regel.
     const item = group.items.find(i => i.id === itemId)
     const target = bulk
       ? `${group.items.filter(g => selectedIds.has(g.id)).length} items`
       : (item ? `'${item.name}'` : 'Item')
+    let label = ''
     if ('status' in updates) {
-      showToast(`${target} → ${updates.status || '(geen status)'}`)
+      label = `${target} → ${updates.status || '(geen status)'}`
+      showToast(label)
     } else if ('ownerIds' in updates) {
       const next = (updates.ownerIds ?? []).filter(id => id !== 'unassigned')
       const names = next.map(id => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? id)
-      showToast(names.length === 0 ? `${target} niet meer toegewezen` : `${target} → ${names.join(', ')}`)
+      label = names.length === 0 ? `${target} niet meer toegewezen` : `${target} → ${names.join(', ')}`
+      showToast(label)
     } else if ('startDate' in updates || 'endDate' in updates) {
-      showToast(`Datums bijgewerkt op ${target}`)
+      label = `Datums bijgewerkt op ${target}`
+      showToast(label)
+    } else if ('estHours' in updates) {
+      label = `${target} → ${Number(updates.estHours) || 0}u`
+    } else if ('dagen' in updates) {
+      label = `${target} → ${Number(updates.dagen) || 0} dagen`
+    } else if ('name' in updates) {
+      label = `${target} hernoemd`
+    } else if ('subitems' in updates) {
+      label = `Subitem bijgewerkt`
+    } else {
+      label = `${target} bijgewerkt`
     }
+    // Niet bij bulk — daar is undo via BulkActionBar al iets aparts.
+    if (!bulk) pushUndo(() => onUpdateGroup(snapshot), label)
   }
   function deleteItem(itemId: string) {
     const removed = group.items.find(i => i.id === itemId)
@@ -2488,8 +2509,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               // Som van uren + dagen in de gefilterde set — handig voor
               // 'wat doen we in maart'. Uren komen uit estHours, dagen uit
               // het dagen-veld dat de tabel zelf bijhoudt.
-              const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + (Number(i.estHours) || 0), 0), 0)
-              const totalDays  = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + (Number(i.dagen) || 0), 0), 0)
+              const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + effectiveHours(i), 0), 0)
+              const totalDays  = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + effectiveDays(i), 0), 0)
               const fmt = (n: number) => Math.round(n * 10) / 10
               return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>· {fmt(totalHours)}u totaal ({fmt(totalDays)} dagen)</span>
             })()}
@@ -2560,8 +2581,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         {filteredGroups.length > 0 && (() => {
           const allItems = filteredGroups.flatMap(g => g.items)
           const totalItems = allItems.length
-          const totalHours = allItems.reduce((s, i) => s + (Number(i.estHours) || 0), 0)
-          const totalDays  = allItems.reduce((s, i) => s + (Number(i.dagen) || 0), 0)
+          const totalHours = allItems.reduce((s, i) => s + effectiveHours(i), 0)
+          const totalDays  = allItems.reduce((s, i) => s + effectiveDays(i), 0)
           const fmt = (n: number) => Math.round(n * 10) / 10
           // Uitgelijnd op het tabel-grid (zelfde gridTemplate als de rijen) zodat
           // de cijfers precies onder hun kolomkoppen vallen. Extra contrast via
