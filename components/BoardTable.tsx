@@ -176,7 +176,7 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
       {open && (
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <div style={{
-            background: 'var(--bg-hover)', border: '1px solid var(--border)',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderRadius: 8, padding: 4, minWidth: 168,
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
           }}>
@@ -254,7 +254,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
       {open && (
         <PortalDropdown anchor={trigRef} onClose={() => setOpen(false)}>
           <div style={{
-            background: 'var(--bg-hover)', border: '1px solid var(--border)',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderRadius: 8, padding: 6, minWidth: 190,
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
           }}>
@@ -994,7 +994,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
 
           {colorPicker && (
             <PortalDropdown anchor={colorBtnRef} onClose={() => setColorPicker(false)}>
-              <div style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.4)' }}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.4)' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Groepskleur</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
                   {PALETTE.map(c => (
