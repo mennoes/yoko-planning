@@ -19,7 +19,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null }
 type Rule     = { pattern: string; board_id: string }
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
@@ -148,15 +148,18 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
 
   // Bestaande items uit DEZE calendar — over alle boards heen (een event kan
   // van bord verhuizen wanneer een routing-regel toegevoegd of gewijzigd is).
+  // Trek óók status/journal/owner_ids mee zodat we user-edits niet
+  // overschrijven bij de volgende Google-sync.
   const { data: existingRows } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, external_id')
+    .select('id, group_id, board_id, external_id, status, journal, owner_ids')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
 
   const existing = (existingRows as ItemRow[] | null) ?? []
   const byExt    = new Map(existing.map(r => [r.external_id, r.id]))
+  const byExtFull = new Map(existing.map(r => [r.external_id, r]))
 
   // Group recurring events by their master ID so each recurring meeting
   // becomes ONE board_item with subitems for each instance. Single events
@@ -199,16 +202,19 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const targetBoard = routeEvent(name, cal.board_id, rules)
       const targetGroup = await getGroupFor(targetBoard)
       seenExt.add(ev.id)
-      const existingId = byExt.get(ev.id)
-      const id         = existingId ?? `it_g_${ev.id}_${cal.user_id.slice(0, 8)}`
+      const existingId  = byExt.get(ev.id)
+      const existingRow = byExtFull.get(ev.id)
+      const id          = existingId ?? `it_g_${ev.id}_${cal.user_id.slice(0, 8)}`
       if (existingId) updated++; else added++
       upserts.push({
         id,
         group_id:           targetGroup,
         board_id:           targetBoard,
         name,
-        owner_ids:          ownerIds,
-        status:             '',
+        // owner_ids/status/journal blijven van de gebruiker — overschrijven
+        // wordt gedaan vóórdat-ie z'n Done-markering kon bewaren.
+        owner_ids:          (existingRow?.owner_ids && existingRow.owner_ids.length > 0) ? existingRow.owner_ids : ownerIds,
+        status:             existingRow?.status ?? '',
         start_date:         start,
         end_date:           end ?? start,
         deadline:           null,
@@ -217,7 +223,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         notes:              ev.description ?? null,
         contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
         subitems:           [],
-        journal:            [],
+        journal:            existingRow?.journal ?? [],
         extra:              {},
         position:            0,
         source:              'google',
@@ -259,16 +265,17 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         estHours:  eventHours(ev),
       }
     })
-    const existingId = byExt.get(groupKey)
-    const id         = existingId ?? `it_g_${groupKey}_${cal.user_id.slice(0, 8)}`
+    const existingId  = byExt.get(groupKey)
+    const existingRow = byExtFull.get(groupKey)
+    const id          = existingId ?? `it_g_${groupKey}_${cal.user_id.slice(0, 8)}`
     if (existingId) updated++; else added++
     upserts.push({
       id,
       group_id:           targetGroup,
       board_id:           targetBoard,
       name:               baseName + ` (${instances.length}×)`,
-      owner_ids:          ownerIds,
-      status:             '',
+      owner_ids:          (existingRow?.owner_ids && existingRow.owner_ids.length > 0) ? existingRow.owner_ids : ownerIds,
+      status:             existingRow?.status ?? '',
       start_date:         minStart,
       end_date:           maxEnd ?? minStart,
       deadline:           null,
@@ -277,7 +284,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       notes:              sorted[0].description ?? null,
       contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
       subitems,
-      journal:            [],
+      journal:            existingRow?.journal ?? [],
       extra:              {},
       position:            0,
       source:              'google',

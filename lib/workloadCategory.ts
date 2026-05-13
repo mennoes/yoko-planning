@@ -17,7 +17,7 @@ export const CAT_COLOR: Record<WorkloadCategory, string> = {
   meeting:  '#D8B62E',
   overhead: '#9aadbd',
   maken:    '#5fa06e',
-  vrij:     '#c98ad1',
+  vrij:     '#3db883',
 }
 export const CAT_LABEL: Record<WorkloadCategory, string> = {
   meeting:  'Meeting',

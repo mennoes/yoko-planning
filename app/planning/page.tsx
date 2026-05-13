@@ -532,9 +532,19 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
   onReassign?: (project: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const barH = small ? 10 : BAR_H
+  // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
+  // groene look + palmboom-prefix zodat in één oogopslag duidelijk is dat
+  // iemand niet werkt op die dagen — overruled meeting-geel en bord-kleur.
+  const category = effectiveCategory(
+    { name: project.name, hours: project.estHours ?? 0, source: project.source },
+    loadCategoryOverrides()[project.id] ?? null,
+  )
+  const isVrij = category === 'vrij'
   // Meetings (small=true) get the yellow accent so they stand apart from
   // real project bars in the timeline at a glance.
-  const color   = small ? '#D8B62E' : (BOARD_COLORS[project.board] ?? '#888')
+  const color   = isVrij
+    ? CAT_COLOR.vrij
+    : (small ? '#D8B62E' : (BOARD_COLORS[project.board] ?? '#888'))
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
   const reassignRef = useRef<string | null>(null)
@@ -692,6 +702,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
           <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
         </div>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 9 : 11 }} aria-label="Vrij">🏝</span>}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {project.name}{project.group ? ` | ${project.group}` : ''}
           </span>
