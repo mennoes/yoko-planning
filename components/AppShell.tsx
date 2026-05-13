@@ -14,6 +14,7 @@ import ThemeApply from './ThemeApply'
 import Link from 'next/link'
 import { IconMenu, IconSearch, IconHome } from './Icon'
 import { NotificationBell } from './NotificationBell'
+import { FeedbackBubble } from './FeedbackBubble'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
@@ -22,6 +23,7 @@ import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistr
 import { ensureRewindItems } from '@/lib/rewindScheduler'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
 import { pullCapacities, subscribeRemoteCapacities } from '@/lib/capacitiesStore'
+import { pullFeedback, subscribeRemoteFeedback } from '@/lib/feedbackStore'
 import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
 import { onAuthChange, isSyncing } from '@/lib/sync'
@@ -137,6 +139,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Team capaciteiten (u/w per persoon)
       pullCapacities()
       unsubs.push(subscribeRemoteCapacities())
+      // Feedback / ideeën / bugs (floating bubble)
+      pullFeedback()
+      unsubs.push(subscribeRemoteFeedback())
       // Comments cross-browser sync
       pullCommentsAll()
       unsubs.push(subscribeRemoteComments())
@@ -266,6 +271,7 @@ function Inner({ children }: { children: ReactNode }) {
 
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />
+      <FeedbackBubble />
 
       <main ref={mainRef} style={{
         flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,
