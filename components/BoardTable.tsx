@@ -768,7 +768,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   // Comments per board-item — leeft naast 'journal' in de DetailPanel,
   // maar bereikbaar via een knop direct op de rij.
   const [commentCount, setCommentCount] = useState(0)
-  const [showComments, setShowComments] = useState(false)
+  const [showDetail, setShowDetail] = useState(false)
   useEffect(() => {
     const refresh = () => {
       const threads = loadCommentsFor('board-item:' + item.id)
@@ -852,21 +852,23 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               style={{ ...editInput, flex: 1 }} />
           ) : (
             <span
-              onClick={() => {
+              onClick={() => setShowDetail(true)}
+              onDoubleClick={e => {
                 if (item.source === 'google') return
+                e.stopPropagation()
                 setNameDraft(item.name); setEditName(true)
               }}
-              title={item.source === 'google' ? 'Bewerk dit item in Google Calendar' : undefined}
+              title="Klik voor details · dubbelklik om naam te bewerken"
               style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
-                cursor: item.source === 'google' ? 'default' : 'pointer',
+                cursor: 'pointer',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
               {item.name}
             </span>
           )}
 
-          {/* Comments-knop — opent een modal met thread + @ mentions + delete.
+          {/* Comments-knop — opent het detail-drawer en scrolt naar opmerkingen.
               Felle pill bij ≥1 opmerking, anders een subtiele outline-icon. */}
-          <button onClick={(e) => { e.stopPropagation(); setShowComments(true) }}
+          <button onClick={(e) => { e.stopPropagation(); setShowDetail(true) }}
             title={commentCount > 0 ? `${commentCount} opmerking${commentCount === 1 ? '' : 'en'}` : 'Plaats opmerking'}
             style={commentCount > 0 ? {
               display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -913,9 +915,9 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           accentColor={accentColor}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
-      {showComments && (
-        <BoardItemCommentModal itemId={item.id} itemText={item.name}
-          onClose={() => setShowComments(false)} />
+      {showDetail && (
+        <ItemDetailDrawer item={item} cols={cols} accentColor={accentColor}
+          onUpdate={onUpdate} onClose={() => setShowDetail(false)} />
       )}
     </>
   )
@@ -1050,14 +1052,21 @@ function DedupModal({ groups, onClose, onDelete }: {
   )
 }
 
-// ─── Comment modal voor één board-item ────────────────────────────────────────
-function BoardItemCommentModal({ itemId, itemText, onClose }: {
-  itemId: string; itemText: string; onClose: () => void
+// ─── Item-detail drawer ─ rechts-uitschuivend paneel met info + groot ──────
+// commentaar-veld, zoals Monday's item-modal. Klik op item-naam = open.
+function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
+  item: BoardItem; cols: ColumnDef[]; accentColor?: string
+  onUpdate: (u: Partial<BoardItem>) => void
+  onClose: () => void
 }) {
+  const itemId   = item.id
+  const itemText = item.name
   const { profile } = useProfile()
   const [threads, setThreads] = useState<CommentThread[]>([])
   const [newReply, setNewReply] = useState('')
   const [mentionIds, setMentionIds] = useState<string[]>([])
+  const [editName, setEditName] = useState(false)
+  const [nameDraft, setNameDraft] = useState(item.name)
 
   useEffect(() => {
     const refresh = () => setThreads(loadCommentsFor('board-item:' + itemId))
@@ -1066,10 +1075,10 @@ function BoardItemCommentModal({ itemId, itemText, onClose }: {
   }, [itemId])
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !editName) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, editName])
 
   const thread = threads[0]
   const replies = thread?.thread ?? []
@@ -1117,85 +1126,174 @@ function BoardItemCommentModal({ itemId, itemText, onClose }: {
     saveComment({ ...thread, thread: next })
   }
 
+  const accent = accentColor ?? '#579bfc'
+  const isGoogle = item.source === 'google'
+
   if (typeof document === 'undefined') return null
   return createPortal(
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, backdropFilter: 'blur(4px)' }} />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, backdropFilter: 'blur(3px)' }} />
       <div onClick={e => e.stopPropagation()} style={{
-        position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-        width: 'min(460px, 92vw)', maxHeight: '80vh', zIndex: 9001,
-        background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)',
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: 'min(760px, 96vw)', zIndex: 9001,
+        background: 'var(--bg-base)', borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+        boxShadow: '-12px 0 40px rgba(0,0,0,0.35)',
       }}>
-        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Opmerkingen</div>
-            <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }}>{itemText}</div>
+        {/* Header */}
+        <div style={{
+          padding: '16px 22px 14px', borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'flex-start', gap: 12,
+          background: 'var(--bg-card)',
+        }}>
+          <div style={{ width: 4, alignSelf: 'stretch', borderRadius: 3, background: accent, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Item</span>
+              {isGoogle && <span style={{ background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3 }}>GOOGLE</span>}
+            </div>
+            {editName && !isGoogle ? (
+              <input autoFocus value={nameDraft}
+                onChange={e => setNameDraft(e.target.value)}
+                onBlur={() => { onUpdate({ name: nameDraft }); setEditName(false) }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { onUpdate({ name: nameDraft }); setEditName(false) }
+                  if (e.key === 'Escape') { setNameDraft(item.name); setEditName(false) }
+                }}
+                style={{ ...editInput, fontSize: 20, fontWeight: 700, width: '100%' }} />
+            ) : (
+              <h2 onClick={() => { if (!isGoogle) { setNameDraft(item.name); setEditName(true) } }}
+                title={isGoogle ? 'Bewerk in Google Calendar' : 'Klik om te bewerken'}
+                style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)',
+                  cursor: isGoogle ? 'default' : 'text', lineHeight: 1.25 }}>
+                {item.name}
+              </h2>
+            )}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
+          <button onClick={onClose} title="Sluiten (Esc)"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
-          {replies.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '8px 0' }}>Nog geen opmerkingen.</p>
-          ) : replies.map(r => {
-            const mine = !!profile?.memberId && r.authorId === profile.memberId
-            return (
-              <div key={r.id} style={{ marginBottom: 12, position: 'relative' }}
-                onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '1' }}
-                onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '0' }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
-                  <strong style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>{r.author}</strong>
-                  <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
-                    {new Date(r.createdAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                  </span>
+
+        {/* Body: properties + comments */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 22px' }}>
+          {/* Properties grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px 18px', marginBottom: 24 }}>
+            {cols.map(col => (
+              <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {col.label}
+                </span>
+                <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
+                  <Cell item={item} col={col} onUpdate={onUpdate} />
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>
-                  {r.body}
-                </div>
-                {profile?.memberId && thread && (
-                  <ReactionRow
-                    reactions={r.reactions}
-                    currentMemberId={profile.memberId}
-                    onToggle={emoji => {
-                      const updatedReply = toggleReaction(r, emoji, profile.memberId!)
-                      saveComment({
-                        ...thread,
-                        thread: thread.thread.map(x => x.id === r.id ? updatedReply : x),
-                      })
-                    }}
-                  />
-                )}
-                {mine && (
-                  <button className="cmt-del" onClick={() => deleteReply(r.id)}
-                    title="Verwijder opmerking"
-                    style={{ position: 'absolute', top: 0, right: 0, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '2px 5px', borderRadius: 4, opacity: 0, transition: 'opacity 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-                    ×
-                  </button>
-                )}
               </div>
-            )
-          })}
-        </div>
-        <div style={{ padding: '10px 16px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6 }}>
-          <MentionTextarea
-            value={newReply}
-            onChange={setNewReply}
-            onMentionsChange={setMentionIds}
-            onSubmit={addReply}
-            placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, ⌘+Enter om te plaatsen)"
-            rows={2}
-          />
-          <button onClick={addReply} disabled={!newReply.trim()}
-            style={{ padding: '8px 14px', borderRadius: 6, border: 'none',
-              background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
-              color: newReply.trim() ? '#000' : 'var(--text-muted)',
-              fontSize: 12.5, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed',
-              alignSelf: 'flex-end' }}>
-            Plaats
-          </button>
+            ))}
+          </div>
+
+          {/* Notes */}
+          {(typeof item.notes === 'string' || item.notes === undefined) && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                Notities
+              </div>
+              <textarea
+                defaultValue={item.notes ?? ''}
+                onBlur={e => { if (e.target.value !== (item.notes ?? '')) onUpdate({ notes: e.target.value }) }}
+                placeholder="Voeg notities toe…"
+                rows={3}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '10px 12px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'var(--bg-card)',
+                  color: 'var(--text-primary)', fontSize: 13.5, fontFamily: 'inherit',
+                  resize: 'vertical', outline: 'none',
+                }} />
+            </div>
+          )}
+
+          {/* Comments */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Opmerkingen
+              </div>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                {replies.length} {replies.length === 1 ? 'reactie' : 'reacties'}
+              </span>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <MentionTextarea
+                value={newReply}
+                onChange={setNewReply}
+                onMentionsChange={setMentionIds}
+                onSubmit={addReply}
+                placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, ⌘+Enter om te plaatsen)"
+                rows={3}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                <button onClick={addReply} disabled={!newReply.trim()}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
+                    background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                    color: newReply.trim() ? '#000' : 'var(--text-muted)',
+                    fontSize: 13, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed' }}>
+                  Plaats opmerking
+                </button>
+              </div>
+            </div>
+
+            {replies.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '8px 0' }}>Nog geen opmerkingen. Wees de eerste!</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {[...replies].reverse().map(r => {
+                  const mine = !!profile?.memberId && r.authorId === profile.memberId
+                  return (
+                    <div key={r.id} style={{
+                      position: 'relative',
+                      background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                      borderRadius: 10, padding: '12px 14px',
+                    }}
+                      onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '1' }}
+                      onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '0' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                        <strong style={{ fontSize: 13.5, color: 'var(--text-primary)' }}>{r.author}</strong>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {new Date(r.createdAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 14, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 }}>
+                        {r.body}
+                      </div>
+                      {profile?.memberId && thread && (
+                        <ReactionRow
+                          reactions={r.reactions}
+                          currentMemberId={profile.memberId}
+                          onToggle={emoji => {
+                            const updatedReply = toggleReaction(r, emoji, profile.memberId!)
+                            saveComment({
+                              ...thread,
+                              thread: thread.thread.map(x => x.id === r.id ? updatedReply : x),
+                            })
+                          }}
+                        />
+                      )}
+                      {mine && (
+                        <button className="cmt-del" onClick={() => deleteReply(r.id)}
+                          title="Verwijder opmerking"
+                          style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 15, padding: '2px 6px', borderRadius: 4, opacity: 0, transition: 'opacity 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>,
@@ -1688,6 +1786,56 @@ function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
   }]
 }
 
+// ─── Periode-filter knop ─ chic pill die RangeCalendar opent ─────────────────
+function PeriodFilterButton({ from, until, color, onChange }: {
+  from: string; until: string; color: string
+  onChange: (from: string | null, until: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const hasAny = !!(from || until)
+
+  const label = (() => {
+    if (!hasAny) return 'Periode'
+    if (from && until) return fmtRange(from, until)
+    if (from)          return `vanaf ${fmtDate(from)}`
+    return `tot ${fmtDate(until)}`
+  })()
+
+  return (
+    <>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+        title="Filter op periode (overlap met timeline)"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '9px 14px', borderRadius: 8,
+          border: hasAny ? `1px solid ${color}66` : '1px solid var(--border)',
+          background: hasAny ? color + '18' : 'var(--bg-card)',
+          color: hasAny ? 'var(--text-primary)' : 'var(--text-muted)',
+          fontSize: 14, cursor: 'pointer', outline: 'none', fontWeight: hasAny ? 600 : 400,
+        }}>
+        <span aria-hidden style={{ display: 'inline-flex' }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <line x1="16" y1="3" x2="16" y2="7" />
+            <line x1="8" y1="3" x2="8" y2="7" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        </span>
+        <span>{label}</span>
+      </button>
+      {open && (
+        <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
+          <RangeCalendar
+            startDate={from || null} endDate={until || null} color={color}
+            onChange={(s, e) => onChange(s, e)}
+          />
+        </PortalDropdown>
+      )}
+    </>
+  )
+}
+
 // ─── BoardTable (hoofd component) ─────────────────────────────────────────────
 type BoardTableProps = {
   boardId: string
@@ -1778,14 +1926,25 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         if (filterOwner && !item.ownerIds.includes(filterOwner)) return false
         if (filterStatus && item.status !== filterStatus) return false
         // Periode-filter: item moet OVERLAPPEN met de gekozen range.
-        // Item zonder datums valt buiten elke range.
+        // Subitems tellen ook mee — een parent zonder eigen datum maar met
+        // subitems in maart hoort óók in het maart-filter te verschijnen.
         if (from !== null || until !== null) {
-          const s = item.startDate ? new Date(item.startDate).getTime() : null
-          const e = item.endDate   ? new Date(item.endDate).getTime() + 86400000 - 1 : s
-          if (s === null) return false
-          const itemEnd = e ?? s
-          if (from !== null && itemEnd   < from)  return false
-          if (until !== null && s        > until) return false
+          const ranges: Array<[number, number]> = []
+          const push = (s: string | null | undefined, e: string | null | undefined) => {
+            if (!s) return
+            const ms = new Date(s).getTime()
+            const me = e ? new Date(e).getTime() + 86400000 - 1 : ms + 86400000 - 1
+            ranges.push([ms, me])
+          }
+          push(item.startDate, item.endDate)
+          for (const sub of (item.subitems ?? [])) push(sub.startDate, sub.endDate)
+          if (ranges.length === 0) return false
+          const overlaps = ranges.some(([s, e]) => {
+            if (from  !== null && e < from)  return false
+            if (until !== null && s > until) return false
+            return true
+          })
+          if (!overlaps) return false
         }
         return true
       }),
@@ -2083,14 +2242,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
         {/* Periode-filter: items waarvan de timeline OVERLAPT met
             [van, tot]. Leeg laten = geen ondergrens / bovengrens. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-card)' }}>
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Periode</span>
-          <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 13, padding: '8px 4px', outline: 'none' }} />
-          <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>→</span>
-          <input type="date" value={filterUntil} onChange={e => setFilterUntil(e.target.value)}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 13, padding: '8px 4px', outline: 'none' }} />
-        </div>
+        <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
+          onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
 
         {hasFilter && (
           <>
