@@ -100,6 +100,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
           photo:           p.photo,
           weekly_capacity: 40,
         }, { onConflict: 'user_id' })
+
+        // Google-events die eerder met lege owner_ids zijn binnengekomen
+        // (omdat profiel toen nog niet gemapt was) krijgen nu de juiste
+        // member_id. Kick een sync af zodat upserts opnieuw langskomen.
+        try {
+          const { syncGoogleNow } = await import('@/lib/googleClient')
+          syncGoogleNow().catch(() => {})
+        } catch { /* sync optional */ }
       }
     }
   }
