@@ -21,6 +21,7 @@ import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemo
 import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistry'
 import { ensureRewindItems } from '@/lib/rewindScheduler'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
+import { pullCapacities, subscribeRemoteCapacities } from '@/lib/capacitiesStore'
 import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
 import { onAuthChange, isSyncing } from '@/lib/sync'
@@ -133,6 +134,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Workload category overrides
       pullCategoryOverrides()
       unsubs.push(subscribeRemoteCategories())
+      // Team capaciteiten (u/w per persoon)
+      pullCapacities()
+      unsubs.push(subscribeRemoteCapacities())
       // Comments cross-browser sync
       pullCommentsAll()
       unsubs.push(subscribeRemoteComments())

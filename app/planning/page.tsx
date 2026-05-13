@@ -14,6 +14,7 @@ import dienjaarRaw       from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type TeamMember } from '@/lib/workload'
+import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
   effectiveCategory,
@@ -1860,32 +1861,37 @@ export default function PlanningPage() {
   }, [])
 
   useEffect(() => {
-
-    // Restore team capacities from localStorage
-    let capByMember: Record<string, number> = {}
-    try {
-      const savedCap = localStorage.getItem('yoko-capacities')
-      if (savedCap) capByMember = JSON.parse(savedCap)
-    } catch {}
-
-    // Restore team order from localStorage
-    try {
-      const saved = localStorage.getItem('planning-team-order')
-      if (saved) {
-        const order = JSON.parse(saved) as string[]
-        const byId  = new Map(teamData.members.map(m => [m.id, m]))
-        const ordered: TeamMember[] = []
-        for (const id of order) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
-        for (const m of byId.values()) ordered.push(m)
-        if (ordered.length === teamData.members.length) {
-          setTeam(ordered.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
-          return
+    // Pas capaciteiten uit de gedeelde store toe op de team-lijst — met
+    // localStorage als snelle cache en Supabase als bron van waarheid.
+    function applyCapacities(capByMember: Record<string, number>) {
+      // Restore team order from localStorage
+      try {
+        const saved = localStorage.getItem('planning-team-order')
+        if (saved) {
+          const order = JSON.parse(saved) as string[]
+          const byId  = new Map(teamData.members.map(m => [m.id, m]))
+          const ordered: TeamMember[] = []
+          for (const id of order) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
+          for (const m of byId.values()) ordered.push(m)
+          if (ordered.length === teamData.members.length) {
+            setTeam(ordered.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+            return
+          }
         }
-      }
-    } catch {}
-    if (Object.keys(capByMember).length > 0) {
+      } catch {}
       setTeam(teamData.members.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
     }
+
+    // Stap 1: lokale cache meteen toepassen voor instant-render
+    applyCapacities(loadCapacities())
+
+    // Stap 2: remote pullen — bij eerste run op een nieuw device overschrijft
+    // dit de defaults met wat een andere browser eerder had ingevuld.
+    pullCapacities().then(() => applyCapacities(loadCapacities())).catch(() => {})
+
+    // Stap 3: blijven luisteren naar wijzigingen (realtime + eigen edits)
+    const off = onCapacitiesChange(() => applyCapacities(loadCapacities()))
+    return () => off()
   }, [])
 
   function applyShift() {
@@ -2019,15 +2025,9 @@ export default function PlanningPage() {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   function updateCapacity(memberId: string, capacity: number) {
-    setTeam(prev => {
-      const next = prev.map(m => m.id === memberId ? { ...m, weeklyCapacity: capacity } : m)
-      try {
-        const map: Record<string, number> = {}
-        for (const m of next) map[m.id] = m.weeklyCapacity
-        localStorage.setItem('yoko-capacities', JSON.stringify(map))
-      } catch {}
-      return next
-    })
+    setTeam(prev => prev.map(m => m.id === memberId ? { ...m, weeklyCapacity: capacity } : m))
+    // Cache lokaal én pushen naar Supabase zodat andere devices het oppikken.
+    setCapacity(memberId, capacity)
   }
   function handleDragMove(project: Project, s: string | null, e: string | null) {
     setShadowDrag({ projectId: project.id, start: s, end: e })
