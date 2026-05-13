@@ -667,8 +667,13 @@ export default function TodosPage() {
         </button>
       </div>
 
-      {/* General */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start', marginBottom: 28 }}>
+      {/* General — zelfde kolombreedte als de persoonlijke rij eronder, zodat
+          ze visueel uitlijnen. Op mobiel valt 't terug op één kolom. */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.max(1, personal.length)}, minmax(0, 1fr))`,
+        gap: 12, alignItems: 'start', marginBottom: 28,
+      }}>
         {general.map((s, i) => (
           <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
             allProjects={allProjects}
