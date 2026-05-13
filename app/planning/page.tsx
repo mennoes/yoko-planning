@@ -543,16 +543,33 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
 
   const isReadOnly = project.source === 'google'
 
-  function memberAt(clientX: number, clientY: number): string | null {
-    const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null
-    if (!el) return null
-    const row = el.closest<HTMLElement>('[data-member-id]')
-    return row?.dataset.memberId ?? null
+  // Snapshot van alle member-rijen op het moment dat de drag start. Gebruiken
+  // we elementFromPoint zoals voorheen, dan kan een sticky cell of een
+  // overhangend element de hit blokkeren. Een Y-range op de geometrie van
+  // de rij is veel directer: cursor.y → welke rij.
+  const rowsRef = useRef<{ id: string; top: number; bottom: number }[]>([])
+  function captureRows() {
+    const rows: { id: string; top: number; bottom: number }[] = []
+    for (const el of document.querySelectorAll<HTMLElement>('[data-member-id]')) {
+      const r = el.getBoundingClientRect()
+      const id = el.dataset.memberId
+      if (!id) continue
+      rows.push({ id, top: r.top, bottom: r.bottom })
+    }
+    rowsRef.current = rows
+  }
+  function memberAt(_clientX: number, clientY: number): string | null {
+    for (const r of rowsRef.current) {
+      if (clientY >= r.top && clientY <= r.bottom) return r.id
+    }
+    return null
   }
 
   function clearRowHighlight() {
     for (const el of document.querySelectorAll<HTMLElement>('[data-member-id][data-reassign-target]')) {
       el.style.background = ''
+      el.style.outline = ''
+      el.style.outlineOffset = ''
       el.removeAttribute('data-reassign-target')
     }
   }
@@ -562,7 +579,9 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
     const el = document.querySelector<HTMLElement>(`[data-member-id="${id}"]`)
     if (!el) return
     el.dataset.reassignTarget = '1'
-    el.style.background = 'rgba(88,150,255,0.10)'
+    el.style.background = 'rgba(88,150,255,0.18)'
+    el.style.outline = '2px solid rgba(88,150,255,0.85)'
+    el.style.outlineOffset = '-2px'
   }
 
   function startDrag(e: React.MouseEvent, mode: DragInfo['mode']) {
@@ -572,6 +591,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
     dragRef.current = { mode, startX: e.clientX, startY: e.clientY, origStart: project.startDate, origEnd: project.endDate }
     setGhost({ left, width })
     reassignRef.current = null
+    captureRows()
 
     function onMove(ev: MouseEvent) {
       if (!dragRef.current) return
