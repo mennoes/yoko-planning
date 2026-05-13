@@ -8,13 +8,32 @@ import teamData from '@/data/team.json'
 // Map @studioyoko.nl emails → member-id, opgebouwd uit team.json. Bij
 // shared meetings (Teamdag, weekstart, etc.) trekken we hieruit alle
 // Yoko-deelnemers als mede-eigenaar van het item.
-const EMAIL_TO_MEMBER: Record<string, string> = (() => {
-  const out: Record<string, string> = {}
-  for (const m of teamData.members as Array<{ id: string; email?: string }>) {
-    if (m.email) out[m.email.toLowerCase()] = m.id
+//
+// Lookup is fuzzy: we normaliseren de local-part van een email (lowercase,
+// strippen streepjes/punten) en vergelijken met member.id én een naam-
+// hash. Daardoor matchen 'anne-fleur', 'annefleur', 'anne.fleur' alledrie
+// op member-id 'anne-fleur', ook al staat er in team.json maar één variant.
+function normEmailLocal(s: string): string {
+  return s.toLowerCase().replace(/[.\-_]/g, '')
+}
+const MEMBER_KEYS: Array<{ id: string; keys: Set<string> }> = (teamData.members as Array<{ id: string; name: string; email?: string }>)
+  .map(m => {
+    const keys = new Set<string>()
+    keys.add(normEmailLocal(m.id))
+    if (m.email) keys.add(normEmailLocal(m.email.split('@')[0] ?? ''))
+    if (m.name) keys.add(normEmailLocal(m.name.split(' ')[0] ?? ''))
+    return { id: m.id, keys }
+  })
+function resolveAttendeeEmail(email: string): string | null {
+  const e = email.toLowerCase().trim()
+  if (!e.endsWith('@studioyoko.nl')) return null
+  const local = normEmailLocal(e.split('@')[0] ?? '')
+  if (!local) return null
+  for (const { id, keys } of MEMBER_KEYS) {
+    if (keys.has(local)) return id
   }
-  return out
-})()
+  return null
+}
 
 const WINDOW_DAYS_FUTURE = 56  // ~8 weeks ahead
 const WINDOW_DAYS_PAST   = 14  // 2 weeks back
@@ -163,10 +182,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const ats = ev.attendees ?? []
     const yokos = new Set<string>()
     for (const a of ats) {
-      const email = a.email?.toLowerCase()
+      const email = a.email
       if (!email) continue
       if (a.responseStatus === 'declined') continue
-      const id = EMAIL_TO_MEMBER[email]
+      const id = resolveAttendeeEmail(email)
       if (id) yokos.add(id)
     }
     // De calendar-owner zélf staat soms niet in de attendees-lijst (single-
