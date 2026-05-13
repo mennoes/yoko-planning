@@ -73,8 +73,8 @@ const HANDLE_W = 8
 
 // ─── View-size presets ────────────────────────────────────────────────────────
 function vc(vs: ViewSize) {
-  if (vs === 'large') return { cs: 78, or: 35, hh: 110, av: 46 }
-  return                     { cs: 46, or: 20, hh:  60, av: 32 }
+  if (vs === 'large') return { cs: 78, or: 35, hh: 110, av: 58 }
+  return                     { cs: 46, or: 20, hh:  72, av: 44 }
 }
 // Column widths per zoom
 const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 46, week: 104, maand: 120 }
@@ -2838,6 +2838,14 @@ export default function PlanningPage() {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
               if (freelancersOpen) {
                 freelancers.forEach((m, i) => out.push(<div key={`f-${m.id}`}>{renderMember(m, i)}</div>))
+              } else {
+                // Ingeklapt: toon alleen freelancers die in de zichtbare
+                // periode daadwerkelijk werk hebben. Voorkomt dat we de hele
+                // lange lijst tonen, maar verbergt ook geen actieve mensen.
+                const active = freelancers.filter(m =>
+                  cols.some(col => memberHoursInCol(effectiveProjects, m.id, col).reduce((s, c) => s + c.hours, 0) > 0)
+                )
+                active.forEach((m, i) => out.push(<div key={`f-${m.id}`}>{renderMember(m, i)}</div>))
               }
             }
             return out
