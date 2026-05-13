@@ -1169,8 +1169,8 @@ export default function Sidebar({
   const containerStyle: React.CSSProperties = isMobile
     ? {
         width: 320, minWidth: 320, maxWidth: 320,
-        position: 'fixed', top: 0, right: 0, height: '100vh',
-        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        position: 'fixed', top: 0, left: 0, height: '100vh',
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.22s ease',
         zIndex: 60, display: 'flex', alignItems: 'stretch',
         boxShadow: open ? '0 0 30px rgba(0,0,0,0.3)' : 'none',
