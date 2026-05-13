@@ -38,6 +38,26 @@ function resolveAttendeeEmail(email: string): string | null {
 const WINDOW_DAYS_FUTURE = 56   // ~8 weeks ahead
 const WINDOW_DAYS_PAST   = 180  // 6 months back — zodat recurring meetings
                                  //   ook hun historische instances meenemen
+const AUTO_DONE_AFTER_DAYS = 3  // events waarvan de end-date > N dagen
+                                 //   geleden is, worden auto op 'Done' gezet
+                                 //   tenzij de gebruiker 'Stuck' heeft gezet
+
+function isPastByDays(end: string | null | undefined, days: number): boolean {
+  if (!end) return false
+  const endTs = Date.parse(end)
+  if (Number.isNaN(endTs)) return false
+  return Date.now() - endTs > days * 86400000
+}
+
+function resolveStatus(existing: string | null | undefined, end: string | null | undefined): string {
+  const prev = (existing ?? '').trim()
+  // Stuck nooit overschrijven — daar wil de gebruiker bewust naar kijken.
+  if (prev === 'Stuck') return prev
+  // Door gebruiker handmatig op Done gezet? Laat staan.
+  if (prev === 'Done') return prev
+  if (isPastByDays(end, AUTO_DONE_AFTER_DAYS)) return 'Done'
+  return prev
+}
 
 type GoogleCalRow = {
   id:             string
@@ -286,7 +306,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         board_id:           keepBoard,
         name,
         owner_ids:          finalOwners,
-        status:             existingRow?.status ?? '',
+        status:             resolveStatus(existingRow?.status, end ?? start),
         start_date:         start,
         end_date:           end ?? start,
         deadline:           null,
@@ -349,7 +369,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         // Bewaar handmatig hernoemde subitems; anders standaard de datum-label.
         name:      prev?.name && prev.name !== '—' && !/^[a-z]{2,3}\s+\d/i.test(prev.name) ? prev.name : dateLabel,
         ownerIds:  prev?.ownerIds && prev.ownerIds.length > 0 ? prev.ownerIds : finalOwners,
-        status:    prev?.status ?? '',
+        status:    resolveStatus(prev?.status, end ?? start),
         startDate: start,
         endDate:   end ?? start,
         estHours:  eventHours(ev) * finalOwners.length,
@@ -365,7 +385,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       board_id:           keepBoard,
       name:               baseName + ` (${instances.length}×)`,
       owner_ids:          finalOwners,
-      status:             existingRow?.status ?? '',
+      status:             resolveStatus(existingRow?.status, maxEnd ?? minStart),
       start_date:         minStart,
       end_date:           maxEnd ?? minStart,
       deadline:           null,
