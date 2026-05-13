@@ -8,8 +8,9 @@ import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { useUndo }        from './UndoContext'
+import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
-import { IconComment }    from './Icon'
+import { IconComment, IconSearch, IconActivity } from './Icon'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity }    from '@/lib/itemActivity'
 import {
@@ -1980,6 +1981,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           )}
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          <Link href={`/activity?board=${encodeURIComponent(boardId)}`}
+            title={`Activiteit van bord '${title}'`}
+            style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              color: 'var(--text-secondary)', cursor: 'pointer', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <IconActivity size={13} /> Activiteit
+          </Link>
           <button onClick={() => setReorderMode(r => !r)}
             title={reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
@@ -2048,21 +2057,23 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       )}
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: 12, pointerEvents: 'none' }}>🔍</span>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', display: 'inline-flex' }}>
+            <IconSearch size={16} />
+          </span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoeken…"
-            style={{ padding: '6px 8px 6px 26px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', width: 180, boxSizing: 'border-box' }} />
+            style={{ padding: '9px 12px 9px 32px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', width: 220, boxSizing: 'border-box' }} />
         </div>
 
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: filterStatus ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 13, cursor: 'pointer', outline: 'none' }}>
+          style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: filterStatus ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none' }}>
           <option value="">Alle statussen</option>
           {STATUS_OPTIONS.filter(o => o.label).map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
         </select>
 
         <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)}
-          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: filterOwner ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 13, cursor: 'pointer', outline: 'none' }}>
+          style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: filterOwner ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none' }}>
           <option value="">Alle personen</option>
           {allOwners.map(id => {
             const m = teamData.members.find(t => t.id === id)
@@ -2072,33 +2083,33 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
         {/* Periode-filter: items waarvan de timeline OVERLAPT met
             [van, tot]. Leeg laten = geen ondergrens / bovengrens. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 4px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-card)' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 4 }}>Periode</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-card)' }}>
+          <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Periode</span>
           <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 12, padding: '5px 4px', outline: 'none' }} />
-          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 13, padding: '8px 4px', outline: 'none' }} />
+          <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>→</span>
           <input type="date" value={filterUntil} onChange={e => setFilterUntil(e.target.value)}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 12, padding: '5px 4px', outline: 'none' }} />
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 13, padding: '8px 4px', outline: 'none' }} />
         </div>
 
         {hasFilter && (
           <>
             <button onClick={() => { setSearch(''); setFilterOwner(''); setFilterStatus(''); setFilterFrom(''); setFilterUntil('') }}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--overlay-medium)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
+              style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--overlay-medium)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
               × Wissen
             </button>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{resultCount} resultaten</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{resultCount} resultaten</span>
             {(filterFrom || filterUntil) && (() => {
               // Som van uren in de gefilterde set — handig voor 'wat doen we in maart'
               const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + (Number(i.estHours) || 0), 0), 0)
-              return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>· {Math.round(totalHours * 10) / 10}u totaal</span>
+              return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>· {Math.round(totalHours * 10) / 10}u totaal</span>
             })()}
           </>
         )}
 
         <button onClick={() => setDedupOpen(true)}
           title="Vind items met dezelfde naam en laat je kiezen welke je houdt"
-          style={{ marginLeft: 'auto', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          style={{ marginLeft: 'auto', padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)' }}>
           🧹 Schoonmaken
@@ -2157,6 +2168,28 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             Geen resultaten gevonden
           </div>
         )}
+        {filteredGroups.length > 0 && (() => {
+          const allItems = filteredGroups.flatMap(g => g.items)
+          const totalItems = allItems.length
+          const totalHours = allItems.reduce((s, i) => s + (Number(i.estHours) || 0), 0)
+          const totalDays  = allItems.reduce((s, i) => s + (Number(i.dagen) || 0), 0)
+          const fmt = (n: number) => Math.round(n * 10) / 10
+          return (
+            <div style={{
+              marginTop: 8, padding: '12px 16px',
+              borderTop: '2px solid var(--border)',
+              background: 'var(--overlay-faint)',
+              display: 'flex', alignItems: 'center', gap: 14,
+              fontSize: 13, color: 'var(--text-primary)', fontWeight: 600,
+              borderRadius: '0 0 8px 8px',
+            }}>
+              <span>Totaal · {totalItems} items</span>
+              <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontWeight: 500 }}>
+                {fmt(totalHours)}u · {fmt(totalDays)} dagen
+              </span>
+            </div>
+          )
+        })()}
       </div>
 
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
