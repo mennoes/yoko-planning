@@ -122,16 +122,27 @@ export async function listEvents(
   timeMin:     string,
   timeMax:     string,
 ): Promise<GoogleEvent[]> {
-  const params = new URLSearchParams({
-    timeMin, timeMax,
-    singleEvents: 'true',
-    orderBy:      'startTime',
-    maxResults:   '250',
-    showDeleted:  'true',
-  })
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
-  if (!res.ok) throw new Error('list events failed: ' + await res.text())
-  const data = await res.json() as { items?: GoogleEvent[] }
-  return data.items ?? []
+  // Pagination: Google levert max 250 per pagina. Bij brede windows (we
+  // trekken 6 maanden historie) zit één agenda er zo overheen — zonder
+  // pageToken-loop verloor je dan instances van recurring meetings.
+  const out: GoogleEvent[] = []
+  let pageToken: string | undefined
+  for (let i = 0; i < 20; i++) {  // harde cap: 20 × 250 = 5000 events
+    const params = new URLSearchParams({
+      timeMin, timeMax,
+      singleEvents: 'true',
+      orderBy:      'startTime',
+      maxResults:   '250',
+      showDeleted:  'true',
+    })
+    if (pageToken) params.set('pageToken', pageToken)
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    if (!res.ok) throw new Error('list events failed: ' + await res.text())
+    const data = await res.json() as { items?: GoogleEvent[]; nextPageToken?: string }
+    if (data.items) out.push(...data.items)
+    if (!data.nextPageToken) break
+    pageToken = data.nextPageToken
+  }
+  return out
 }
