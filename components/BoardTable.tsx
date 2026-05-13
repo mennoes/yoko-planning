@@ -919,6 +919,135 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   )
 }
 
+// ─── Dedup modal: dubbele items opsporen + opruimen ──────────────────────────
+function DedupModal({ groups, onClose, onDelete }: {
+  groups: BoardGroup[]
+  onClose: () => void
+  onDelete: (idsToDelete: Set<string>) => void
+}) {
+  // Groepeer alle items op naam (case-insensitive, trimmed). Sets met
+  // meer dan 1 entry = potentiële duplicaten.
+  const dupGroups = useMemo(() => {
+    const byName = new Map<string, BoardItem[]>()
+    for (const g of groups) for (const i of g.items) {
+      const key = (i.name ?? '').trim().toLowerCase()
+      if (!key) continue
+      if (!byName.has(key)) byName.set(key, [])
+      byName.get(key)!.push(i)
+    }
+    return [...byName.values()].filter(arr => arr.length > 1)
+  }, [groups])
+
+  // Per duplicate-set: welk item houden we? Default = eerste (meestal de
+  // oudste, of de Google-versie als er een is).
+  const [keep, setKeep] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {}
+    for (const arr of dupGroups) {
+      // Voorkeur: Google-item houden als er één bij zit, anders het eerste
+      const preferred = arr.find(i => i.source === 'google') ?? arr[0]
+      out[(arr[0].name ?? '').trim().toLowerCase()] = preferred.id
+    }
+    return out
+  })
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const toDelete = new Set<string>()
+  for (const arr of dupGroups) {
+    const key = (arr[0].name ?? '').trim().toLowerCase()
+    const keepId = keep[key]
+    for (const i of arr) if (i.id !== keepId) toDelete.add(i.id)
+  }
+
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9000, backdropFilter: 'blur(4px)' }} />
+      <div onClick={e => e.stopPropagation()} style={{
+        position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+        width: 'min(620px, 92vw)', maxHeight: '85vh', zIndex: 9001,
+        background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+      }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>🧹 Schoonmaken</h3>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--text-muted)' }}>
+              {dupGroups.length === 0
+                ? 'Geen duplicaten gevonden — alles is uniek.'
+                : `${dupGroups.length} naam${dupGroups.length === 1 ? '' : 'en'} komen meerdere keren voor. Kies per groep welk item je wil houden, de rest wordt verwijderd.`}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+          {dupGroups.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>👌 Niks te doen.</p>
+          ) : dupGroups.map((arr) => {
+            const key = (arr[0].name ?? '').trim().toLowerCase()
+            return (
+              <div key={key} style={{ marginBottom: 16, border: '1px solid var(--border-light)', borderRadius: 8 }}>
+                <div style={{ padding: '8px 12px', background: 'var(--overlay-faint)', borderBottom: '1px solid var(--border-light)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  &ldquo;{arr[0].name}&rdquo; <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {arr.length}× gevonden</span>
+                </div>
+                {arr.map(i => {
+                  const isKept = keep[key] === i.id
+                  return (
+                    <label key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: '1px solid var(--border-light)', cursor: 'pointer',
+                      background: isKept ? 'var(--accent-light)' : 'transparent' }}>
+                      <input type="radio" name={`dup-${key}`} checked={isKept}
+                        onChange={() => setKeep(prev => ({ ...prev, [key]: i.id }))}
+                        style={{ accentColor: 'var(--accent)' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {i.source === 'google' && <span style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>G</span>}
+                          {i.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {i.startDate ? `${i.startDate} → ${i.endDate ?? i.startDate}` : 'geen datums'} · {i.estHours ?? 0}u
+                          {i.ownerIds && i.ownerIds.length > 0 && ` · ${i.ownerIds.filter(o => o !== 'unassigned').map(o => teamData.members.find(m => m.id === o)?.name?.split(' ')[0] ?? o).join(', ')}`}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: isKept ? 'var(--accent)' : 'var(--text-muted)' }}>
+                        {isKept ? 'BEHOUDEN' : 'verwijderen'}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+
+        {dupGroups.length > 0 && (
+          <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+              {toDelete.size} item{toDelete.size === 1 ? '' : 's'} worden verwijderd.
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={onClose} style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12.5, cursor: 'pointer' }}>Annuleer</button>
+              <button onClick={() => onDelete(toDelete)} disabled={toDelete.size === 0}
+                style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
+                  background: toDelete.size > 0 ? '#e2445c' : 'var(--bg-hover)',
+                  color: toDelete.size > 0 ? '#fff' : 'var(--text-muted)',
+                  fontSize: 12.5, fontWeight: 700, cursor: toDelete.size > 0 ? 'pointer' : 'not-allowed' }}>
+                Verwijder {toDelete.size}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>,
+    document.body,
+  )
+}
+
 // ─── Comment modal voor één board-item ────────────────────────────────────────
 function BoardItemCommentModal({ itemId, itemText, onClose }: {
   itemId: string; itemText: string; onClose: () => void
@@ -1622,6 +1751,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const [sortBy,        setSortBy]       = useState<{ key: string; dir: 'asc' | 'desc' } | null>({ key: 'timeline', dir: 'asc' })
   const [reorderMode,   setReorderMode]  = useState(false)
   const [titleDraft,    setTitleDraft]   = useState(title)
+  const [dedupOpen,     setDedupOpen]    = useState(false)
 
   function resizeCol(key: string, newWidth: number) {
     const updated = { ...colWidths, [key]: Math.max(60, newWidth) }
@@ -1964,7 +2094,23 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             })()}
           </>
         )}
+
+        <button onClick={() => setDedupOpen(true)}
+          title="Vind items met dezelfde naam en laat je kiezen welke je houdt"
+          style={{ marginLeft: 'auto', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)' }}>
+          🧹 Schoonmaken
+        </button>
       </div>
+
+      {dedupOpen && (
+        <DedupModal groups={groups} onClose={() => setDedupOpen(false)}
+          onDelete={(ids: Set<string>) => {
+            onChange(groups.map(g => ({ ...g, items: g.items.filter(i => !ids.has(i.id)) })))
+            setDedupOpen(false)
+          }} />
+      )}
 
       {/* Groepen — wrapped in een dropzone zodat hele groepen via header-
           handle naar een andere positie gesleept kunnen worden. */}

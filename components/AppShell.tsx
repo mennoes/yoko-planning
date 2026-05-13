@@ -18,6 +18,7 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
 import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
 import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistry'
+import { ensureRewindItems } from '@/lib/rewindScheduler'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
 import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
@@ -126,6 +127,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Comments cross-browser sync
       pullCommentsAll()
       unsubs.push(subscribeRemoteComments())
+      // Auto-plan Rewind-items voor huidige + volgende maand zodra de
+      // boards zijn geladen. Idempotent (skipt bestaande).
+      ensureRewindItems(2)
       // Boards: pull + subscribe + first-time migrate from localStorage
       for (const b of BOARD_NAMES) {
         const ok = await pullBoardFromRemote(b)
