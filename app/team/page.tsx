@@ -6,6 +6,11 @@ import teamData     from '@/data/team.json'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
 import { IconUsers, IconSearch } from '@/components/Icon'
+import {
+  getCapacities, setCapacity, onCapacitiesChange,
+  getContacts, saveContacts, onContactsChange,
+  type ContactGroup as StoredGroup,
+} from '@/lib/teamPageStore'
 
 // ─── Contacts types ───────────────────────────────────────────────────────────
 type Contact = { id: string; name: string; role: string; email: string; phone: string }
@@ -92,12 +97,19 @@ function PhotoCropper({ src, onDone, onCancel }: {
 }
 
 // ─── Team member card ─────────────────────────────────────────────────────────
-function TeamMemberCard({ member }: { member: typeof teamData.members[number] }) {
+function TeamMemberCard({ member, capacity, onCapacityChange }: {
+  member: typeof teamData.members[number]
+  capacity: number
+  onCapacityChange: (cap: number) => void
+}) {
   const { getPhoto, setPhoto }  = useTeamPhotos()
   const { profile }             = useProfile()
   const isMe    = profile?.memberId === member.id
   const photo   = isMe ? (profile?.photo ?? null) : getPhoto(member.id)
   const fallback = `/team/${member.id}.jpg`
+  const [capEdit, setCapEdit] = useState(false)
+  const [capDraft, setCapDraft] = useState(String(capacity))
+  useEffect(() => { if (!capEdit) setCapDraft(String(capacity)) }, [capacity, capEdit])
 
   const [cropSrc,   setCropSrc]   = useState<string | null>(null)
   const [hover,     setHover]     = useState(false)
@@ -163,10 +175,29 @@ function TeamMemberCard({ member }: { member: typeof teamData.members[number] })
 
           <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} />
 
-          {/* Name + capacity */}
+          {/* Name + capacity (capacity is inline-editable + gedeeld met Planning) */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>{member.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{member.weeklyCapacity}u/week</div>
+            {capEdit ? (
+              <input autoFocus type="number" min={0} value={capDraft}
+                onChange={e => setCapDraft(e.target.value)}
+                onBlur={() => { const n = Math.max(0, parseFloat(capDraft) || 0); onCapacityChange(n); setCapEdit(false) }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { const n = Math.max(0, parseFloat(capDraft) || 0); onCapacityChange(n); setCapEdit(false) }
+                  if (e.key === 'Escape') { setCapDraft(String(capacity)); setCapEdit(false) }
+                }}
+                style={{ width: 70, marginTop: 4, padding: '3px 6px', fontSize: 12, textAlign: 'center',
+                  background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4,
+                  color: 'var(--text-primary)', outline: 'none' }} />
+            ) : (
+              <button onClick={() => setCapEdit(true)} title="Klik om uren/week te wijzigen"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', marginTop: 2,
+                  fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 600, borderRadius: 4 }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                {capacity}u/week
+              </button>
+            )}
           </div>
 
           {/* Color dot */}
@@ -191,8 +222,22 @@ function Avatar({ name, color }: { name: string; color: string }) {
 }
 
 // ─── Contact group ────────────────────────────────────────────────────────────
-function ContactGroup({ group }: { group: Group }) {
+function ContactGroup({ group, onChange }: {
+  group: Group
+  onChange: (g: Group) => void
+}) {
   const [collapsed, setCollapsed] = useState(false)
+  function updateContact(id: string, patch: Partial<Contact>) {
+    onChange({ ...group, contacts: group.contacts.map(c => c.id === id ? { ...c, ...patch } : c) })
+  }
+  function deleteContact(id: string) {
+    const c = group.contacts.find(x => x.id === id)
+    if (c && c.name && !confirm(`'${c.name}' verwijderen?`)) return
+    onChange({ ...group, contacts: group.contacts.filter(c => c.id !== id) })
+  }
+  function addContact() {
+    onChange({ ...group, contacts: [...group.contacts, { id: `c_${Date.now()}`, name: '', role: '', email: '', phone: '' }] })
+  }
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -209,58 +254,141 @@ function ContactGroup({ group }: { group: Group }) {
       {!collapsed && (
         <div style={{ borderLeft: `4px solid ${group.color}` }}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 160px 220px 160px',
+            display: 'grid', gridTemplateColumns: '1fr 160px 220px 160px 36px',
             background: 'var(--bg-hover)', borderBottom: '1px solid var(--border)',
           }}>
-            {['Naam', 'Functie', 'E-mail', 'Telefoon'].map(h => (
-              <div key={h} style={{
+            {['Naam', 'Functie', 'E-mail', 'Telefoon', ''].map((h, i) => (
+              <div key={h || `e-${i}`} style={{
                 padding: '6px 14px', fontSize: 11, fontWeight: 700,
                 color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em',
-                borderLeft: h !== 'Naam' ? '1px solid var(--border)' : 'none',
+                borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
               }}>{h}</div>
             ))}
           </div>
           {group.contacts.map(contact => (
-            <ContactRow key={contact.id} contact={contact} color={group.color} />
+            <ContactRow key={contact.id} contact={contact} color={group.color}
+              onUpdate={u => updateContact(contact.id, u)}
+              onDelete={() => deleteContact(contact.id)} />
           ))}
+          <div style={{ padding: '8px 14px' }}>
+            <button onClick={addContact}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+              + Voeg contact toe
+            </button>
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function ContactRow({ contact, color }: { contact: Contact; color: string }) {
+function ContactRow({ contact, color, onUpdate, onDelete }: {
+  contact: Contact; color: string
+  onUpdate: (u: Partial<Contact>) => void
+  onDelete: () => void
+}) {
   const [hover, setHover] = useState(false)
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '1fr 160px 220px 160px',
+      display: 'grid', gridTemplateColumns: '1fr 160px 220px 160px 36px',
       alignItems: 'center', minHeight: 44, borderBottom: '1px solid var(--border)',
       background: hover ? 'var(--overlay-hover)' : 'transparent', transition: 'background 0.1s',
     }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <Avatar name={contact.name} color={color} />
-        <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text-primary)' }}>{contact.name}</span>
+        <InlineField value={contact.name} placeholder="Naam" onSave={v => onUpdate({ name: v })}
+          style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text-primary)', flex: 1 }} />
       </div>
-      <div style={{ padding: '6px 14px', borderLeft: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)' }}>
-        {contact.role || <span style={{ color: 'var(--text-muted)' }}>—</span>}
+      <div style={{ padding: '6px 14px', borderLeft: '1px solid var(--border)' }}>
+        <InlineField value={contact.role} placeholder="Functie" onSave={v => onUpdate({ role: v })}
+          style={{ fontSize: 13, color: 'var(--text-secondary)' }} />
       </div>
-      <div style={{ padding: '6px 14px', borderLeft: '1px solid var(--border)', fontSize: 13 }}>
-        {contact.email ? (
-          <a href={`mailto:${contact.email}`} style={{ color: 'var(--blue)', textDecoration: 'none' }}
-            onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-            onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>{contact.email}</a>
-        ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+      <div style={{ padding: '6px 14px', borderLeft: '1px solid var(--border)' }}>
+        <InlineField value={contact.email} placeholder="E-mail" type="email" onSave={v => onUpdate({ email: v })}
+          style={{ fontSize: 13, color: contact.email ? 'var(--blue)' : 'var(--text-muted)' }} />
       </div>
-      <div style={{ padding: '6px 14px', borderLeft: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)' }}>
-        {contact.phone || <span style={{ color: 'var(--text-muted)' }}>—</span>}
+      <div style={{ padding: '6px 14px', borderLeft: '1px solid var(--border)' }}>
+        <InlineField value={contact.phone} placeholder="Telefoon" onSave={v => onUpdate({ phone: v })}
+          style={{ fontSize: 13, color: 'var(--text-secondary)' }} />
+      </div>
+      <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        {hover && (
+          <button onClick={onDelete} title="Contact verwijderen"
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
+        )}
       </div>
     </div>
   )
 }
 
+// Klik op tekst → input; Enter/blur slaat op, Escape annuleert.
+function InlineField({ value, placeholder, onSave, style, type = 'text' }: {
+  value: string; placeholder: string; onSave: (v: string) => void
+  style?: React.CSSProperties
+  type?: 'text' | 'email' | 'tel'
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  useEffect(() => { if (!editing) setDraft(value) }, [value, editing])
+  if (editing) return (
+    <input autoFocus type={type} value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => { onSave(draft); setEditing(false) }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') { onSave(draft); setEditing(false) }
+        if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+      }}
+      placeholder={placeholder}
+      style={{ width: '100%', boxSizing: 'border-box',
+        padding: '4px 6px', background: 'var(--bg-base)', border: '1px solid var(--accent)',
+        borderRadius: 4, color: 'var(--text-primary)', outline: 'none', ...style, fontWeight: 500 }} />
+  )
+  return (
+    <span onClick={() => setEditing(true)} title="Klik om te bewerken"
+      style={{ cursor: 'text', display: 'inline-block', padding: '2px 0', minHeight: 18, ...style }}>
+      {value || <span style={{ color: 'var(--text-muted)' }}>{placeholder}</span>}
+    </span>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function TeamPage() {
-  const groups = contactsData.groups as Group[]
+  // Capaciteiten zijn gedeeld met de Planning-pagina via localStorage; we
+  // luisteren ook live mee zodat een aanpassing in Planning hier direct
+  // doorkomt (en andersom).
+  const initialCaps: Record<string, number> = Object.fromEntries(
+    teamData.members.map(m => [m.id, m.weeklyCapacity ?? 0])
+  )
+  const [caps, setCaps] = useState<Record<string, number>>(initialCaps)
+  useEffect(() => {
+    const refresh = () => {
+      const ov = getCapacities()
+      setCaps({ ...initialCaps, ...ov })
+    }
+    refresh()
+    return onCapacitiesChange(refresh)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Contacts leven in localStorage (override op data/contacts.json) en
+  // worden via een custom event live ge-sync'd binnen dezelfde browser.
+  const initialGroups = contactsData.groups as Group[]
+  const [groups, setGroups] = useState<Group[]>(initialGroups)
+  useEffect(() => {
+    const refresh = () => setGroups(getContacts(initialGroups as unknown as StoredGroup[]) as unknown as Group[])
+    refresh()
+    return onContactsChange(refresh)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  function updateGroup(next: Group) {
+    const updated = groups.map(g => g.id === next.id ? next : g)
+    setGroups(updated)
+    saveContacts(updated as unknown as StoredGroup[])
+  }
 
   return (
     <div style={{ padding: '32px 32px 64px' }}>
@@ -276,10 +404,14 @@ export default function TeamPage() {
           Studio Yoko
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          {teamData.members.map(m => <TeamMemberCard key={m.id} member={m} />)}
+          {teamData.members.map(m => (
+            <TeamMemberCard key={m.id} member={m}
+              capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
+              onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
+          ))}
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
-          Hover over een foto om te wijzigen · je eigen profiel beheer je via de sidebar
+          Hover over een foto om te wijzigen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · je eigen profiel beheer je via de sidebar
         </p>
       </div>
 
@@ -290,7 +422,9 @@ export default function TeamPage() {
             Contacten · {groups.reduce((s, g) => s + g.contacts.length, 0)} personen
           </div>
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'visible' }}>
-            {groups.map(group => <ContactGroup key={group.id} group={group} />)}
+            {groups.map(group => (
+              <ContactGroup key={group.id} group={group} onChange={updateGroup} />
+            ))}
           </div>
         </>
       )}
