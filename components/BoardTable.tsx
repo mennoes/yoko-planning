@@ -1357,30 +1357,10 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
               </span>
             </div>
 
-            <div style={{ marginBottom: 14 }}>
-              <MentionTextarea
-                value={newReply}
-                onChange={setNewReply}
-                onMentionsChange={setMentionIds}
-                onSubmit={addReply}
-                placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, ⌘+Enter om te plaatsen)"
-                rows={3}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-                <button onClick={addReply} disabled={!newReply.trim()}
-                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
-                    background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
-                    color: newReply.trim() ? '#000' : 'var(--text-muted)',
-                    fontSize: 13, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed' }}>
-                  Plaats opmerking
-                </button>
-              </div>
-            </div>
-
             {replies.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '8px 0' }}>Nog geen opmerkingen. Wees de eerste!</p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '8px 0 14px' }}>Nog geen opmerkingen. Wees de eerste!</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
                 {[...replies].reverse().map(r => {
                   const mine = !!profile?.memberId && r.authorId === profile.memberId
                   return (
@@ -1427,6 +1407,26 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
                 })}
               </div>
             )}
+
+            <div>
+              <MentionTextarea
+                value={newReply}
+                onChange={setNewReply}
+                onMentionsChange={setMentionIds}
+                onSubmit={addReply}
+                placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, ⌘+Enter om te plaatsen)"
+                rows={3}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                <button onClick={addReply} disabled={!newReply.trim()}
+                  style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
+                    background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                    color: newReply.trim() ? '#000' : 'var(--text-muted)',
+                    fontSize: 13, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed' }}>
+                  Plaats opmerking
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
