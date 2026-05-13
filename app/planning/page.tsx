@@ -583,11 +583,16 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
       if (Math.abs(dx) >= 10 || Math.abs(dy) >= 10) didDrag.current = true
 
       // Reassign-mode only applies to whole-bar drags ('move'), not edge resizes.
-      // If the cursor is over a different member row, treat this as a
-      // reassignment intent and skip date-shifts during the drag.
-      const targetId = mode === 'move' && onReassign ? memberAt(ev.clientX, ev.clientY) : null
-      const isReassigning = !!(targetId && targetId !== memberId)
-      reassignRef.current = isReassigning ? targetId : null
+      // Het target is "sticky": een korte uitstap naar een tussen-rij-gap
+      // (memberAt → null) wist 'm niet, anders zou loslaten op een hairsbreedte
+      // buiten een rij stilletjes terugvallen op datum-drag.
+      if (mode === 'move' && onReassign) {
+        const hit = memberAt(ev.clientX, ev.clientY)
+        if (hit === memberId) reassignRef.current = null
+        else if (hit !== null) reassignRef.current = hit
+        // else (hit === null): bewaar laatste target
+      }
+      const isReassigning = !!reassignRef.current
       highlightRow(reassignRef.current)
 
       if (isReassigning) {
@@ -648,7 +653,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
         style={{ position: 'absolute', top: barTop - 6, left: g.left + 2 - 8,
           width: g.width + 16, height: barH + 12,
-          cursor: ghost ? 'grabbing' : 'pointer',
+          cursor: ghost ? 'grabbing' : 'grab',
           pointerEvents: 'auto' }}
       />
       <div
@@ -657,7 +662,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
         style={{ position: 'absolute', top: barTop, left: g.left + 2, width: g.width, height: barH,
           background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 600, color: '#fff',
-          cursor: ghost ? 'grabbing' : 'pointer', userSelect: 'none',
+          cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
           pointerEvents: 'auto',
           boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
           zIndex: ghost ? 1 : 'auto' }}
