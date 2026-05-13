@@ -2268,10 +2268,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     clearSelection()
   }
   function toggleSort(key: string) {
+    // Tweetallig: nieuwe kolom start op asc (eerstvolgende eerst), volgende
+    // klik flipt naar desc, daarna weer asc. Geen 'geen sortering'-stand —
+    // de tabel is altijd op iets gesorteerd.
     setSortBy(prev => {
       if (!prev || prev.key !== key) return { key, dir: 'asc' }
-      if (prev.dir === 'asc') return { key, dir: 'desc' }
-      return null
+      return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
     })
   }
 
@@ -2329,12 +2331,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               color: reorderMode ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>
             ↕ {reorderMode ? 'Klaar' : 'Volgorde'}
           </button>
-          {sortBy && (
-            <button onClick={() => setSortBy(null)} title="Sortering wissen"
-              style={{ padding: '7px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-              × sortering
-            </button>
-          )}
           <button onClick={exportCSV} title="Exporteer als CSV"
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             ↓ CSV
