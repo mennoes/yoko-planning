@@ -890,21 +890,33 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           <button onClick={(e) => { e.stopPropagation(); setShowDetail(true) }}
             title={commentCount > 0 ? `${commentCount} opmerking${commentCount === 1 ? '' : 'en'}` : 'Plaats opmerking'}
             style={commentCount > 0 ? {
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '3px 9px', borderRadius: 999,
-              background: 'var(--accent-light)',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 11px', borderRadius: 999,
+              background: 'var(--accent)',
               border: '1px solid var(--accent)',
-              color: 'var(--text-primary)',
-              fontSize: 12, fontWeight: 700,
+              color: '#000',
+              fontSize: 13, fontWeight: 700,
               cursor: 'pointer', flexShrink: 0, lineHeight: 1,
             } : {
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)',
-              padding: '4px 6px', borderRadius: 6, flexShrink: 0,
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer',
+              color: 'var(--accent)',
+              padding: '4px 8px', borderRadius: 999, flexShrink: 0,
               display: 'inline-flex', alignItems: 'center', gap: 4,
-              opacity: hover ? 0.85 : 0.4, transition: 'opacity 0.15s',
+              opacity: 1, transition: 'background 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => {
+              if (commentCount === 0) {
+                e.currentTarget.style.background = 'var(--accent-light)'
+              }
+            }}
+            onMouseLeave={e => {
+              if (commentCount === 0) {
+                e.currentTarget.style.background = 'var(--bg-card)'
+              }
             }}>
-            <IconComment size={18} strokeWidth={1.6} />
+            <IconComment size={22} strokeWidth={1.8} />
             {commentCount > 0 && <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span>}
           </button>
         </div>
