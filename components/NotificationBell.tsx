@@ -131,7 +131,7 @@ export function NotificationBell() {
         <IconBell size={22} strokeWidth={1.8} />
         {unread > 0 && (
           <span style={{
-            position: 'absolute', top: -3, right: -3,
+            position: 'absolute', top: 2, right: 2,
             minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8,
             background: '#e2445c', color: '#fff', fontSize: 10, fontWeight: 700,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

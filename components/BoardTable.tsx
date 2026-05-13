@@ -633,6 +633,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
   function renderCol(c: ColumnDef) {
     switch (c.key) {
       case 'owner':
+      case 'ownerIds':
         return <div style={cellBorder}><OwnersCell value={subitem.ownerIds} onChange={v => onUpdate({ ownerIds: v })} /></div>
       case 'status':
         return <div style={cellBorder}><StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} /></div>

@@ -1774,6 +1774,12 @@ export default function PlanningPage() {
     return localStorage.getItem('planning-freelancers-open') === '1'
   })
   useEffect(() => { localStorage.setItem('planning-freelancers-open', freelancersOpen ? '1' : '0') }, [freelancersOpen])
+  const [yokoTeamOpen, setYokoTeamOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    const v = localStorage.getItem('planning-yokoteam-open')
+    return v === null ? true : v === '1'
+  })
+  useEffect(() => { localStorage.setItem('planning-yokoteam-open', yokoTeamOpen ? '1' : '0') }, [yokoTeamOpen])
   const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -2729,13 +2735,8 @@ export default function PlanningPage() {
                         <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
                       )}
-                      <button onClick={() => {
-                          if (editOrder) return
-                          // Toggle focus: if already isolated to this member → clear; else isolate
-                          if (filterMembers.size === 1 && filterMembers.has(member.id)) setFilterMembers(new Set())
-                          else setFilterMembers(new Set([member.id]))
-                        }}
-                        title={filterMembers.size === 1 && filterMembers.has(member.id) ? 'Toon iedereen' : `Focus op ${member.name}`}
+                      <button onClick={() => { if (!editOrder) toggleExpand(member.id) }}
+                        title={isExp ? 'Inklappen' : 'Uitvouwen'}
                         style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', minWidth: 0, flex: 1, padding: 0, textAlign: 'left' }}>
                         <MemberAvatar member={member} size={av} />
                         <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2816,8 +2817,10 @@ export default function PlanningPage() {
 
             const out: React.ReactNode[] = []
             if (yokoTeam.length > 0) {
-              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length)}</div>)
-              yokoTeam.forEach((m, i) => out.push(<div key={`y-${m.id}`}>{renderMember(m, i)}</div>))
+              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => setYokoTeamOpen(o => !o), isOpen: yokoTeamOpen })}</div>)
+              if (yokoTeamOpen) {
+                yokoTeam.forEach((m, i) => out.push(<div key={`y-${m.id}`}>{renderMember(m, i)}</div>))
+              }
             }
             if (unassigned.length > 0) {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)

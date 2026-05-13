@@ -264,9 +264,10 @@ function SectionBlock({
   // All sections are collapsible. Default open for 'projects' (Agenda's),
   // collapsed for 'docs' (Pagina's) and 'pages' (Documenten). Auto-open if
   // the current route lives inside.
-  const [open,          setOpen]          = useState(
-    section.type === 'projects'
-    || section.items.some(i => pathname.startsWith(i.href))
+  // Standaard ingeklapt — alleen auto-openen wanneer de actieve route
+  // binnen de sectie zit, dan ziet de gebruiker waar 'ie is.
+  const [open, setOpen] = useState(
+    section.items.some(i => pathname.startsWith(i.href))
   )
   useEffect(() => {
     if (section.items.some(i => pathname.startsWith(i.href))) setOpen(true)
@@ -473,11 +474,11 @@ function SectionBlock({
                     onClick={e => { if (editOrder) e.preventDefault() }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, flex: 1,
-                      padding: '7px 10px 7px 18px',
+                      padding: '9px 10px 9px 22px',
                       borderRadius: 6, marginBottom: 1,
                       color: 'var(--text-primary)',
                       background: active ? 'var(--bg-hover)' : 'transparent',
-                      textDecoration: 'none', fontSize: 14.5, fontWeight: active ? 600 : 500, minWidth: 0,
+                      textDecoration: 'none', fontSize: 16, fontWeight: active ? 600 : 500, minWidth: 0,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
