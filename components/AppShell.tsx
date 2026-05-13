@@ -18,6 +18,7 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
 import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
+import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
 import { onAuthChange, isSyncing } from '@/lib/sync'
 import { syncGoogleNow } from '@/lib/googleClient'
@@ -117,6 +118,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Workload category overrides
       pullCategoryOverrides()
       unsubs.push(subscribeRemoteCategories())
+      // Comments cross-browser sync
+      pullCommentsAll()
+      unsubs.push(subscribeRemoteComments())
       // Boards: pull + subscribe + first-time migrate from localStorage
       for (const b of BOARD_NAMES) {
         const ok = await pullBoardFromRemote(b)
