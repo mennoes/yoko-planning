@@ -1435,7 +1435,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
           v = dKey === 'startDate' ? dates[0] : dates[dates.length - 1]
         }
       }
-      return v ? new Date(v).getTime() : Number.MAX_SAFE_INTEGER
+      // null laten doorvallen — de outer sort gooit null altijd onderaan,
+      // ongeacht asc/desc. (MAX_SAFE_INTEGER zou items zonder datum in DESC
+      // bovenaan zetten, wat raar oogt.)
+      return v ? new Date(v).getTime() : null
     }
     const v = item[key]
     if (v == null) return ''
