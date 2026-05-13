@@ -702,7 +702,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
           <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
         </div>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 9 : 11 }} aria-label="Vrij">🏝</span>}
+          {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {project.name}{project.group ? ` | ${project.group}` : ''}
           </span>
