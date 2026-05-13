@@ -15,7 +15,7 @@ import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type TeamMember } from '@/lib/workload'
 import {
-  CAT_COLOR, CAT_LABEL,
+  CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
   effectiveCategory,
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
@@ -413,7 +413,7 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
     return out
   })()
 
-  const catTotal: Record<WorkloadCategory, number> = { maken: 0, overhead: 0, meeting: 0 }
+  const catTotal: Record<WorkloadCategory, number> = { maken: 0, overhead: 0, meeting: 0, vrij: 0 }
   for (const c of contribs) {
     const cat = effectiveCategory({ name: c.project.name, hours: c.hours, source: c.project.source }, overrides[c.project.id])
     catTotal[cat] += c.hours
@@ -437,13 +437,13 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 
       {/* Category breakdown bar */}
       <div style={{ display: 'flex', height: 5, borderRadius: 3, overflow: 'hidden', background: 'var(--border)', marginBottom: 6 }}>
-        {(['maken','overhead','meeting'] as const).map(c => {
+        {ALL_CATEGORIES.map(c => {
           const w = total > 0 ? (catTotal[c] / total) * 100 : 0
           return <div key={c} style={{ width: `${w}%`, background: CAT_COLOR[c], transition: 'width 0.3s' }} />
         })}
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-        {(['maken','overhead','meeting'] as const).map(c => (
+        {ALL_CATEGORIES.map(c => (
           <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[c] }} />
             <strong style={{ color: 'var(--text-primary)' }}>{r(catTotal[c])}u</strong> {CAT_LABEL[c].toLowerCase()}
@@ -483,7 +483,7 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
                   <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{r(hours)}u</span>
                 </div>
                 <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                  {(['maken','overhead','meeting'] as const).map(c => {
+                  {ALL_CATEGORIES.map(c => {
                     const active = cat === c
                     return (
                       <button key={c} type="button"
@@ -1299,7 +1299,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
         </Row>
         <Row label="Categorie">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {(['maken','overhead','meeting'] as const).map(c => {
+            {ALL_CATEGORIES.map(c => {
               const active = currentCategory === c
               const colorC = CAT_COLOR[c]
               return (

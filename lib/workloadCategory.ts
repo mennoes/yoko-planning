@@ -7,17 +7,23 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 
-export type WorkloadCategory = 'meeting' | 'overhead' | 'maken'
+// `overhead` blijft als data-key bestaan zodat oude rijen in Supabase niet
+// opnieuw geclassificeerd hoeven; alleen het label is gewijzigd naar
+// "Overige maken". `vrij` is nieuw — vakantie / verlof / niet-werkdagen.
+export type WorkloadCategory = 'meeting' | 'overhead' | 'maken' | 'vrij'
+export const ALL_CATEGORIES: readonly WorkloadCategory[] = ['maken', 'overhead', 'meeting', 'vrij'] as const
 
 export const CAT_COLOR: Record<WorkloadCategory, string> = {
   meeting:  '#D8B62E',
   overhead: '#9aadbd',
   maken:    '#5fa06e',
+  vrij:     '#c98ad1',
 }
 export const CAT_LABEL: Record<WorkloadCategory, string> = {
   meeting:  'Meeting',
-  overhead: 'Overhead',
+  overhead: 'Overige maken',
   maken:    'Maken',
+  vrij:     'Vrij',
 }
 
 const MEETING_PATTERNS = [
@@ -26,13 +32,23 @@ const MEETING_PATTERNS = [
   /\byoko check\b/i, /\bcheckout\b/i, /\bcheck out\b/i, /\bbpd\b/i, /\bketcho\b/i,
 ]
 const OVERHEAD_PATTERNS = [
-  /\bvisie\b/i, /\bto.?do/i, /\bformuleer/i, /\bplanning\b/i, /\bsocials\b/i, /\bthuiswerken\b/i,
-  /\bvrij\b/i, /\bvakantie\b/i, /\bnab\b/i, /\bonbetaald\b/i, /\bemail\b/i, /\bmail\b/i,
+  /\bvisie\b/i, /\bto.?do/i, /\bformuleer/i, /\bplanning\b/i, /\bsocials\b/i,
+  /\bnab\b/i, /\bonbetaald\b/i, /\bemail\b/i, /\bmail\b/i,
   /\bonboarding\b/i, /\bevaluatie\b/i, /\beind-?gesprek\b/i,
 ]
+const VRIJ_PATTERNS = [
+  /\bvrij\b/i, /\bvakantie\b/i, /\bverlof\b/i, /\bthuiswerken\b/i, /\bziek\b/i,
+  /\bfeestdag\b/i, /\bhemelvaart\b/i, /\bpinksteren\b/i, /\bpasen\b/i, /\bkerst\b/i,
+  /\bkoningsdag\b/i, /\bbevrijdingsdag\b/i,
+]
+
+function isValidCategory(c: unknown): c is WorkloadCategory {
+  return c === 'meeting' || c === 'overhead' || c === 'maken' || c === 'vrij'
+}
 
 export function classifyItem(item: { name: string; hours: number; source?: string }): WorkloadCategory {
   const n = item.name || ''
+  if (VRIJ_PATTERNS.some(re => re.test(n))) return 'vrij'
   if (MEETING_PATTERNS.some(re => re.test(n))) return 'meeting'
   // Short Google events without a clear "maken" name → meeting
   if (item.source === 'google' && item.hours > 0 && item.hours <= 1.5) return 'meeting'
@@ -44,7 +60,7 @@ export function effectiveCategory(
   item: { name: string; hours: number; source?: string },
   override?: WorkloadCategory | null,
 ): WorkloadCategory {
-  if (override === 'meeting' || override === 'overhead' || override === 'maken') return override
+  if (isValidCategory(override)) return override
   return classifyItem(item)
 }
 
@@ -111,9 +127,7 @@ export async function pullCategoryOverrides(): Promise<boolean> {
 
   const map: Record<string, WorkloadCategory> = {}
   for (const r of data as { item_id: string; category: string }[]) {
-    if (r.category === 'meeting' || r.category === 'overhead' || r.category === 'maken') {
-      map[r.item_id] = r.category
-    }
+    if (isValidCategory(r.category)) map[r.item_id] = r.category
   }
   // Skip the update event if the cache already matches.
   if (JSON.stringify(readCache()) === JSON.stringify(map)) return true
