@@ -176,7 +176,7 @@ export function NotificationBell() {
             </div>
           </div>
           {items.length === 0 ? (
-            <p style={{ padding: '14px 12px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
+            <p style={{ padding: '14px 12px', fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
               Geen meldingen — even kalm.
             </p>
           ) : items.map(n => {

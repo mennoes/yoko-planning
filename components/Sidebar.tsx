@@ -25,6 +25,7 @@ import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
   IconDocument, IconFolder, IconFolderOpen, IconSort, IconRefresh, IconActivity,
+  IconSearch,
 } from './Icon'
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
@@ -1046,10 +1047,12 @@ export default function Sidebar({
   isMobile = false,
   open     = true,
   onClose,
+  onOpenSearch,
 }: {
-  isMobile?: boolean
-  open?:     boolean
-  onClose?:  () => void
+  isMobile?:     boolean
+  open?:         boolean
+  onClose?:      () => void
+  onOpenSearch?: () => void
 } = {}) {
   const pathname              = usePathname()
   const { profile, openEdit, signOut } = useProfile()
@@ -1169,8 +1172,8 @@ export default function Sidebar({
   const containerStyle: React.CSSProperties = isMobile
     ? {
         width: 320, minWidth: 320, maxWidth: 320,
-        position: 'fixed', top: 0, right: 0, height: '100vh',
-        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        position: 'fixed', top: 0, left: 0, height: '100vh',
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.22s ease',
         zIndex: 60, display: 'flex', alignItems: 'stretch',
         boxShadow: open ? '0 0 30px rgba(0,0,0,0.3)' : 'none',
@@ -1216,7 +1219,24 @@ export default function Sidebar({
             </svg>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--sup-yellow)', letterSpacing: '0.3em', textTransform: 'uppercase', marginTop: 8 }}>PLANNING</div>
           </Link>
-          {!isMobile && <NotificationBell />}
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {onOpenSearch && (
+                <button onClick={onOpenSearch} aria-label="Zoeken" title="Zoeken (⌘K)"
+                  style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-secondary)', padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+                  <IconSearch size={18} />
+                </button>
+              )}
+              <NotificationBell />
+            </div>
+          )}
         </div>
 
         {/* Nav */}

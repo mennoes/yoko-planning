@@ -11,7 +11,8 @@ import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
-import { IconMenu, IconSearch } from './Icon'
+import Link from 'next/link'
+import { IconMenu, IconSearch, IconHome } from './Icon'
 import { NotificationBell } from './NotificationBell'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
@@ -206,7 +207,8 @@ function Inner({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <Sidebar isMobile={isMobile} open={!isMobile || drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <Sidebar isMobile={isMobile} open={!isMobile || drawerOpen} onClose={() => setDrawerOpen(false)}
+        onOpenSearch={!isMobile ? () => setSearchOpen(true) : undefined} />
 
       {isMobile && drawerOpen && (
         <div onClick={() => setDrawerOpen(false)}
@@ -215,9 +217,9 @@ function Inner({ children }: { children: ReactNode }) {
 
       {isMobile && !drawerOpen && (
         <>
-          {/* Menu linksboven — meest gebruikte knop, sluit aan op standaard
-              mobile-conventie (hamburger linksboven). */}
-          <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 70 }}>
+          {/* Menu + home linksboven — meest gebruikte knoppen, sluit aan op
+              standaard mobile-conventie (hamburger linksboven). */}
+          <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
             <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
               style={{
                 width: 38, height: 38, borderRadius: 9,
@@ -228,6 +230,16 @@ function Inner({ children }: { children: ReactNode }) {
               }}>
               <IconMenu size={20} />
             </button>
+            <Link href="/" aria-label="Home"
+              style={{
+                width: 38, height: 38, borderRadius: 9,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                color: 'var(--text-primary)', textDecoration: 'none',
+              }}>
+              <IconHome size={20} />
+            </Link>
           </div>
           {/* Notificaties + zoeken rechtsboven. */}
           <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
