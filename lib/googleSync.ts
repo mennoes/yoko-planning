@@ -267,9 +267,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const keepBoard = existingRow?.board_id ?? targetBoard
       const keepGroup = existingRow?.group_id ?? targetGroup
       const eventOwners = ownersForEvent(ev)
-      const finalOwners = (existingRow?.owner_ids && existingRow.owner_ids.length > 0)
-        ? existingRow.owner_ids
-        : eventOwners.owners
+      // Union van bestaande + Google-attendees: bestaande user-toevoegingen
+      // blijven staan, en nieuwe Yoko-deelnemers uit Google worden vanzelf
+      // toegevoegd. (Vorige variant 'als er al iets staat → niet aanraken'
+      // betekende dat Vincent/Anne-Fleur op een Teamdag nooit binnenkwamen.)
+      const ownerSet = new Set<string>(existingRow?.owner_ids ?? [])
+      for (const o of eventOwners.owners) ownerSet.add(o)
+      const finalOwners = [...ownerSet]
       // per-persoon uren in ownerHours, totaal in est_hours zodat
       // workload-berekeningen per persoon kloppen.
       const ownerHoursMap: Record<string, number> = {}
@@ -322,9 +326,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const groupOwners = ownersForEvent(sorted[sorted.length - 1])
     const existingId  = byExt.get(groupKey)
     const existingRow = byExtFull.get(groupKey)
-    const finalOwners = (existingRow?.owner_ids && existingRow.owner_ids.length > 0)
-      ? existingRow.owner_ids
-      : groupOwners.owners
+    const ownerSet = new Set<string>(existingRow?.owner_ids ?? [])
+    for (const o of groupOwners.owners) ownerSet.add(o)
+    const finalOwners = [...ownerSet]
     const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0) * finalOwners.length
     const ownerHoursMap: Record<string, number> = {}
     const perPersonTotal = sorted.reduce((s, ev) => s + eventHours(ev), 0)

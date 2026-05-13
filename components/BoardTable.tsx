@@ -963,7 +963,18 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
     if (key === 'estHours' || key === 'dagen' || key === 'nummers') return Number(item[key] ?? 0)
     if (key === 'startDate' || key === 'endDate' || key === 'deadline' || key === 'uitzenddag' || key === 'timeline') {
       const dKey = key === 'timeline' ? 'startDate' : key
-      const v    = item[dKey] as string | null
+      let v = item[dKey] as string | null
+      // Auto-rollup voor sortering: parent zonder eigen datum pakt 't
+      // vroegste subitem (voor start) of laatste (voor end), zodat 'ie
+      // op de juiste plek in de tijdlijn komt te staan.
+      if (!v && (dKey === 'startDate' || dKey === 'endDate')) {
+        const subs = (item.subitems ?? []) as Array<{ startDate?: string | null; endDate?: string | null }>
+        const dates = subs.map(s => dKey === 'startDate' ? s.startDate : s.endDate).filter(Boolean) as string[]
+        if (dates.length > 0) {
+          dates.sort()
+          v = dKey === 'startDate' ? dates[0] : dates[dates.length - 1]
+        }
+      }
       return v ? new Date(v).getTime() : Number.MAX_SAFE_INTEGER
     }
     const v = item[key]
