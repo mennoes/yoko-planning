@@ -27,5 +27,5 @@ export default function DienjaarPage() {
     saveGroups('dienjaar', groups)
   }, [groups])
 
-  return <BoardTable title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
+  return <BoardTable boardId="dienjaar" title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
 }

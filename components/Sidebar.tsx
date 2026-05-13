@@ -17,7 +17,8 @@ import {
   type GoogleConnection, type GoogleCalAvailable,
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
-import { pullBoardFromRemote, BOARD_NAMES } from '@/lib/boardStore'
+import { pullBoardFromRemote, BOARD_NAMES, moveItemToBoard, loadGroups } from '@/lib/boardStore'
+import type { BoardGroup } from '@/lib/boards'
 import { VacationButton } from './VacationButton'
 import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
@@ -409,12 +410,55 @@ function SectionBlock({
           {section.items.map((item, idx) => {
             const active  = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
             const editing = editingItemId === item.id
+            // Een /projects/<board> link mag een item-drop accepteren —
+            // dat verplaatst het board-item van zijn bron-bord hierheen.
+            const targetBoardId = section.type === 'projects' && item.href.startsWith('/projects/')
+              ? item.href.replace('/projects/', '')
+              : null
             return (
               <div key={item.id} draggable
                 onDragStart={() => onDragStart(idx)}
-                onDragOver={e => onDragOver(e, idx)}
+                onDragOver={e => {
+                  // Twee verschillende drags kunnen hier landen: sidebar-eigen
+                  // reordering (useReorder) of een board-item dat van een
+                  // BoardTable komt. Voor het tweede zetten we expliciet
+                  // 'copy/move' modus en lichten de rij op.
+                  if (targetBoardId && e.dataTransfer.types.includes('application/x-yoko-item')) {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    e.currentTarget.style.background = 'rgba(88,150,255,0.18)'
+                    e.currentTarget.style.outline = '2px solid rgba(88,150,255,0.85)'
+                    e.currentTarget.style.outlineOffset = '-2px'
+                    return
+                  }
+                  onDragOver(e, idx)
+                }}
+                onDragLeave={e => {
+                  e.currentTarget.style.background = ''
+                  e.currentTarget.style.outline = ''
+                  e.currentTarget.style.outlineOffset = ''
+                }}
+                onDrop={e => {
+                  e.currentTarget.style.background = ''
+                  e.currentTarget.style.outline = ''
+                  e.currentTarget.style.outlineOffset = ''
+                  if (!targetBoardId) return
+                  const raw = e.dataTransfer.getData('application/x-yoko-item')
+                  if (!raw) return
+                  e.preventDefault()
+                  try {
+                    const data = JSON.parse(raw) as { itemId: string; fromBoard?: string }
+                    if (!data.itemId || !data.fromBoard || data.fromBoard === targetBoardId) return
+                    // Snapshot alle boards voor fallback; moveItemToBoard
+                    // gebruikt deze als-localStorage-leeg fallback.
+                    const fallback: Record<string, BoardGroup[]> = {}
+                    for (const b of BOARD_NAMES) fallback[b] = loadGroups(b, [])
+                    const res = moveItemToBoard(data.itemId, data.fromBoard, targetBoardId, fallback)
+                    if (!res.ok) alert(res.message ?? 'Verplaatsen mislukt')
+                  } catch {}
+                }}
                 onDragEnd={onDragEnd}
-                style={{ position: 'relative', display: 'flex', alignItems: 'center', cursor: 'grab' }}
+                style={{ position: 'relative', display: 'flex', alignItems: 'center', cursor: 'grab', borderRadius: 6, transition: 'background 0.12s' }}
                 onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '1')) }}
                 onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '0')) }}
               >

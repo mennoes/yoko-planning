@@ -835,7 +835,8 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderM
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onDeleteGroup, onResizeCol }: {
+  boardId: string
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
@@ -1111,7 +1112,7 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
                   e.dataTransfer.effectAllowed = 'move'
                   // Geef ook expliciet door welke groep + item we slepen,
                   // zodat een andere BoardGroupSection het in de drop kan oppakken.
-                  e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({ itemId: item.id, fromGroupId: group.id }))
+                  e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({ itemId: item.id, fromGroupId: group.id, fromBoard: boardId }))
                 }}
                 onDragOver={e => {
                   // Cross-group: laat de container het afhandelen
@@ -1203,13 +1204,14 @@ function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
 
 // ─── BoardTable (hoofd component) ─────────────────────────────────────────────
 type BoardTableProps = {
+  boardId: string
   title: string; emoji: string; color: string
   columns: ColumnDef[]; groups: BoardGroup[]
   onChange: (groups: BoardGroup[]) => void
   onRenameTitle?: (label: string) => void
 }
 
-export default function BoardTable({ title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
+export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const storageKey = `board-col-widths-${title}`
   const onChange = (next: BoardGroup[]) => rawOnChange(autoMoveDoneItems(next))
   const { profile } = useProfile()
@@ -1549,7 +1551,7 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
       {/* Groepen */}
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'visible' }}>
         {filteredGroups.map(group => (
-          <BoardGroupSection key={group.id} group={group} cols={columns}
+          <BoardGroupSection key={group.id} boardId={boardId} group={group} cols={columns}
             colWidths={colWidths} gridTemplate={gridTemplate}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}

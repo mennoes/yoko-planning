@@ -27,5 +27,5 @@ export default function NederlandPage() {
     saveGroups('nederland', groups)
   }, [groups])
 
-  return <BoardTable title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
+  return <BoardTable boardId="nederland" title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
 }

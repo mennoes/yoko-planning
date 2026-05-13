@@ -29,5 +29,5 @@ export default function YokoPage() {
     saveGroups('yoko', groups)
   }, [groups])
 
-  return <BoardTable title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
+  return <BoardTable boardId="yoko" title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
 }

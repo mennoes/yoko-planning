@@ -27,5 +27,5 @@ export default function PnpPage() {
     saveGroups('pnp', groups)
   }, [groups])
 
-  return <BoardTable title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
+  return <BoardTable boardId="pnp" title={title} emoji={cfg.emoji} color={cfg.color} columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
 }
