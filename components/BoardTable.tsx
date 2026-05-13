@@ -624,9 +624,11 @@ function Cell({ item, col, onUpdate }: {
 // ─── Subitem grid template ────────────────────────────────────────────────────
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
+  selected?: boolean
+  onToggleSelect?: () => void
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -664,14 +666,19 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
       display: 'grid', gridTemplateColumns: gridTemplate,
       alignItems: 'center', minHeight: 40,
       borderBottom: '1px solid var(--border-light)',
-      background: hover ? 'var(--overlay-hover)' : 'transparent',
+      background: selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent'),
       transition: 'background 0.1s',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      {/* Per-rij rail aan de absolute linkerkant — kort segment per
-          subitem zoals Monday doet, ipv één doorlopende balk. */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'stretch', height: '100%' }}>
-        <div style={{ width: 4, background: rail ?? 'var(--accent)', borderRadius: 2, margin: '4px 0 4px 0' }} />
+      {/* Eerste kolom: checkbox voor bulk-selectie + per-rij rail (Monday-stijl). */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%', paddingRight: 0 }}>
+        {onToggleSelect && (
+          <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
+            onClick={e => e.stopPropagation()}
+            style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 13, height: 13,
+              opacity: selected || hover ? 1 : 0.4, transition: 'opacity 0.15s', flexShrink: 0 }} />
+        )}
+        <div style={{ width: 4, background: rail ?? 'var(--accent)', borderRadius: 2, margin: '4px 0', alignSelf: 'stretch' }} />
       </div>
       <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {editName ? (
@@ -701,9 +708,11 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, cols, gridTemplate, accentColor, onUpdate }: {
+function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
   onUpdate: (u: SubItem[]) => void
 }) {
   function updateOne(id: string, u: Partial<SubItem>) { onUpdate(subitems.map(s => s.id === id ? { ...s, ...u } : s)) }
@@ -752,6 +761,8 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, onUpdate }
         .map(sub => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
+          selected={selectedIds?.has(sub.id) ?? false}
+          onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
       <div style={{ padding: '6px 10px 6px 60px' }}>
@@ -766,10 +777,12 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, onUpdate }
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
+function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
   selected: boolean
   accentColor?: string
+  selectedIds?: Set<string>
+  onToggleSubitem?: (id: string) => void
   onToggleSelect: () => void
   reorderMode: boolean
   isFirst: boolean
@@ -945,6 +958,8 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
       {expanded && (
         <SubItemsSection subitems={subitems} cols={cols} gridTemplate={gridTemplate}
           accentColor={accentColor}
+          selectedIds={selectedIds}
+          onToggleSelect={onToggleSubitem}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
       {showDetail && (
@@ -1749,6 +1764,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   selected={selectedIds.has(item.id)}
                   accentColor={group.color}
                   onToggleSelect={() => onToggleSelect(item.id)}
+                  selectedIds={selectedIds}
+                  onToggleSubitem={onToggleSelect}
                   reorderMode={reorderMode}
                   isFirst={realIdx === 0}
                   isLast={realIdx === group.items.length - 1}
@@ -2113,7 +2130,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
   function bulkUpdate(patch: Partial<BoardItem>) {
     if (selectedIds.size === 0) return
-    // Notificeer bij bulk-status-wijziging
+    // Notificeer bij bulk-status-wijziging (alleen voor top-level items)
     if (patch.status !== undefined) {
       for (const g of groups) for (const i of g.items) {
         if (selectedIds.has(i.id) && i.status !== patch.status) {
@@ -2121,17 +2138,40 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         }
       }
     }
+    // Subitem-velden zijn een subset van BoardItem-velden — alleen de
+    // velden die het SubItem-schema kent kopiëren we mee.
+    const subPatch: Partial<SubItem> = {}
+    if ('status'    in patch) subPatch.status    = patch.status as string
+    if ('ownerIds'  in patch) subPatch.ownerIds  = patch.ownerIds as string[]
+    if ('startDate' in patch) subPatch.startDate = patch.startDate as string | null
+    if ('endDate'   in patch) subPatch.endDate   = patch.endDate as string | null
+    if ('estHours'  in patch) subPatch.estHours  = patch.estHours as number
+    const hasSubPatch = Object.keys(subPatch).length > 0
     onChange(groups.map(g => ({
       ...g,
-      items: g.items.map(i => selectedIds.has(i.id) ? { ...i, ...patch } : i),
+      items: g.items.map(i => {
+        let nextItem = selectedIds.has(i.id) ? { ...i, ...patch } : i
+        if (hasSubPatch && nextItem.subitems && nextItem.subitems.length > 0) {
+          const subs = nextItem.subitems.map(s => selectedIds.has(s.id) ? { ...s, ...subPatch } : s)
+          if (subs.some((s, idx) => s !== nextItem.subitems![idx])) nextItem = { ...nextItem, subitems: subs }
+        }
+        return nextItem
+      }),
     })))
   }
   function bulkDelete() {
     if (selectedIds.size === 0) return
     // Geen confirm-dialog meer — undo-toast vangt vergissingen op.
-    const snapshot = groups.map(g => ({ ...g, items: [...g.items] }))
+    const snapshot = groups.map(g => ({ ...g, items: [...g.items.map(i => ({ ...i, subitems: i.subitems ? [...i.subitems] : i.subitems }))] }))
     const count = selectedIds.size
-    onChange(groups.map(g => ({ ...g, items: g.items.filter(i => !selectedIds.has(i.id)) })))
+    onChange(groups.map(g => ({
+      ...g,
+      items: g.items
+        .filter(i => !selectedIds.has(i.id))
+        .map(i => i.subitems && i.subitems.some(s => selectedIds.has(s.id))
+          ? { ...i, subitems: i.subitems.filter(s => !selectedIds.has(s.id)) }
+          : i),
+    })))
     pushUndo(() => onChange(snapshot), `${count} item${count === 1 ? '' : 's'} verwijderd`)
     clearSelection()
   }
