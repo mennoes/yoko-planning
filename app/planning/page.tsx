@@ -1991,7 +1991,7 @@ export default function PlanningPage() {
     apply(newStart, newEnd)
     logActivity('Datums bijgewerkt', project.name, `${prevStart ?? '—'} → ${newStart ?? '—'} / ${prevEnd ?? '—'} → ${newEnd ?? '—'}`)
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
-    pushUndo(() => apply(prevStart, prevEnd))
+    pushUndo(() => apply(prevStart, prevEnd), `Datums bijgewerkt op '${project.name}'`)
   }
   function handleReassignOwner(project: Project, fromMemberId: string, toMemberId: string) {
     setShadowDrag(null)
@@ -2046,7 +2046,7 @@ export default function PlanningPage() {
     pushUndo(() => {
       saveGroups(boardName, before)
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
-    }, `'${project.name}' terug naar ${fromName}`)
+    }, `'${project.name}': ${fromName} → ${toName}`)
   }
   function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }>) {
     const boardName  = project.board

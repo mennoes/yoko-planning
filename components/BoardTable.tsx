@@ -571,12 +571,22 @@ export function effectiveDays(item: BoardItem): number {
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
-  if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => onUpdate({ ownerIds: v })} />
+  const { showToast } = useUndo()
+  if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => {
+    onUpdate({ ownerIds: v })
+    const names = v.filter(id => id !== 'unassigned')
+      .map(id => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? id)
+    showToast(names.length === 0 ? `'${item.name}' niet meer toegewezen` : `'${item.name}' → ${names.join(', ')}`)
+  }} />
   if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
     onUpdate({ status: v })
     notifyOwnersOfStatusChange(item, item.status, v)
+    showToast(`'${item.name}' → ${v || '(geen status)'}`)
   }} />
-  if (col.type === 'daterange') return <DateRangeCell startDate={item.startDate} endDate={item.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} />
+  if (col.type === 'daterange') return <DateRangeCell startDate={item.startDate} endDate={item.endDate} onChange={(s,e) => {
+    onUpdate({ startDate: s, endDate: e })
+    showToast(`Datums bijgewerkt op '${item.name}'`)
+  }} />
   if (col.type === 'url')       return <UrlCell       value={(item[col.key] as string) ?? ''} onChange={v => onUpdate({ [col.key]: v })} />
 
   const hasSubs = (item.subitems?.length ?? 0) > 0

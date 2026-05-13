@@ -4,23 +4,38 @@ import { createContext, useContext, useRef, useEffect, useState, type ReactNode 
 
 type UndoFn = () => void
 type UndoEntry = { fn: UndoFn; description?: string }
-type UndoCtx = { pushUndo: (fn: UndoFn, description?: string) => void; clearUndo: () => void }
+type ToastKind = 'undo' | 'info'
+type Toast = { id: number; description: string; kind: ToastKind }
+type UndoCtx = {
+  pushUndo:   (fn: UndoFn, description?: string) => void
+  clearUndo:  () => void
+  /** Toon een korte info-melding rechtsonder (geen undo). Default 5s. */
+  showToast:  (message: string, durationMs?: number) => void
+}
 
-const Ctx = createContext<UndoCtx>({ pushUndo: () => {}, clearUndo: () => {} })
+const Ctx = createContext<UndoCtx>({ pushUndo: () => {}, clearUndo: () => {}, showToast: () => {} })
 
 export function UndoProvider({ children }: { children: ReactNode }) {
   const stack = useRef<UndoEntry[]>([])
-  const [toast, setToast] = useState<{ id: number; description: string } | null>(null)
+  const [toast, setToast] = useState<Toast | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function startToastDismiss(durationMs: number) {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), durationMs)
+  }
 
   function pushUndo(fn: UndoFn, description?: string) {
     stack.current = [...stack.current.slice(-49), { fn, description }]
     if (description) {
-      const id = Date.now()
-      setToast({ id, description })
-      if (toastTimer.current) clearTimeout(toastTimer.current)
-      toastTimer.current = setTimeout(() => setToast(null), 5000)
+      setToast({ id: Date.now(), description, kind: 'undo' })
+      startToastDismiss(5000)
     }
+  }
+
+  function showToast(message: string, durationMs = 5000) {
+    setToast({ id: Date.now(), description: message, kind: 'info' })
+    startToastDismiss(durationMs)
   }
 
   function clearUndo() { stack.current = [] }
@@ -50,11 +65,11 @@ export function UndoProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <Ctx.Provider value={{ pushUndo, clearUndo }}>
+    <Ctx.Provider value={{ pushUndo, clearUndo, showToast }}>
       {children}
       {toast && (
         <div style={{
-          position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', bottom: 20, right: 20,
           zIndex: 9500,
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 10, padding: '10px 14px',
@@ -64,14 +79,16 @@ export function UndoProvider({ children }: { children: ReactNode }) {
           maxWidth: '92vw',
         }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toast.description}</span>
-          <button onClick={undoLast}
-            style={{
-              background: 'var(--accent)', color: '#000',
-              border: 'none', borderRadius: 6, padding: '5px 11px',
-              fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
-            }}>
-            ↶ Maak ongedaan
-          </button>
+          {toast.kind === 'undo' && (
+            <button onClick={undoLast}
+              style={{
+                background: 'var(--accent)', color: '#000',
+                border: 'none', borderRadius: 6, padding: '5px 11px',
+                fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+              ↶ Maak ongedaan
+            </button>
+          )}
           <button onClick={() => { if (toastTimer.current) clearTimeout(toastTimer.current); setToast(null) }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 4px' }}>
             ×

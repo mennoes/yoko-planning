@@ -26,6 +26,7 @@ import {
   IconDocument, IconFolder, IconFolderOpen, IconSort, IconRefresh,
 } from './Icon'
 import { UserAvatar } from './UserAvatar'
+import { useUndo } from './UndoContext'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -244,6 +245,7 @@ function PagesSectionItems({ pathname }: { pathname: string }) {
 function SectionBlock({
   section, allSections, setAllSections, pathname, onDelete,
   editOrder, isFirstSection, isLastSection, onMoveSection,
+  showToast,
 }: {
   section:        SidebarSection
   allSections:    SidebarSection[]
@@ -254,6 +256,7 @@ function SectionBlock({
   isFirstSection: boolean
   isLastSection:  boolean
   onMoveSection:  (dir: -1 | 1) => void
+  showToast:      (message: string) => void
 }) {
   // All sections are collapsible. Default open for 'projects' (Agenda's),
   // collapsed for 'docs' (Pagina's) and 'pages' (Documenten). Auto-open if
@@ -455,6 +458,7 @@ function SectionBlock({
                     for (const b of BOARD_NAMES) fallback[b] = loadGroups(b, [])
                     const res = moveItemToBoard(data.itemId, data.fromBoard, targetBoardId, fallback)
                     if (!res.ok) alert(res.message ?? 'Verplaatsen mislukt')
+                    else showToast(`Verplaatst: ${data.fromBoard} → ${targetBoardId}`)
                   } catch {}
                 }}
                 onDragEnd={onDragEnd}
@@ -1007,6 +1011,7 @@ export default function Sidebar({
 } = {}) {
   const pathname              = usePathname()
   const { profile, openEdit, signOut } = useProfile()
+  const { showToast }         = useUndo()
   const [theme,       setTheme]       = useState<Theme>('auto')
   const [sections,    setSectionsRaw] = useState<SidebarSection[]>([])
   const [hydrated,    setHydrated]    = useState(false)
@@ -1246,6 +1251,7 @@ export default function Sidebar({
                 isFirstSection={idx === 0}
                 isLastSection={idx === sections.length - 1}
                 onMoveSection={dir => moveSection(idx, dir)}
+                showToast={showToast}
               />
             </div>
           ))}
