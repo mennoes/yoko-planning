@@ -2290,6 +2290,29 @@ export default function PlanningPage() {
             ))}
           </div>
 
+          {/* Mobile: kolombreedte-slider naast de zoom-knoppen. Op desktop
+              zit deze nog in de name-kolom-header. */}
+          {isMobile && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
+              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+              borderRadius: 8, paddingLeft: 2, paddingRight: 2 }}>
+              <button onClick={() => setColWZoom(z => Math.max(50, z - 10))}
+                title="Smaller" aria-label="Smaller"
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
+                  padding: '6px 8px', lineHeight: 1 }}>−</button>
+              <input type="range" min={50} max={300} step={5}
+                value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
+                title={`Kolombreedte ${colWZoom}%`}
+                style={{ width: 64, accentColor: 'var(--accent)' }} />
+              <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
+                title="Breder" aria-label="Breder"
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
+                  padding: '6px 8px', lineHeight: 1 }}>+</button>
+            </div>
+          )}
+
           {/* Mobile: nav + overflow */}
           {isMobile ? (
             <>
