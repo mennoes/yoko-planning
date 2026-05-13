@@ -2099,35 +2099,43 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     if (!hasFilter) return groups
     const from = filterFrom ? new Date(filterFrom).getTime() : null
     const until = filterUntil ? new Date(filterUntil).getTime() + 86400000 - 1 : null
+    const overlapsRange = (s: string | null | undefined, e: string | null | undefined) => {
+      if (!s) return false
+      const ms = new Date(s).getTime()
+      const me = e ? new Date(e).getTime() + 86400000 - 1 : ms + 86400000 - 1
+      if (from  !== null && me < from)  return false
+      if (until !== null && ms > until) return false
+      return true
+    }
     return groups.map(g => ({
       ...g,
-      items: g.items.filter(item => {
-        if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
-        if (filterOwner && !item.ownerIds.includes(filterOwner)) return false
-        if (filterStatus && item.status !== filterStatus) return false
-        // Periode-filter: item moet OVERLAPPEN met de gekozen range.
-        // Subitems tellen ook mee — een parent zonder eigen datum maar met
-        // subitems in maart hoort óók in het maart-filter te verschijnen.
-        if (from !== null || until !== null) {
-          const ranges: Array<[number, number]> = []
-          const push = (s: string | null | undefined, e: string | null | undefined) => {
-            if (!s) return
-            const ms = new Date(s).getTime()
-            const me = e ? new Date(e).getTime() + 86400000 - 1 : ms + 86400000 - 1
-            ranges.push([ms, me])
+      items: g.items
+        .filter(item => {
+          if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
+          if (filterOwner && !item.ownerIds.includes(filterOwner)) return false
+          if (filterStatus && item.status !== filterStatus) return false
+          // Periode-filter: item moet OVERLAPPEN met de gekozen range.
+          // Subitems tellen ook mee — een parent zonder eigen datum maar met
+          // subitems in maart hoort óók in het maart-filter te verschijnen.
+          if (from !== null || until !== null) {
+            const parentOver = overlapsRange(item.startDate, item.endDate)
+            const subOver    = (item.subitems ?? []).some(s => overlapsRange(s.startDate, s.endDate))
+            if (!parentOver && !subOver) return false
           }
-          push(item.startDate, item.endDate)
-          for (const sub of (item.subitems ?? [])) push(sub.startDate, sub.endDate)
-          if (ranges.length === 0) return false
-          const overlaps = ranges.some(([s, e]) => {
-            if (from  !== null && e < from)  return false
-            if (until !== null && s > until) return false
-            return true
-          })
-          if (!overlaps) return false
-        }
-        return true
-      }),
+          return true
+        })
+        .map(item => {
+          // Subitems die buiten het filter-bereik vallen verbergen we; je
+          // wil alleen de instances zien die in de gekozen periode zitten.
+          if ((from === null && until === null) || !item.subitems || item.subitems.length === 0) return item
+          const visibleSubs = item.subitems.filter(s => overlapsRange(s.startDate, s.endDate))
+          // Parent had subitems EN er zijn alleen niet-zichtbare → toon alle
+          // subitems alsnog zodat de rij niet leeg oogt (kan alleen wanneer
+          // de parent zelf op datum matchte).
+          if (visibleSubs.length === 0) return item
+          if (visibleSubs.length === item.subitems.length) return item
+          return { ...item, subitems: visibleSubs }
+        }),
     })).filter(g => g.items.length > 0)
   }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter])
 
@@ -2458,9 +2466,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             </button>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{resultCount} resultaten</span>
             {(filterFrom || filterUntil) && (() => {
-              // Som van uren in de gefilterde set — handig voor 'wat doen we in maart'
+              // Som van uren + dagen in de gefilterde set — handig voor
+              // 'wat doen we in maart'. Uren komen uit estHours, dagen uit
+              // het dagen-veld dat de tabel zelf bijhoudt.
               const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + (Number(i.estHours) || 0), 0), 0)
-              return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>· {Math.round(totalHours * 10) / 10}u totaal</span>
+              const totalDays  = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + (Number(i.dagen) || 0), 0), 0)
+              const fmt = (n: number) => Math.round(n * 10) / 10
+              return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>· {fmt(totalHours)}u totaal ({fmt(totalDays)} dagen)</span>
             })()}
           </>
         )}
@@ -2532,19 +2544,33 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           const totalHours = allItems.reduce((s, i) => s + (Number(i.estHours) || 0), 0)
           const totalDays  = allItems.reduce((s, i) => s + (Number(i.dagen) || 0), 0)
           const fmt = (n: number) => Math.round(n * 10) / 10
+          // Uitgelijnd op het tabel-grid (zelfde gridTemplate als de rijen) zodat
+          // de cijfers precies onder hun kolomkoppen vallen. Extra contrast via
+          // bg-card + 2px top-border en sterkere tekstkleur.
           return (
             <div style={{
-              marginTop: 8, padding: '12px 16px',
-              borderTop: '2px solid var(--border)',
-              background: 'var(--overlay-faint)',
-              display: 'flex', alignItems: 'center', gap: 14,
-              fontSize: 13, color: 'var(--text-primary)', fontWeight: 600,
-              borderRadius: '0 0 8px 8px',
+              display: 'grid', gridTemplateColumns: gridTemplate,
+              borderTop: '2px solid var(--accent)',
+              background: 'var(--bg-card)',
+              fontSize: 13, color: 'var(--text-primary)', fontWeight: 700,
+              borderRadius: '0 0 10px 10px',
             }}>
-              <span>Totaal · {totalItems} items</span>
-              <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontWeight: 500 }}>
-                {fmt(totalHours)}u · {fmt(totalDays)} dagen
-              </span>
+              <div />
+              <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: 'var(--text-secondary)' }}>Totaal</span>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {totalItems} items</span>
+              </div>
+              {columns.map(col => (
+                <div key={col.key} style={{
+                  padding: '12px 8px', borderLeft: '1px solid var(--border)',
+                  display: 'flex', alignItems: 'center',
+                }}>
+                  {col.key === 'estHours' ? `${fmt(totalHours)}u`
+                    : col.key === 'dagen' ? `${fmt(totalDays)} dagen`
+                    : ''}
+                </div>
+              ))}
+              <div style={{ borderLeft: '1px solid var(--border)' }} />
             </div>
           )
         })()}
