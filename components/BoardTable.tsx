@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react'
 import { createPortal } from 'react-dom'
+import { useSearchParams } from 'next/navigation'
 import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
 import { useProfile }     from './ProfileContext'
@@ -1104,7 +1105,7 @@ function BoardGroupSection({ group, cols, colWidths, gridTemplate, selectedIds, 
             {renderItems.map((item) => {
               const realIdx = group.items.findIndex(i => i.id === item.id)
               return (
-              <div key={item.id} draggable={!sortBy && !reorderMode}
+              <div key={item.id} data-item-id={item.id} draggable={!sortBy && !reorderMode}
                 onDragStart={e => {
                   dragRowRef.current = realIdx
                   e.dataTransfer.effectAllowed = 'move'
@@ -1214,6 +1215,33 @@ export default function BoardTable({ title, emoji, color, columns, groups, onCha
   const { profile } = useProfile()
   const { pushUndo } = useUndo()
   useEffect(() => { setCurrentActor(profile?.memberId ?? null) }, [profile?.memberId])
+
+  // Focus-from-link: een planning-popup of #item-mention kan linken naar
+  // `?focus=<itemId>`. Klap de groep open als-ie dicht zit, scroll naar
+  // de rij, en flash 'em zodat je oog er heen wordt getrokken.
+  const searchParams = useSearchParams()
+  const focusId = searchParams?.get('focus') ?? null
+  const lastFocusedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focusId || lastFocusedRef.current === focusId) return
+    const targetGroup = groups.find(g => g.items.some(i => i.id === focusId))
+    if (!targetGroup) return  // item bestaat nog niet (of staat in een ander bord)
+    lastFocusedRef.current = focusId
+    if (targetGroup.collapsed) {
+      rawOnChange(groups.map(g => g.id === targetGroup.id ? { ...g, collapsed: false } : g))
+    }
+    // Wacht twee frames zodat de eventueel-uitgeklapte groep gerenderd is.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(focusId)}"]`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('yoko-focus-flash')
+      setTimeout(() => el.classList.remove('yoko-focus-flash'), 2400)
+    }))
+  // We willen alleen reageren op focusId-wijzigingen, niet op groups-changes
+  // die anders een retrigger zouden veroorzaken na het uitklappen.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId])
 
   function initWidths(): Record<string, number> {
     try {

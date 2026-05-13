@@ -202,3 +202,42 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Selection */
 ::selection { background: var(--accent-mid); color: var(--text-primary); }
+
+/* Focus-highlight: gebruikt door BoardTable wanneer je via ?focus= naar
+   een specifiek item linkt (bv. vanuit de planning). Kort gele flash zodat
+   je oog naar de juiste rij wordt getrokken zonder dat het permanent leidt. */
+@keyframes yoko-focus-flash {
+  0%   { background: rgba(216, 182, 46, 0.55); }
+  60%  { background: rgba(216, 182, 46, 0.30); }
+  100% { background: transparent; }
+}
+.yoko-focus-flash { animation: yoko-focus-flash 2.2s ease-out; }
+
+/* Inline item-referentie in pages-editor (en overal waar je losse HTML
+   wilt embedden). Tekst-stukken in textareas blijven `#item:...` tokens
+   en worden via {@link TextWithItemRefs} live opgemaakt. */
+.yoko-item-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 0 6px;
+  margin: 0 1px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 0.9em;
+  font-weight: 500;
+  line-height: 1.55;
+  text-decoration: none;
+  white-space: nowrap;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.yoko-item-ref:hover { background: var(--bg-card); border-color: var(--text-muted); }
+.yoko-item-ref::before {
+  content: '';
+  width: 6px; height: 6px; border-radius: 2px;
+  background: var(--ref-color, #888);
+  display: inline-block; flex-shrink: 0;
+}

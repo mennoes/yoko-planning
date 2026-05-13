@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 import teamData          from '@/data/team.json'
@@ -23,6 +24,7 @@ import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange }
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity } from '@/lib/itemActivity'
 import { MentionTextarea } from '@/components/MentionTextarea'
+import { TextWithItemRefs } from '@/components/ItemRefChip'
 import { ReactionRow } from '@/components/ReactionRow'
 import { LinksRow } from '@/components/LinksRow'
 import { ItemHistory } from '@/components/ItemHistory'
@@ -518,14 +520,16 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 }
 
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
-type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; origStart: string | null; origEnd: string | null }
+type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; startY: number; origStart: string | null; origEnd: string | null }
 
-function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd, onClick }: {
-  project: Project; left: number; width: number; colW: number
+function DraggableBar({ project, memberId, left, width, colW, small, onDragMove, onDragEnd, onClick, onReassign }: {
+  project: Project; memberId: string
+  left: number; width: number; colW: number
   small?: boolean
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick:    () => void
+  onReassign?: (project: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const barH = small ? 10 : BAR_H
   // Meetings (small=true) get the yellow accent so they stand apart from
@@ -533,36 +537,76 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
   const color   = small ? '#D8B62E' : (BOARD_COLORS[project.board] ?? '#888')
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
+  const reassignRef = useRef<string | null>(null)
   const didDrag = useRef(false)
   const dpx = 7 / colW
 
   const isReadOnly = project.source === 'google'
 
+  function memberAt(clientX: number, clientY: number): string | null {
+    const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+    if (!el) return null
+    const row = el.closest<HTMLElement>('[data-member-id]')
+    return row?.dataset.memberId ?? null
+  }
+
+  function clearRowHighlight() {
+    for (const el of document.querySelectorAll<HTMLElement>('[data-member-id][data-reassign-target]')) {
+      el.style.background = ''
+      el.removeAttribute('data-reassign-target')
+    }
+  }
+  function highlightRow(id: string | null) {
+    clearRowHighlight()
+    if (!id) return
+    const el = document.querySelector<HTMLElement>(`[data-member-id="${id}"]`)
+    if (!el) return
+    el.dataset.reassignTarget = '1'
+    el.style.background = 'rgba(88,150,255,0.10)'
+  }
+
   function startDrag(e: React.MouseEvent, mode: DragInfo['mode']) {
     if (isReadOnly) return
     e.preventDefault(); e.stopPropagation()
     didDrag.current = false
-    dragRef.current = { mode, startX: e.clientX, origStart: project.startDate, origEnd: project.endDate }
+    dragRef.current = { mode, startX: e.clientX, startY: e.clientY, origStart: project.startDate, origEnd: project.endDate }
     setGhost({ left, width })
+    reassignRef.current = null
 
     function onMove(ev: MouseEvent) {
       if (!dragRef.current) return
       const dx = ev.clientX - dragRef.current.startX
+      const dy = ev.clientY - dragRef.current.startY
       // 10px threshold — drag only kicks in once the user has clearly moved
       // the mouse, so single clicks always reach the click handler.
-      if (Math.abs(dx) < 10 && !didDrag.current) return
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && !didDrag.current) return
+      if (Math.abs(dx) >= 10 || Math.abs(dy) >= 10) didDrag.current = true
+
+      // Reassign-mode only applies to whole-bar drags ('move'), not edge resizes.
+      // If the cursor is over a different member row, treat this as a
+      // reassignment intent and skip date-shifts during the drag.
+      const targetId = mode === 'move' && onReassign ? memberAt(ev.clientX, ev.clientY) : null
+      const isReassigning = !!(targetId && targetId !== memberId)
+      reassignRef.current = isReassigning ? targetId : null
+      highlightRow(reassignRef.current)
+
+      if (isReassigning) {
+        // Hide the date-ghost so we don't suggest both actions at once.
+        setGhost(null)
+        return
+      }
+
       const ddays = Math.round(dx * dpx)
-      if (Math.abs(dx) >= 10) didDrag.current = true
-      const { mode, origStart, origEnd } = dragRef.current
+      const { mode: m, origStart, origEnd } = dragRef.current
       let newL = left, newW = width
-      if (mode === 'move')       { newL = left + ddays * (colW / 7) }
-      else if (mode === 'start') { const dl = ddays * (colW / 7); newL = left + dl; newW = Math.max(colW / 7, width - dl) }
-      else                       { newW = Math.max(colW / 7, width + ddays * (colW / 7)) }
+      if (m === 'move')       { newL = left + ddays * (colW / 7) }
+      else if (m === 'start') { const dl = ddays * (colW / 7); newL = left + dl; newW = Math.max(colW / 7, width - dl) }
+      else                    { newW = Math.max(colW / 7, width + ddays * (colW / 7)) }
       setGhost({ left: newL, width: newW })
       let ss = origStart, se = origEnd
-      if (mode === 'move')       { ss = origStart ? addDays(origStart, ddays) : null; se = origEnd ? addDays(origEnd, ddays) : null }
-      else if (mode === 'start') { ss = origStart ? addDays(origStart, ddays) : null; if (ss && se && ss > se) ss = se }
-      else                       { se = origEnd ? addDays(origEnd, ddays) : null; if (ss && se && se < ss) se = ss }
+      if (m === 'move')       { ss = origStart ? addDays(origStart, ddays) : null; se = origEnd ? addDays(origEnd, ddays) : null }
+      else if (m === 'start') { ss = origStart ? addDays(origStart, ddays) : null; if (ss && se && ss > se) ss = se }
+      else                    { se = origEnd ? addDays(origEnd, ddays) : null; if (ss && se && se < ss) se = ss }
       onDragMove(ss, se)
     }
 
@@ -571,14 +615,20 @@ function DraggableBar({ project, left, width, colW, small, onDragMove, onDragEnd
       window.removeEventListener('mouseup', onUp)
       onDragMove(project.startDate, project.endDate)
       if (!dragRef.current) return
+      const targetId = reassignRef.current
       const dx = ev.clientX - dragRef.current.startX
       const ddays = Math.round(dx * dpx)
-      const { mode, origStart, origEnd } = dragRef.current
-      dragRef.current = null; setGhost(null)
+      const { mode: m, origStart, origEnd } = dragRef.current
+      dragRef.current = null; setGhost(null); reassignRef.current = null
+      clearRowHighlight()
+      if (targetId && onReassign) {
+        onReassign(project, memberId, targetId)
+        return
+      }
       let ns = origStart, ne = origEnd
-      if (mode === 'move')       { ns = origStart ? addDays(origStart, ddays) : null; ne = origEnd ? addDays(origEnd, ddays) : null }
-      else if (mode === 'start') { ns = origStart ? addDays(origStart, ddays) : null; if (ns && ne && ns > ne) ns = ne }
-      else                       { ne = origEnd ? addDays(origEnd, ddays) : null; if (ns && ne && ne < ns) ne = ns }
+      if (m === 'move')       { ns = origStart ? addDays(origStart, ddays) : null; ne = origEnd ? addDays(origEnd, ddays) : null }
+      else if (m === 'start') { ns = origStart ? addDays(origStart, ddays) : null; if (ns && ne && ns > ne) ns = ne }
+      else                    { ne = origEnd ? addDays(origEnd, ddays) : null; if (ns && ne && ne < ns) ne = ns }
       onDragEnd(ns, ne)
     }
     window.addEventListener('mousemove', onMove)
@@ -643,13 +693,14 @@ function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
   return weekIdx * weekColW + (cellInWeek / 5) * weekColW
 }
 
-function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDragMove, onDragEnd, onBarClick }: {
+function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDragMove, onDragEnd, onBarClick, onReassign }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   zoom: ZoomLevel
   hideMeetings?: boolean
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
+  onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const gridStart   = cols[0].rangeStart
   const gridStartMs = gridStart.getTime()
@@ -786,10 +837,11 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         }
         return (
           <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H, pointerEvents: 'none' }}>
-            <DraggableBar project={b.p} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
+            <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
-              onClick={() => onBarClick(b.p)} />
+              onClick={() => onBarClick(b.p)}
+              onReassign={onReassign} />
           </div>
         )
       })}
@@ -920,6 +972,16 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
   )
   const [ownerIds, setOwnerIds] = useState<string[]>(project.ownerIds)
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
+  const ownerPickerRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!ownerPickerOpen) return
+    function onDown(ev: MouseEvent) {
+      const el = ownerPickerRef.current
+      if (el && !el.contains(ev.target as Node)) setOwnerPickerOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [ownerPickerOpen])
   const [entryMentions, setEntryMentions] = useState<string[]>([])
   const { profile } = useProfile()
   const [categoryOverride, setCategoryOverrideState] = useState<WorkloadCategory | null>(loadCategoryOverrides()[project.id] ?? null)
@@ -966,61 +1028,86 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
 
   const isGoogle = rawItem?.source === 'google' || project.source === 'google'
   const isMerged = !!project.mergedFrom && project.mergedFrom.length > 1
-  function save() {
-    if (isGoogle) return
-    // When subitems exist the parent's hours are derived; don't write them.
-    // If only "unassigned" is left in the picker, drop it so the item ends up
-    // in real unassigned territory rather than fake-assigned to the placeholder.
-    const cleanOwners = ownerIds.length > 1 ? ownerIds.filter(id => id !== 'unassigned') : ownerIds
-    const finalOwners = cleanOwners.length === 0 ? ['unassigned'] : cleanOwners
-    const extra: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }> = {
-      notes, journal, ownerHours, ownerIds: finalOwners, links,
-    }
-    if (!hasSubitems) extra.estHours = parseFloat(estHours) || 0
-    onUpdate(project, startDate || null, endDate || null, extra)
 
-    // Geschiedenis: log de belangrijkste wijzigingen (datum-shifts, nieuwe
-    // eigenaren, uren). Status wordt elders gelogd (BoardTable status-cell).
-    const rawItemId = project.id.slice(project.board.length + 2)
-    const oldStart = project.startDate ?? ''
-    const oldEnd   = project.endDate ?? ''
-    const newStart = startDate || ''
-    const newEnd   = endDate || ''
-    if (oldStart !== newStart || oldEnd !== newEnd) {
-      logItemActivity(rawItemId, 'wijzigde de timeline',
-        `${oldStart || '—'} – ${oldEnd || '—'}  →  ${newStart || '—'} – ${newEnd || '—'}`).catch(() => {})
+  // Instant-save: elke veldwijziging in de popup roept commit() aan.
+  // Geen Opslaan-knop nodig — Cmd+Z draait de laatste wijziging terug.
+  type Patch = Partial<{
+    startDate: string | null
+    endDate:   string | null
+    estHours:  number
+    notes:     string
+    journal:   import('@/lib/boards').JournalEntry[]
+    ownerHours: Record<string, number>
+    ownerIds:  string[]
+    links:     import('@/lib/boards').ItemLink[]
+  }>
+  function commit(patch: Patch) {
+    if (isGoogle) return
+    // Bouw de volledige nieuwe state (patch overschrijft, anders fallback op
+    // huidige local state) en stuur door naar handleDetailUpdate in de parent.
+    const nextStart = patch.startDate !== undefined ? patch.startDate : (startDate || null)
+    const nextEnd   = patch.endDate   !== undefined ? patch.endDate   : (endDate   || null)
+    const nextEst   = patch.estHours  !== undefined ? patch.estHours  : (parseFloat(estHours) || 0)
+    const nextNotes = patch.notes     !== undefined ? patch.notes     : notes
+    const nextJournal    = patch.journal    !== undefined ? patch.journal    : journal
+    const nextOwnerHours = patch.ownerHours !== undefined ? patch.ownerHours : ownerHours
+    const nextLinks      = patch.links      !== undefined ? patch.links      : links
+    const rawOwners      = patch.ownerIds   !== undefined ? patch.ownerIds   : ownerIds
+    // 'unassigned' alleen behouden als enige owner; anders eruit filteren.
+    const cleaned = rawOwners.length > 1 ? rawOwners.filter(id => id !== 'unassigned') : rawOwners
+    const finalOwners = cleaned.length === 0 ? ['unassigned'] : cleaned
+
+    const extra: Patch = {
+      notes: nextNotes,
+      journal: nextJournal,
+      ownerHours: nextOwnerHours,
+      ownerIds: finalOwners,
+      links: nextLinks,
     }
-    if (!hasSubitems) {
+    if (!hasSubitems) extra.estHours = nextEst
+    onUpdate(project, nextStart, nextEnd, extra)
+
+    // Geschiedenis + notificaties per soort wijziging (alleen wat écht veranderde).
+    const rawItemId = project.id.slice(project.board.length + 2)
+    if (patch.startDate !== undefined || patch.endDate !== undefined) {
+      const oldStart = project.startDate ?? '—'
+      const oldEnd   = project.endDate   ?? '—'
+      logItemActivity(rawItemId, 'wijzigde de timeline',
+        `${oldStart} – ${oldEnd}  →  ${nextStart ?? '—'} – ${nextEnd ?? '—'}`).catch(() => {})
+    }
+    if (patch.estHours !== undefined && !hasSubitems) {
       const oldEst = project.estHours ?? 0
-      const newEst = parseFloat(estHours) || 0
-      if (oldEst !== newEst) {
-        logItemActivity(rawItemId, 'zette uren', `${oldEst}u → ${newEst}u`).catch(() => {})
+      if (oldEst !== nextEst) {
+        logItemActivity(rawItemId, 'zette uren', `${oldEst}u → ${nextEst}u`).catch(() => {})
       }
     }
-
-    // Notificatie voor nieuw toegewezen eigenaren — alleen voor mensen die
-    // er nog niet op stonden.
-    const wasOwner = new Set(project.ownerIds ?? [])
-    for (const newId of finalOwners) {
-      if (newId === 'unassigned') continue
-      if (wasOwner.has(newId)) continue
-      createNotification({
-        recipientId: newId,
-        actorId:     profile?.memberId ?? null,
-        kind:        'assigned',
-        contextKind: 'board_item',
-        contextId:   project.id,
-        href:        `/projects/${project.board}`,
-        body:        project.name,
-      }).catch(() => {})
-      const memberName = teamData.members.find(m => m.id === newId)?.name
-      logItemActivity(rawItemId, 'wees iemand toe', memberName ?? newId).catch(() => {})
+    if (patch.ownerIds !== undefined) {
+      const prevOwners = new Set(((rawItem?.ownerIds as string[] | undefined) ?? project.ownerIds) ?? [])
+      for (const newId of finalOwners) {
+        if (newId === 'unassigned' || prevOwners.has(newId)) continue
+        createNotification({
+          recipientId: newId,
+          actorId:     profile?.memberId ?? null,
+          kind:        'assigned',
+          contextKind: 'board_item',
+          contextId:   project.id,
+          href:        `/projects/${project.board}`,
+          body:        project.name,
+        }).catch(() => {})
+        const memberName = teamData.members.find(m => m.id === newId)?.name
+        logItemActivity(rawItemId, 'wees iemand toe', memberName ?? newId).catch(() => {})
+      }
     }
   }
   function addEntry() {
     const text = newEntry.trim()
     if (!text) return
-    setJournal(j => [...j, { id: Date.now().toString(), ts: new Date().toISOString(), text, authorId: profile?.memberId }])
+    const entry: import('@/lib/boards').JournalEntry = {
+      id: Date.now().toString(), ts: new Date().toISOString(), text, authorId: profile?.memberId,
+    }
+    const nextJournal = [...journal, entry]
+    setJournal(nextJournal)
+    commit({ journal: nextJournal })
     // Notificatie per @mention in deze journal-entry
     for (const rid of entryMentions) {
       createNotification({
@@ -1036,7 +1123,11 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
     setNewEntry('')
     setEntryMentions([])
   }
-  function deleteEntry(id: string) { setJournal(j => j.filter(x => x.id !== id)) }
+  function deleteEntry(id: string) {
+    const nextJournal = journal.filter(x => x.id !== id)
+    setJournal(nextJournal)
+    commit({ journal: nextJournal })
+  }
   const owners = team.filter(m => project.ownerIds.includes(m.id))
 
   return (
@@ -1059,7 +1150,14 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
               {project.name}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              in → <span style={{ color, fontWeight: 600 }}>{project.board}</span>{project.group ? <> · {project.group}</> : null}
+              in → <Link
+                href={`/projects/${project.board}?focus=${encodeURIComponent(project.id.slice(project.board.length + 2))}`}
+                title="Open op het bord"
+                style={{ color, fontWeight: 600, textDecoration: 'none' }}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
+                {project.board}
+              </Link>{project.group ? <> · {project.group}</> : null}
               {rawItem?.source === 'google' && <span style={{ marginLeft: 8, color: '#a05400' }}>· Bewerk in Google Calendar</span>}
             </div>
           </div>
@@ -1110,7 +1208,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
       )}
       {!isMerged && <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
         <Row label="Owner">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
+          <div ref={ownerPickerRef} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
             {ownerIds.length > 0 && ownerIds.map(oid => {
               const m = team.find(t => t.id === oid)
               if (!m) return null
@@ -1119,7 +1217,11 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
                   <UserAvatar memberId={m.id} size={22} />
                   {m.name}
                   {!isGoogle && (
-                    <button onClick={() => setOwnerIds(ids => ids.filter(x => x !== m.id))}
+                    <button onClick={() => {
+                        const next = ownerIds.filter(x => x !== m.id)
+                        setOwnerIds(next)
+                        commit({ ownerIds: next })
+                      }}
                       title="Verwijder owner"
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px', marginLeft: 2 }}>×</button>
                   )}
@@ -1133,28 +1235,31 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
               </button>
             )}
             {ownerPickerOpen && (
-              <>
-                <div onClick={() => setOwnerPickerOpen(false)}
-                  style={{ position: 'fixed', inset: 0, zIndex: 305 }} />
-                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 306,
+              <div
+                style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 306,
                   background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
                   padding: 6, minWidth: 220, maxHeight: 280, overflowY: 'auto',
                   boxShadow: '0 14px 40px rgba(0,0,0,0.25)' }}>
-                  {team.filter(m => m.id !== 'unassigned').map(m => {
-                    const on = ownerIds.includes(m.id)
-                    return (
-                      <button key={m.id}
-                        onClick={() => setOwnerIds(ids => on ? ids.filter(x => x !== m.id) : [...ids.filter(x => x !== 'unassigned'), m.id])}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6,
-                          background: on ? m.color + '22' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
-                        <UserAvatar memberId={m.id} size={22} />
-                        <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{m.name}</span>
-                        {on && <span style={{ fontSize: 11, color: m.color, fontWeight: 700 }}>✓</span>}
-                      </button>
-                    )
-                  })}
-                </div>
-              </>
+                {team.filter(m => m.id !== 'unassigned').map(m => {
+                  const on = ownerIds.includes(m.id)
+                  return (
+                    <button key={m.id}
+                      onClick={() => {
+                        const next = on
+                          ? ownerIds.filter(x => x !== m.id)
+                          : [...ownerIds.filter(x => x !== 'unassigned'), m.id]
+                        setOwnerIds(next)
+                        commit({ ownerIds: next })
+                      }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6,
+                        background: on ? m.color + '22' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <UserAvatar memberId={m.id} size={22} />
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{m.name}</span>
+                      {on && <span style={{ fontSize: 11, color: m.color, fontWeight: 700 }}>✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </div>
         </Row>
@@ -1225,11 +1330,11 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="date" value={startDate} disabled={isGoogle}
-              onChange={e => setStartDate(e.target.value)}
+              onChange={e => { setStartDate(e.target.value); commit({ startDate: e.target.value || null }) }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
             <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
             <input type="date" value={endDate} disabled={isGoogle}
-              onChange={e => setEndDate(e.target.value)}
+              onChange={e => { setEndDate(e.target.value); commit({ endDate: e.target.value || null }) }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
           </div>
           {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
@@ -1246,6 +1351,10 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
               <>
                 <input type="number" value={estHours} disabled={isGoogle}
                   onChange={e => setEstHours(e.target.value)}
+                  onBlur={e => {
+                    const v = parseFloat(e.target.value) || 0
+                    if (v !== (project.estHours ?? 0)) commit({ estHours: v })
+                  }}
                   style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>· {Math.round(((parseFloat(estHours) || 0) / 8) * 10) / 10} d</span>
@@ -1253,17 +1362,17 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
             )}
           </div>
         </Row>
-        {!isGoogle && project.ownerIds.length > 1 && (
+        {!isGoogle && ownerIds.filter(id => id !== 'unassigned').length > 1 && (
           <Row label="Verdeling">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 Standaard verdeeld; vul in om handmatig per persoon te splitsen.
               </div>
-              {project.ownerIds.map(oid => {
+              {ownerIds.filter(id => id !== 'unassigned').map(oid => {
                 const m = team.find(t => t.id === oid)
                 if (!m) return null
                 const total = hasSubitems ? subitemsTotal : (parseFloat(estHours) || 0)
-                const def   = total / Math.max(project.ownerIds.length, 1)
+                const def   = total / Math.max(ownerIds.filter(id => id !== 'unassigned').length, 1)
                 const cur   = ownerHours[oid]
                 return (
                   <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1280,6 +1389,13 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
                           else n[oid] = parseFloat(v) || 0
                           return n
                         })
+                      }}
+                      onBlur={e => {
+                        const v = e.target.value
+                        const next = { ...ownerHours }
+                        if (v === '') delete next[oid]
+                        else next[oid] = parseFloat(v) || 0
+                        commit({ ownerHours: next })
                       }}
                       style={{ ...dateInput, width: 70 }} />
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>uur</span>
@@ -1310,11 +1426,13 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
         </Row>
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
-            onChange={e => setNotes(e.target.value)} rows={3} placeholder={isGoogle ? '' : 'Notities…'}
+            onChange={e => setNotes(e.target.value)}
+            onBlur={() => { if (notes !== ((rawItem?.notes as string) ?? '')) commit({ notes }) }}
+            rows={3} placeholder={isGoogle ? '' : 'Notities…'}
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
         </Row>
         <Row label="Bestanden">
-          <LinksRow links={links} onChange={setLinks} readonly={isGoogle} />
+          <LinksRow links={links} onChange={next => { setLinks(next); commit({ links: next }) }} readonly={isGoogle} />
         </Row>
         <Row label="Journaal">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1328,14 +1446,16 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
                     {d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} · {d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e.text}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    <TextWithItemRefs text={e.text} compact />
+                  </div>
                   {profile?.memberId && (
                     <ReactionRow
                       reactions={e.reactions}
                       currentMemberId={profile.memberId}
                       onToggle={emoji => {
                         const me = profile.memberId!
-                        setJournal(j => j.map(x => {
+                        const next = journal.map(x => {
                           if (x.id !== e.id) return x
                           const reactions = { ...(x.reactions ?? {}) }
                           const set = new Set(reactions[emoji] ?? [])
@@ -1343,7 +1463,9 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
                           if (set.size === 0) delete reactions[emoji]
                           else                reactions[emoji] = [...set]
                           return { ...x, reactions }
-                        }))
+                        })
+                        setJournal(next)
+                        commit({ journal: next })
                       }}
                     />
                   )}
@@ -1376,17 +1498,21 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
           <ItemHistory itemId={project.id.slice(project.board.length + 2)} />
         </Row>
       </div>}
-      <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button onClick={onClose} style={cancelBtn}>Sluiten</button>
-        {!isMerged && onDuplicate && (
-          <button onClick={onDuplicate} title="Dupliceer dit item naar dezelfde groep"
-            style={{ ...cancelBtn, color: 'var(--text-secondary)' }}>
-            ⎘ Dupliceer
-          </button>
-        )}
+      <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
         {!isGoogle && !isMerged && (
-          <button onClick={save} style={{ ...cancelBtn, background: color, color: '#000', border: 'none', fontWeight: 800 }}>Opslaan</button>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            Wijzigingen worden direct opgeslagen · ⌘Z voor ongedaan maken
+          </span>
         )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          {!isMerged && onDuplicate && (
+            <button onClick={onDuplicate} title="Dupliceer dit item naar dezelfde groep"
+              style={{ ...cancelBtn, color: 'var(--text-secondary)' }}>
+              ⎘ Dupliceer
+            </button>
+          )}
+          <button onClick={onClose} style={{ ...cancelBtn, background: color, color: '#000', border: 'none', fontWeight: 800 }}>Klaar</button>
+        </div>
       </div>
     </div>
     </>
@@ -1747,6 +1873,15 @@ export default function PlanningPage() {
     [allGroups]
   )
 
+  // Ongedateerde projecten — items mét eigenaar maar zónder start/eind-datum.
+  // Verschijnen onderin de Unassigned-sectie als chips zodat ze niet onzichtbaar
+  // blijven (de tijdlijn filtert ze immers weg). Google-items overslaan: die
+  // krijgen altijd een datum bij sync, dus die zouden hier niet thuishoren.
+  const undatedProjects = useMemo(
+    () => projects.filter(p => !p.startDate && !p.endDate && p.source !== 'google'),
+    [projects]
+  )
+
   const effectiveProjects = useMemo(() => {
     if (!shadowDrag) return projects
     return projects.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
@@ -1831,16 +1966,85 @@ export default function PlanningPage() {
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     pushUndo(() => apply(prevStart, prevEnd))
   }
+  function handleReassignOwner(project: Project, fromMemberId: string, toMemberId: string) {
+    setShadowDrag(null)
+    if (project.source === 'google') return  // Google items zijn read-only
+    if (fromMemberId === toMemberId) return
+    const boardName  = project.board
+    const origItemId = project.id.slice(boardName.length + 2)
+    const before = allGroups[boardName] ?? []
+    const apply = (replaceFrom: string, replaceWith: string) => {
+      const groups = (allGroups[boardName] ?? []).map(g => ({
+        ...g,
+        items: g.items.map(i => {
+          if (i.id !== origItemId) return i
+          const prev = (i.ownerIds as string[] | undefined) ?? []
+          // Vervang `replaceFrom` door `replaceWith`. Als de nieuwe eigenaar
+          // al in de lijst staat, verwijderen we alleen de oude (geen dupes).
+          const hasNew  = prev.includes(replaceWith)
+          const swapped = prev.flatMap(o => o === replaceFrom ? (hasNew ? [] : [replaceWith]) : [o])
+          // Houd ownerHours schoon: hours van de oude eigenaar verhuizen mee.
+          const oldHours = (i.ownerHours as Record<string, number> | undefined) ?? {}
+          const newHours: Record<string, number> = {}
+          for (const [k, v] of Object.entries(oldHours)) {
+            if (k === replaceFrom) {
+              const merged = (newHours[replaceWith] ?? 0) + (oldHours[replaceWith] ?? 0) + v
+              if (merged > 0) newHours[replaceWith] = merged
+            } else if (k !== replaceWith) {
+              newHours[k] = v
+            }
+          }
+          return { ...i, ownerIds: swapped.length > 0 ? swapped : ['unassigned'], ownerHours: newHours }
+        }),
+      }))
+      saveGroups(boardName, groups)
+      setAllGroups(prev => ({ ...prev, [boardName]: groups }))
+    }
+    apply(fromMemberId, toMemberId)
+    const fromName = team.find(m => m.id === fromMemberId)?.name ?? fromMemberId
+    const toName   = team.find(m => m.id === toMemberId)?.name ?? toMemberId
+    logActivity('Owner gewisseld', project.name, `${fromName} → ${toName}`)
+    logItemActivity(origItemId, 'wisselde owner', `${fromName} → ${toName}`).catch(() => {})
+    if (toMemberId !== 'unassigned') {
+      createNotification({
+        recipientId: toMemberId,
+        actorId:     profile?.memberId ?? null,
+        kind:        'assigned',
+        contextKind: 'board_item',
+        contextId:   project.id,
+        href:        `/projects/${project.board}`,
+        body:        project.name,
+      }).catch(() => {})
+    }
+    pushUndo(() => {
+      saveGroups(boardName, before)
+      setAllGroups(prev => ({ ...prev, [boardName]: before }))
+    }, `'${project.name}' terug naar ${fromName}`)
+  }
   function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
-    const groups = (allGroups[boardName] ?? []).map(g => ({
+    // Snapshot huidige board-state vóór de wijziging — Cmd+Z herstelt dit
+    // (alleen dit ene item verschilt; rest van het bord blijft gelijk).
+    const before = allGroups[boardName] ?? []
+    const groups = before.map(g => ({
       ...g, items: g.items.map(i => i.id === origItemId ? { ...i, startDate: newStart, endDate: newEnd, ...(extra ?? {}) } : i),
     }))
     saveGroups(boardName, groups)
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
-    logActivity('Project opgeslagen', project.name)
-    setDetailProject(null)
+    // Houd detailProject in sync zodat project.startDate/endDate up-to-date
+    // blijven na een commit (gebruikt door child components zoals de bar).
+    setDetailProject(prev => prev && prev.id === project.id
+      ? { ...prev, startDate: newStart, endDate: newEnd, ...(extra ? { ownerIds: extra.ownerIds ?? prev.ownerIds, estHours: extra.estHours ?? prev.estHours, ownerHours: extra.ownerHours ?? prev.ownerHours } : {}) }
+      : prev)
+    pushUndo(() => {
+      saveGroups(boardName, before)
+      setAllGroups(prev => ({ ...prev, [boardName]: before }))
+      // Sluit de open popup — anders zou de lokale state in DetailPanel
+      // stale staan tegenover de net-herstelde data. Bij heropenen krijg
+      // je een verse render met de juiste waarden.
+      setDetailProject(null)
+    })
   }
 
   function handleDetailDuplicate(project: Project) {
@@ -2421,14 +2625,20 @@ export default function PlanningPage() {
 
             const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; isOpen?: boolean }) => (
               <div onClick={opts?.onClick}
-                style={{ padding: '10px 14px 6px', borderBottom: '1px solid var(--border-light)',
-                  background: 'var(--overlay-faint)', display: 'flex', alignItems: 'center', gap: 8,
+                style={{ borderBottom: '1px solid var(--border-light)',
+                  background: 'var(--overlay-faint)',
                   cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none' }}>
-                {opts?.onClick && (
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: opts.isOpen ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
-                )}
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
+                {/* Label blijft tegen de linker rand kleven terwijl de balk
+                    horizontaal meescrolt — anders schuift de tekst uit beeld
+                    zodra je naar rechts scrollt in de tijdlijn. */}
+                <div style={{ position: 'sticky', left: 0, width: 'max-content',
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {opts?.onClick && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: opts.isOpen ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                  )}
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
+                </div>
               </div>
             )
 
@@ -2438,7 +2648,7 @@ export default function PlanningPage() {
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
 
             return (
-              <div key={member.id} style={{ borderBottom: '1px solid var(--border-light)', background: 'transparent' }}>
+              <div key={member.id} data-member-id={member.id} style={{ borderBottom: '1px solid var(--border-light)', background: 'transparent' }}>
                 {/* Capacity row */}
                 <div style={{ display: 'flex' }}>
                   {/* Sticky name cell */}
@@ -2521,7 +2731,8 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
-                        onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)} />
+                        onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)}
+                        onReassign={handleReassignOwner} />
                     </div>
                   </div>
                 )}
@@ -2540,9 +2751,43 @@ export default function PlanningPage() {
               out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length)}</div>)
               yokoTeam.forEach((m, i) => out.push(<div key={`y-${m.id}`}>{renderMember(m, i)}</div>))
             }
-            if (unassigned.length > 0) {
-              out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
+            if (unassigned.length > 0 || undatedProjects.length > 0) {
+              const headerLabel = undatedProjects.length > 0 ? 'Unassigned & Ongepland' : 'Unassigned'
+              const headerCount = unassigned.length + undatedProjects.length
+              out.push(<div key="hdr-un">{sectionHeader(headerLabel, headerCount)}</div>)
               unassigned.forEach((m, i) => out.push(<div key={`u-${m.id}`}>{renderMember(m, i)}</div>))
+              if (undatedProjects.length > 0) {
+                out.push(
+                  <div key="undated-strip" style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border-light)',
+                      padding: `8px 12px 8px ${namePad}px`, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Zonder datum · {undatedProjects.length}
+                    </div>
+                    <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                      {undatedProjects.map(p => {
+                        const cBg = BOARD_COLORS[p.board] ?? '#888'
+                        return (
+                          <button key={p.id} onClick={() => setDetailProject(p)}
+                            title={`Klik om ${p.name} te plannen`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                              padding: '4px 10px 4px 8px', borderRadius: 14,
+                              border: '1px solid var(--border-light)', background: 'var(--bg-card)',
+                              color: 'var(--text-primary)', fontSize: 12, fontWeight: 500,
+                              cursor: 'pointer', maxWidth: 240 }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)' }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 2, background: cBg, flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                            {p.ownerIds.filter(id => id !== 'unassigned').slice(0, 2).map(oid => (
+                              <UserAvatar key={oid} memberId={oid} size={16} />
+                            ))}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              }
             }
             if (freelancers.length > 0) {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
