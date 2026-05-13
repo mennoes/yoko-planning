@@ -11,6 +11,12 @@ import { useUndo }        from './UndoContext'
 import { GoogleBadge }    from './GoogleBadge'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity }    from '@/lib/itemActivity'
+import {
+  loadCommentsFor, saveComment, newCommentId, onCommentsUpdate,
+  toggleReaction, type CommentThread,
+} from '@/lib/commentsStore'
+import { MentionTextarea } from './MentionTextarea'
+import { ReactionRow }     from './ReactionRow'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -756,6 +762,19 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   const subitems    = item.subitems ?? []
   const hasSubitems = subitems.length > 0
 
+  // Comments per board-item — leeft naast 'journal' in de DetailPanel,
+  // maar bereikbaar via een knop direct op de rij.
+  const [commentCount, setCommentCount] = useState(0)
+  const [showComments, setShowComments] = useState(false)
+  useEffect(() => {
+    const refresh = () => {
+      const threads = loadCommentsFor('board-item:' + item.id)
+      setCommentCount(threads.reduce((s, t) => s + t.thread.length, 0))
+    }
+    refresh()
+    return onCommentsUpdate(refresh)
+  }, [item.id])
+
   // Auto-rollup: als parent een veld leeg laat én er zijn subitems, dan
   // afleiden uit subitems. Hours doen we al verderop in de Cell-dispatcher
   // (read-only sum). Hier: timeline + owners. Schrijf-actie van de gebruiker
@@ -842,6 +861,28 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               {item.name}
             </span>
           )}
+
+          {/* Comments-knop — opent een modal met thread + @ mentions + delete.
+              Toont een felle pill als er al opmerkingen zijn zodat ie opvalt. */}
+          <button onClick={(e) => { e.stopPropagation(); setShowComments(true) }}
+            title={commentCount > 0 ? `${commentCount} opmerking${commentCount === 1 ? '' : 'en'}` : 'Plaats opmerking'}
+            style={commentCount > 0 ? {
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 999,
+              background: 'var(--accent-light)',
+              border: '1px solid var(--accent)',
+              color: 'var(--text-primary)',
+              fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', flexShrink: 0, lineHeight: 1,
+            } : {
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)',
+              fontSize: 13, padding: '2px 5px', borderRadius: 6, flexShrink: 0,
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              opacity: hover ? 0.7 : 0.35, transition: 'opacity 0.15s',
+            }}>
+            💬{commentCount > 0 ? <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span> : ''}
+          </button>
         </div>
 
         {cols.map(col => (
@@ -869,12 +910,169 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           accentColor={accentColor}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
+      {showComments && (
+        <BoardItemCommentModal itemId={item.id} itemText={item.name}
+          onClose={() => setShowComments(false)} />
+      )}
     </>
   )
 }
 
+// ─── Comment modal voor één board-item ────────────────────────────────────────
+function BoardItemCommentModal({ itemId, itemText, onClose }: {
+  itemId: string; itemText: string; onClose: () => void
+}) {
+  const { profile } = useProfile()
+  const [threads, setThreads] = useState<CommentThread[]>([])
+  const [newReply, setNewReply] = useState('')
+  const [mentionIds, setMentionIds] = useState<string[]>([])
+
+  useEffect(() => {
+    const refresh = () => setThreads(loadCommentsFor('board-item:' + itemId))
+    refresh()
+    return onCommentsUpdate(refresh)
+  }, [itemId])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const thread = threads[0]
+  const replies = thread?.thread ?? []
+
+  function addReply() {
+    const body = newReply.trim()
+    if (!body) return
+    const reply = {
+      id:        newCommentId(),
+      author:    profile?.name ?? 'Iemand',
+      authorId:  profile?.memberId,
+      body,
+      createdAt: new Date().toISOString(),
+    }
+    if (thread) {
+      saveComment({ ...thread, thread: [...thread.thread, reply] })
+    } else {
+      saveComment({
+        id:        newCommentId(),
+        contextId: 'board-item:' + itemId,
+        quote:     itemText,
+        thread:    [reply],
+        resolved:  false,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    for (const rid of mentionIds) {
+      createNotification({
+        recipientId: rid,
+        actorId:     profile?.memberId ?? null,
+        kind:        'mention',
+        contextKind: 'board_item',
+        contextId:   itemId,
+        href:        undefined,
+        body:        body.length > 90 ? body.slice(0, 90) + '…' : body,
+      }).catch(() => {})
+    }
+    setNewReply('')
+    setMentionIds([])
+  }
+
+  function deleteReply(replyId: string) {
+    if (!thread) return
+    const next = thread.thread.filter(r => r.id !== replyId)
+    saveComment({ ...thread, thread: next })
+  }
+
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, backdropFilter: 'blur(4px)' }} />
+      <div onClick={e => e.stopPropagation()} style={{
+        position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+        width: 'min(460px, 92vw)', maxHeight: '80vh', zIndex: 9001,
+        background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+      }}>
+        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Opmerkingen</div>
+            <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }}>{itemText}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
+          {replies.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '8px 0' }}>Nog geen opmerkingen.</p>
+          ) : replies.map(r => {
+            const mine = !!profile?.memberId && r.authorId === profile.memberId
+            return (
+              <div key={r.id} style={{ marginBottom: 12, position: 'relative' }}
+                onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '1' }}
+                onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '0' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                  <strong style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>{r.author}</strong>
+                  <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+                    {new Date(r.createdAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>
+                  {r.body}
+                </div>
+                {profile?.memberId && thread && (
+                  <ReactionRow
+                    reactions={r.reactions}
+                    currentMemberId={profile.memberId}
+                    onToggle={emoji => {
+                      const updatedReply = toggleReaction(r, emoji, profile.memberId!)
+                      saveComment({
+                        ...thread,
+                        thread: thread.thread.map(x => x.id === r.id ? updatedReply : x),
+                      })
+                    }}
+                  />
+                )}
+                {mine && (
+                  <button className="cmt-del" onClick={() => deleteReply(r.id)}
+                    title="Verwijder opmerking"
+                    style={{ position: 'absolute', top: 0, right: 0, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '2px 5px', borderRadius: 4, opacity: 0, transition: 'opacity 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                    ×
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ padding: '10px 16px 12px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6 }}>
+          <MentionTextarea
+            value={newReply}
+            onChange={setNewReply}
+            onMentionsChange={setMentionIds}
+            onSubmit={addReply}
+            placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, ⌘+Enter om te plaatsen)"
+            rows={2}
+          />
+          <button onClick={addReply} disabled={!newReply.trim()}
+            style={{ padding: '8px 14px', borderRadius: 6, border: 'none',
+              background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+              color: newReply.trim() ? '#000' : 'var(--text-muted)',
+              fontSize: 12.5, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed',
+              alignSelf: 'flex-end' }}>
+            Plaats
+          </button>
+        </div>
+      </div>
+    </>,
+    document.body,
+  )
+}
+
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onNestItem, onDeleteGroup, onResizeCol }: {
   boardId: string
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   selectedIds: Set<string>
@@ -885,6 +1083,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   reorderMode: boolean
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
+  onNestItem:     (sourceId: string, fromGroupId: string, targetId: string) => void
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
 }) {
@@ -1204,9 +1403,18 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({ itemId: item.id, fromGroupId: group.id, fromBoard: boardId }))
                 }}
                 onDragOver={e => {
-                  // Cross-group: laat de container het afhandelen
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
                   if (raw && dragRowRef.current === null) return
+                  // Shift houden = nest-modus (item wordt subitem van deze).
+                  // Visualiseren via dashed outline; reorder overslaan.
+                  if (e.shiftKey && dragRowRef.current !== null && dragRowRef.current !== realIdx) {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    e.currentTarget.style.outline = '2px dashed var(--accent)'
+                    e.currentTarget.style.outlineOffset = '-2px'
+                    return
+                  }
+                  e.currentTarget.style.outline = ''
                   // Bij actieve sort zou handmatig reorderen toch onzichtbaar
                   // zijn — sla within-group reorder over.
                   if (sortBy) return
@@ -1217,6 +1425,20 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   next.splice(realIdx, 0, moved)
                   dragRowRef.current = realIdx
                   onUpdateGroup({ ...group, items: next })
+                }}
+                onDragLeave={e => { e.currentTarget.style.outline = '' }}
+                onDrop={e => {
+                  e.currentTarget.style.outline = ''
+                  if (!e.shiftKey) return
+                  const raw = e.dataTransfer.getData('application/x-yoko-item')
+                  if (!raw) return
+                  try {
+                    const data = JSON.parse(raw) as { itemId: string; fromGroupId: string; fromBoard?: string }
+                    if (!data.itemId || data.itemId === item.id) return
+                    if (data.fromBoard && data.fromBoard !== boardId) return  // alleen binnen hetzelfde bord
+                    e.preventDefault()
+                    onNestItem(data.itemId, data.fromGroupId, item.id)
+                  } catch {}
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate}
@@ -1401,6 +1623,36 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       if (g.id === fromGroupId) return { ...g, items: g.items.filter(i => i.id !== itemId) }
       if (g.id === toGroupId)   return { ...g, items: [...g.items, item] }
       return g
+    }))
+  }
+
+  // Nest source-item ALS subitem van target-item. Source verdwijnt uit z'n
+  // groep, target krijgt 'm onderaan z'n subitems-lijst. Alleen relevante
+  // velden gaan mee (subitem-schema is een subset van item-schema).
+  function nestItemUnder(sourceId: string, fromGroupId: string, targetId: string) {
+    if (sourceId === targetId) return
+    const fromGroup = groups.find(g => g.id === fromGroupId)
+    const source    = fromGroup?.items.find(i => i.id === sourceId)
+    if (!source) return
+    const sub: SubItem = {
+      id:        source.id,
+      name:      source.name,
+      ownerIds:  source.ownerIds ?? [],
+      status:    source.status ?? '',
+      startDate: source.startDate ?? null,
+      endDate:   source.endDate ?? null,
+      estHours:  Number(source.estHours) || 0,
+    }
+    onChange(groups.map(g => {
+      let items = g.items
+      if (g.id === fromGroupId) items = items.filter(i => i.id !== sourceId)
+      items = items.map(i => {
+        if (i.id !== targetId) return i
+        const exists = (i.subitems ?? []).some(s => s.id === sub.id)
+        if (exists) return i
+        return { ...i, subitems: [...(i.subitems ?? []), sub] }
+      })
+      return { ...g, items }
     }))
   }
 
@@ -1679,6 +1931,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               reorderMode={reorderMode}
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
+              onNestItem={nestItemUnder}
               onDeleteGroup={() => handleDeleteGroup(group.id)} />
           </div>
         ))}
@@ -1690,7 +1943,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       </div>
 
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-        Klik op tekst/cijfers om te bewerken · Sleep rijen om te herordenen · Klik op tijdlijn om datums in te stellen
+        Klik op tekst/cijfers om te bewerken · Sleep rijen om te herordenen · Shift+sleep op een ander item maakt 't subitem · Klik op tijdlijn om datums in te stellen
       </p>
 
       {/* Bulk action bar */}
