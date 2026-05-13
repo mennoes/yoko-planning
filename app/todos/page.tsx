@@ -8,7 +8,7 @@ import { useProfile } from '@/components/ProfileContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 import { useIsMobile } from '@/lib/useIsMobile'
-import { IconCheckList } from '@/components/Icon'
+import { IconCheckList, IconComment } from '@/components/Icon'
 import initialData from '@/data/todos.json'
 import teamData    from '@/data/team.json'
 import yokoRaw       from '@/data/boards/yoko.json'
@@ -403,7 +403,8 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
             display: 'inline-flex', alignItems: 'center', gap: 3,
             opacity: 0.45,
           }}>
-          💬{commentCount > 0 ? <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span> : ''}
+          <IconComment size={commentCount > 0 ? 14 : 16} strokeWidth={1.7} />
+          {commentCount > 0 && <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span>}
         </button>
       )}
       {editOrder ? (
@@ -624,19 +625,25 @@ export default function TodosPage() {
 
   const general  = sections.filter(s => !MEMBER_IDS.has(s.id))
   // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
-  // direct ziet zonder te scrollen.
+  // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
+  // (Odette, Vincent, Menno, Anne-Fleur, Kars, …) ipv de json-volgorde.
+  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'kars', 'take-lijzenga']
+  const orderIdx = (id: string) => {
+    const i = PERSONAL_ORDER.indexOf(id)
+    return i >= 0 ? i : 999
+  }
   const personal = sections.filter(s => MEMBER_IDS.has(s.id))
     .sort((a, b) => {
       const me = currentProfile?.memberId
       if (a.id === me) return -1
       if (b.id === me) return 1
-      return 0
+      return orderIdx(a.id) - orderIdx(b.id)
     })
 
   if (!hydrated) return null
 
   return (
-    <div style={{ maxWidth: 1400, padding: isMobile ? '60px 16px 60px' : '44px 36px 80px' }}>
+    <div style={{ maxWidth: 1900, padding: isMobile ? '60px 16px 60px' : '44px 36px 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 20 : 32 }}>
         <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
           <IconCheckList size={isMobile ? 22 : 28} />
@@ -672,8 +679,13 @@ export default function TodosPage() {
         </div>
       )}
 
-      {/* Personal */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, alignItems: 'start' }}>
+      {/* Personal — alle gebruikers op één rij. Op mobiele schermen blijft
+          dat onpraktisch, dus daar valt 'ie terug op één kolom. */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.max(1, personal.length)}, minmax(0, 1fr))`,
+        gap: 12, alignItems: 'start',
+      }}>
         {personal.map((s, i) => (
           <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
             allProjects={allProjects}
