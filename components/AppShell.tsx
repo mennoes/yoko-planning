@@ -142,6 +142,11 @@ function Inner({ children }: { children: ReactNode }) {
         }
         unsubs.push(subscribeRemoteBoard(b))
       }
+      // Eén keer na de initiële pull: items waarvan de timeline zojuist
+      // 'live' is geworden krijgen status 'Working on...'. Loopt ook zonder
+      // Google-sync (de tweede useEffect-tick) zodat een nieuwe dag direct
+      // het juiste status-beeld geeft.
+      try { await applyAutoStatus() } catch {}
     }
     start()
     const offAuth = onAuthChange(() => {
