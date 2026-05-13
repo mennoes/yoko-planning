@@ -7,6 +7,20 @@ import { loadAllItemsFlat, formatItemRef, type ItemRefResolved } from '@/lib/ite
 type Member = { id: string; name: string; color?: string }
 const MEMBERS: Member[] = teamData.members as Member[]
 
+function MentionAvatar({ id, name, color }: { id: string; name: string; color?: string }) {
+  const [failed, setFailed] = useState(false)
+  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  const style: React.CSSProperties = {
+    width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+    border: `2px solid ${color ?? '#888'}`, objectFit: 'cover',
+  }
+  if (failed) return (
+    <span style={{ ...style, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      background: color ?? '#888', color: '#fff', fontSize: 9, fontWeight: 700 }}>{initials}</span>
+  )
+  return <img src={`/team/${id}.jpg`} alt={name} title={name} style={style} onError={() => setFailed(true)} />
+}
+
 type Mode = 'mention' | 'itemref'
 type ItemOpt = ItemRefResolved
 
@@ -177,13 +191,13 @@ export function MentionTextarea({
               onMouseDown={e => { e.preventDefault(); applyMember(m) }}
               onMouseEnter={() => setIdx(i)}
               style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', display: 'flex', alignItems: 'center', gap: 9,
                 padding: '6px 10px', borderRadius: 5, textAlign: 'left',
                 background: i === idx ? 'var(--bg-hover)' : 'transparent',
                 border: 'none', cursor: 'pointer', fontSize: 13,
                 color: 'var(--text-primary)',
               }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color ?? '#888', flexShrink: 0 }} />
+              <MentionAvatar id={m.id} name={m.name} color={m.color} />
               <span style={{ flex: 1 }}>{m.name}</span>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>@{m.name.split(' ')[0]}</span>
             </button>
