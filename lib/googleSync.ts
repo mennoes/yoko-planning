@@ -51,7 +51,8 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null }
+type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; estHours?: number }
+type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; subitems?: SubItemSnapshot[] | null }
 type Rule     = { pattern: string; board_id: string }
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
@@ -208,7 +209,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // overschrijven bij de volgende Google-sync.
   const { data: existingRows } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, external_id, status, journal, owner_ids')
+    .select('id, group_id, board_id, external_id, status, journal, owner_ids, subitems')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
@@ -334,14 +335,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const ownerHoursMap: Record<string, number> = {}
     const perPersonTotal = sorted.reduce((s, ev) => s + eventHours(ev), 0)
     for (const oid of finalOwners) ownerHoursMap[oid] = perPersonTotal
+    // Bouw een lookup van bestaande subitems zodat user-edits (status Done,
+    // hernoemen, owner-aanpassingen) bij elke sync behouden blijven.
+    const priorSubs = Array.isArray(existingRow?.subitems) ? existingRow!.subitems! : []
+    const priorById = new Map<string, SubItemSnapshot>(priorSubs.map(s => [s.id, s]))
     const subitems = sorted.map(ev => {
       const { start, end } = eventDates(ev)
       const dateLabel = start ? new Date(start).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
+      const sid  = `si_g_${ev.id}`
+      const prev = priorById.get(sid)
       return {
-        id:        `si_g_${ev.id}`,
-        name:      dateLabel,
-        ownerIds:  finalOwners,
-        status:    '',
+        id:        sid,
+        // Bewaar handmatig hernoemde subitems; anders standaard de datum-label.
+        name:      prev?.name && prev.name !== '—' && !/^[a-z]{2,3}\s+\d/i.test(prev.name) ? prev.name : dateLabel,
+        ownerIds:  prev?.ownerIds && prev.ownerIds.length > 0 ? prev.ownerIds : finalOwners,
+        status:    prev?.status ?? '',
         startDate: start,
         endDate:   end ?? start,
         estHours:  eventHours(ev) * finalOwners.length,

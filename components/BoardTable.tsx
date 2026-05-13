@@ -747,24 +747,10 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
         ))}
         <div style={{ borderLeft: '1px solid var(--border-light)' }} />
       </div>
-      {[...subitems]
-        .sort((a, b) => {
-          // Auto-sort: vroegste startdatum bovenaan; subitems zonder datum
-          // blijven onderaan in hun originele volgorde.
-          const av = a.startDate ?? ''
-          const bv = b.startDate ?? ''
-          if (!av && !bv) return 0
-          if (!av) return 1
-          if (!bv) return -1
-          return av.localeCompare(bv)
-        })
-        .map(sub => (
-        <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
-          rail={rail}
-          selected={selectedIds?.has(sub.id) ?? false}
-          onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
-          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
-      ))}
+      <SubitemRows subitems={subitems} cols={cols} gridTemplate={gridTemplate}
+        rail={rail}
+        selectedIds={selectedIds} onToggleSelect={onToggleSelect}
+        updateOne={updateOne} deleteOne={deleteOne} />
       <div style={{ padding: '6px 10px 6px 60px' }}>
         <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
@@ -773,6 +759,65 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
         </button>
       </div>
     </div>
+  )
+}
+
+// Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
+// bovenaan), daarna een inklapbare "Done (N)" sectie.
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, updateOne, deleteOne }: {
+  subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
+  selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
+  updateOne: (id: string, u: Partial<SubItem>) => void
+  deleteOne: (id: string) => void
+}) {
+  const [doneOpen, setDoneOpen] = useState(false)
+  const sortByStart = (a: SubItem, b: SubItem) => {
+    const av = a.startDate ?? ''
+    const bv = b.startDate ?? ''
+    if (!av && !bv) return 0
+    if (!av) return 1
+    if (!bv) return -1
+    return av.localeCompare(bv)
+  }
+  const active = subitems.filter(s => s.status !== 'Done').sort(sortByStart)
+  const done   = subitems.filter(s => s.status === 'Done').sort(sortByStart)
+  return (
+    <>
+      {active.map(sub => (
+        <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
+          rail={rail}
+          selected={selectedIds?.has(sub.id) ?? false}
+          onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+      ))}
+      {done.length > 0 && (
+        <>
+          <button onClick={() => setDoneOpen(o => !o)}
+            style={{
+              width: '100%', textAlign: 'left',
+              background: 'var(--overlay-faint)', border: 'none',
+              borderBottom: '1px solid var(--border-light)',
+              padding: '7px 14px 7px 56px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+            <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>{doneOpen ? '▼' : '▶'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 2, background: '#00c875' }} />
+              Done ({done.length})
+            </span>
+          </button>
+          {doneOpen && done.map(sub => (
+            <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
+              rail={rail}
+              selected={selectedIds?.has(sub.id) ?? false}
+              onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+              onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+          ))}
+        </>
+      )}
+    </>
   )
 }
 
@@ -819,8 +864,14 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   let effectiveItem: BoardItem = item
   if (hasSubitems) {
     const updates: Partial<BoardItem> = {}
-    const subStarts = subitems.map(s => s.startDate).filter(Boolean) as string[]
-    const subEnds   = subitems.map(s => s.endDate).filter(Boolean) as string[]
+    // Voorkeur: actieve (niet-Done) subitems voor de afgeleide timeline. Een
+    // recurring meeting met 7 Done en 4 openstaande heeft een 'live' bereik
+    // van de 4 openstaande, niet feb–jul. Pas als alles Done is val terug
+    // op alle subitems zodat de range nog ergens op slaat.
+    const activeSubs = subitems.filter(s => s.status !== 'Done')
+    const dateSubs   = activeSubs.length > 0 ? activeSubs : subitems
+    const subStarts = dateSubs.map(s => s.startDate).filter(Boolean) as string[]
+    const subEnds   = dateSubs.map(s => s.endDate).filter(Boolean) as string[]
     if (!item.startDate && subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
     if (!item.endDate   && subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
     const parentOwnersEmpty = !item.ownerIds || item.ownerIds.length === 0
@@ -1444,7 +1495,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
       // vroegste subitem (voor start) of laatste (voor end), zodat 'ie
       // op de juiste plek in de tijdlijn komt te staan.
       if (!v && (dKey === 'startDate' || dKey === 'endDate')) {
-        const subs = (item.subitems ?? []) as Array<{ startDate?: string | null; endDate?: string | null }>
+        const allSubs = (item.subitems ?? []) as Array<{ status?: string; startDate?: string | null; endDate?: string | null }>
+        const activeSubs = allSubs.filter(s => s.status !== 'Done')
+        const subs = activeSubs.length > 0 ? activeSubs : allSubs
         const dates = subs.map(s => dKey === 'startDate' ? s.startDate : s.endDate).filter(Boolean) as string[]
         if (dates.length > 0) {
           dates.sort()
