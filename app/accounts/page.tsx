@@ -9,6 +9,7 @@ type Account = {
   account: string
   url: string
   username: string
+  password: string
   licensedBy: string
 }
 
@@ -37,7 +38,7 @@ export default function AccountsPage() {
     const newId = Date.now().toString()
     setAccounts((prev) => [
       ...prev,
-      { id: newId, account: 'Nieuw account', url: '', username: '', licensedBy: '' },
+      { id: newId, account: 'Nieuw account', url: '', username: '', password: '', licensedBy: '' },
     ])
   }
 
@@ -47,9 +48,10 @@ export default function AccountsPage() {
 
   const columns: { key: keyof Account; label: string; width?: number }[] = [
     { key: 'account', label: 'Account', width: 200 },
-    { key: 'url', label: 'URL', width: 180 },
-    { key: 'username', label: 'Username', width: 220 },
-    { key: 'licensedBy', label: 'License van', width: 130 },
+    { key: 'url', label: 'URL', width: 160 },
+    { key: 'username', label: 'Username', width: 210 },
+    { key: 'password', label: 'Password', width: 220 },
+    { key: 'licensedBy', label: 'License van', width: 120 },
   ]
 
   return (
@@ -176,6 +178,29 @@ export default function AccountsPage() {
                     >
                       {value}
                     </a>
+                  ) : col.key === 'password' && value ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                      <span style={{
+                        fontSize: 13.5, color: 'var(--text-secondary)',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+                      }}>
+                        {showPasswords ? value : '••••••••••'}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigator.clipboard?.writeText(value)
+                          const btn = e.currentTarget
+                          const orig = btn.textContent
+                          btn.textContent = '✓'
+                          setTimeout(() => { btn.textContent = orig }, 1200)
+                        }}
+                        title="Kopieer wachtwoord"
+                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '2px 5px', borderRadius: 4, flexShrink: 0 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}>⧉</button>
+                    </div>
                   ) : (
                     <span
                       style={{
