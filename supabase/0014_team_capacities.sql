@@ -13,5 +13,18 @@ drop policy if exists "Team capacities bewerken" on public.team_capacities;
 create policy "Team capacities lezen"    on public.team_capacities for select to authenticated using (true);
 create policy "Team capacities bewerken" on public.team_capacities for all    to authenticated using (true) with check (true);
 
--- Vergeet niet realtime aan te zetten via Database → Replication → public →
--- vinkje voor team_capacities.
+-- Realtime aanzetten — dit deed je vroeger via Database → Replication, maar
+-- die pagina is in de huidige Supabase-UI weg. Onderstaand DO-blok voegt de
+-- tabel idempotent toe aan de supabase_realtime-publicatie, zodat
+-- cross-device updates direct binnenkomen zonder UI-klik.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname    = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename  = 'team_capacities'
+  ) then
+    alter publication supabase_realtime add table public.team_capacities;
+  end if;
+end$$;
