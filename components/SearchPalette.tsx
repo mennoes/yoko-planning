@@ -189,13 +189,22 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {results.length === 0 ? (
-            <div style={{ padding: '20px 16px', color: 'var(--text-muted)', fontSize: 14 }}>
-              {query.trim() ? (
+            <div style={{ padding: '12px 16px 16px', color: 'var(--text-muted)', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {query.trim() && (
                 <button onClick={quickAddTodo}
                   style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px dashed var(--border)', background: 'var(--bg-hover)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 14, textAlign: 'left' }}>
-                  + Voeg <strong>“{query.trim()}”</strong> toe als todo (Inbox)
+                  + Voeg <strong>&ldquo;{query.trim()}&rdquo;</strong> toe als todo (Inbox)
                 </button>
-              ) : 'Geen resultaten.'}
+              )}
+              <button onClick={() => { onClose(); router.push('/pages/vakantie') }}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 14, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 16 }}>🏝</span>
+                <span style={{ fontWeight: 600 }}>Vakantie aanvragen</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>→ /pages/vakantie</span>
+              </button>
+              {!query.trim() && results.length === 0 && (
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Of typ om een todo / pagina / item te zoeken</span>
+              )}
             </div>
           ) : (
             <ul style={{ listStyle: 'none', margin: 0, padding: '6px 0' }}>

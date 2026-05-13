@@ -104,7 +104,9 @@ function Inner({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      // ⌘/Ctrl + K én ⌘/Ctrl + Space openen het zoekvenster — Space is
+      // makkelijker met één hand.
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K' || e.key === ' ' || e.code === 'Space')) {
         e.preventDefault(); setSearchOpen(o => !o)
       } else if (e.key === 'Escape' && searchOpen) {
         setSearchOpen(false)

@@ -667,48 +667,81 @@ export default function TodosPage() {
         </button>
       </div>
 
-      {/* General — zelfde kolombreedte als de persoonlijke rij eronder, zodat
-          ze visueel uitlijnen. Op mobiel valt 't terug op één kolom. */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.max(1, personal.length)}, minmax(0, 1fr))`,
-        gap: 12, alignItems: 'start', marginBottom: 28,
-      }}>
-        {general.map((s, i) => (
-          <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
-            allProjects={allProjects}
-            editOrder={editOrder}
-            isFirstCard={i === 0}
-            isLastCard={i === general.length - 1}
-            onMoveCard={dir => moveCard(s.id, dir)} />
-        ))}
-      </div>
+      {/* General — eerste rij boven de persoonlijke rij. Wat niet in één rij
+          past komt ná de persoonlijke kaarten als 'Extra'-blok. */}
+      {(() => {
+        const cols = Math.max(1, personal.length)
+        const topGeneral    = isMobile ? general : general.slice(0, cols)
+        const bottomGeneral = isMobile ? []      : general.slice(cols)
+        return (
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : `repeat(${cols}, minmax(0, 1fr))`,
+              gap: 12, alignItems: 'start', marginBottom: 28,
+            }}>
+              {topGeneral.map((s, i) => (
+                <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
+                  allProjects={allProjects}
+                  editOrder={editOrder}
+                  isFirstCard={i === 0}
+                  isLastCard={i === topGeneral.length - 1}
+                  onMoveCard={dir => moveCard(s.id, dir)} />
+              ))}
+            </div>
 
-      {/* Divider */}
-      {general.length > 0 && personal.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Persoonlijk</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        </div>
-      )}
+            {/* Divider */}
+            {general.length > 0 && personal.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Persoonlijk</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+            )}
 
-      {/* Personal — alle gebruikers op één rij. Op mobiele schermen blijft
-          dat onpraktisch, dus daar valt 'ie terug op één kolom. */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.max(1, personal.length)}, minmax(0, 1fr))`,
-        gap: 12, alignItems: 'start',
-      }}>
-        {personal.map((s, i) => (
-          <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
-            allProjects={allProjects}
-            editOrder={editOrder}
-            isFirstCard={i === 0}
-            isLastCard={i === personal.length - 1}
-            onMoveCard={dir => moveCard(s.id, dir)} />
-        ))}
-      </div>
+            {/* Personal — alle gebruikers op één rij. */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : `repeat(${cols}, minmax(0, 1fr))`,
+              gap: 12, alignItems: 'start',
+            }}>
+              {personal.map((s, i) => (
+                <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
+                  allProjects={allProjects}
+                  editOrder={editOrder}
+                  isFirstCard={i === 0}
+                  isLastCard={i === personal.length - 1}
+                  onMoveCard={dir => moveCard(s.id, dir)} />
+              ))}
+            </div>
+
+            {/* Extra general onder de personen — gebruik dezelfde kolombreedte. */}
+            {bottomGeneral.length > 0 && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '28px 0 24px' }}>
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Extra</span>
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                  gap: 12, alignItems: 'start',
+                }}>
+                  {bottomGeneral.map((s, i) => (
+                    <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
+                      allProjects={allProjects}
+                      editOrder={editOrder}
+                      isFirstCard={i === 0}
+                      isLastCard={i === bottomGeneral.length - 1}
+                      onMoveCard={dir => moveCard(s.id, dir)} />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )
+      })()}
     </div>
   )
 }
