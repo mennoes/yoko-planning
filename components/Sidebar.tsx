@@ -48,19 +48,20 @@ const PALETTE = [
   '#ff642e','#ff7a00','#ffcb00','#00c875','#037f4c','#ff5ac4','#9aadbd',
 ]
 
-type Theme = 'auto' | 'dark' | 'light'
+type Theme = 'dark' | 'light'
 const THEMES: { value: Theme; Icon: React.ComponentType<{ size?: number }>; label: string }[] = [
-  { value: 'auto',  Icon: IconAuto, label: 'Auto'   },
-  { value: 'dark',  Icon: IconMoon, label: 'Donker' },
   { value: 'light', Icon: IconSun,  label: 'Licht'  },
+  { value: 'dark',  Icon: IconMoon, label: 'Donker' },
 ]
 function applyTheme(t: Theme) {
-  if (t === 'auto') {
-    const h = new Date().getHours()
-    document.documentElement.setAttribute('data-theme', (h >= 7 && h < 19) ? 'light' : 'dark')
-  } else {
-    document.documentElement.setAttribute('data-theme', t)
-  }
+  document.documentElement.setAttribute('data-theme', t)
+}
+/** Initieel thema: gebruik OS-voorkeur als nog niks expliciet gekozen. */
+function initialTheme(): Theme {
+  if (typeof window === 'undefined') return 'light'
+  const saved = localStorage.getItem('theme')
+  if (saved === 'dark' || saved === 'light') return saved
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 // ─── Generic drag-to-reorder ──────────────────────────────────────────────────
@@ -1053,7 +1054,7 @@ export default function Sidebar({
   const pathname              = usePathname()
   const { profile, openEdit, signOut } = useProfile()
   const { showToast }         = useUndo()
-  const [theme,       setTheme]       = useState<Theme>('auto')
+  const [theme,       setTheme]       = useState<Theme>('light')
   const [sections,    setSectionsRaw] = useState<SidebarSection[]>([])
   const [hydrated,    setHydrated]    = useState(false)
   const [width,       setWidth]       = useState(DEFAULT_SIDEBAR_W)
@@ -1084,8 +1085,8 @@ export default function Sidebar({
 
   useEffect(() => {
     setSectionsRaw(loadSections())
-    const saved = localStorage.getItem('theme') as Theme | null
-    if (saved && THEMES.some(t => t.value === saved)) { setTheme(saved); applyTheme(saved) }
+    const init = initialTheme()
+    setTheme(init); applyTheme(init)
     const savedW = parseInt(localStorage.getItem('sidebar-width') ?? '')
     if (!isNaN(savedW)) setWidth(Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, savedW)))
     try {
