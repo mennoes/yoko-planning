@@ -17,6 +17,7 @@ import {
   loadCommentsFor, saveComment, newCommentId, onCommentsUpdate,
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
+import { addRule as addSubitemRule } from '@/lib/subitemRules'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 
@@ -729,7 +730,18 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, onUpdate }
         ))}
         <div style={{ borderLeft: '1px solid var(--border-light)' }} />
       </div>
-      {subitems.map(sub => (
+      {[...subitems]
+        .sort((a, b) => {
+          // Auto-sort: vroegste startdatum bovenaan; subitems zonder datum
+          // blijven onderaan in hun originele volgorde.
+          const av = a.startDate ?? ''
+          const bv = b.startDate ?? ''
+          if (!av && !bv) return 0
+          if (!av) return 1
+          if (!bv) return -1
+          return av.localeCompare(bv)
+        })
+        .map(sub => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
@@ -1987,6 +1999,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       startDate: source.startDate ?? null,
       endDate:   source.endDate ?? null,
       estHours:  Number(source.estHours) || 0,
+    }
+    // Onthoud de nesting-keuze voor Google-items: een volgende episode met
+    // vergelijkbare naam plaatsen we dan automatisch onder dezelfde parent.
+    if (source.source === 'google') {
+      const target = groups.flatMap(g => g.items).find(i => i.id === targetId)
+      if (target) addSubitemRule(source.name, boardId, targetId, target.name)
     }
     onChange(groups.map(g => {
       let items = g.items

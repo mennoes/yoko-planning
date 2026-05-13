@@ -24,6 +24,7 @@ import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
 import { onAuthChange, isSyncing } from '@/lib/sync'
 import { syncGoogleNow } from '@/lib/googleClient'
+import { applySubitemRules } from '@/lib/subitemRules'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -160,6 +161,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Defensive force-pull — realtime can drop events, this guarantees the
       // local cache reflects whatever the sync just wrote.
       await Promise.all(BOARD_NAMES.map(b => pullBoardFromRemote(b)))
+      // Past geleerde nesting-regels toe: nieuwe Google-events die lijken op
+      // een eerder handmatig genest item belanden direct onder dezelfde parent.
+      try { await applySubitemRules() } catch {}
     }
     tick()
     const id = setInterval(tick, 5 * 60 * 1000)
