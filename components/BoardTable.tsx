@@ -571,22 +571,12 @@ export function effectiveDays(item: BoardItem): number {
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
-  const { showToast } = useUndo()
-  if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => {
-    onUpdate({ ownerIds: v })
-    const names = v.filter(id => id !== 'unassigned')
-      .map(id => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? id)
-    showToast(names.length === 0 ? `'${item.name}' niet meer toegewezen` : `'${item.name}' → ${names.join(', ')}`)
-  }} />
+  if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => onUpdate({ ownerIds: v })} />
   if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
     onUpdate({ status: v })
     notifyOwnersOfStatusChange(item, item.status, v)
-    showToast(`'${item.name}' → ${v || '(geen status)'}`)
   }} />
-  if (col.type === 'daterange') return <DateRangeCell startDate={item.startDate} endDate={item.endDate} onChange={(s,e) => {
-    onUpdate({ startDate: s, endDate: e })
-    showToast(`Datums bijgewerkt op '${item.name}'`)
-  }} />
+  if (col.type === 'daterange') return <DateRangeCell startDate={item.startDate} endDate={item.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} />
   if (col.type === 'url')       return <UrlCell       value={(item[col.key] as string) ?? ''} onChange={v => onUpdate({ [col.key]: v })} />
 
   const hasSubs = (item.subitems?.length ?? 0) > 0
@@ -875,7 +865,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   onResizeCol: (key: string, width: number) => void
 }) {
   const [dropHover, setDropHover] = useState(false)
-  const { pushUndo } = useUndo()
+  const { pushUndo, showToast } = useUndo()
   // Collapsed-state komt rechtstreeks uit de group-data (gestored in
   // localStorage + Supabase via boardStore). Toggle persisteert via
   // onUpdateGroup, dus refresh onthoudt je keuze.
@@ -894,7 +884,31 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   }
 
   function updateItem(itemId: string, updates: Partial<BoardItem>) {
-    onUpdateGroup({ ...group, items: group.items.map(i => i.id === itemId ? { ...i, ...updates } : i) })
+    // Multi-select: als het item in een groter selectie zit, pas de
+    // wijziging op alle geselecteerde items binnen deze groep toe. Cross-
+    // group bulk (zelden gebruikt) blijft per-groep.
+    const bulk = selectedIds.size > 1 && selectedIds.has(itemId)
+    onUpdateGroup({
+      ...group,
+      items: group.items.map(i => {
+        if (bulk ? selectedIds.has(i.id) : i.id === itemId) return { ...i, ...updates }
+        return i
+      }),
+    })
+    // Toast met bulk-bewustzijn — Cell-handlers zelf zijn silent.
+    const item = group.items.find(i => i.id === itemId)
+    const target = bulk
+      ? `${group.items.filter(g => selectedIds.has(g.id)).length} items`
+      : (item ? `'${item.name}'` : 'Item')
+    if ('status' in updates) {
+      showToast(`${target} → ${updates.status || '(geen status)'}`)
+    } else if ('ownerIds' in updates) {
+      const next = (updates.ownerIds ?? []).filter(id => id !== 'unassigned')
+      const names = next.map(id => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? id)
+      showToast(names.length === 0 ? `${target} niet meer toegewezen` : `${target} → ${names.join(', ')}`)
+    } else if ('startDate' in updates || 'endDate' in updates) {
+      showToast(`Datums bijgewerkt op ${target}`)
+    }
   }
   function deleteItem(itemId: string) {
     const removed = group.items.find(i => i.id === itemId)
@@ -993,6 +1007,21 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
         {/* Groep header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderLeft: `4px solid ${group.color}`, background: 'var(--overlay-subtle)' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
+
+          {/* Drag-handle voor group-reorder. Alleen dit element initieert
+              de drag; klikken op andere header-elementen (kleur, naam, ×)
+              blijft gewoon werken zonder per ongeluk een drag te starten. */}
+          <span
+            draggable
+            onDragStart={e => {
+              e.stopPropagation()
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('application/x-yoko-group', JSON.stringify({ groupId: group.id, fromBoard: boardId }))
+            }}
+            title="Sleep om volgorde te wijzigen"
+            style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0, opacity: headerHover ? 1 : 0.4, transition: 'opacity 0.12s', userSelect: 'none' }}>
+            ⋮⋮
+          </span>
 
           <button onClick={toggleCollapsed} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
             {collapsed ? '▶' : '▼'}
@@ -1131,7 +1160,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
             {renderItems.map((item) => {
               const realIdx = group.items.findIndex(i => i.id === item.id)
               return (
-              <div key={item.id} data-item-id={item.id} draggable={!sortBy && !reorderMode}
+              <div key={item.id} data-item-id={item.id} draggable={!reorderMode}
                 onDragStart={e => {
                   dragRowRef.current = realIdx
                   e.dataTransfer.effectAllowed = 'move'
@@ -1143,6 +1172,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   // Cross-group: laat de container het afhandelen
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
                   if (raw && dragRowRef.current === null) return
+                  // Bij actieve sort zou handmatig reorderen toch onzichtbaar
+                  // zijn — sla within-group reorder over.
+                  if (sortBy) return
                   e.preventDefault()
                   if (dragRowRef.current === null || dragRowRef.current === realIdx) return
                   const next = [...group.items]
@@ -1285,7 +1317,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const [filterStatus,  setFilterStatus] = useState('')
   const [editingTitle,  setEditingTitle] = useState(false)
   const [selectedIds,   setSelectedIds]  = useState<Set<string>>(new Set())
-  const [sortBy,        setSortBy]       = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+  // Default sort: timeline-asc — items met vroegste startdatum komen
+  // boven, zodat je in één oogopslag ziet wat eerst aan de beurt is.
+  // Klik op een kolom-header overschrijft dit.
+  const [sortBy,        setSortBy]       = useState<{ key: string; dir: 'asc' | 'desc' } | null>({ key: 'timeline', dir: 'asc' })
   const [reorderMode,   setReorderMode]  = useState(false)
   const [titleDraft,    setTitleDraft]   = useState(title)
 
@@ -1574,19 +1609,43 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         )}
       </div>
 
-      {/* Groepen */}
+      {/* Groepen — wrapped in een dropzone zodat hele groepen via header-
+          handle naar een andere positie gesleept kunnen worden. */}
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'visible' }}>
-        {filteredGroups.map(group => (
-          <BoardGroupSection key={group.id} boardId={boardId} group={group} cols={columns}
-            colWidths={colWidths} gridTemplate={gridTemplate}
-            selectedIds={selectedIds}
-            onToggleSelect={toggleSelect}
-            onSelectGroup={selectGroup}
-            sortBy={sortBy} onToggleSort={toggleSort}
-            reorderMode={reorderMode}
-            onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
-            onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
-            onDeleteGroup={() => handleDeleteGroup(group.id)} />
+        {filteredGroups.map((group, gIdx) => (
+          <div key={group.id}
+            data-group-id={group.id}
+            onDragOver={e => {
+              if (!e.dataTransfer.types.includes('application/x-yoko-group')) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+            }}
+            onDrop={e => {
+              const raw = e.dataTransfer.getData('application/x-yoko-group')
+              if (!raw) return
+              e.preventDefault()
+              try {
+                const { groupId } = JSON.parse(raw) as { groupId: string }
+                if (!groupId || groupId === group.id) return
+                const fromIdx = groups.findIndex(g => g.id === groupId)
+                if (fromIdx < 0) return
+                const next = [...groups]
+                const [moved] = next.splice(fromIdx, 1)
+                next.splice(gIdx, 0, moved)
+                onChange(next)
+              } catch {}
+            }}>
+            <BoardGroupSection boardId={boardId} group={group} cols={columns}
+              colWidths={colWidths} gridTemplate={gridTemplate}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onSelectGroup={selectGroup}
+              sortBy={sortBy} onToggleSort={toggleSort}
+              reorderMode={reorderMode}
+              onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
+              onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
+              onDeleteGroup={() => handleDeleteGroup(group.id)} />
+          </div>
         ))}
         {filteredGroups.length === 0 && (
           <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
