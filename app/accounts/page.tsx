@@ -1,49 +1,75 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { IconKey } from '@/components/Icon'
-import initialData from '@/data/accounts.json'
-
-type Account = {
-  id: string
-  account: string
-  url: string
-  username: string
-  password: string
-  licensedBy: string
-}
+import { useProfile } from '@/components/ProfileContext'
+import { useUndo } from '@/components/UndoContext'
+import { requiresAuth } from '@/lib/supabase'
+import {
+  pullAccounts, upsertAccount, deleteAccount, subscribeRemoteAccounts,
+  type Account,
+} from '@/lib/accountsStore'
 
 export default function AccountsPage() {
-  const [accounts, setAccounts] = useState<Account[]>(initialData.accounts)
+  const { profile } = useProfile()
+  const { showToast } = useUndo()
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [loading, setLoading] = useState(true)
+  const [authBlocked, setAuthBlocked] = useState(false)
   const [showPasswords, setShowPasswords] = useState(false)
   const [editingCell, setEditingCell] = useState<{ id: string; field: keyof Account } | null>(null)
   const [editValue, setEditValue] = useState('')
+
+  // Authenticatie + initiële pull. Niet ingelogde gebruikers krijgen niks
+  // te zien — RLS blokkeert dat aan de DB-kant; hier tonen we een nette
+  // melding ipv 'leeg lijstje'.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      if (!requiresAuth || !profile?.memberId) {
+        setAuthBlocked(true); setLoading(false); return
+      }
+      setAuthBlocked(false)
+      const rows = await pullAccounts()
+      if (cancelled) return
+      if (!rows) { setAuthBlocked(true); setLoading(false); return }
+      setAccounts(rows); setLoading(false)
+    }
+    load()
+    const off = subscribeRemoteAccounts(() => {
+      pullAccounts().then(rows => { if (rows && !cancelled) setAccounts(rows) })
+    })
+    return () => { cancelled = true; off() }
+  }, [profile?.memberId])
 
   const startEdit = (account: Account, field: keyof Account) => {
     setEditingCell({ id: account.id, field })
     setEditValue(account[field])
   }
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingCell) return
-    setAccounts((prev) =>
-      prev.map((a) =>
-        a.id === editingCell.id ? { ...a, [editingCell.field]: editValue } : a
-      )
-    )
+    const target = accounts.find(a => a.id === editingCell.id)
+    if (!target) { setEditingCell(null); return }
+    const updated = { ...target, [editingCell.field]: editValue }
+    setAccounts(prev => prev.map(a => a.id === editingCell.id ? updated : a))
     setEditingCell(null)
+    const idx = accounts.findIndex(a => a.id === editingCell.id)
+    const ok = await upsertAccount(updated, idx)
+    if (!ok) showToast('Opslaan mislukt — probeer opnieuw')
   }
 
-  const addRow = () => {
+  const addRow = async () => {
     const newId = Date.now().toString()
-    setAccounts((prev) => [
-      ...prev,
-      { id: newId, account: 'Nieuw account', url: '', username: '', password: '', licensedBy: '' },
-    ])
+    const fresh: Account = { id: newId, account: 'Nieuw account', url: '', username: '', password: '', licensedBy: '' }
+    const next = [...accounts, fresh]
+    setAccounts(next)
+    await upsertAccount(fresh, next.length - 1)
   }
 
-  const deleteRow = (id: string) => {
-    setAccounts((prev) => prev.filter((a) => a.id !== id))
+  const deleteRow = async (id: string) => {
+    setAccounts(prev => prev.filter(a => a.id !== id))
+    await deleteAccount(id)
   }
 
   const columns: { key: keyof Account; label: string; width?: number }[] = [
@@ -53,6 +79,33 @@ export default function AccountsPage() {
     { key: 'password', label: 'Password', width: 220 },
     { key: 'licensedBy', label: 'License van', width: 120 },
   ]
+
+  if (loading) {
+    return (
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 32px' }}>
+        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 28px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconKey size={28} />Accounts
+        </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Laden…</p>
+      </div>
+    )
+  }
+
+  if (authBlocked) {
+    return (
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 32px' }}>
+        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 28px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <IconKey size={28} />Accounts
+        </h1>
+        <div style={{ padding: '32px 28px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
+          <p style={{ margin: 0 }}>
+            🔒 De wachtwoorden zijn alleen zichtbaar voor ingelogde teamleden.
+            Log in via het menu (rechtsboven) en herlaad de pagina.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '48px 32px' }}>
@@ -273,7 +326,7 @@ export default function AccountsPage() {
       </div>
 
       <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-        Dubbelklik op een cel om te bewerken.
+        Wachtwoorden staan in Supabase achter login (RLS). Dubbelklik op een cel om te bewerken.
       </p>
 
       <style>{`

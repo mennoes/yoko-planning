@@ -324,46 +324,39 @@ function SectionBlock({
   }
 
   return (
-    <div style={{
-      marginTop: 8,
-      background: 'transparent',
-      border: '1px solid var(--border-light)',
-      borderRadius: 10,
-      overflow: 'hidden',
-      transition: 'background 0.15s',
-    }}>
-      {/* Section header — gentle tint, white items below */}
+    <div style={{ marginBottom: 1 }}>
+      {/* Section header — flat, in dezelfde stijl als de hoofdnav-items
+          (Home / Planning / To do's). Folder-icoon + naam, klik om in/uit
+          te klappen. Sub-items vallen er gewoon onder. */}
       <div onClick={e => {
-        // Click anywhere on the header (except buttons / inputs) toggles open state
         const t = e.target as HTMLElement
         if (t.closest('button') || t.closest('input')) return
         setOpen(o => !o)
       }}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 12px', cursor: 'pointer',
-          background: open ? 'transparent' : 'var(--overlay-faint)',
-          borderBottom: open ? '1px solid var(--border-light)' : 'none' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 12px', borderRadius: 8, cursor: 'pointer',
+          color: 'var(--text-primary)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em' }}
         onMouseEnter={e => {
+          e.currentTarget.style.background = 'var(--bg-hover)'
           e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '1'))
         }}
         onMouseLeave={e => {
+          e.currentTarget.style.background = 'transparent'
           e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '0'))
         }}>
-        <button onClick={() => setOpen(o => !o)}
-          title={open ? 'Inklappen' : 'Uitklappen'}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', alignItems: 'center', padding: 0, flexShrink: 0 }}>
-          {open ? <IconFolderOpen size={16} /> : <IconFolder size={16} />}
-        </button>
+        <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          {open ? <IconFolderOpen size={22} /> : <IconFolder size={22} />}
+        </span>
 
         {editName ? (
           <input autoFocus value={nameDraft}
             onChange={e => setNameDraft(e.target.value)}
             onBlur={() => { saveName(nameDraft.trim() || section.name); setEditName(false) }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { saveName(nameDraft.trim() || section.name); setEditName(false) } }}
-            style={{ background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, letterSpacing: '0.02em', outline: 'none', width: 140 }}
+            style={{ background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', outline: 'none', flex: 1, minWidth: 0 }}
           />
         ) : (
           <span onDoubleClick={() => { setNameDraft(section.name); setEditName(true) }} title="Dubbelklik om naam te bewerken"
-            style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.01em', cursor: 'text', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            style={{ flex: 1, cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {section.name}
           </span>
         )}

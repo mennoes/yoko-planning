@@ -12,7 +12,7 @@ import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
 import vlaanderenRaw from '@/data/boards/vlaanderen.json'
 import dienjaarRaw   from '@/data/boards/dienjaar.json'
-import accountsData  from '@/data/accounts.json'
+import { pullAccounts } from '@/lib/accountsStore'
 import type { BoardGroup } from '@/lib/boards'
 
 const BOARD_RAW: Record<string, { groups: unknown[] }> = {
@@ -106,10 +106,16 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
       if (!t.done) all.push({ id: `todo-${s.id}-${t.id}`, title: t.text, subtitle: `Todo · ${s.title}`, href: '/todos', emoji: '✅' })
     }
 
-    // Accounts
-    for (const a of accountsData.accounts) {
-      all.push({ id: `account-${a.id}`, title: a.account, subtitle: 'Account', href: '/accounts', emoji: '🔑' })
-    }
+    // Accounts — alleen voor ingelogde gebruikers, achter Supabase RLS.
+    // We laden async; bij anon-toegang krijgen we niks terug en blijft
+    // het palette zonder account-results (geen lek van titels).
+    pullAccounts().then(rows => {
+      if (!rows) return
+      setData(prev => [
+        ...prev,
+        ...rows.map(a => ({ id: `account-${a.id}`, title: a.account, subtitle: 'Account', href: '/accounts', emoji: '🔑' })),
+      ])
+    })
 
     // Static pages
     all.push({ id: 'nav-home',     title: 'Home',       subtitle: 'Pagina',  href: '/',          emoji: '🏠' })
