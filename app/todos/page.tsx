@@ -667,17 +667,77 @@ export default function TodosPage() {
         </button>
       </div>
 
-      {/* General — eerste rij boven de persoonlijke rij. Wat niet in één rij
-          past komt ná de persoonlijke kaarten als 'Extra'-blok. */}
-      {(() => {
+      {isMobile ? (() => {
+        // Op mobiel: eigen kaart bovenaan (volle breedte), andere personen in
+        // een horizontale scroll-rij eronder, daarna de algemene secties.
+        const me     = personal[0]
+        const others = personal.slice(1)
+        return (
+          <>
+            {me && (
+              <div style={{ marginBottom: others.length > 0 ? 14 : 24 }}>
+                <TodoCard section={me} isMember={true} onUpdate={updateSection}
+                  allProjects={allProjects}
+                  editOrder={editOrder}
+                  isFirstCard={true}
+                  isLastCard={others.length === 0}
+                  onMoveCard={dir => moveCard(me.id, dir)} />
+              </div>
+            )}
+
+            {others.length > 0 && (
+              <div style={{
+                display: 'flex', gap: 12,
+                overflowX: 'auto',
+                scrollSnapType: 'x mandatory',
+                WebkitOverflowScrolling: 'touch',
+                margin: '0 -16px 24px',
+                padding: '4px 16px 10px',
+              }}>
+                {others.map((s, i) => (
+                  <div key={s.id} style={{ flex: '0 0 82vw', scrollSnapAlign: 'start' }}>
+                    <TodoCard section={s} isMember={true} onUpdate={updateSection}
+                      allProjects={allProjects}
+                      editOrder={editOrder}
+                      isFirstCard={i === 0}
+                      isLastCard={i === others.length - 1}
+                      onMoveCard={dir => moveCard(s.id, dir)} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {general.length > 0 && personal.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Algemeen</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+              {general.map((s, i) => (
+                <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
+                  allProjects={allProjects}
+                  editOrder={editOrder}
+                  isFirstCard={i === 0}
+                  isLastCard={i === general.length - 1}
+                  onMoveCard={dir => moveCard(s.id, dir)} />
+              ))}
+            </div>
+          </>
+        )
+      })() : (() => {
+        // Desktop: algemene rij eerst, persoonlijke rij eronder; overlopende
+        // algemene secties belanden onderaan als 'Extra'.
         const cols = Math.max(1, personal.length)
-        const topGeneral    = isMobile ? general : general.slice(0, cols)
-        const bottomGeneral = isMobile ? []      : general.slice(cols)
+        const topGeneral    = general.slice(0, cols)
+        const bottomGeneral = general.slice(cols)
         return (
           <>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : `repeat(${cols}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
               gap: 12, alignItems: 'start', marginBottom: 28,
             }}>
               {topGeneral.map((s, i) => (
@@ -690,7 +750,6 @@ export default function TodosPage() {
               ))}
             </div>
 
-            {/* Divider */}
             {general.length > 0 && personal.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
                 <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
@@ -699,10 +758,9 @@ export default function TodosPage() {
               </div>
             )}
 
-            {/* Personal — alle gebruikers op één rij. */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : `repeat(${cols}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
               gap: 12, alignItems: 'start',
             }}>
               {personal.map((s, i) => (
@@ -715,7 +773,6 @@ export default function TodosPage() {
               ))}
             </div>
 
-            {/* Extra general onder de personen — gebruik dezelfde kolombreedte. */}
             {bottomGeneral.length > 0 && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '28px 0 24px' }}>
