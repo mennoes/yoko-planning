@@ -624,11 +624,12 @@ function Cell({ item, col, onUpdate }: {
 // ─── Subitem grid template ────────────────────────────────────────────────────
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
   onToggleSelect?: () => void
+  isLast?: boolean
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -670,15 +671,20 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       transition: 'background 0.1s',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      {/* Eerste kolom: checkbox voor bulk-selectie + per-rij rail (Monday-stijl). */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%', paddingRight: 0 }}>
+      {/* Eerste kolom: checkbox + boom-connector (verticale lijn met
+          horizontale elbow per rij — als een Monday/file-tree). */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%', paddingRight: 0, position: 'relative' }}>
         {onToggleSelect && (
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
             style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 13, height: 13,
-              opacity: selected || hover ? 1 : 0.4, transition: 'opacity 0.15s', flexShrink: 0 }} />
+              opacity: selected || hover ? 1 : 0.4, transition: 'opacity 0.15s', flexShrink: 0, zIndex: 1 }} />
         )}
-        <div style={{ width: 4, background: rail ?? 'var(--accent)', borderRadius: 2, margin: '4px 0', alignSelf: 'stretch' }} />
+        {/* Boom-connector: top-half is altijd zichtbaar (verbindt met boven),
+            bottom-half is verborgen op de laatste rij (eindigt bij elbow). */}
+        <div aria-hidden style={{ position: 'absolute', right: 4, top: 0, bottom: isLast ? '50%' : 0, width: 2, background: rail ?? 'var(--accent)' }} />
+        {/* Horizontale elbow naar de eerste cel. */}
+        <div aria-hidden style={{ position: 'absolute', right: 0, top: '50%', width: 6, height: 2, background: rail ?? 'var(--accent)' }} />
       </div>
       <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {editName ? (
@@ -781,16 +787,23 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
   }
   const active = subitems.filter(s => s.status !== 'Done').sort(sortByStart)
   const done   = subitems.filter(s => s.status === 'Done').sort(sortByStart)
+  // 'Laatste' = bepaalt of de verticale connector na deze rij doorloopt.
+  // Wanneer Done bestaat is de Done-header de laatste; anders de laatste
+  // actieve rij. Bij geopende Done is de laatste done-rij de finale.
+  const lastActiveIdx = active.length - 1
+  const hasDone = done.length > 0
+  const lastDoneIdx  = done.length - 1
   return (
     <>
-      {active.map(sub => (
+      {active.map((sub, idx) => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
           selected={selectedIds?.has(sub.id) ?? false}
           onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+          isLast={!hasDone && idx === lastActiveIdx}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
-      {done.length > 0 && (
+      {hasDone && (
         <>
           <button onClick={() => setDoneOpen(o => !o)}
             style={{
@@ -801,18 +814,24 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               display: 'flex', alignItems: 'center', gap: 8,
               fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
               textTransform: 'uppercase', letterSpacing: '0.05em',
+              position: 'relative',
             }}>
+            {/* Tree-connector voor de Done-header: verticale lijn + elbow.
+                Eindigt hier wanneer Done dicht is, loopt door wanneer open. */}
+            <span aria-hidden style={{ position: 'absolute', left: 36 - 4 - 2, top: 0, bottom: doneOpen ? 0 : '50%', width: 2, background: rail }} />
+            <span aria-hidden style={{ position: 'absolute', left: 36 - 4, top: '50%', width: 6, height: 2, background: rail }} />
             <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>{doneOpen ? '▼' : '▶'}</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 9, height: 9, borderRadius: 2, background: '#00c875' }} />
               Done ({done.length})
             </span>
           </button>
-          {doneOpen && done.map(sub => (
+          {doneOpen && done.map((sub, idx) => (
             <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
               rail={rail}
               selected={selectedIds?.has(sub.id) ?? false}
               onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+              isLast={idx === lastDoneIdx}
               onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
           ))}
         </>
