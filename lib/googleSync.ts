@@ -35,8 +35,9 @@ function resolveAttendeeEmail(email: string): string | null {
   return null
 }
 
-const WINDOW_DAYS_FUTURE = 56  // ~8 weeks ahead
-const WINDOW_DAYS_PAST   = 14  // 2 weeks back
+const WINDOW_DAYS_FUTURE = 56   // ~8 weeks ahead
+const WINDOW_DAYS_PAST   = 180  // 6 months back — zodat recurring meetings
+                                 //   ook hun historische instances meenemen
 
 type GoogleCalRow = {
   id:             string

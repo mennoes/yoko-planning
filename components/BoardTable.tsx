@@ -103,8 +103,15 @@ function PortalDropdown({ anchor, onClose, children }: {
       if (!dropRef.current?.contains(e.target as Node) &&
           !anchor.current?.contains(e.target as Node)) onClose()
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose() }
+    }
     document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (typeof window === 'undefined') return null

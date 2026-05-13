@@ -25,6 +25,7 @@ import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 import { onAuthChange, isSyncing } from '@/lib/sync'
 import { syncGoogleNow } from '@/lib/googleClient'
 import { applySubitemRules } from '@/lib/subitemRules'
+import { applyAutoStatus }   from '@/lib/autoStatus'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -164,6 +165,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Past geleerde nesting-regels toe: nieuwe Google-events die lijken op
       // een eerder handmatig genest item belanden direct onder dezelfde parent.
       try { await applySubitemRules() } catch {}
+      // Items waarvan de timeline 'nu' is en die nog geen status hebben
+      // krijgen automatisch 'Working on...'. Manuele statussen blijven staan.
+      try { await applyAutoStatus() } catch {}
     }
     tick()
     const id = setInterval(tick, 5 * 60 * 1000)
