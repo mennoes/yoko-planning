@@ -68,6 +68,12 @@ export async function markAllRead(recipientId: string): Promise<void> {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(EVENT))
 }
 
+export async function deleteAll(recipientId: string): Promise<void> {
+  if (!supabase) return
+  await supabase.from('notifications').delete().eq('recipient_id', recipientId)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(EVENT))
+}
+
 export function onNotificationsChange(handler: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
   window.addEventListener(EVENT, handler)

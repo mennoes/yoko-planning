@@ -8,7 +8,7 @@ import { useTeamPhotos } from './TeamPhotosContext'
 import { IconBell } from './Icon'
 import teamData from '@/data/team.json'
 import {
-  loadNotifications, markAllRead, markRead, onNotificationsChange,
+  loadNotifications, markAllRead, markRead, deleteAll, onNotificationsChange,
   subscribeRemoteNotifications, type Notification,
 } from '@/lib/notificationsStore'
 
@@ -151,16 +151,29 @@ export function NotificationBell() {
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 10px 6px',
+            padding: '10px 12px 8px', gap: 8,
+            borderBottom: '1px solid var(--border-light)',
           }}>
-            <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>Meldingen</strong>
-            {unread > 0 && (
-              <button onClick={() => memberId && markAllRead(memberId)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 11.5, color: 'var(--text-muted)', padding: 0 }}>
-                Markeer alles gelezen
-              </button>
-            )}
+            <strong style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 700 }}>Meldingen</strong>
+            <div style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
+              {unread > 0 && (
+                <button onClick={() => memberId && markAllRead(memberId)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: 12, color: 'var(--text-secondary)', padding: 0, fontWeight: 500 }}>
+                  Alles gelezen
+                </button>
+              )}
+              {items.length > 0 && (
+                <button onClick={() => {
+                  if (!memberId) return
+                  if (window.confirm(`Alle ${items.length} meldingen verwijderen?`)) deleteAll(memberId)
+                }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: 12, color: 'var(--red, #e2445c)', padding: 0, fontWeight: 600 }}>
+                  Leegmaken
+                </button>
+              )}
+            </div>
           </div>
           {items.length === 0 ? (
             <p style={{ padding: '14px 12px', fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
@@ -182,12 +195,12 @@ export function NotificationBell() {
                   </span>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                    <strong>{actorName(n.actor_id)}</strong>{' '}
-                    <span style={{ color: 'var(--text-secondary)' }}>{actionLabel(n)}</span>{' '}
-                    {n.body && <em style={{ color: 'var(--text-muted)', fontStyle: 'normal' }}>"{n.body}"</em>}
+                  <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.45 }}>
+                    <strong style={{ fontWeight: 700 }}>{actorName(n.actor_id)}</strong>{' '}
+                    <span style={{ color: 'var(--text-primary)' }}>{actionLabel(n)}</span>{' '}
+                    {n.body && <em style={{ color: 'var(--text-secondary)', fontStyle: 'normal', fontWeight: 500 }}>&quot;{n.body}&quot;</em>}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 3, fontWeight: 500 }}>
                     {fmtRelative(n.created_at)}
                   </div>
                 </div>
