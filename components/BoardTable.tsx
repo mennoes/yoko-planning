@@ -646,11 +646,9 @@ function SubItemRow({ subitem, cols, gridTemplate, onUpdate, onDelete }: {
       transition: 'background 0.1s',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      {/* Indent block under the parent's select column, with a coloured rail
-          so the nesting reads at a glance. */}
-      <div style={{ height: '100%', display: 'flex', alignItems: 'stretch', justifyContent: 'flex-end', paddingRight: 0 }}>
-        <div style={{ width: 3, background: 'var(--overlay-medium)' }} />
-      </div>
+      {/* De continue accent-bar zit nu op SubItemsSection — deze cel is leeg
+          maar houdt de grid-uitlijning met de parent intact. */}
+      <div />
       <div style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {editName ? (
           <input autoFocus value={nameDraft}
@@ -679,8 +677,9 @@ function SubItemRow({ subitem, cols, gridTemplate, onUpdate, onDelete }: {
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, cols, gridTemplate, onUpdate }: {
+function SubItemsSection({ subitems, cols, gridTemplate, accentColor, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
+  accentColor?: string
   onUpdate: (u: SubItem[]) => void
 }) {
   function updateOne(id: string, u: Partial<SubItem>) { onUpdate(subitems.map(s => s.id === id ? { ...s, ...u } : s)) }
@@ -688,7 +687,8 @@ function SubItemsSection({ subitems, cols, gridTemplate, onUpdate }: {
   function addOne() {
     onUpdate([...subitems, { id: Date.now().toString(), name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
   }
-  const hdrCell: React.CSSProperties = { padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-light)' }
+  const rail = accentColor ?? 'var(--accent)'
+  const hdrCell: React.CSSProperties = { padding: '6px 8px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-light)' }
 
   // Subitem-only header labels per known column key. Falls back to the
   // parent column label so custom columns get something sensible.
@@ -701,35 +701,49 @@ function SubItemsSection({ subitems, cols, gridTemplate, onUpdate }: {
     return fallback
   }
 
+  // Monday-stijl: continue accent-bar links over de hele subitems-tafel,
+  // ingesprongen onder de parent zodat het nesting-niveau direct leesbaar
+  // is. Eigen header-rij + rijen behouden de parent grid-template zodat
+  // kolombreedtes blijven matchen.
   return (
-    <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--overlay-sub-border)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--overlay-sub-header)', borderBottom: '1px solid var(--border-light)' }}>
-        <div />
-        <div style={{ padding: '4px 10px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
-        {cols.map(c => (
-          <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
+    <div style={{ borderBottom: '1px solid var(--border)', padding: '6px 18px 10px 30px', background: 'var(--overlay-sub-border)' }}>
+      <div style={{ borderLeft: `4px solid ${rail}`,
+        background: 'var(--bg-card)',
+        borderTop: '1px solid var(--border-light)',
+        borderRight: '1px solid var(--border-light)',
+        borderBottom: '1px solid var(--border-light)',
+        borderRadius: '0 8px 8px 0',
+        overflow: 'hidden',
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--overlay-sub-header)', borderBottom: '1px solid var(--border-light)' }}>
+          <div />
+          <div style={{ padding: '6px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
+          {cols.map(c => (
+            <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
+          ))}
+          <div style={{ borderLeft: '1px solid var(--border-light)' }} />
+        </div>
+        {subitems.map(sub => (
+          <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
+            onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
         ))}
-        <div style={{ borderLeft: '1px solid var(--border-light)' }} />
-      </div>
-      {subitems.map(sub => (
-        <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
-          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
-      ))}
-      <div style={{ padding: '6px 10px 6px 60px' }}>
-        <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-          + Voeg subitem toe
-        </button>
+        <div style={{ padding: '6px 10px 6px 60px' }}>
+          <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+            + Voeg subitem toe
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
+function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
   selected: boolean
+  accentColor?: string
   onToggleSelect: () => void
   reorderMode: boolean
   isFirst: boolean
@@ -828,6 +842,7 @@ function BoardRow({ item, cols, gridTemplate, selected, onToggleSelect, reorderM
 
       {expanded && (
         <SubItemsSection subitems={subitems} cols={cols} gridTemplate={gridTemplate}
+          accentColor={accentColor}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
     </>
@@ -1129,6 +1144,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 onDragEnd={() => { dragRowRef.current = null }}>
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate}
                   selected={selectedIds.has(item.id)}
+                  accentColor={group.color}
                   onToggleSelect={() => onToggleSelect(item.id)}
                   reorderMode={reorderMode}
                   isFirst={realIdx === 0}
