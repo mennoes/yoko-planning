@@ -1333,6 +1333,47 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
             </select>
           </div>
         </Row>
+        {(() => {
+          // Groep-picker: kies een andere groep binnen hetzelfde bord
+          // (bv. naar Done-groep slepen zonder drag-and-drop).
+          const boardGroups = allGroups[project.board] ?? []
+          if (isGoogle || boardGroups.length === 0) return null
+          const rawItemId = project.id.slice(project.board.length + 2)
+          const currentGroup = boardGroups.find(g => g.items.some(i => i.id === rawItemId))
+          if (!currentGroup) return null
+          return (
+            <Row label="Groep">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: currentGroup.color ?? '#888' }} />
+                  {currentGroup.name}
+                </span>
+                {boardGroups.length > 1 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const targetGroupId = e.target.value
+                      if (!targetGroupId || targetGroupId === currentGroup.id) return
+                      const item = currentGroup.items.find(i => i.id === rawItemId)
+                      if (!item) return
+                      const nextGroups = boardGroups.map(g => {
+                        if (g.id === currentGroup.id) return { ...g, items: g.items.filter(i => i.id !== rawItemId) }
+                        if (g.id === targetGroupId)   return { ...g, items: [...g.items, item] }
+                        return g
+                      })
+                      saveGroups(project.board, nextGroups)
+                    }}
+                    style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                    <option value="">→ Andere groep…</option>
+                    {boardGroups.filter(g => g.id !== currentGroup.id).map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </Row>
+          )
+        })()}
         <Row label="Categorie">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             {ALL_CATEGORIES.map(c => {
