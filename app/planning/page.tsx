@@ -366,7 +366,9 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
       }}>
         <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
         {total > 0 && (
-          <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
+          <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1,
+            position: 'relative', zIndex: 15,
+            background: 'var(--bg-base)', padding: '0 3px', borderRadius: 3 }}>
             {total}u
           </span>
         )}
@@ -2663,18 +2665,20 @@ export default function PlanningPage() {
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
                 {expanded.size >= team.length ? '▾' : '▸'} Alles
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                <button onClick={() => setColWZoom(z => Math.max(50, z - 10))}
-                  title="Smaller (sneltoets: −)"
-                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                <input type="range" min={50} max={300} step={5}
-                  value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
-                  title={`Kolom-breedte ${colWZoom}%   ·   sneltoetsen +/−`}
-                  style={{ width: 80, accentColor: 'var(--accent)' }} />
-                <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
-                  title="Breder (sneltoets: +)"
-                  style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
-              </div>
+              {!isMobile && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                  <button onClick={() => setColWZoom(z => Math.max(50, z - 10))}
+                    title="Smaller (sneltoets: −)"
+                    style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                  <input type="range" min={50} max={300} step={5}
+                    value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
+                    title={`Kolom-breedte ${colWZoom}%   ·   sneltoetsen +/−`}
+                    style={{ width: 80, accentColor: 'var(--accent)' }} />
+                  <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
+                    title="Breder (sneltoets: +)"
+                    style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                </div>
+              )}
             </div>
             {cols.map(col => {
               const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
