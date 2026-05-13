@@ -247,7 +247,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
         style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: 'nowrap', minWidth: 24 }}>
         {value.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
-          : value.map(id => <MemberAvatar key={id} id={id} size={30} />)
+          : value.map(id => <MemberAvatar key={id} id={id} size={34} />)
         }
       </div>
 
@@ -507,7 +507,10 @@ function DateRangeCell({
               }}>!</span>
             )}
             <span title={`${progressPct}% verstreken`}
-              style={{ position: 'relative', zIndex: 1, fontSize: 11, fontWeight: 600, color: progressPct > 35 ? '#fff' : pillClr, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textShadow: progressPct > 35 ? '0 1px 1px rgba(0,0,0,0.15)' : 'none' }}>
+              style={{ position: 'relative', zIndex: 1, fontSize: 13, fontWeight: 600,
+                color: progressPct > 35 ? '#fff' : 'var(--text-primary)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                textShadow: progressPct > 35 ? '0 1px 1px rgba(0,0,0,0.2)' : 'none' }}>
               {fmtRange(startDate, endDate)}
             </span>
           </>

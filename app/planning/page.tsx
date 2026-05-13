@@ -2793,10 +2793,15 @@ export default function PlanningPage() {
 
         </div>
 
-        {/* Footer info */}
-        <div style={{ padding: isMobile ? '10px 14px 24px' : '12px 32px 24px', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
-          {projects.length} items · {team.length} teamleden · {Object.keys(BOARD_COLORS).length} agenda&apos;s
-          {!isMobile && <> · sleep een balk om datums te verschuiven · klik voor details</>}
+        {/* Footer info — sticky-left zodat de tekst altijd zichtbaar
+            blijft bij horizontaal scrollen, en wat groter font ipv 11. */}
+        <div style={{ padding: isMobile ? '10px 0 24px' : '12px 0 24px' }}>
+          <div style={{ position: 'sticky', left: 0, width: 'max-content',
+            padding: isMobile ? '0 14px' : '0 32px',
+            fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
+            {projects.length} items · {team.length} teamleden · {Object.keys(BOARD_COLORS).length} agenda&apos;s
+            {!isMobile && <> · sleep een balk om datums te verschuiven · klik voor details</>}
+          </div>
         </div>
       </div>
 
