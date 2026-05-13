@@ -41,19 +41,25 @@ export function NotificationBell() {
   const [items, setItems] = useState<Notification[]>([])
   const wrapRef = useRef<HTMLDivElement>(null)
   const btnRef  = useRef<HTMLButtonElement>(null)
-  const [popPos, setPopPos] = useState<{ top: number; right: number } | null>(null)
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null)
+
+  function computePos() {
+    if (!btnRef.current) return null
+    const r = btnRef.current.getBoundingClientRect()
+    // Pop-out onder de bell, links uitgelijnd met de knop. Clamp tegen
+    // de rechter scherm-rand zodat de popup nooit buiten beeld valt.
+    const popW = 360
+    const left = Math.min(r.left, window.innerWidth - popW - 8)
+    return {
+      top:  Math.min(r.bottom + 6, window.innerHeight - 24),
+      left: Math.max(8, left),
+    }
+  }
 
   function toggleOpen() {
-    if (!open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect()
-      // Op smalle schermen rechts uitlijnen aan de schermrand zodat de
-      // popup nooit links afloopt. De popup is breder dan de afstand
-      // tussen bell en linker scherm-rand wanneer er andere knoppen
-      // rechts van de bell staan (zoek/menu).
-      setPopPos({
-        top:   Math.min(r.bottom + 6, window.innerHeight - 24),
-        right: 8,
-      })
+    if (!open) {
+      const p = computePos()
+      if (p) setPopPos(p)
     }
     setOpen(o => !o)
   }
@@ -62,12 +68,8 @@ export function NotificationBell() {
   useEffect(() => {
     if (!open) return
     const recompute = () => {
-      if (!btnRef.current) return
-      const r = btnRef.current.getBoundingClientRect()
-      setPopPos({
-        top:   Math.min(r.bottom + 6, window.innerHeight - 24),
-        right: 8,
-      })
+      const p = computePos()
+      if (p) setPopPos(p)
     }
     window.addEventListener('resize', recompute)
     window.addEventListener('scroll', recompute, true)
@@ -115,16 +117,18 @@ export function NotificationBell() {
       <button ref={btnRef} onClick={toggleOpen} aria-label="Meldingen"
         title={unread > 0 ? `${unread} ongelezen meldingen` : 'Geen nieuwe meldingen'}
         style={{
-          background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+          background: unread > 0 ? 'var(--accent-light)' : 'var(--bg-card)',
+          border: `1px solid ${unread > 0 ? 'var(--accent)' : 'var(--border-light)'}`,
           cursor: 'pointer',
-          width: 38, height: 38, borderRadius: 9, position: 'relative',
+          width: 44, height: 44, borderRadius: 11, position: 'relative',
           color: unread > 0 ? 'var(--accent)' : 'var(--text-secondary)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           padding: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          transition: 'background 0.15s',
         }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-card)')}>
-        <IconBell size={18} strokeWidth={1.7} />
+        onMouseEnter={e => (e.currentTarget.style.background = unread > 0 ? 'var(--accent-light)' : 'var(--bg-hover)')}
+        onMouseLeave={e => (e.currentTarget.style.background = unread > 0 ? 'var(--accent-light)' : 'var(--bg-card)')}>
+        <IconBell size={22} strokeWidth={1.8} />
         {unread > 0 && (
           <span style={{
             position: 'absolute', top: -3, right: -3,
@@ -139,7 +143,7 @@ export function NotificationBell() {
       </button>
       {open && popPos && typeof document !== 'undefined' && createPortal(
         <div data-bell-popover style={{
-          position: 'fixed', top: popPos.top, right: popPos.right, zIndex: 9050,
+          position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9050,
           width: 'min(360px, calc(100vw - 16px))', maxHeight: '70vh', overflowY: 'auto',
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 12, padding: 4,

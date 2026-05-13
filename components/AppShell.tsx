@@ -212,11 +212,8 @@ function Inner({ children }: { children: ReactNode }) {
           </div>
         </>
       )}
-      {!isMobile && (
-        <div style={{ position: 'fixed', top: 14, right: 18, zIndex: 50 }}>
-          <NotificationBell />
-        </div>
-      )}
+      {/* Desktop bell zit nu in de sidebar-header (naast het logo).
+          Op mobile blijft 'm rechtsboven naast de hamburger. */}
 
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />

@@ -27,6 +27,7 @@ import {
 } from './Icon'
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
+import { NotificationBell } from './NotificationBell'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -1159,7 +1160,7 @@ export default function Sidebar({
         <div style={{ padding: isMobile ? '20px 60px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <Link href="/"
             onClick={e => { if (editOrder) e.preventDefault() }}
-            style={{ textDecoration: 'none', display: 'block', flex: 1, minWidth: 0 }}
+            style={{ textDecoration: 'none', display: 'block', minWidth: 0 }}
             onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
             onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
             <svg width="100" height="18" viewBox="0 0 323 57" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', color: 'var(--sup-yellow)' }}>
@@ -1167,6 +1168,7 @@ export default function Sidebar({
             </svg>
             <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--sup-yellow)', letterSpacing: '0.28em', textTransform: 'uppercase', marginTop: 6 }}>PLANNING</div>
           </Link>
+          {!isMobile && <NotificationBell />}
         </div>
 
         {/* Nav */}
