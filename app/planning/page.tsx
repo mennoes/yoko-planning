@@ -1898,15 +1898,6 @@ export default function PlanningPage() {
     [allGroups]
   )
 
-  // Ongedateerde projecten — items mét eigenaar maar zónder start/eind-datum.
-  // Verschijnen onderin de Unassigned-sectie als chips zodat ze niet onzichtbaar
-  // blijven (de tijdlijn filtert ze immers weg). Google-items overslaan: die
-  // krijgen altijd een datum bij sync, dus die zouden hier niet thuishoren.
-  const undatedProjects = useMemo(
-    () => projects.filter(p => !p.startDate && !p.endDate && p.source !== 'google'),
-    [projects]
-  )
-
   const effectiveProjects = useMemo(() => {
     if (!shadowDrag) return projects
     return projects.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
@@ -2776,43 +2767,9 @@ export default function PlanningPage() {
               out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length)}</div>)
               yokoTeam.forEach((m, i) => out.push(<div key={`y-${m.id}`}>{renderMember(m, i)}</div>))
             }
-            if (unassigned.length > 0 || undatedProjects.length > 0) {
-              const headerLabel = undatedProjects.length > 0 ? 'Unassigned & Ongepland' : 'Unassigned'
-              const headerCount = unassigned.length + undatedProjects.length
-              out.push(<div key="hdr-un">{sectionHeader(headerLabel, headerCount)}</div>)
+            if (unassigned.length > 0) {
+              out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
               unassigned.forEach((m, i) => out.push(<div key={`u-${m.id}`}>{renderMember(m, i)}</div>))
-              if (undatedProjects.length > 0) {
-                out.push(
-                  <div key="undated-strip" style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border-light)',
-                      padding: `8px 12px 8px ${namePad}px`, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Zonder datum · {undatedProjects.length}
-                    </div>
-                    <div style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                      {undatedProjects.map(p => {
-                        const cBg = BOARD_COLORS[p.board] ?? '#888'
-                        return (
-                          <button key={p.id} onClick={() => setDetailProject(p)}
-                            title={`Klik om ${p.name} te plannen`}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                              padding: '4px 10px 4px 8px', borderRadius: 14,
-                              border: '1px solid var(--border-light)', background: 'var(--bg-card)',
-                              color: 'var(--text-primary)', fontSize: 12, fontWeight: 500,
-                              cursor: 'pointer', maxWidth: 240 }}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)' }}>
-                            <span style={{ width: 8, height: 8, borderRadius: 2, background: cBg, flexShrink: 0 }} />
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                            {p.ownerIds.filter(id => id !== 'unassigned').slice(0, 2).map(oid => (
-                              <UserAvatar key={oid} memberId={oid} size={16} />
-                            ))}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              }
             }
             if (freelancers.length > 0) {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
