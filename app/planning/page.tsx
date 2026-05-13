@@ -2760,7 +2760,7 @@ export default function PlanningPage() {
                 {/* Capacity row */}
                 <div style={{ display: 'flex' }}>
                   {/* Sticky name cell */}
-                  <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+                  <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
                     background: stickyBg,
                     display: 'flex', alignItems: 'center',
                     padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border-light)' }}>
@@ -2831,7 +2831,7 @@ export default function PlanningPage() {
                 {/* Timeline bars (expanded) */}
                 {isExp && memberProjects.length > 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 19, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)}
@@ -2841,7 +2841,7 @@ export default function PlanningPage() {
                 )}
                 {isExp && memberProjects.length === 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 19, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
                 )}
