@@ -2314,9 +2314,6 @@ export default function PlanningPage() {
               <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
                 <IconHourglass size={14} style={{ marginRight: 6 }} />Capaciteit
               </button>
-              <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden" style={ghostBtn(editOrder)}>
-                <IconSort size={14} style={{ marginRight: 6 }} />{editOrder ? 'Klaar' : 'Sorteren'}
-              </button>
               <button onClick={() => setHideMeetings(v => !v)}
                 title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
                 style={ghostBtn(hideMeetings)}>
@@ -2337,8 +2334,11 @@ export default function PlanningPage() {
                 ))}
               </div>
 
-              {/* Right-most overflow: Exporteer + Deel */}
-              <div style={{ position: 'relative', marginLeft: 'auto' }}>
+              {/* Right-most: Sorteren + overflow (Exporteer + Deel + Verschuif) */}
+              <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+                <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden" style={ghostBtn(editOrder)}>
+                  <IconSort size={14} style={{ marginRight: 6 }} />{editOrder ? 'Klaar' : 'Sorteren'}
+                </button>
                 <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
                   style={ghostBtn(overflowOpen)}>
                   <IconMore size={16} />
