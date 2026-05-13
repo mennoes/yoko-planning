@@ -43,6 +43,7 @@ export const IconSort       = (p: Props) => base({ ...p, children: <><line x1="7
 export const IconHourglass  = (p: Props) => base({ ...p, children: <><line x1="6" y1="3" x2="18" y2="3" /><line x1="6" y1="21" x2="18" y2="21" /><path d="M7 3v3c0 2 2 3 5 6 3-3 5-4 5-6V3" /><path d="M7 21v-3c0-2 2-3 5-6 3 3 5 4 5 6v3" /></> })
 export const IconAlert      = (p: Props) => base({ ...p, children: <><path d="M12 3l10 18H2z" /><line x1="12" y1="10" x2="12" y2="15" /><line x1="12" y1="18" x2="12" y2="18.5" /></> })
 export const IconClock      = (p: Props) => base({ ...p, children: <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 16 14" /></> })
+export const IconComment    = (p: Props) => base({ ...p, children: <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-4 4v-4H6a2 2 0 0 1-2-2z" /> })
 export const IconRange      = (p: Props) => base({ ...p, children: <><line x1="4" y1="12" x2="20" y2="12" /><polyline points="9 7 4 12 9 17" /><polyline points="15 7 20 12 15 17" /></> })
 export const IconMore       = (p: Props) => base({ ...p, children: <><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></> })
 export const IconRocket     = (p: Props) => base({ ...p, children: <><path d="M14 4l6 6-7 7-3 1-3-3 1-3 6-7c.6-.6 1.4-1 2-1z" /><line x1="9" y1="15" x2="6" y2="18" /><circle cx="15" cy="9" r="1.5" /></> })

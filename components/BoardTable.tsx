@@ -9,6 +9,7 @@ import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { useUndo }        from './UndoContext'
 import { GoogleBadge }    from './GoogleBadge'
+import { IconComment }    from './Icon'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity }    from '@/lib/itemActivity'
 import {
@@ -863,25 +864,26 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           )}
 
           {/* Comments-knop — opent een modal met thread + @ mentions + delete.
-              Toont een felle pill als er al opmerkingen zijn zodat ie opvalt. */}
+              Felle pill bij ≥1 opmerking, anders een subtiele outline-icon. */}
           <button onClick={(e) => { e.stopPropagation(); setShowComments(true) }}
             title={commentCount > 0 ? `${commentCount} opmerking${commentCount === 1 ? '' : 'en'}` : 'Plaats opmerking'}
             style={commentCount > 0 ? {
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '2px 8px', borderRadius: 999,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 9px', borderRadius: 999,
               background: 'var(--accent-light)',
               border: '1px solid var(--accent)',
               color: 'var(--text-primary)',
-              fontSize: 11, fontWeight: 700,
+              fontSize: 12, fontWeight: 700,
               cursor: 'pointer', flexShrink: 0, lineHeight: 1,
             } : {
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-muted)',
-              fontSize: 13, padding: '2px 5px', borderRadius: 6, flexShrink: 0,
-              display: 'inline-flex', alignItems: 'center', gap: 3,
-              opacity: hover ? 0.7 : 0.35, transition: 'opacity 0.15s',
+              padding: '4px 6px', borderRadius: 6, flexShrink: 0,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              opacity: hover ? 0.85 : 0.4, transition: 'opacity 0.15s',
             }}>
-            💬{commentCount > 0 ? <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span> : ''}
+            <IconComment size={18} strokeWidth={1.6} />
+            {commentCount > 0 && <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span>}
           </button>
         </div>
 
