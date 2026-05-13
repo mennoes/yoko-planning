@@ -795,11 +795,10 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
       for (const s of subitems) for (const oid of (s.ownerIds ?? [])) if (oid && oid !== 'unassigned') subOwners.add(oid)
       if (subOwners.size > 0) updates.ownerIds = [...subOwners]
     }
-    if (!item.status) {
-      // Status rolt op naar 'Done' alleen wanneer ALLE subitems Done zijn.
-      const allDone = subitems.length > 0 && subitems.every(s => s.status === 'Done')
-      if (allDone) updates.status = 'Done'
-    }
+    // Status NIET auto-rollen. Done subitems blijven gewoon in het
+    // parent-item zichtbaar; pas wanneer jij het item zelf op Done zet
+    // verhuist 't naar de Done-groep. Voorkomt dat een item ongewenst
+    // wegspringt zodra de laatste subitem klaar is.
     if (Object.keys(updates).length > 0) effectiveItem = { ...item, ...updates }
   }
 
