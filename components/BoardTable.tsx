@@ -651,9 +651,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: gridTemplate,
-      alignItems: 'center', minHeight: 36,
+      alignItems: 'center', minHeight: 40,
       borderBottom: '1px solid var(--border-light)',
-      background: hover ? 'var(--overlay-subtle)' : 'var(--overlay-sub)',
+      background: hover ? 'var(--overlay-hover)' : 'transparent',
       transition: 'background 0.1s',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
@@ -662,7 +662,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'stretch', height: '100%' }}>
         <div style={{ width: 4, background: rail ?? 'var(--accent)', borderRadius: 2, margin: '4px 0 4px 0' }} />
       </div>
-      <div style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+      <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {editName ? (
           <input autoFocus value={nameDraft}
             onChange={e => setNameDraft(e.target.value)}
@@ -674,7 +674,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
             style={{ ...editInput, flex: 1 }} />
         ) : (
           <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
-            style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 400, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+            style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
             {subitem.name}
           </span>
         )}
@@ -718,8 +718,8 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, onUpdate }
   // links uitgelijnd net naast de eerste cel. Header & content delen de
   // parent grid-template zodat kolombreedtes matchen.
   return (
-    <div style={{ borderBottom: '1px solid var(--border)', padding: '4px 18px 8px 30px', background: 'var(--overlay-sub-border)' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--overlay-sub-header)', borderBottom: '1px solid var(--border-light)' }}>
+    <div style={{ borderBottom: '1px solid var(--border)', padding: '4px 18px 8px 30px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--bg-hover)', borderBottom: '1px solid var(--border-light)' }}>
         <div />
         <div style={{ padding: '6px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
         {cols.map(c => (
@@ -1301,13 +1301,39 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
             {group.items.length} items
           </span>
 
-          {headerHover && !editName && (
-            <button onClick={onDeleteGroup} title="Groep verwijderen"
-              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 4px', borderRadius: 3 }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-              ×
-            </button>
+          {/* Group-level select-all + verwijder. Selectie-checkbox vinkt
+              alle items in de groep aan/uit (handig voor bulk-acties of
+              bulk-slepen). Verwijder-knop is altijd zichtbaar met label
+              zodat 't niet meer raden is. */}
+          {!editName && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label title="Alle items in deze groep selecteren"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, cursor: 'pointer' }}>
+                <input type="checkbox"
+                  checked={group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))}
+                  ref={el => { if (el) {
+                    const some = group.items.some(i => selectedIds.has(i.id))
+                    const all  = group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))
+                    el.indeterminate = some && !all
+                  }}}
+                  onChange={e => onSelectGroup(group.id, e.target.checked)}
+                  onClick={e => e.stopPropagation()}
+                  style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                selecteer alles
+              </label>
+              <button onClick={e => {
+                  e.stopPropagation()
+                  const count = group.items.length
+                  if (count > 0 && !confirm(`Groep '${group.name}' verwijderen met ${count} item${count === 1 ? '' : 's'}?`)) return
+                  onDeleteGroup()
+                }}
+                title="Verwijder groep"
+                style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: '3px 9px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'var(--red)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
+                × Verwijder
+              </button>
+            </div>
           )}
         </div>
 
@@ -1406,9 +1432,18 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 onDragOver={e => {
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
                   if (raw && dragRowRef.current === null) return
-                  // Shift houden = nest-modus (item wordt subitem van deze).
-                  // Visualiseren via dashed outline; reorder overslaan.
-                  if (e.shiftKey && dragRowRef.current !== null && dragRowRef.current !== realIdx) {
+                  if (dragRowRef.current === null || dragRowRef.current === realIdx) {
+                    e.currentTarget.style.outline = ''
+                    return
+                  }
+                  // Drop-zone-detectie: middelste 50% van de rij = nest;
+                  // bovenste/onderste 25% = reorder. Geeft een natuurlijke
+                  // "drop on item" vs "drop between items" gesture zonder
+                  // dat je een modifier-key hoeft te kennen.
+                  const r = e.currentTarget.getBoundingClientRect()
+                  const y = e.clientY - r.top
+                  const nestZone = y > r.height * 0.25 && y < r.height * 0.75
+                  if (nestZone) {
                     e.preventDefault()
                     e.dataTransfer.dropEffect = 'move'
                     e.currentTarget.style.outline = '2px dashed var(--accent)'
@@ -1420,7 +1455,6 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   // zijn — sla within-group reorder over.
                   if (sortBy) return
                   e.preventDefault()
-                  if (dragRowRef.current === null || dragRowRef.current === realIdx) return
                   const next = [...group.items]
                   const [moved] = next.splice(dragRowRef.current, 1)
                   next.splice(realIdx, 0, moved)
@@ -1430,9 +1464,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 onDragLeave={e => { e.currentTarget.style.outline = '' }}
                 onDrop={e => {
                   e.currentTarget.style.outline = ''
-                  if (!e.shiftKey) return
                   const raw = e.dataTransfer.getData('application/x-yoko-item')
                   if (!raw) return
+                  // Alleen nesten als de drop in de nest-zone (middelste
+                  // 50%) gebeurt; randen leveren al de reorder af.
+                  const r = e.currentTarget.getBoundingClientRect()
+                  const y = e.clientY - r.top
+                  const nestZone = y > r.height * 0.25 && y < r.height * 0.75
+                  if (!nestZone) return
                   try {
                     const data = JSON.parse(raw) as { itemId: string; fromGroupId: string; fromBoard?: string }
                     if (!data.itemId || data.itemId === item.id) return
@@ -1573,6 +1612,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const [search,        setSearch]       = useState('')
   const [filterOwner,   setFilterOwner]  = useState('')
   const [filterStatus,  setFilterStatus] = useState('')
+  const [filterFrom,    setFilterFrom]   = useState('')  // YYYY-MM-DD
+  const [filterUntil,   setFilterUntil]  = useState('')
   const [editingTitle,  setEditingTitle] = useState(false)
   const [selectedIds,   setSelectedIds]  = useState<Set<string>>(new Set())
   // Default sort: timeline-asc — items met vroegste startdatum komen
@@ -1592,20 +1633,32 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     onChange([...groups, { id: Date.now().toString(), name: 'Nieuwe groep', color, collapsed: false, items: [] }])
   }
 
-  const hasFilter = !!(search || filterOwner || filterStatus)
+  const hasFilter = !!(search || filterOwner || filterStatus || filterFrom || filterUntil)
 
   const filteredGroups = useMemo(() => {
     if (!hasFilter) return groups
+    const from = filterFrom ? new Date(filterFrom).getTime() : null
+    const until = filterUntil ? new Date(filterUntil).getTime() + 86400000 - 1 : null
     return groups.map(g => ({
       ...g,
       items: g.items.filter(item => {
         if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
         if (filterOwner && !item.ownerIds.includes(filterOwner)) return false
         if (filterStatus && item.status !== filterStatus) return false
+        // Periode-filter: item moet OVERLAPPEN met de gekozen range.
+        // Item zonder datums valt buiten elke range.
+        if (from !== null || until !== null) {
+          const s = item.startDate ? new Date(item.startDate).getTime() : null
+          const e = item.endDate   ? new Date(item.endDate).getTime() + 86400000 - 1 : s
+          if (s === null) return false
+          const itemEnd = e ?? s
+          if (from !== null && itemEnd   < from)  return false
+          if (until !== null && s        > until) return false
+        }
         return true
       }),
     })).filter(g => g.items.length > 0)
-  }, [groups, search, filterOwner, filterStatus, hasFilter])
+  }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter])
 
   const allOwners = useMemo(() => {
     const ids = new Set<string>()
@@ -1886,13 +1939,29 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           })}
         </select>
 
+        {/* Periode-filter: items waarvan de timeline OVERLAPT met
+            [van, tot]. Leeg laten = geen ondergrens / bovengrens. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 4px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-card)' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 4 }}>Periode</span>
+          <input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 12, padding: '5px 4px', outline: 'none' }} />
+          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
+          <input type="date" value={filterUntil} onChange={e => setFilterUntil(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: 12, padding: '5px 4px', outline: 'none' }} />
+        </div>
+
         {hasFilter && (
           <>
-            <button onClick={() => { setSearch(''); setFilterOwner(''); setFilterStatus('') }}
+            <button onClick={() => { setSearch(''); setFilterOwner(''); setFilterStatus(''); setFilterFrom(''); setFilterUntil('') }}
               style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--overlay-medium)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
               × Wissen
             </button>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{resultCount} resultaten</span>
+            {(filterFrom || filterUntil) && (() => {
+              // Som van uren in de gefilterde set — handig voor 'wat doen we in maart'
+              const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + (Number(i.estHours) || 0), 0), 0)
+              return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>· {Math.round(totalHours * 10) / 10}u totaal</span>
+            })()}
           </>
         )}
       </div>
@@ -1944,7 +2013,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       </div>
 
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-        Klik op tekst/cijfers om te bewerken · Sleep rijen om te herordenen · Shift+sleep op een ander item maakt 't subitem · Klik op tijdlijn om datums in te stellen
+        Klik op tekst/cijfers om te bewerken · Sleep tussen rijen om te herordenen · Sleep óp een rij maakt 't een subitem · Klik op tijdlijn om datums in te stellen
       </p>
 
       {/* Bulk action bar */}
