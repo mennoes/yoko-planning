@@ -821,6 +821,35 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
   )
 }
 
+// ─── Notes preview cel ──────────────────────────────────────────────────────
+// Klik opent het item-detail-drawer met een echt textarea. Strippen we de
+// HTML-tags die uit oudere imports (Google-beschrijvingen) kunnen komen,
+// anders zie je <p>…</p> letterlijk in de cel.
+function NotesPreview({ value, onOpen }: { value: string; onOpen: () => void }) {
+  const plain = (value ?? '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/p>\s*<p[^>]*>/gi, ' · ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return (
+    <div onClick={e => { e.stopPropagation(); onOpen() }}
+      title={plain || 'Klik om notitie toe te voegen'}
+      style={{
+        cursor: 'pointer', fontSize: 13, padding: '0 4px',
+        color: plain ? 'var(--text-secondary)' : 'var(--text-muted)',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        width: '100%', userSelect: 'none',
+      }}>
+      {plain || '—'}
+    </div>
+  )
+}
+
 // ─── Item rij ─────────────────────────────────────────────────────────────────
 function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
@@ -988,7 +1017,14 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
 
         {cols.map(col => (
           <div key={col.key} style={{ padding: '4px 8px', borderLeft: '1px solid var(--border)', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
-            <Cell item={effectiveItem} col={col} onUpdate={onUpdate} />
+            {col.key === 'notes' ? (
+              // Notes is een vrije-tekst-veld dat al snel niet meer in één
+              // cel past. Klikken opent het detail-drawer met een groot
+              // textarea + eventuele opmerkingen ernaast.
+              <NotesPreview value={item.notes ?? ''} onOpen={() => setShowDetail(true)} />
+            ) : (
+              <Cell item={effectiveItem} col={col} onUpdate={onUpdate} />
+            )}
           </div>
         ))}
 
