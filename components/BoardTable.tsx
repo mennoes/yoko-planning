@@ -1498,8 +1498,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
     // dus lokale wijzigingen aan naam, timeline, uren, deadline etc.
     // verdwijnen toch. Subitem-edits (status Done per instance) blijven
     // wel toegestaan; daar bewaren we de state expliciet.
-    const target = group.items.find(i => i.id === itemId)
-    if (target?.source === 'google') {
+    const sourceItem = group.items.find(i => i.id === itemId)
+    if (sourceItem?.source === 'google') {
       const keys = Object.keys(updates)
       const allowed = keys.every(k => k === 'subitems')
       if (!allowed) {
