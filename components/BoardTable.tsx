@@ -53,6 +53,7 @@ const STATUS_OPTIONS = [
   { label: 'Done',          color: '#00c875' },
   { label: 'Stuck',         color: '#e2445c' },
   { label: 'Not started',   color: '#808080' },
+  { label: 'Doorlopend',    color: '#579bfc' },
 ]
 
 // ─── Groep kleurenpalet ───────────────────────────────────────────────────────
