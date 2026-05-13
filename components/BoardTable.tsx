@@ -604,8 +604,9 @@ function Cell({ item, col, onUpdate }: {
 // ─── Subitem grid template ────────────────────────────────────────────────────
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
+  rail?: string
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -646,9 +647,11 @@ function SubItemRow({ subitem, cols, gridTemplate, onUpdate, onDelete }: {
       transition: 'background 0.1s',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      {/* De continue accent-bar zit nu op SubItemsSection — deze cel is leeg
-          maar houdt de grid-uitlijning met de parent intact. */}
-      <div />
+      {/* Per-rij rail aan de absolute linkerkant — kort segment per
+          subitem zoals Monday doet, ipv één doorlopende balk. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'stretch', height: '100%' }}>
+        <div style={{ width: 4, background: rail ?? 'var(--accent)', borderRadius: 2, margin: '4px 0 4px 0' }} />
+      </div>
       <div style={{ padding: '3px 10px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {editName ? (
           <input autoFocus value={nameDraft}
@@ -701,39 +704,30 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, onUpdate }
     return fallback
   }
 
-  // Monday-stijl: continue accent-bar links over de hele subitems-tafel,
-  // ingesprongen onder de parent zodat het nesting-niveau direct leesbaar
-  // is. Eigen header-rij + rijen behouden de parent grid-template zodat
-  // kolombreedtes blijven matchen.
+  // Monday-stijl: korte rail-segmentjes per rij (geen doorlopende balk),
+  // links uitgelijnd net naast de eerste cel. Header & content delen de
+  // parent grid-template zodat kolombreedtes matchen.
   return (
-    <div style={{ borderBottom: '1px solid var(--border)', padding: '6px 18px 10px 30px', background: 'var(--overlay-sub-border)' }}>
-      <div style={{ borderLeft: `4px solid ${rail}`,
-        background: 'var(--bg-card)',
-        borderTop: '1px solid var(--border-light)',
-        borderRight: '1px solid var(--border-light)',
-        borderBottom: '1px solid var(--border-light)',
-        borderRadius: '0 8px 8px 0',
-        overflow: 'hidden',
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--overlay-sub-header)', borderBottom: '1px solid var(--border-light)' }}>
-          <div />
-          <div style={{ padding: '6px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
-          {cols.map(c => (
-            <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
-          ))}
-          <div style={{ borderLeft: '1px solid var(--border-light)' }} />
-        </div>
-        {subitems.map(sub => (
-          <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
-            onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+    <div style={{ borderBottom: '1px solid var(--border)', padding: '4px 18px 8px 30px', background: 'var(--overlay-sub-border)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--overlay-sub-header)', borderBottom: '1px solid var(--border-light)' }}>
+        <div />
+        <div style={{ padding: '6px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
+        {cols.map(c => (
+          <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
         ))}
-        <div style={{ padding: '6px 10px 6px 60px' }}>
-          <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-            + Voeg subitem toe
-          </button>
-        </div>
+        <div style={{ borderLeft: '1px solid var(--border-light)' }} />
+      </div>
+      {subitems.map(sub => (
+        <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
+          rail={rail}
+          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+      ))}
+      <div style={{ padding: '6px 10px 6px 60px' }}>
+        <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+          + Voeg subitem toe
+        </button>
       </div>
     </div>
   )
@@ -758,6 +752,33 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   const [expanded,  setExpanded]  = useState(false)
   const subitems    = item.subitems ?? []
   const hasSubitems = subitems.length > 0
+
+  // Auto-rollup: als parent een veld leeg laat én er zijn subitems, dan
+  // afleiden uit subitems. Hours doen we al verderop in de Cell-dispatcher
+  // (read-only sum). Hier: timeline + owners. Schrijf-actie van de gebruiker
+  // overschrijft de derived waarde — om weer auto te krijgen moet je 't
+  // veld op de parent leegmaken.
+  let effectiveItem: BoardItem = item
+  if (hasSubitems) {
+    const updates: Partial<BoardItem> = {}
+    const subStarts = subitems.map(s => s.startDate).filter(Boolean) as string[]
+    const subEnds   = subitems.map(s => s.endDate).filter(Boolean) as string[]
+    if (!item.startDate && subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
+    if (!item.endDate   && subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
+    const parentOwnersEmpty = !item.ownerIds || item.ownerIds.length === 0
+      || (item.ownerIds.length === 1 && item.ownerIds[0] === 'unassigned')
+    if (parentOwnersEmpty) {
+      const subOwners = new Set<string>()
+      for (const s of subitems) for (const oid of (s.ownerIds ?? [])) if (oid && oid !== 'unassigned') subOwners.add(oid)
+      if (subOwners.size > 0) updates.ownerIds = [...subOwners]
+    }
+    if (!item.status) {
+      // Status rolt op naar 'Done' alleen wanneer ALLE subitems Done zijn.
+      const allDone = subitems.length > 0 && subitems.every(s => s.status === 'Done')
+      if (allDone) updates.status = 'Done'
+    }
+    if (Object.keys(updates).length > 0) effectiveItem = { ...item, ...updates }
+  }
 
   return (
     <>
@@ -822,7 +843,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
 
         {cols.map(col => (
           <div key={col.key} style={{ padding: '4px 8px', borderLeft: '1px solid var(--border)', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
-            <Cell item={item} col={col} onUpdate={onUpdate} />
+            <Cell item={effectiveItem} col={col} onUpdate={onUpdate} />
           </div>
         ))}
 
