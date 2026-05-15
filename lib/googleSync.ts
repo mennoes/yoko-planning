@@ -59,6 +59,19 @@ function resolveStatus(existing: string | null | undefined, end: string | null |
   return prev
 }
 
+// Voor recurring meetings (Weekstart, dagelijkse stand-up, etc.) is "Doorlopend"
+// een betekenisvollere standaardstatus dan een lege string of 'Working'. De
+// gebruiker mag 'm nog steeds handmatig op Done/Stuck zetten — dat respecteren
+// we. Als de hele reeks > N dagen geleden afliep (laatste instance voorbij)
+// vallen we terug op de normale auto-Done.
+function resolveRecurringStatus(existing: string | null | undefined, lastEnd: string | null | undefined): string {
+  const prev = (existing ?? '').trim()
+  if (prev === 'Stuck') return prev
+  if (prev === 'Done')  return prev
+  if (isPastByDays(lastEnd, AUTO_DONE_AFTER_DAYS)) return 'Done'
+  return 'Doorlopend'
+}
+
 type GoogleCalRow = {
   id:             string
   user_id:        string
@@ -141,6 +154,41 @@ async function ensureGoogleGroup(
   return newId
 }
 
+// Doorlopende meetings (recurring events) krijgen een eigen "Doorlopend"
+// groep — gebruikers willen die niet tussen losse projecten zien staan.
+// Bestaande groep met die naam wordt hergebruikt, anders maken we 'm
+// onderaan het bord aan zodat hij niet boven actuele werkitems verschijnt.
+async function ensureDoorlopendGroup(
+  admin:   SupabaseClient,
+  boardId: string,
+): Promise<string> {
+  const { data: rows } = await admin
+    .from('board_groups').select('id, name')
+    .eq('board_id', boardId)
+    .ilike('name', 'doorlopend')
+    .limit(1)
+  const existing = (rows as { id: string; name: string }[] | null)?.[0]
+  if (existing) return existing.id
+
+  const { data: posRows } = await admin
+    .from('board_groups').select('position')
+    .eq('board_id', boardId)
+    .order('position', { ascending: false })
+    .limit(1)
+  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
+
+  const newId = `g_doorlopend_${boardId}_${Date.now()}`
+  await admin.from('board_groups').insert({
+    id:        newId,
+    board_id:  boardId,
+    name:      'Doorlopend',
+    color:     '#579bfc',
+    collapsed: false,
+    position:  maxPos + 1,
+  })
+  return newId
+}
+
 async function ensureFreshAccessToken(
   admin: SupabaseClient,
   cal:   GoogleCalRow,
@@ -173,6 +221,17 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (cached) return cached
     const gid = await ensureGoogleGroup(admin, boardId)
     groupCache.set(boardId, gid)
+    return gid
+  }
+
+  // Aparte cache voor de Doorlopend-groep — recurring events landen hier
+  // i.p.v. tussen losse projecten.
+  const doorlopendCache = new Map<string, string>()
+  async function getDoorlopendGroupFor(boardId: string): Promise<string> {
+    const cached = doorlopendCache.get(boardId)
+    if (cached) return cached
+    const gid = await ensureDoorlopendGroup(admin, boardId)
+    doorlopendCache.set(boardId, gid)
     return gid
   }
 
@@ -402,7 +461,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     seenExt.add(groupKey)
     const baseName    = sorted[0].summary ?? '(geen titel)'
     const targetBoard = routeEvent(baseName, cal.board_id, rules)
-    const targetGroup = await getGroupFor(targetBoard)
+    const targetGroup = await getDoorlopendGroupFor(targetBoard)
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
     // Voor recurring nemen we de owners van de meeste recente instantie —
@@ -449,7 +508,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       board_id:           keepBoard,
       name:               baseName + ` (${instances.length}×)`,
       owner_ids:          finalOwners,
-      status:             resolveStatus(existingRow?.status, maxEnd ?? minStart),
+      status:             resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart),
       start_date:         minStart,
       end_date:           maxEnd ?? minStart,
       deadline:           null,
