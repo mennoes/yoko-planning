@@ -481,10 +481,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // (maar die rij heeft een ander external_user_id) mag ik NIET verwijderen
   // namens de echte eigenaar. Daarom filteren we op rijen die nog steeds
   // mijn external_user_id dragen én die ik dit run niet meer gezien heb.
+  //
+  // Twee opruimscenario's tegelijk:
+  //  1. Event is uit Google verwijderd → ik schreef nergens naartoe voor dat
+  //     id → r.id niet in seenIds → opruimen.
+  //  2. Ik had een oude per-user rij (`it_g_{ev.id}_{userprefix}`) die door
+  //     deze sync naar een gedeelde canonical rij (`it_g_{iCalUID}`) is
+  //     verhuisd → ik schreef wel naar de canonical id, niet naar mijn oude
+  //     → r.id niet in seenIds → opruimen.
+  //
+  // De extra `external_id`-check die hier eerst stond blokkeerde scenario 2:
+  // we hadden het Google event-id wél gezien (seenExt), alleen routed naar
+  // een ander board_items.id, waardoor mijn stale rij bleef hangen.
   const toRemove = existing
     .filter(r => r.external_user_id === cal.user_id)
     .filter(r => !seenIds.has(r.id))
-    .filter(r => r.external_id && !seenExt.has(r.external_id))
     .map(r => r.id)
   let removed = 0
   if (toRemove.length > 0) {
@@ -561,6 +572,39 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       await admin.from('board_items').delete().in('id', dupes.map(d => d.id))
       removed += dupes.length
     }
+  }
+
+  // Migratie-cleanup voor pre-iCalUID duplicaten: rijen van teamleden die
+  // sinds de fix nog niet hebben gesynct hebben ical_uid IS NULL. We
+  // matchen ze met de canonical rij via name + start_date (combinatie is
+  // praktisch uniek per event) en mergen ze in. Idempotent: na een paar
+  // syncs heeft elke rij ical_uid en doet de query niets meer.
+  for (const u of upserts) {
+    const icalUid   = u.ical_uid as string | null
+    if (!icalUid) continue
+    const name      = String(u.name ?? '')
+    const startDate = u.start_date as string | null
+    const canonical = String(u.id)
+    if (!name || !startDate) continue
+    const { data: legacyRows } = await admin
+      .from('board_items')
+      .select('id, owner_ids, journal')
+      .eq('source', 'google')
+      .is('ical_uid', null)
+      .eq('name', name)
+      .eq('start_date', startDate)
+      .neq('id', canonical)
+    const legacies = (legacyRows as { id: string; owner_ids: string[] | null; journal: unknown }[] | null) ?? []
+    if (legacies.length === 0) continue
+    const merged = new Set<string>((u.owner_ids as string[]) ?? [])
+    for (const r of legacies) for (const o of (r.owner_ids ?? [])) merged.add(o)
+    if (merged.size !== ((u.owner_ids as string[]) ?? []).length) {
+      await admin.from('board_items')
+        .update({ owner_ids: Array.from(merged) })
+        .eq('id', canonical)
+    }
+    await admin.from('board_items').delete().in('id', legacies.map(r => r.id))
+    removed += legacies.length
   }
 
   await admin.from('google_calendars').update({ last_sync_at: new Date().toISOString() }).eq('id', cal.id)
