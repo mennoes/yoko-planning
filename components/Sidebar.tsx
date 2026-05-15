@@ -262,18 +262,25 @@ function SectionBlock({
   onMoveSection:  (dir: -1 | 1) => void
   showToast:      (message: string) => void
 }) {
-  // All sections are collapsible. Default open for 'projects' (Agenda's),
-  // collapsed for 'docs' (Pagina's) and 'pages' (Documenten). Auto-open if
-  // the current route lives inside.
-  // Standaard ingeklapt — alleen auto-openen wanneer de actieve route
-  // binnen de sectie zit, dan ziet de gebruiker waar 'ie is.
-  const [open, setOpen] = useState(
-    section.items.some(i => pathname.startsWith(i.href))
-  )
-  useEffect(() => {
-    if (section.items.some(i => pathname.startsWith(i.href))) setOpen(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // All sections are collapsible. Standaard ingeklapt — gebruikers willen
+  // niet dat hun zorgvuldig dichtgeklapte secties (zoals Agenda's) elke
+  // navigatie weer openploppen. We bewaren de open/dicht-staat per sectie
+  // in localStorage zodat het op-mobile-én-desktop blijft hangen.
+  const openStorageKey = `yoko-sidebar-section-open-${section.id}`
+  const [open, setOpenRaw] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    const v = localStorage.getItem(openStorageKey)
+    return v === '1'
+  })
+  function setOpen(next: boolean | ((prev: boolean) => boolean)) {
+    setOpenRaw(prev => {
+      const v = typeof next === 'function' ? next(prev) : next
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(openStorageKey, v ? '1' : '0')
+      }
+      return v
+    })
+  }
   const [addingItem,    setAddingItem]    = useState(false)
   const [newLabel,      setNewLabel]      = useState('')
   const [editName,      setEditName]      = useState(false)
@@ -287,9 +294,8 @@ function SectionBlock({
     saveSections(updated)
   })
 
-  useEffect(() => {
-    if (section.items.some(i => pathname.startsWith(i.href))) setOpen(true)
-  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Geen auto-open op route-change: de gebruiker bepaalt zelf of een sectie
+  // openstaat. Wel scrollen-naar-actief blijft via de bestaande mechanismes.
 
   useEffect(() => {
     if (addingItem) setTimeout(() => addInputRef.current?.focus(), 50)
