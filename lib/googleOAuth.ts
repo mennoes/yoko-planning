@@ -13,6 +13,7 @@ const STATE_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? 'dev-fallback-secret'
 
 export type GoogleEvent = {
   id:                 string
+  iCalUID?:           string                       // globally-stable id; same waarde in elke kalender voor één event
   status?:            string                       // 'confirmed' | 'tentative' | 'cancelled'
   summary?:           string
   description?:       string
