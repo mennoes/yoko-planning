@@ -1196,19 +1196,30 @@ export default function Sidebar({
 
         {/* Mobile close button (top-right inside drawer) */}
         {isMobile && onClose && (
-          <button onClick={onClose} aria-label="Menu sluiten"
-            style={{ position: 'absolute', top: 12, right: 12, zIndex: 5,
-              width: 36, height: 36, borderRadius: 9,
-              background: 'var(--bg-hover)', border: '1px solid var(--border-light)',
-              color: 'var(--text-primary)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 0 }}>
-            <IconClose size={18} />
-          </button>
+          <>
+            <button onClick={() => setSettingsOpen(true)} aria-label="Instellingen" title="Instellingen"
+              style={{ position: 'absolute', top: 12, right: 56, zIndex: 5,
+                width: 36, height: 36, borderRadius: 9,
+                background: 'var(--bg-hover)', border: '1px solid var(--border-light)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0 }}>
+              <IconSettings size={18} />
+            </button>
+            <button onClick={onClose} aria-label="Menu sluiten"
+              style={{ position: 'absolute', top: 12, right: 12, zIndex: 5,
+                width: 36, height: 36, borderRadius: 9,
+                background: 'var(--bg-hover)', border: '1px solid var(--border-light)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0 }}>
+              <IconClose size={18} />
+            </button>
+          </>
         )}
 
         {/* Logo + my-avatar header */}
-        <div style={{ padding: isMobile ? '20px 60px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ padding: isMobile ? '20px 100px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <Link href="/"
             onClick={e => { if (editOrder) e.preventDefault() }}
             style={{ textDecoration: 'none', display: 'block', minWidth: 0 }}
