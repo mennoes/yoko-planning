@@ -20,6 +20,7 @@ import {
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
+import { useIsMobile }     from '@/lib/useIsMobile'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -2198,6 +2199,21 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     return Array.from(ids)
   }, [groups])
 
+  // Quick-filter chips & dropdown tonen alleen Yoko-collega's (de mensen
+  // die echt aan de planning werken). Externe contactpersonen die soms in
+  // owner_ids belanden via gcal-sync zijn voor filteren niet relevant en
+  // maken de chip-rij op mobiel veel te druk.
+  const yokoOwners = useMemo(() => {
+    return allOwners.filter(id => {
+      const m = teamData.members.find(t => t.id === id)
+      return !!m?.email && m.email.toLowerCase().endsWith('@studioyoko.nl')
+    })
+  }, [allOwners])
+
+  const isMobile = useIsMobile()
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreBtnRef = useRef<HTMLButtonElement>(null)
+
   // Sleep een item van de ene groep naar de andere. Aangeroepen vanuit de
   // drop-handler op de doel-groep zodra een item er overheen wordt gelaten.
   function moveItemBetweenGroups(itemId: string, fromGroupId: string, toGroupId: string) {
@@ -2418,31 +2434,105 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               background: 'var(--bg-card)', border: '1px solid var(--border)',
               color: 'var(--text-secondary)', cursor: 'pointer', textDecoration: 'none',
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <IconActivity size={13} /> Activiteit
+            <IconActivity size={13} /> {isMobile ? '' : 'Activiteit'}
           </Link>
-          <button onClick={() => setReorderMode(r => !r)}
-            title={reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
-            style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-              background: reorderMode ? 'var(--accent-light)' : 'var(--bg-card)',
-              border: `1px solid ${reorderMode ? 'var(--accent)' : 'var(--border)'}`,
-              color: reorderMode ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>
-            ↕ {reorderMode ? 'Klaar' : 'Volgorde'}
-          </button>
-          <button onClick={exportCSV} title="Exporteer als CSV"
-            style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            ↓ CSV
-          </button>
+          {!isMobile && (
+            <>
+              <button onClick={() => setReorderMode(r => !r)}
+                title={reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+                style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  background: reorderMode ? 'var(--accent-light)' : 'var(--bg-card)',
+                  border: `1px solid ${reorderMode ? 'var(--accent)' : 'var(--border)'}`,
+                  color: reorderMode ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>
+                ↕ {reorderMode ? 'Klaar' : 'Volgorde'}
+              </button>
+              <button onClick={exportCSV} title="Exporteer als CSV"
+                style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                ↓ CSV
+              </button>
+            </>
+          )}
           <button onClick={addGroup}
             style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            + Nieuwe groep
+            + {isMobile ? 'Groep' : 'Nieuwe groep'}
           </button>
+          {isMobile && (
+            <button ref={moreBtnRef} onClick={() => setMoreOpen(v => !v)}
+              title="Meer acties"
+              style={{ padding: '7px 10px', borderRadius: 6, fontSize: 16, fontWeight: 700, lineHeight: 1,
+                background: moreOpen ? 'var(--accent-light)' : 'var(--bg-card)',
+                border: `1px solid ${moreOpen ? 'var(--accent)' : 'var(--border)'}`,
+                color: moreOpen ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>
+              ⋯
+            </button>
+          )}
+          {isMobile && moreOpen && (
+            <PortalDropdown anchor={moreBtnRef} onClose={() => setMoreOpen(false)}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 220 }}>
+                <button onClick={() => { setReorderMode(r => !r); setMoreOpen(false) }}
+                  style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
+                    padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                    color: reorderMode ? 'var(--accent)' : 'var(--text-primary)', fontSize: 14,
+                    fontWeight: reorderMode ? 600 : 500, textAlign: 'left', borderRadius: 6 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  ↕ {reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+                </button>
+                <button onClick={() => { exportCSV(); setMoreOpen(false) }}
+                  style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
+                    padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left', borderRadius: 6 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  ↓ Exporteer CSV
+                </button>
+                {yokoOwners.length > 0 && (
+                  <>
+                    <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 4px' }} />
+                    <div style={{ padding: '4px 12px 6px', fontSize: 11, fontWeight: 600,
+                      color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Filter op persoon
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '0 8px 8px' }}>
+                      {filterOwner && (
+                        <button onClick={() => { setFilterOwner(''); setMoreOpen(false) }}
+                          style={{ padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)',
+                            background: 'var(--bg-hover)', cursor: 'pointer', fontSize: 12,
+                            color: 'var(--text-muted)' }}>
+                          × wis
+                        </button>
+                      )}
+                      {yokoOwners.map(id => {
+                        const m = teamData.members.find(t => t.id === id)
+                        if (!m) return null
+                        const active = filterOwner === id
+                        return (
+                          <button key={id} onClick={() => { setFilterOwner(active ? '' : id); setMoreOpen(false) }}
+                            style={{ padding: '4px 10px', borderRadius: 999,
+                              border: `1.5px solid ${active ? m.color : 'var(--border-light)'}`,
+                              background: active ? m.color + '22' : 'var(--bg-card)',
+                              cursor: 'pointer', fontSize: 12,
+                              fontWeight: active ? 700 : 500,
+                              color: active ? m.color : 'var(--text-secondary)' }}>
+                            {m.name.split(' ')[0]}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </PortalDropdown>
+          )}
         </div>
       </div>
 
-      {/* Owner avatar strip — quick filter on people in this board */}
-      {allOwners.length > 0 && (
+      {/* Owner avatar strip — quick filter on people in this board.
+          Op mobiel zit deze in het ⋯-menu hierboven, dus alleen op desktop tonen. */}
+      {!isMobile && yokoOwners.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-          {allOwners.map(id => {
+          {yokoOwners.map(id => {
             const m = teamData.members.find(t => t.id === id)
             if (!m) return null
             const active = filterOwner === id
@@ -2500,7 +2590,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)}
           style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: filterOwner ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none' }}>
           <option value="">Alle personen</option>
-          {allOwners.map(id => {
+          {yokoOwners.map(id => {
             const m = teamData.members.find(t => t.id === id)
             return m ? <option key={id} value={id}>{m.name}</option> : null
           })}
