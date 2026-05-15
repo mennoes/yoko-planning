@@ -156,37 +156,50 @@ async function ensureGoogleGroup(
 
 // Doorlopende meetings (recurring events) krijgen een eigen "Doorlopend"
 // groep — gebruikers willen die niet tussen losse projecten zien staan.
-// Bestaande groep met die naam wordt hergebruikt, anders maken we 'm
-// onderaan het bord aan zodat hij niet boven actuele werkitems verschijnt.
+// Standaardplek: positie 1 (tweede slot, direct onder de Google Agenda-
+// groep). Bestaande Doorlopend-groep wordt hergebruikt en zo nodig naar
+// positie 1 verplaatst.
 async function ensureDoorlopendGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
   const { data: rows } = await admin
-    .from('board_groups').select('id, name')
+    .from('board_groups').select('id, name, position')
     .eq('board_id', boardId)
-    .ilike('name', 'doorlopend')
-    .limit(1)
-  const existing = (rows as { id: string; name: string }[] | null)?.[0]
-  if (existing) return existing.id
+    .order('position', { ascending: true })
+  const groups = (rows as { id: string; name: string; position: number }[] | null) ?? []
+  const existing = groups.find(g => g.name.toLowerCase() === 'doorlopend')
 
-  const { data: posRows } = await admin
-    .from('board_groups').select('position')
-    .eq('board_id', boardId)
-    .order('position', { ascending: false })
-    .limit(1)
-  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
+  // Snelle exit: groep zit al op positie 1, niets doen.
+  if (existing && existing.position === 1) return existing.id
 
-  const newId = `g_doorlopend_${boardId}_${Date.now()}`
-  await admin.from('board_groups').insert({
-    id:        newId,
-    board_id:  boardId,
-    name:      'Doorlopend',
-    color:     '#579bfc',
-    collapsed: false,
-    position:  maxPos + 1,
-  })
-  return newId
+  // Bouw de gewenste volgorde: alle andere groepen op hun huidige relatieve
+  // volgorde, met Doorlopend als tweede item (index 1). Zo behoudt de
+  // bovenste groep (meestal 'Google Agenda' of het standaard-board) z'n
+  // plek bovenaan en schuift de rest één naar beneden.
+  const others = groups.filter(g => g.id !== existing?.id)
+  const doorlopendId = existing?.id ?? `g_doorlopend_${boardId}_${Date.now()}`
+  if (!existing) {
+    await admin.from('board_groups').insert({
+      id:        doorlopendId,
+      board_id:  boardId,
+      name:      'Doorlopend',
+      color:     '#579bfc',
+      collapsed: false,
+      position:  1,
+    })
+  } else {
+    await admin.from('board_groups').update({ position: 1 }).eq('id', existing.id)
+  }
+  // Renummer de overige groepen: index 0 blijft op 0, vanaf index 1 schuift
+  // alles +1 omdat Doorlopend nu op 1 zit.
+  for (let i = 0; i < others.length; i++) {
+    const targetPos = i === 0 ? 0 : i + 1
+    if (others[i].position !== targetPos) {
+      await admin.from('board_groups').update({ position: targetPos }).eq('id', others[i].id)
+    }
+  }
+  return doorlopendId
 }
 
 async function ensureFreshAccessToken(
@@ -501,7 +514,14 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     seenIds.add(id)
     if (existingRow) updated++; else added++
     const keepBoard = existingRow?.board_id ?? targetBoard
-    const keepGroup = existingRow?.group_id ?? targetGroup
+    // Forceer alle doorlopende items in de Doorlopend-groep van hun huidige
+    // bord — ook bestaande rijen die ooit in 'Losse projecten' o.i.d. zijn
+    // beland. Als de gebruiker 'm naar een ander bord heeft gesleept,
+    // respecteren we dat (keepBoard blijft staan), maar we zorgen dat
+    // daar ook een Doorlopend-groep is en gebruiken die.
+    const keepGroup = keepBoard === targetBoard
+      ? targetGroup
+      : await getDoorlopendGroupFor(keepBoard)
     upserts.push({
       id,
       group_id:           keepGroup,
