@@ -202,6 +202,41 @@ async function ensureDoorlopendGroup(
   return doorlopendId
 }
 
+// Done-groep — gebruikers willen items die op Done staan terugzien in een
+// vaste Done-bucket, ook voor gcal-rijen. We hergebruiken een bestaande
+// groep met die naam (case-insensitive); anders maken we 'm onderaan aan.
+// Niet renummeren — Done hoort onderaan en de client behandelt 'm hetzelfde.
+async function ensureDoneGroup(
+  admin:   SupabaseClient,
+  boardId: string,
+): Promise<string> {
+  const { data: rows } = await admin
+    .from('board_groups').select('id, name')
+    .eq('board_id', boardId)
+    .ilike('name', 'done')
+    .limit(1)
+  const existing = (rows as { id: string; name: string }[] | null)?.[0]
+  if (existing) return existing.id
+
+  const { data: posRows } = await admin
+    .from('board_groups').select('position')
+    .eq('board_id', boardId)
+    .order('position', { ascending: false })
+    .limit(1)
+  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
+
+  const newId = `g_done_${boardId}_${Date.now()}`
+  await admin.from('board_groups').insert({
+    id:        newId,
+    board_id:  boardId,
+    name:      'Done',
+    color:     '#9aa39a',
+    collapsed: false,
+    position:  maxPos + 1,
+  })
+  return newId
+}
+
 async function ensureFreshAccessToken(
   admin: SupabaseClient,
   cal:   GoogleCalRow,
@@ -245,6 +280,19 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (cached) return cached
     const gid = await ensureDoorlopendGroup(admin, boardId)
     doorlopendCache.set(boardId, gid)
+    return gid
+  }
+
+  // Done-groep cache: zodra een event status='Done' krijgt routen we 'm
+  // hierheen i.p.v. naar Doorlopend/Losse projecten. De client doet hetzelfde
+  // via autoMoveDoneItems, maar dat draait pas bij user-acties — door hier
+  // ook te routen sluit het visueel direct na de sync aan.
+  const doneCache = new Map<string, string>()
+  async function getDoneGroupFor(boardId: string): Promise<string> {
+    const cached = doneCache.get(boardId)
+    if (cached) return cached
+    const gid = await ensureDoneGroup(admin, boardId)
+    doneCache.set(boardId, gid)
     return gid
   }
 
@@ -417,7 +465,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // een Done-groep of ander bord heeft gesleept, mag Google die niet
       // weer terugsturen naar de target-groep volgens de route-regels.
       const keepBoard = existingRow?.board_id ?? targetBoard
-      const keepGroup = existingRow?.group_id ?? targetGroup
+      const newStatus = resolveStatus(existingRow?.status, end ?? start)
+      // Done items routen we direct naar de Done-groep van het huidige bord,
+      // ook server-side, zodat ze niet eerst in 'Losse projecten' staan tot
+      // de gebruiker iets aanraakt en autoMoveDoneItems triggert.
+      const keepGroup = newStatus === 'Done'
+        ? await getDoneGroupFor(keepBoard)
+        : (existingRow?.group_id ?? targetGroup)
       const eventOwners = ownersForEvent(ev)
       // Union van bestaande + Google-attendees: bestaande user-toevoegingen
       // blijven staan, en nieuwe Yoko-deelnemers uit Google worden vanzelf
@@ -436,7 +490,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         board_id:           keepBoard,
         name,
         owner_ids:          finalOwners,
-        status:             resolveStatus(existingRow?.status, end ?? start),
+        status:             newStatus,
         start_date:         start,
         end_date:           end ?? start,
         deadline:           null,
@@ -514,21 +568,26 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     seenIds.add(id)
     if (existingRow) updated++; else added++
     const keepBoard = existingRow?.board_id ?? targetBoard
-    // Forceer alle doorlopende items in de Doorlopend-groep van hun huidige
-    // bord — ook bestaande rijen die ooit in 'Losse projecten' o.i.d. zijn
-    // beland. Als de gebruiker 'm naar een ander bord heeft gesleept,
-    // respecteren we dat (keepBoard blijft staan), maar we zorgen dat
-    // daar ook een Doorlopend-groep is en gebruiken die.
-    const keepGroup = keepBoard === targetBoard
-      ? targetGroup
-      : await getDoorlopendGroupFor(keepBoard)
+    const newStatus = resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart)
+    // Status-gestuurde groep-keuze: Done items horen in de Done-groep (ook
+    // wanneer de gebruiker zelf op Done klikt of de hele reeks > 3 dagen
+    // geleden afliep). Niet-Done recurring items worden geforceerd naar de
+    // Doorlopend-groep van hun huidige bord — ook bestaande rijen die ooit
+    // in 'Losse projecten' o.i.d. zijn beland. Manuele bord-verplaatsingen
+    // (keepBoard) blijven staan; binnen dat bord landen ze altijd in
+    // Doorlopend (of Done als status='Done').
+    const keepGroup = newStatus === 'Done'
+      ? await getDoneGroupFor(keepBoard)
+      : (keepBoard === targetBoard
+          ? targetGroup
+          : await getDoorlopendGroupFor(keepBoard))
     upserts.push({
       id,
       group_id:           keepGroup,
       board_id:           keepBoard,
       name:               baseName + ` (${instances.length}×)`,
       owner_ids:          finalOwners,
-      status:             resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart),
+      status:             newStatus,
       start_date:         minStart,
       end_date:           maxEnd ?? minStart,
       deadline:           null,
