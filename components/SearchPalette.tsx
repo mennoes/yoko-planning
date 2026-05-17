@@ -42,6 +42,14 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
   const [query, setQuery] = useState('')
   const [data, setData]   = useState<Result[]>([])
   const [highlight, setHighlight] = useState(0)
+  // Toon Mac- of Windows-snelkoppeling afhankelijk van het platform zodat
+  // de hint in de palette aansluit op de toetsen die de gebruiker écht heeft.
+  const [shortcutLabel, setShortcutLabel] = useState('⌘K')
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return
+    const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
+    setShortcutLabel(isMac ? '⌘K' : 'Ctrl+K')
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -184,6 +192,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
           <input autoFocus value={query} onChange={e => setQuery(e.target.value)} onKeyDown={onKey}
             placeholder="Zoek of typ om een todo toe te voegen…"
             style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 16 }} />
+          <kbd style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)', color: 'var(--text-muted)' }}>{shortcutLabel}</kbd>
           <kbd style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)', color: 'var(--text-muted)' }}>esc</kbd>
         </div>
 
