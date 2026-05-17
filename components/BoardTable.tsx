@@ -2546,14 +2546,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                   background: active ? m.color + '18' : 'var(--bg-card)',
                   cursor: 'pointer', transition: 'all 0.12s',
                 }}>
-                <span style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: m.color + '30', border: `1.5px solid ${m.color}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 10, fontWeight: 700, color: m.color, flexShrink: 0,
-                }}>
-                  {m.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-                </span>
+                <MemberAvatar id={id} size={24} />
                 <span style={{
                   fontSize: 12.5, fontWeight: active ? 700 : 500,
                   color: active ? m.color : 'var(--text-secondary)',
