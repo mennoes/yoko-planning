@@ -358,6 +358,22 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   const byExt    = new Map(existing.map(r => [r.external_id, r.id]))
   const byExtFull = new Map(existing.map(r => [r.external_id, r]))
 
+  // Verzamel alle item-id's die ergens al als subitem zijn ingenest. Wanneer
+  // een gebruiker een Google-item handmatig onder een ander item heeft
+  // gesleept, wordt de top-level row verwijderd en blijft alleen de
+  // subitem-entry in het parent-item bestaan. Zonder deze check zou de
+  // eerstvolgende sync 'm opnieuw top-level aanmaken en zou de nesting bij
+  // elke refresh "verdwijnen". Door deze id's te skippen blijft de nesting
+  // permanent staan over syncs heen.
+  const { data: subParents } = await admin
+    .from('board_items')
+    .select('subitems')
+    .not('subitems', 'is', null)
+  const nestedIds = new Set<string>()
+  for (const r of (subParents as { subitems: SubItemSnapshot[] | null }[] | null) ?? []) {
+    for (const s of (r.subitems ?? [])) if (s?.id) nestedIds.add(s.id)
+  }
+
   // Group recurring events by their master ID so each recurring meeting
   // becomes ONE board_item with subitems for each instance. Single events
   // (no recurringEventId) stay as their own item.
@@ -460,6 +476,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const existingRow = lookup.row
       const id          = lookup.id
       seenIds.add(id)
+      // Item is door gebruiker als subitem ergens ingenest — niet opnieuw
+      // top-level aanmaken. seenIds is al gemarkeerd zodat de cleanup-pass
+      // het ook niet aanraakt.
+      if (nestedIds.has(id)) continue
       if (existingRow) updated++; else added++
       // Bewaar handmatige verplaatsingen — als de gebruiker het item naar
       // een Done-groep of ander bord heeft gesleept, mag Google die niet
@@ -566,6 +586,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     })
     const id          = lookup.id
     seenIds.add(id)
+    // Door gebruiker genest onder een ander item → niet opnieuw top-level
+    // aanmaken bij volgende syncs.
+    if (nestedIds.has(id)) continue
     if (existingRow) updated++; else added++
     const keepBoard = existingRow?.board_id ?? targetBoard
     const newStatus = resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart)
