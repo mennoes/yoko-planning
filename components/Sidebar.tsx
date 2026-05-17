@@ -1177,7 +1177,10 @@ export default function Sidebar({
 
   const containerStyle: React.CSSProperties = isMobile
     ? {
-        width: 320, minWidth: 320, maxWidth: 320,
+        // 320 was te krap: YOKO-logo (148) + Settings+Sluit-knoppen (2×32 + gap)
+        // raakten elkaar. 360 geeft net genoeg adem op smalle telefoons en
+        // blijft binnen iPhone-SE breedte (375).
+        width: 360, minWidth: 360, maxWidth: 360,
         position: 'fixed', top: 0, left: 0, height: '100vh',
         transform: open ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.22s ease',
@@ -1204,28 +1207,28 @@ export default function Sidebar({
         {isMobile && onClose && (
           <>
             <button onClick={() => setSettingsOpen(true)} aria-label="Instellingen" title="Instellingen"
-              style={{ position: 'absolute', top: 12, right: 56, zIndex: 5,
-                width: 36, height: 36, borderRadius: 9,
+              style={{ position: 'absolute', top: 12, right: 48, zIndex: 5,
+                width: 32, height: 32, borderRadius: 8,
                 background: 'var(--bg-hover)', border: '1px solid var(--border-light)',
                 color: 'var(--text-primary)',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 padding: 0 }}>
-              <IconSettings size={18} />
+              <IconSettings size={16} />
             </button>
             <button onClick={onClose} aria-label="Menu sluiten"
               style={{ position: 'absolute', top: 12, right: 12, zIndex: 5,
-                width: 36, height: 36, borderRadius: 9,
+                width: 32, height: 32, borderRadius: 8,
                 background: 'var(--bg-hover)', border: '1px solid var(--border-light)',
                 color: 'var(--text-primary)',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 padding: 0 }}>
-              <IconClose size={18} />
+              <IconClose size={16} />
             </button>
           </>
         )}
 
         {/* Logo + my-avatar header */}
-        <div style={{ padding: isMobile ? '20px 100px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ padding: isMobile ? '20px 88px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <Link href="/"
             onClick={e => { if (editOrder) e.preventDefault() }}
             style={{ textDecoration: 'none', display: 'block', minWidth: 0 }}
