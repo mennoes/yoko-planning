@@ -1495,14 +1495,15 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
     // wijziging op alle geselecteerde items binnen deze groep toe. Cross-
     // group bulk (zelden gebruikt) blijft per-groep.
     const bulk = selectedIds.size > 1 && selectedIds.has(itemId)
-    // Google-items zijn read-only: ze worden bij elke sync overschreven
-    // dus lokale wijzigingen aan naam, timeline, uren, deadline etc.
-    // verdwijnen toch. Subitem-edits (status Done per instance) blijven
-    // wel toegestaan; daar bewaren we de state expliciet.
+    // Google-items zijn grotendeels read-only: bij elke sync worden naam,
+    // timeline, uren, deadline etc. overschreven dus lokale edits daarop
+    // verdwijnen toch. Subitem-edits en status zijn wél toegestaan — de
+    // sync's resolveStatus respecteert door de gebruiker gezette Done/Stuck/
+    // Working etc., en subitem-state bewaren we expliciet.
     const sourceItem = group.items.find(i => i.id === itemId)
     if (sourceItem?.source === 'google') {
       const keys = Object.keys(updates)
-      const allowed = keys.every(k => k === 'subitems')
+      const allowed = keys.every(k => k === 'subitems' || k === 'status')
       if (!allowed) {
         showToast('Bewerk dit item in Google Calendar — wijzigingen hier worden bij de volgende sync overschreven')
         return
