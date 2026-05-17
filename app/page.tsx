@@ -631,9 +631,24 @@ export default function HomePage() {
     werkdruk: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <IconHourglass size={isMobile ? 17 : 15} />
-            Werkdruk
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <IconHourglass size={isMobile ? 17 : 15} />
+              Werkdruk
+            </span>
+            {/* Kleine datumlabel zodat je in één oogopslag ziet om welke week
+                het gaat — vooral handig na een paar klikken op </>. */}
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', letterSpacing: 0 }}>
+              {(() => {
+                const base = getWeekStart(new Date())
+                const monday = new Date(base); monday.setDate(monday.getDate() + weekOffset * 7)
+                const friday = new Date(monday); friday.setDate(friday.getDate() + 4)
+                const sameMonth = monday.getMonth() === friday.getMonth()
+                const monStr = monday.toLocaleDateString('nl-NL', sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' })
+                const friStr = friday.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                return `${monStr} – ${friStr}`
+              })()}
+            </span>
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={() => setWeekOffset(o => o - 1)}
