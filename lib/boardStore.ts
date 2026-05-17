@@ -1,7 +1,33 @@
-import type { BoardGroup, BoardItem } from './boards'
+import type { BoardGroup, BoardItem, SubItem } from './boards'
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 import { getBoardIds } from './boardsRegistry'
+
+// Filtert dubbele subitems eruit. Door historische sync-bugs én oude
+// migraties van Google-id-vormen (it_g_{ev.id} → it_g_{iCalUID}) konden
+// twee subitems naast elkaar belanden die feitelijk hetzelfde event waren.
+// Dedup-strategie: eerst op id (literal duplicate); daarna op de combinatie
+// naam + start + end (zelfde gebeurtenis met andere id-vorm). Volgorde
+// blijft behouden: eerste voorkomen wint.
+function dedupeSubitems(subs: SubItem[] | undefined): SubItem[] | undefined {
+  if (!subs || subs.length < 2) return subs
+  const seenIds  = new Set<string>()
+  const seenKeys = new Set<string>()
+  const out: SubItem[] = []
+  for (const s of subs) {
+    const id = s?.id
+    if (id && seenIds.has(id)) continue
+    const name = (s?.name ?? '').trim().toLowerCase()
+    const key  = `${name}|${s?.startDate ?? ''}|${s?.endDate ?? ''}`
+    // Lege key (geen naam én geen datums) niet dedupen — die kan voorkomen
+    // bij net-aangemaakte handmatige subitems en willen we ongemoeid laten.
+    if (name && seenKeys.has(key)) continue
+    if (id) seenIds.add(id)
+    if (name) seenKeys.add(key)
+    out.push(s)
+  }
+  return out
+}
 
 // ─── Per-board localStorage keys ─────────────────────────────────────────────
 function key(boardName: string)      { return `yoko-board-${boardName}` }
@@ -72,7 +98,7 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     uitzenddag:     (r.uitzenddag as string | null) ?? null,
     framelink:      (r.framelink as string | undefined) ?? undefined,
     nummers:        (r.nummers as number | undefined) ?? undefined,
-    subitems:       (r.subitems as BoardItem['subitems']) ?? undefined,
+    subitems:       dedupeSubitems(r.subitems as BoardItem['subitems']) ?? undefined,
     journal:        (r.journal as BoardItem['journal']) ?? undefined,
     source:         (r.source as BoardItem['source']) ?? undefined,
     externalLink:   (r.external_link as string | undefined) ?? undefined,
@@ -158,7 +184,7 @@ function itemToRow(boardName: string, groupId: string, position: number, item: B
     uitzenddag:     item.uitzenddag ?? null,
     framelink:      item.framelink ?? null,
     nummers:        item.nummers ?? null,
-    subitems:       item.subitems ?? [],
+    subitems:       dedupeSubitems(item.subitems) ?? [],
     journal:        item.journal ?? [],
     extra,
     position,
