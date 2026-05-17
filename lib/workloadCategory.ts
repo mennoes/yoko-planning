@@ -42,6 +42,15 @@ const VRIJ_PATTERNS = [
   /\bkoningsdag\b/i, /\bbevrijdingsdag\b/i,
 ]
 
+// Door de Google-sync gebruikt om events met 'Vrij'/'Vakantie' in de titel
+// expliciet als 'vrij'-categorie te registreren in de workload_categories
+// tabel — zodat alle devices ze direct als vakantie/vrij zien zonder dat
+// de classifier-fallback hoeft te draaien.
+export function isVrijTitle(name: string | undefined | null): boolean {
+  const n = name ?? ''
+  return VRIJ_PATTERNS.some(re => re.test(n))
+}
+
 function isValidCategory(c: unknown): c is WorkloadCategory {
   return c === 'meeting' || c === 'overhead' || c === 'maken' || c === 'vrij'
 }

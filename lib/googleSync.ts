@@ -4,6 +4,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
+import { isVrijTitle } from './workloadCategory'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit team.json. Bij
 // shared meetings (Teamdag, weekstart, etc.) trekken we hieruit alle
@@ -635,6 +636,28 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
 
   if (upserts.length > 0) {
     await admin.from('board_items').upsert(upserts, { onConflict: 'id' })
+  }
+
+  // Auto-categoriseer items met 'Vrij'/'Vakantie'/'Verlof'/etc. in de titel
+  // als category='vrij' in workload_categories. De classifier doet dit op de
+  // fly ook, maar door 't expliciet op te slaan zien alle devices/tools het
+  // direct (zonder regex-evaluatie) en respecteren ze de vrij-tag. Bestaande
+  // handmatige overrides van de gebruiker laten we ongemoeid.
+  const vrijIds = upserts
+    .filter(u => isVrijTitle(u.name as string))
+    .map(u => String(u.id))
+  if (vrijIds.length > 0) {
+    const { data: existingCats } = await admin
+      .from('workload_categories')
+      .select('item_id')
+      .in('item_id', vrijIds)
+    const alreadySet = new Set((existingCats as { item_id: string }[] | null)?.map(r => r.item_id) ?? [])
+    const newRows = vrijIds
+      .filter(id => !alreadySet.has(id))
+      .map(id => ({ item_id: id, category: 'vrij', updated_at: new Date().toISOString() }))
+    if (newRows.length > 0) {
+      await admin.from('workload_categories').upsert(newRows, { onConflict: 'item_id' })
+    }
   }
 
   // Remove events that no longer exist (or were cancelled) remotely.
