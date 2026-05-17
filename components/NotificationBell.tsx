@@ -120,7 +120,7 @@ export function NotificationBell() {
           background: unread > 0 ? 'var(--accent-light)' : 'var(--bg-card)',
           border: `1px solid ${unread > 0 ? 'var(--accent)' : 'var(--border-light)'}`,
           cursor: 'pointer',
-          width: 44, height: 44, borderRadius: 11, position: 'relative',
+          width: 36, height: 36, borderRadius: 9, position: 'relative',
           color: unread > 0 ? 'var(--accent)' : 'var(--text-secondary)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           padding: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
@@ -128,7 +128,7 @@ export function NotificationBell() {
         }}
         onMouseEnter={e => (e.currentTarget.style.background = unread > 0 ? 'var(--accent-light)' : 'var(--bg-hover)')}
         onMouseLeave={e => (e.currentTarget.style.background = unread > 0 ? 'var(--accent-light)' : 'var(--bg-card)')}>
-        <IconBell size={22} strokeWidth={1.8} />
+        <IconBell size={18} strokeWidth={1.8} />
         {unread > 0 && (
           <span style={{
             position: 'absolute', top: 2, right: 2,
