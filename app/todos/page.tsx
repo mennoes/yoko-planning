@@ -58,6 +58,45 @@ function loadAllProjects(): ProjectLink[] {
   return out
 }
 
+// Verzamel de open Monday-projecten waar `memberId` eigenaar van is:
+// niet-Google items met status ≠ 'Done'. Wordt gebruikt door de
+// auto-seed van de eigen to-do-sectie zodat nieuwe projecten meteen
+// als te-doen item verschijnen zonder dat de gebruiker ze handmatig
+// hoeft te koppelen.
+function loadMyOpenProjects(memberId: string): ProjectLink[] {
+  if (typeof window === 'undefined' || !memberId) return []
+  const out: ProjectLink[] = []
+  for (const [board, raw] of Object.entries(RAW)) {
+    const groups = loadGroups(board, raw.groups as BoardGroup[])
+    for (const g of groups) for (const item of g.items) {
+      if (!item.name) continue
+      if (item.source === 'google') continue
+      if ((item.status ?? '').toLowerCase() === 'done') continue
+      if (!item.ownerIds?.includes(memberId)) continue
+      out.push({ board, itemId: item.id, name: item.name })
+    }
+  }
+  return out
+}
+
+// Onthoud welke project-id's we al een keer als auto-todo hebben
+// toegevoegd, zodat een eenmaal door de gebruiker verwijderde todo
+// niet bij elke pageload terugkeert. Per-device (localStorage) is hier
+// genoeg — als je 'm op telefoon weghaalt en op laptop wilt terugzien,
+// kun je 'm daar handmatig toevoegen via '+ Voeg toe'.
+const SEEDED_KEY = 'yoko-todos-seeded-projects'
+function loadSeededProjectIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(SEEDED_KEY)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch { return new Set() }
+}
+function saveSeededProjectIds(ids: Set<string>): void {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(SEEDED_KEY, JSON.stringify([...ids])) } catch {}
+}
+
 function fmtRelative(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
   if (diff < 1)    return 'zojuist'
@@ -598,6 +637,57 @@ export default function TodosPage() {
       window.removeEventListener('yoko-board-update', onBoardUpdate)
     }
   }, [])
+
+  // ── Auto-seed open Monday-projecten in mijn to-do-sectie ────────────────────
+  // Niet-Google items waar ik eigenaar van ben en die nog niet Done zijn,
+  // verschijnen automatisch als gekoppelde todo in mijn eigen kaart. De
+  // 'seeded'-set in localStorage onthoudt welke ik al een keer heb gezien
+  // — zo komt een verwijderde auto-todo niet bij elke pageload terug.
+  // Projecten die ik al handmatig had gekoppeld (via '+ Voeg toe') tellen
+  // ook als 'gezien'.
+  useEffect(() => {
+    const me = currentProfile?.memberId
+    if (!me || !hydrated || sections.length === 0 || allProjects.length === 0) return
+    const mySection = sections.find(s => s.id === me)
+    if (!mySection) return
+
+    const seeded = loadSeededProjectIds()
+    const mine   = loadMyOpenProjects(me)
+    const existingItemIds = new Set(
+      mySection.items
+        .map(i => i.projectRef?.itemId)
+        .filter((x): x is string => !!x)
+    )
+
+    // Markeer ook handmatig-gekoppelde projecten als 'gezien', anders
+    // zouden ze na verwijdering opnieuw als auto-todo terugkeren.
+    const nextSeeded = new Set(seeded)
+    for (const p of mine) {
+      if (existingItemIds.has(p.itemId)) nextSeeded.add(`${p.board}:${p.itemId}`)
+    }
+
+    const toAdd = mine.filter(p => {
+      const key = `${p.board}:${p.itemId}`
+      if (nextSeeded.has(key))         return false
+      if (existingItemIds.has(p.itemId)) return false
+      return true
+    })
+    for (const p of toAdd) nextSeeded.add(`${p.board}:${p.itemId}`)
+    if (nextSeeded.size !== seeded.size) saveSeededProjectIds(nextSeeded)
+    if (toAdd.length === 0) return
+
+    const newItems: TodoItem[] = toAdd.map((p, idx) => ({
+      id: `auto-${Date.now()}-${idx}`,
+      text: p.name,
+      done: false,
+      projectRef: { board: p.board, itemId: p.itemId, name: p.name },
+    }))
+    const nextSections = sections.map(s =>
+      s.id === me ? { ...s, items: [...s.items, ...newItems] } : s
+    )
+    setSections(nextSections)
+    saveTodoSections(nextSections)
+  }, [currentProfile?.memberId, hydrated, sections, allProjects])
 
   function updateSection(updated: Section, prev?: Section) {
     const next = sections.map(s => s.id === updated.id ? updated : s)
