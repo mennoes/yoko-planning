@@ -668,41 +668,36 @@ export default function TodosPage() {
       </div>
 
       {isMobile ? (() => {
-        // Op mobiel: eigen kaart bovenaan (volle breedte), andere personen in
-        // een horizontale scroll-rij eronder, daarna de algemene secties.
+        // Op mobiel: alle persoonlijke kaarten stacken we volledig onder
+        // elkaar (eigen kaart bovenaan). De horizontale scroll-rij die
+        // hier eerder stond werkte averechts — Odette's kaart viel af aan
+        // de rechterkant, gebruikers moesten extra swipen om collega's
+        // te zien. Stacking is voorspelbaarder en matched het desktop-
+        // gedrag dichter.
         const me     = personal[0]
         const others = personal.slice(1)
         return (
           <>
             {me && (
-              <div style={{ marginBottom: others.length > 0 ? 14 : 24 }}>
+              <div style={{ marginBottom: 14 }}>
                 <TodoCard section={me} isMember={true} onUpdate={updateSection}
                   allProjects={allProjects}
                   editOrder={editOrder}
                   isFirstCard={true}
-                  isLastCard={others.length === 0}
+                  isLastCard={others.length === 0 && general.length === 0}
                   onMoveCard={dir => moveCard(me.id, dir)} />
               </div>
             )}
 
             {others.length > 0 && (
-              <div style={{
-                display: 'flex', gap: 12,
-                overflowX: 'auto',
-                scrollSnapType: 'x mandatory',
-                WebkitOverflowScrolling: 'touch',
-                margin: '0 -16px 24px',
-                padding: '4px 16px 10px',
-              }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 24 }}>
                 {others.map((s, i) => (
-                  <div key={s.id} style={{ flex: '0 0 82vw', scrollSnapAlign: 'start' }}>
-                    <TodoCard section={s} isMember={true} onUpdate={updateSection}
-                      allProjects={allProjects}
-                      editOrder={editOrder}
-                      isFirstCard={i === 0}
-                      isLastCard={i === others.length - 1}
-                      onMoveCard={dir => moveCard(s.id, dir)} />
-                  </div>
+                  <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
+                    allProjects={allProjects}
+                    editOrder={editOrder}
+                    isFirstCard={i === 0}
+                    isLastCard={i === others.length - 1 && general.length === 0}
+                    onMoveCard={dir => moveCard(s.id, dir)} />
                 ))}
               </div>
             )}
