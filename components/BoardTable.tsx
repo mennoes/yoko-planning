@@ -633,6 +633,55 @@ export function effectiveDays(item: BoardItem): number {
   return Math.round((effectiveHours(item) / 8) * 10) / 10
 }
 
+// ─── Pro-rated hours/days in een datum-window ────────────────────────────────
+// Wanneer de gebruiker een periode-filter zet, wil het totaal alléén de uren
+// optellen die binnen dat window vallen — niet de volledige itemduur. We
+// pro-raten lineair: als een item 28 mrt – 24 mei (58 dagen, 20u) loopt en
+// het filter is 1–31 mei, dan tellen we 24/58 × 20 ≈ 8.3u mee.
+//
+// Items met subitems behandelen we per subitem (zelfde pro-ratie). Items
+// zonder timeline (geen startDate/endDate) tellen volledig mee — daar kunnen
+// we geen window-overlap berekenen, maar ze horen wel bij het filter
+// (anders waren ze niet in de result-set beland).
+function daysInclusive(startISO: string | null | undefined, endISO: string | null | undefined): number {
+  if (!startISO) return 0
+  const start = Date.parse(startISO)
+  const end   = endISO ? Date.parse(endISO) : start
+  if (Number.isNaN(start) || Number.isNaN(end)) return 0
+  return Math.max(1, Math.round((end - start) / 86400000) + 1)
+}
+function overlapDays(
+  startISO: string | null | undefined, endISO: string | null | undefined,
+  fromTs: number | null, untilTs: number | null,
+): number {
+  if (!startISO) return 0
+  const start = Date.parse(startISO)
+  const end   = endISO ? Date.parse(endISO) : start
+  if (Number.isNaN(start) || Number.isNaN(end)) return 0
+  const lo = fromTs  != null ? Math.max(start, fromTs)  : start
+  const hi = untilTs != null ? Math.min(end,   untilTs) : end
+  if (hi < lo) return 0
+  return Math.round((hi - lo) / 86400000) + 1
+}
+function hoursInRange(item: BoardItem, fromTs: number | null, untilTs: number | null): number {
+  if (fromTs == null && untilTs == null) return effectiveHours(item)
+  const subs = item.subitems ?? []
+  if (subs.length > 0) {
+    return subs.reduce((s, si) => {
+      const hours = Number(si.estHours) || 0
+      const span  = daysInclusive(si.startDate, si.endDate)
+      if (span === 0) return s + hours
+      const overlap = overlapDays(si.startDate, si.endDate, fromTs, untilTs)
+      return s + hours * (overlap / span)
+    }, 0)
+  }
+  const hours = Number(item.estHours) || 0
+  const span  = daysInclusive(item.startDate, item.endDate)
+  if (span === 0) return hours
+  const overlap = overlapDays(item.startDate, item.endDate, fromTs, untilTs)
+  return hours * (overlap / span)
+}
+
 // ─── Cel dispatcher ───────────────────────────────────────────────────────────
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
@@ -2665,13 +2714,16 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             </button>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{resultCount} resultaten</span>
             {(filterFrom || filterUntil) && (() => {
-              // Som van uren + dagen in de gefilterde set — handig voor
-              // 'wat doen we in maart'. Uren komen uit estHours, dagen uit
-              // het dagen-veld dat de tabel zelf bijhoudt.
-              const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + effectiveHours(i), 0), 0)
-              const totalDays  = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + effectiveDays(i), 0), 0)
+              // Som van uren + dagen in de gefilterde set — pro-rateerd
+              // wanneer een item z'n timeline maar deels in het filter-
+              // window valt. Bijvoorbeeld een project 28 mrt – 24 mei van
+              // 20u telt voor de filter 1–31 mei lineair als 24/58 × 20 mee.
+              const fromTs  = filterFrom  ? new Date(filterFrom).getTime() : null
+              const untilTs = filterUntil ? new Date(filterUntil).getTime() + 86400000 - 1 : null
+              const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + hoursInRange(i, fromTs, untilTs), 0), 0)
+              const totalDays  = totalHours / 8
               const fmt = (n: number) => Math.round(n * 10) / 10
-              return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>· {fmt(totalHours)}u totaal ({fmt(totalDays)} dagen)</span>
+              return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>· {fmt(totalHours)}u in periode ({fmt(totalDays)} dagen)</span>
             })()}
           </>
         )}
