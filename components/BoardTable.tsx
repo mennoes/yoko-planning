@@ -96,11 +96,35 @@ function PortalDropdown({ anchor, onClose, children }: {
   const dropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (anchor.current) {
+    function place() {
+      if (!anchor.current || !dropRef.current) return
       const r = anchor.current.getBoundingClientRect()
-      setPos({ top: r.bottom + 3, left: Math.min(r.left, window.innerWidth - 210) })
+      const d = dropRef.current.getBoundingClientRect()
+      const margin = 8
+      // Bij voorkeur ONDER de anchor; als 't niet past flippen we erboven.
+      // Als 't ook erboven niet past, kleven we tegen de bovenrand met margin.
+      let top = r.bottom + 3
+      const wouldOverflowBottom = top + d.height + margin > window.innerHeight
+      if (wouldOverflowBottom) {
+        const flipped = r.top - d.height - 3
+        top = flipped >= margin ? flipped : Math.max(margin, window.innerHeight - d.height - margin)
+      }
+      // Horizontaal: standaard links uitgelijnd; als rechts overflowt, schuif
+      // naar links zodat het volledige paneel zichtbaar is.
+      let left = r.left
+      if (left + d.width + margin > window.innerWidth) {
+        left = Math.max(margin, window.innerWidth - d.width - margin)
+      }
+      if (left < margin) left = margin
+      setPos({ top, left })
       setReady(true)
     }
+    // Eerst hidden renderen om de échte grootte te meten, dan plaatsen.
+    place()
+    // Herplaatsen bij resize / scroll zodat 't zichtbaar blijft als de
+    // viewport verandert terwijl de popup open is.
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
     function onDown(e: MouseEvent) {
       if (!dropRef.current?.contains(e.target as Node) &&
           !anchor.current?.contains(e.target as Node)) onClose()
@@ -111,6 +135,8 @@ function PortalDropdown({ anchor, onClose, children }: {
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
     return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
@@ -121,6 +147,7 @@ function PortalDropdown({ anchor, onClose, children }: {
     <div ref={dropRef} style={{
       position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999,
       visibility: ready ? 'visible' : 'hidden',
+      maxHeight: `calc(100vh - 16px)`, overflowY: 'auto',
     }}>
       {children}
     </div>,
@@ -277,10 +304,8 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
           }}>
             {team.map(m => {
-              const active  = value.includes(m.id)
-              const isMe    = profile?.memberId === m.id
-              const photo   = isMe ? profile?.photo : null
-              const initials = m.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+              const active = value.includes(m.id)
+              const isMe   = profile?.memberId === m.id
               return (
                 <button key={m.id} onClick={() => toggle(m.id)} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
@@ -289,19 +314,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
                   border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 13, textAlign: 'left',
                 }}>
-                  {photo ? (
-                    <img src={photo} alt="" style={{
-                      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                      border: `2px solid ${m.color}`, objectFit: 'cover',
-                    }} />
-                  ) : (
-                    <span style={{
-                      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                      background: m.color + '30', border: `2px solid ${m.color}`,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 9, fontWeight: 700, color: m.color,
-                    }}>{initials}</span>
-                  )}
+                  <MemberAvatar id={m.id} size={22} />
                   <span style={{ fontWeight: active ? 600 : 400 }}>
                     {m.name}{isMe ? ' (jij)' : ''}
                   </span>
@@ -984,19 +997,36 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               }}
               style={{ ...editInput, flex: 1 }} />
           ) : (
-            <span
-              onClick={() => setShowDetail(true)}
-              onDoubleClick={e => {
-                if (item.source === 'google') return
-                e.stopPropagation()
-                setNameDraft(item.name); setEditName(true)
-              }}
-              title="Klik voor details · dubbelklik om naam te bewerken"
-              style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
-                cursor: 'pointer',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-              {item.name}
-            </span>
+            <>
+              <span
+                onClick={() => setShowDetail(true)}
+                onDoubleClick={e => {
+                  if (item.source === 'google') return
+                  e.stopPropagation()
+                  setNameDraft(item.name); setEditName(true)
+                }}
+                title={item.source === 'google'
+                  ? 'Bewerk in Google Calendar'
+                  : 'Klik voor details · dubbelklik om naam te bewerken'}
+                style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
+                  cursor: 'pointer',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                {item.name}
+              </span>
+              {hover && item.source !== 'google' && (
+                <button
+                  onClick={e => { e.stopPropagation(); setNameDraft(item.name); setEditName(true) }}
+                  title="Naam bewerken"
+                  aria-label="Naam bewerken"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: '2px 6px', fontSize: 13, lineHeight: 1,
+                    borderRadius: 4, flexShrink: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  ✎
+                </button>
+              )}
+            </>
           )}
 
           {/* Comments-knop — opent het detail-drawer en scrolt naar opmerkingen.

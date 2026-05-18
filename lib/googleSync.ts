@@ -238,6 +238,42 @@ async function ensureDoneGroup(
   return newId
 }
 
+// Vrij/Vakantie-groep — events met titels als 'Vrij', 'Vakantie', 'Verlof',
+// 'Ziek' of een feestdag horen niet tussen losse projecten te staan. We
+// bundelen ze in een aparte 'Vrij'-groep zodat de planning meteen duidelijk
+// maakt wie wanneer afwezig is. Bestaande groep met die naam wordt
+// hergebruikt; anders aanmaken onderaan het bord.
+async function ensureVrijGroup(
+  admin:   SupabaseClient,
+  boardId: string,
+): Promise<string> {
+  const { data: rows } = await admin
+    .from('board_groups').select('id, name')
+    .eq('board_id', boardId)
+    .ilike('name', 'vrij')
+    .limit(1)
+  const existing = (rows as { id: string; name: string }[] | null)?.[0]
+  if (existing) return existing.id
+
+  const { data: posRows } = await admin
+    .from('board_groups').select('position')
+    .eq('board_id', boardId)
+    .order('position', { ascending: false })
+    .limit(1)
+  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
+
+  const newId = `g_vrij_${boardId}_${Date.now()}`
+  await admin.from('board_groups').insert({
+    id:        newId,
+    board_id:  boardId,
+    name:      'Vrij',
+    color:     '#3db883',
+    collapsed: false,
+    position:  maxPos + 1,
+  })
+  return newId
+}
+
 async function ensureFreshAccessToken(
   admin: SupabaseClient,
   cal:   GoogleCalRow,
@@ -294,6 +330,17 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (cached) return cached
     const gid = await ensureDoneGroup(admin, boardId)
     doneCache.set(boardId, gid)
+    return gid
+  }
+
+  // Vrij-groep cache: events met 'Vrij'/'Vakantie'/'Verlof'-achtige titels
+  // landen hier i.p.v. tussen losse projecten.
+  const vrijCache = new Map<string, string>()
+  async function getVrijGroupFor(boardId: string): Promise<string> {
+    const cached = vrijCache.get(boardId)
+    if (cached) return cached
+    const gid = await ensureVrijGroup(admin, boardId)
+    vrijCache.set(boardId, gid)
     return gid
   }
 
@@ -487,12 +534,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // weer terugsturen naar de target-groep volgens de route-regels.
       const keepBoard = existingRow?.board_id ?? targetBoard
       const newStatus = resolveStatus(existingRow?.status, end ?? start)
-      // Done items routen we direct naar de Done-groep van het huidige bord,
-      // ook server-side, zodat ze niet eerst in 'Losse projecten' staan tot
-      // de gebruiker iets aanraakt en autoMoveDoneItems triggert.
+      // Vrij/Vakantie-events bundelen we in een eigen Vrij-groep zodat
+      // afwezigheid meteen herkenbaar is in het bord. Done heeft daarna
+      // voorrang (events kunnen oud-en-afgehandeld zijn). Anders volgen we
+      // bestaande logica: gebruiker-keuze respecteren, anders targetGroup.
+      const isVrij = isVrijTitle(name)
       const keepGroup = newStatus === 'Done'
         ? await getDoneGroupFor(keepBoard)
-        : (existingRow?.group_id ?? targetGroup)
+        : isVrij
+          ? await getVrijGroupFor(keepBoard)
+          : (existingRow?.group_id ?? targetGroup)
       const eventOwners = ownersForEvent(ev)
       // Union van bestaande + Google-attendees: bestaande user-toevoegingen
       // blijven staan, en nieuwe Yoko-deelnemers uit Google worden vanzelf
@@ -593,18 +644,22 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (existingRow) updated++; else added++
     const keepBoard = existingRow?.board_id ?? targetBoard
     const newStatus = resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart)
-    // Status-gestuurde groep-keuze: Done items horen in de Done-groep (ook
-    // wanneer de gebruiker zelf op Done klikt of de hele reeks > 3 dagen
-    // geleden afliep). Niet-Done recurring items worden geforceerd naar de
-    // Doorlopend-groep van hun huidige bord — ook bestaande rijen die ooit
-    // in 'Losse projecten' o.i.d. zijn beland. Manuele bord-verplaatsingen
-    // (keepBoard) blijven staan; binnen dat bord landen ze altijd in
-    // Doorlopend (of Done als status='Done').
+    // Groep-keuze prioriteit: Done > Vrij > Doorlopend.
+    //  - Done items horen in de Done-groep (ook wanneer de gebruiker zelf
+    //    op Done klikt of de hele reeks > 3 dagen geleden afliep).
+    //  - Recurring 'Vrij'/'Vakantie' etc. landen in de Vrij-groep zodat
+    //    afwezigheid herkenbaar blijft.
+    //  - Anders gaan recurring items naar de Doorlopend-groep van hun
+    //    huidige bord, óók als ze ooit in 'Losse projecten' belandden.
+    // Manuele bord-verplaatsingen (keepBoard) blijven gerespecteerd.
+    const isVrij = isVrijTitle(baseName)
     const keepGroup = newStatus === 'Done'
       ? await getDoneGroupFor(keepBoard)
-      : (keepBoard === targetBoard
-          ? targetGroup
-          : await getDoorlopendGroupFor(keepBoard))
+      : isVrij
+        ? await getVrijGroupFor(keepBoard)
+        : (keepBoard === targetBoard
+            ? targetGroup
+            : await getDoorlopendGroupFor(keepBoard))
     upserts.push({
       id,
       group_id:           keepGroup,
