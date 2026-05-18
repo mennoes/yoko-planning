@@ -897,14 +897,20 @@ export default function HomePage() {
     <div style={{ maxWidth: 1160, padding: isMobile ? '60px 16px 60px' : '48px 40px 100px' }}>
 
       {/* ── Greeting ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 14 : 18,
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 18,
         marginBottom: showSummary ? (isMobile ? 14 : 22) : (isMobile ? 18 : 40) }}>
         {memberId && (
-          <UserAvatar memberId={memberId} size={isMobile ? 48 : 60}
+          <UserAvatar memberId={memberId} size={isMobile ? 44 : 60}
             onClick={e => showMember(memberId, e)} />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: isMobile ? 24 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em' }}>
+          <h1 style={{ fontSize: isMobile ? 22 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em',
+            // Op mobiel forceren we één regel — "Goedemiddag, Menno" mag
+            // niet over twee regels lopen, dat oogde rommelig. Bij echt
+            // smalle schermen of een lange naam komt er een ellipsis.
+            whiteSpace: isMobile ? 'nowrap' : 'normal',
+            overflow:   isMobile ? 'hidden' : undefined,
+            textOverflow: isMobile ? 'ellipsis' : undefined }}>
             {greeting}{firstName ? `, ${firstName}` : ''}
           </h1>
           <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
@@ -926,11 +932,14 @@ export default function HomePage() {
         )}
         {isMobile && (
           <button onClick={() => setEditOrder(o => !o)}
-            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
+            title={editOrder ? 'Klaar met sorteren' : 'Kaarten herordenen'}
+            aria-label={editOrder ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+            style={{ padding: editOrder ? '6px 10px' : '6px 9px',
+              borderRadius: 8, border: '1px solid var(--border)',
               background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
               color: editOrder ? '#fff' : 'var(--text-secondary)',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-            {editOrder ? 'Klaar' : 'Volgorde'}
+              fontSize: 13, fontWeight: 700, lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}>
+            {editOrder ? 'Klaar' : '↕'}
           </button>
         )}
       </div>
