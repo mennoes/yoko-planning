@@ -910,12 +910,20 @@ export default function HomePage() {
           <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          {memberId && (
+          {/* Vakantie-chip op mobiel onder de datum (ruimte schaars); op
+              desktop verhuist 'ie naar rechts naast de groet zodat 'ie op
+              dezelfde hoogte staat als de samenvattings-balk eronder. */}
+          {memberId && isMobile && (
             <div style={{ marginTop: 10 }}>
               <VacationButton variant="chip" />
             </div>
           )}
         </div>
+        {memberId && !isMobile && (
+          <div style={{ flexShrink: 0 }}>
+            <VacationButton variant="chip" />
+          </div>
+        )}
         {isMobile && (
           <button onClick={() => setEditOrder(o => !o)}
             style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
