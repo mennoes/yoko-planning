@@ -420,6 +420,38 @@ function RangeCalendar({
           style={{ ...editInput, flex: 1 }} />
       </div>
 
+      {/* Snelkeuzes: hele maand selecteren met één klik. Vorige/Deze/
+          Volgende dekt de meeste planning-vragen ('wat staat er deze
+          maand?'). Stelt 1ste t/m laatste dag in, scrollt kalender mee. */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {([
+          { label: 'Vorige maand', offset: -1 },
+          { label: 'Deze maand',   offset:  0 },
+          { label: 'Volgende maand', offset: 1 },
+        ] as const).map(({ label, offset }) => (
+          <button key={label} onClick={() => {
+            const ref = new Date()
+            ref.setDate(1)
+            ref.setMonth(ref.getMonth() + offset)
+            const y = ref.getFullYear(), m = ref.getMonth()
+            const first = `${y}-${String(m + 1).padStart(2, '0')}-01`
+            const lastDay = new Date(y, m + 1, 0).getDate()
+            const last  = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+            setSelA(first); setSelB(last); setPhase('A')
+            setVy(y); setVm(m)
+            onChange(first, last)
+          }}
+            style={{ flex: 1, padding: '5px 8px', borderRadius: 6,
+              border: '1px solid var(--border-light)', background: 'var(--bg-card)',
+              color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+              transition: 'all 0.1s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.color = color }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-secondary)' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <button onClick={prevMonth} style={navBtnStyle}>◀</button>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
