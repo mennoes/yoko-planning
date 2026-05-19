@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react'
 import { createPortal } from 'react-dom'
-import { useSearchParams } from 'next/navigation'
+// Note: bewust GEEN useSearchParams uit next/navigation — die zet de hele
+// pagina in CSR-bailout en breekt `next build` voor de dynamische
+// /projects/[slug] route. We zijn 'use client', dus window.location is
+// veilig.
 import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
 import { useProfile }     from './ProfileContext'
@@ -2201,8 +2204,18 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // Focus-from-link: een planning-popup of #item-mention kan linken naar
   // `?focus=<itemId>`. Klap de groep open als-ie dicht zit, scroll naar
   // de rij, en flash 'em zodat je oog er heen wordt getrokken.
-  const searchParams = useSearchParams()
-  const focusId = searchParams?.get('focus') ?? null
+  // window.location.search ipv useSearchParams() — zie import-blok hierboven.
+  const [focusId, setFocusId] = useState<string | null>(null)
+  useEffect(() => {
+    function read() {
+      if (typeof window === 'undefined') return null
+      return new URLSearchParams(window.location.search).get('focus')
+    }
+    setFocusId(read())
+    const onNav = () => setFocusId(read())
+    window.addEventListener('popstate', onNav)
+    return () => window.removeEventListener('popstate', onNav)
+  }, [])
   const lastFocusedRef = useRef<string | null>(null)
   useEffect(() => {
     if (!focusId || lastFocusedRef.current === focusId) return

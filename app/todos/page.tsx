@@ -796,6 +796,7 @@ export default function TodosPage() {
               <div style={{ marginBottom: 14 }}>
                 <TodoCard section={me} isMember={true} onUpdate={updateSection}
                   allProjects={allProjects}
+                  doneProjectKeys={doneProjectKeys}
                   editOrder={editOrder}
                   isFirstCard={true}
                   isLastCard={others.length === 0 && general.length === 0}
@@ -808,6 +809,7 @@ export default function TodosPage() {
                 {others.map((s, i) => (
                   <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
                     allProjects={allProjects}
+                    doneProjectKeys={doneProjectKeys}
                     editOrder={editOrder}
                     isFirstCard={i === 0}
                     isLastCard={i === others.length - 1 && general.length === 0}
@@ -828,6 +830,7 @@ export default function TodosPage() {
               {general.map((s, i) => (
                 <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
                   allProjects={allProjects}
+                  doneProjectKeys={doneProjectKeys}
                   editOrder={editOrder}
                   isFirstCard={i === 0}
                   isLastCard={i === general.length - 1}
