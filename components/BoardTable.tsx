@@ -1138,7 +1138,14 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           ) : (
             <>
               <span
-                onClick={() => setShowDetail(true)}
+                onClick={() => {
+                  // Monday-stijl: klik op de naam start rename direct voor
+                  // handmatige items — geen omweg via dubbelklik of menu.
+                  // Google-items zijn read-only qua naam, daar valt 't terug
+                  // op de detail-drawer als gewone klik-actie.
+                  if (item.source === 'google') { setShowDetail(true); return }
+                  setNameDraft(item.name); setEditName(true)
+                }}
                 onDoubleClick={e => {
                   if (item.source === 'google') return
                   e.stopPropagation()
@@ -1146,23 +1153,26 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                 }}
                 title={item.source === 'google'
                   ? 'Bewerk in Google Calendar'
-                  : 'Klik voor details · dubbelklik om naam te bewerken'}
+                  : 'Klik om naam te bewerken'}
+                // I-beam cursor voor handmatige items zodat 'rename-baar'
+                // visueel duidelijk is — net als in Monday. Google-items
+                // krijgen een gewone pointer omdat ze read-only zijn qua naam.
                 style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
-                  cursor: 'pointer',
+                  cursor: item.source === 'google' ? 'pointer' : 'text',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {item.name}
               </span>
               {hover && item.source !== 'google' && (
                 <button
-                  onClick={e => { e.stopPropagation(); setNameDraft(item.name); setEditName(true) }}
-                  title="Naam bewerken"
-                  aria-label="Naam bewerken"
+                  onClick={e => { e.stopPropagation(); setShowDetail(true) }}
+                  title="Details openen"
+                  aria-label="Details openen"
                   style={{ background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--text-muted)', padding: '2px 6px', fontSize: 13, lineHeight: 1,
+                    color: 'var(--text-muted)', padding: '2px 6px', fontSize: 14, lineHeight: 1,
                     borderRadius: 4, flexShrink: 0 }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                  ✎
+                  ↗
                 </button>
               )}
             </>
