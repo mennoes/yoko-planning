@@ -1057,6 +1057,23 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
     return onCommentsUpdate(refresh)
   }, [item.id])
 
+  // ?drawer=<itemId> in de URL = deeplink vanuit een andere view (bv. de
+  // werkdruk-widget op de homepage) die direct het detail wil openen
+  // wanneer deze rij rendert. Lees één keer op mount en wis de param uit
+  // de URL zodat ie niet bij elke pageload opnieuw triggert.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const wantId = params.get('drawer')
+    if (wantId && wantId === item.id) {
+      setShowDetail(true)
+      params.delete('drawer')
+      const qs = params.toString()
+      const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
+      window.history.replaceState(null, '', next)
+    }
+  }, [item.id])
+
   // Auto-rollup: als parent een veld leeg laat én er zijn subitems, dan
   // afleiden uit subitems. Hours doen we al verderop in de Cell-dispatcher
   // (read-only sum). Hier: timeline + owners. Schrijf-actie van de gebruiker
