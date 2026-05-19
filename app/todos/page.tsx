@@ -274,12 +274,13 @@ function TodoCard({
     setEditId(null)
   }
 
-  // Een todo telt als 'verborgen klaar' wanneer de gekoppelde project-rij
-  // op Done staat — dan hoef je hem niet meer in je actieve lijst te zien,
-  // maar 'ie blijft wel terugvindbaar onder het 'afgerond'-blok.
+  // Gekoppelde todo's waarvan het project op Done staat (of voorbij is)
+  // halen we VOLLEDIG uit de lijst — niet in open én niet in 'afgerond',
+  // gewoon weg. Handmatig afgevinkte todo-notes blijven wel in 'afgerond'.
   const isAutoDone = (i: TodoItem) => !!i.projectRef && doneProjectKeys.has(`${i.projectRef.board}:${i.projectRef.itemId}`)
-  const open = section.items.filter(i => !i.done && !isAutoDone(i))
-  const done = section.items.filter(i =>  i.done ||  isAutoDone(i))
+  const visible = section.items.filter(i => !isAutoDone(i))
+  const open    = visible.filter(i => !i.done)
+  const done    = visible.filter(i =>  i.done)
 
   return (
     <div style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
