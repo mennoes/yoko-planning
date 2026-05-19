@@ -79,6 +79,21 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
   return out
 }
 
+// Verzamel alle project-items die op Done staan; gebruikt om gekoppelde
+// todo's automatisch te verbergen uit de open-lijst zonder dat de gebruiker
+// elk vinkje handmatig hoeft te zetten.
+function loadDoneProjectKeys(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  const out = new Set<string>()
+  for (const [board, raw] of Object.entries(RAW)) {
+    const groups = loadGroups(board, raw.groups as BoardGroup[])
+    for (const g of groups) for (const item of g.items) {
+      if ((item.status ?? '').trim() === 'Done') out.add(`${board}:${item.id}`)
+    }
+  }
+  return out
+}
+
 // Onthoud welke project-id's we al een keer als auto-todo hebben
 // toegevoegd, zodat een eenmaal door de gebruiker verwijderde todo
 // niet bij elke pageload terugkeert. Per-device (localStorage) is hier
@@ -96,7 +111,6 @@ function saveSeededProjectIds(ids: Set<string>): void {
   if (typeof window === 'undefined') return
   try { localStorage.setItem(SEEDED_KEY, JSON.stringify([...ids])) } catch {}
 }
-
 function fmtRelative(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
   if (diff < 1)    return 'zojuist'
@@ -154,13 +168,14 @@ function reorderArrowBtn(disabled: boolean): React.CSSProperties {
 
 // ─── Todo card ─────────────────────────────────────────────────────────────────
 function TodoCard({
-  section, isMember, onUpdate, allProjects,
+  section, isMember, onUpdate, allProjects, doneProjectKeys,
   editOrder, isFirstCard, isLastCard, onMoveCard,
 }: {
   section: Section
   isMember: boolean
   onUpdate: (s: Section, prev?: Section) => void
   allProjects: ProjectLink[]
+  doneProjectKeys: Set<string>
   editOrder: boolean
   isFirstCard: boolean
   isLastCard: boolean
@@ -240,8 +255,12 @@ function TodoCard({
     setEditId(null)
   }
 
-  const open = section.items.filter(i => !i.done)
-  const done = section.items.filter(i => i.done)
+  // Een todo telt als 'verborgen klaar' wanneer de gekoppelde project-rij
+  // op Done staat — dan hoef je hem niet meer in je actieve lijst te zien,
+  // maar 'ie blijft wel terugvindbaar onder het 'afgerond'-blok.
+  const isAutoDone = (i: TodoItem) => !!i.projectRef && doneProjectKeys.has(`${i.projectRef.board}:${i.projectRef.itemId}`)
+  const open = section.items.filter(i => !i.done && !isAutoDone(i))
+  const done = section.items.filter(i =>  i.done ||  isAutoDone(i))
 
   return (
     <div style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
@@ -608,10 +627,12 @@ export default function TodosPage() {
   const [hydrated, setHydrated] = useState(false)
   const [editOrder, setEditOrder] = useState(false)
   const [allProjects, setAllProjects] = useState<ProjectLink[]>([])
+  const [doneProjectKeys, setDoneProjectKeys] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setSections(loadSections())
     setAllProjects(loadAllProjects())
+    setDoneProjectKeys(loadDoneProjectKeys())
     setHydrated(true)
 
     // Sync met Supabase: pull, en als er nog niks staat seed met de lokale
@@ -630,7 +651,10 @@ export default function TodosPage() {
 
     const offRemote = subscribeRemoteTodos()
     const offEvent  = onTodosUpdate(() => setSections(loadSections()))
-    const onBoardUpdate = () => setAllProjects(loadAllProjects())
+    const onBoardUpdate = () => {
+      setAllProjects(loadAllProjects())
+      setDoneProjectKeys(loadDoneProjectKeys())
+    }
     window.addEventListener('yoko-board-update', onBoardUpdate)
     return () => {
       offRemote(); offEvent()
@@ -828,6 +852,7 @@ export default function TodosPage() {
               {topGeneral.map((s, i) => (
                 <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
                   allProjects={allProjects}
+                  doneProjectKeys={doneProjectKeys}
                   editOrder={editOrder}
                   isFirstCard={i === 0}
                   isLastCard={i === topGeneral.length - 1}
@@ -851,6 +876,7 @@ export default function TodosPage() {
               {personal.map((s, i) => (
                 <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
                   allProjects={allProjects}
+                  doneProjectKeys={doneProjectKeys}
                   editOrder={editOrder}
                   isFirstCard={i === 0}
                   isLastCard={i === personal.length - 1}
@@ -873,6 +899,7 @@ export default function TodosPage() {
                   {bottomGeneral.map((s, i) => (
                     <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
                       allProjects={allProjects}
+                  doneProjectKeys={doneProjectKeys}
                       editOrder={editOrder}
                       isFirstCard={i === 0}
                       isLastCard={i === bottomGeneral.length - 1}
