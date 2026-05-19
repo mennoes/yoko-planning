@@ -4,7 +4,10 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 
-export type FeedbackKind = 'bug' | 'idee' | 'feedback'
+export type FeedbackKind   = 'bug' | 'idee' | 'feedback'
+export type FeedbackStatus = 'open' | 'planned' | 'done' | 'rejected'
+
+export const FEEDBACK_STATUSES: FeedbackStatus[] = ['open', 'planned', 'done', 'rejected']
 
 export type FeedbackItem = {
   id:          string
@@ -13,6 +16,7 @@ export type FeedbackItem = {
   authorId:    string | null
   authorName:  string | null
   upvotes:     string[]
+  status:      FeedbackStatus
   createdAt:   string
 }
 
@@ -51,12 +55,16 @@ type Row = {
   author_id:   string | null
   author_name: string | null
   upvotes:     unknown
+  status?:     string | null  // toegevoegd in 0014_feedback_status.sql
   created_at:  string
 }
 
 function rowToItem(r: Row): FeedbackItem | null {
   if (r.kind !== 'bug' && r.kind !== 'idee' && r.kind !== 'feedback') return null
   const upvotes = Array.isArray(r.upvotes) ? (r.upvotes as unknown[]).filter(x => typeof x === 'string') as string[] : []
+  const rawStatus = (r.status ?? 'open').toString().toLowerCase()
+  const status: FeedbackStatus =
+    FEEDBACK_STATUSES.includes(rawStatus as FeedbackStatus) ? (rawStatus as FeedbackStatus) : 'open'
   return {
     id:         r.id,
     kind:       r.kind,
@@ -64,6 +72,7 @@ function rowToItem(r: Row): FeedbackItem | null {
     authorId:   r.author_id,
     authorName: r.author_name,
     upvotes,
+    status,
     createdAt:  r.created_at,
   }
 }
@@ -73,7 +82,7 @@ export async function pullFeedback(): Promise<boolean> {
   if (!await getCurrentUserId()) return false
   const { data, error } = await supabase
     .from('feedback_items')
-    .select('id, kind, body, author_id, author_name, upvotes, created_at')
+    .select('id, kind, body, author_id, author_name, upvotes, status, created_at')
     .order('created_at', { ascending: false })
   if (error || !data) return false
 
@@ -101,8 +110,9 @@ export async function submitFeedback(
       author_id:   authorId,
       author_name: authorName,
       upvotes:     [],
+      status:      'open',
     })
-    .select('id, kind, body, author_id, author_name, upvotes, created_at')
+    .select('id, kind, body, author_id, author_name, upvotes, status, created_at')
     .single()
   if (error || !data) return null
   const item = rowToItem(data as Row)
@@ -127,6 +137,14 @@ export async function deleteFeedback(itemId: string): Promise<void> {
   if (!await getCurrentUserId()) return
   writeCache(readCache().filter(i => i.id !== itemId))
   await supabase.from('feedback_items').delete().eq('id', itemId)
+}
+
+export async function setFeedbackStatus(itemId: string, status: FeedbackStatus): Promise<void> {
+  if (!supabase) return
+  if (!await getCurrentUserId()) return
+  // Optimistic update zodat het label meteen wisselt.
+  writeCache(readCache().map(i => i.id === itemId ? { ...i, status } : i))
+  await supabase.from('feedback_items').update({ status }).eq('id', itemId)
 }
 
 let feedbackChannel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null

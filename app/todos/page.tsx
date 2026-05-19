@@ -837,11 +837,10 @@ export default function TodosPage() {
           </>
         )
       })() : (() => {
-        // Desktop: algemene rij eerst, persoonlijke rij eronder; overlopende
-        // algemene secties belanden onderaan als 'Extra'.
+        // Desktop: ALLE algemene kaarten samen in één grid boven personal,
+        // zodat Socials/Reminders/Kansen direct naast Komend/Ideeën staan.
+        // Wat niet in de eerste regel past wrapt vanzelf naar de tweede.
         const cols = Math.max(1, personal.length)
-        const topGeneral    = general.slice(0, cols)
-        const bottomGeneral = general.slice(cols)
         return (
           <>
             <div style={{
@@ -849,13 +848,13 @@ export default function TodosPage() {
               gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
               gap: 12, alignItems: 'start', marginBottom: 28,
             }}>
-              {topGeneral.map((s, i) => (
+              {general.map((s, i) => (
                 <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
                   allProjects={allProjects}
                   doneProjectKeys={doneProjectKeys}
                   editOrder={editOrder}
                   isFirstCard={i === 0}
-                  isLastCard={i === topGeneral.length - 1}
+                  isLastCard={i === general.length - 1}
                   onMoveCard={dir => moveCard(s.id, dir)} />
               ))}
             </div>
@@ -883,31 +882,6 @@ export default function TodosPage() {
                   onMoveCard={dir => moveCard(s.id, dir)} />
               ))}
             </div>
-
-            {bottomGeneral.length > 0 && (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '28px 0 24px' }}>
-                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Extra</span>
-                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                </div>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                  gap: 12, alignItems: 'start',
-                }}>
-                  {bottomGeneral.map((s, i) => (
-                    <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
-                      allProjects={allProjects}
-                  doneProjectKeys={doneProjectKeys}
-                      editOrder={editOrder}
-                      isFirstCard={i === 0}
-                      isLastCard={i === bottomGeneral.length - 1}
-                      onMoveCard={dir => moveCard(s.id, dir)} />
-                  ))}
-                </div>
-              </>
-            )}
           </>
         )
       })()}

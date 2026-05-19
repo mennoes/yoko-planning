@@ -6,8 +6,9 @@ import { useProfile } from './ProfileContext'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconClose, IconComment } from './Icon'
 import {
-  loadFeedback, submitFeedback, toggleUpvote, deleteFeedback, onFeedbackChange,
-  type FeedbackItem, type FeedbackKind,
+  loadFeedback, submitFeedback, toggleUpvote, deleteFeedback, setFeedbackStatus, onFeedbackChange,
+  FEEDBACK_STATUSES,
+  type FeedbackItem, type FeedbackKind, type FeedbackStatus,
 } from '@/lib/feedbackStore'
 
 const KIND_LABEL: Record<FeedbackKind, string> = {
@@ -19,6 +20,18 @@ const KIND_COLOR: Record<FeedbackKind, string> = {
   bug:      '#e2445c',
   idee:     '#D8B62E',
   feedback: '#579bfc',
+}
+const STATUS_LABEL: Record<FeedbackStatus, string> = {
+  open:     'Open',
+  planned:  'Gepland',
+  done:     'Gedaan',
+  rejected: 'Afgewezen',
+}
+const STATUS_COLOR: Record<FeedbackStatus, string> = {
+  open:     '#808080',
+  planned:  '#579bfc',
+  done:     '#00c875',
+  rejected: '#9aadbd',
 }
 
 function fmtRelative(iso: string): string {
@@ -35,6 +48,7 @@ export function FeedbackBubble() {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [filter, setFilter] = useState<FeedbackKind | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<FeedbackStatus | 'all'>('all')
   const [draftKind, setDraftKind] = useState<FeedbackKind>('idee')
   const [draftBody, setDraftBody] = useState('')
   const [busy, setBusy] = useState(false)
@@ -53,13 +67,18 @@ export function FeedbackBubble() {
   }, [open])
 
   const filtered = useMemo(() => {
-    const list = filter === 'all' ? items : items.filter(i => i.kind === filter)
+    const list = items
+      .filter(i => filter === 'all' || i.kind === filter)
+      .filter(i => statusFilter === 'all' || i.status === statusFilter)
     return [...list].sort((a, b) => {
-      // Eerst op upvotes (desc), daarna op datum (desc)
+      // Done/rejected zakken naar onder, daarna upvotes (desc), daarna datum.
+      const aDone = a.status === 'done' || a.status === 'rejected' ? 1 : 0
+      const bDone = b.status === 'done' || b.status === 'rejected' ? 1 : 0
+      if (aDone !== bDone) return aDone - bDone
       if (b.upvotes.length !== a.upvotes.length) return b.upvotes.length - a.upvotes.length
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  }, [items, filter])
+  }, [items, filter, statusFilter])
 
   async function onSubmit() {
     const body = draftBody.trim()
@@ -192,8 +211,8 @@ export function FeedbackBubble() {
           </div>
         </div>
 
-        {/* Filter tabs */}
-        <div style={{ padding: '10px 16px 6px', borderBottom: '1px solid var(--border-light)',
+        {/* Filter tabs — type */}
+        <div style={{ padding: '10px 16px 4px',
           display: 'flex', gap: 4, overflowX: 'auto' }}>
           {([
             { v: 'all',      l: 'Alles' },
@@ -207,6 +226,28 @@ export function FeedbackBubble() {
                 background: filter === t.v ? 'var(--accent-light)' : 'transparent',
                 color: filter === t.v ? 'var(--accent)' : 'var(--text-muted)',
                 fontSize: 11.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+              }}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+        {/* Filter tabs — status (welke gepland/gedaan/etc.) */}
+        <div style={{ padding: '2px 16px 8px', borderBottom: '1px solid var(--border-light)',
+          display: 'flex', gap: 4, overflowX: 'auto' }}>
+          {([
+            { v: 'all',      l: 'Alles' },
+            { v: 'open',     l: 'Open' },
+            { v: 'planned',  l: 'Gepland' },
+            { v: 'done',     l: 'Gedaan' },
+            { v: 'rejected', l: 'Afgewezen' },
+          ] as Array<{ v: FeedbackStatus | 'all'; l: string }>).map(t => (
+            <button key={t.v} onClick={() => setStatusFilter(t.v)}
+              style={{
+                padding: '3px 9px', borderRadius: 999, border: '1px solid transparent',
+                background: statusFilter === t.v ? (t.v === 'all' ? 'var(--bg-hover)' : STATUS_COLOR[t.v as FeedbackStatus] + '22') : 'transparent',
+                color: statusFilter === t.v ? (t.v === 'all' ? 'var(--text-primary)' : STATUS_COLOR[t.v as FeedbackStatus]) : 'var(--text-muted)',
+                fontSize: 10.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>
               {t.l}
             </button>
@@ -246,6 +287,22 @@ export function FeedbackBubble() {
                       background: KIND_COLOR[item.kind] + '22',
                       color: KIND_COLOR[item.kind],
                     }}>{KIND_LABEL[item.kind]}</span>
+                    {/* Status — wijzigbaar door iedereen, simpele <select>. */}
+                    <select value={item.status}
+                      onChange={e => setFeedbackStatus(item.id, e.target.value as FeedbackStatus)}
+                      title="Wijzig status"
+                      style={{
+                        fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                        padding: '1px 4px 1px 6px', borderRadius: 4,
+                        background: STATUS_COLOR[item.status] + '22',
+                        color: STATUS_COLOR[item.status],
+                        border: `1px solid ${STATUS_COLOR[item.status]}55`,
+                        cursor: 'pointer', outline: 'none',
+                      }}>
+                      {FEEDBACK_STATUSES.map(s => (
+                        <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                      ))}
+                    </select>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       {item.authorName ?? 'Iemand'} · {fmtRelative(item.createdAt)}
                     </span>
@@ -255,7 +312,9 @@ export function FeedbackBubble() {
                           color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 2 }}>×</button>
                     )}
                   </div>
-                  <div style={{ fontSize: 13.5, color: 'var(--text-primary)',
+                  <div style={{ fontSize: 13.5,
+                    color: item.status === 'done' || item.status === 'rejected' ? 'var(--text-muted)' : 'var(--text-primary)',
+                    textDecoration: item.status === 'done' ? 'line-through' : 'none',
                     whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>
                     {item.body}
                   </div>
