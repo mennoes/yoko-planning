@@ -65,30 +65,49 @@ function loadAllProjects(): ProjectLink[] {
 // hoeft te koppelen.
 function loadMyOpenProjects(memberId: string): ProjectLink[] {
   if (typeof window === 'undefined' || !memberId) return []
+  const today = new Date().toISOString().slice(0, 10)
   const out: ProjectLink[] = []
   for (const [board, raw] of Object.entries(RAW)) {
     const groups = loadGroups(board, raw.groups as BoardGroup[])
-    for (const g of groups) for (const item of g.items) {
-      if (!item.name) continue
-      if (item.source === 'google') continue
-      if ((item.status ?? '').toLowerCase() === 'done') continue
-      if (!item.ownerIds?.includes(memberId)) continue
-      out.push({ board, itemId: item.id, name: item.name })
+    for (const g of groups) {
+      if ((g.name ?? '').toLowerCase() === 'done') continue  // Done-groep skippen
+      for (const item of g.items) {
+        if (!item.name) continue
+        if (item.source === 'google') continue
+        if ((item.status ?? '').toLowerCase() === 'done') continue
+        if (!item.ownerIds?.includes(memberId)) continue
+        // Past-due items skippen — niet meer toevoegen als auto-todo.
+        const end = item.endDate ?? item.startDate
+        if (end && end < today) continue
+        out.push({ board, itemId: item.id, name: item.name })
+      }
     }
   }
   return out
 }
 
-// Verzamel alle project-items die op Done staan; gebruikt om gekoppelde
-// todo's automatisch te verbergen uit de open-lijst zonder dat de gebruiker
-// elk vinkje handmatig hoeft te zetten.
+// Verzamel alle project-items die "voorbij" zijn voor de to-do-lijst:
+//   - status = 'Done', of
+//   - de eind-datum ligt al in het verleden (en het item heeft tenminste
+//     een datum), of
+//   - de groep waar 't in zit heet 'Done' (sommige imports gebruiken een
+//     vertaalde status zoals 'Klaar', maar de groep is wel Done).
+// Zo verdwijnen oude items vanzelf uit Menno's persoonlijke kaart zonder
+// dat hij ze allemaal moet aanvinken.
 function loadDoneProjectKeys(): Set<string> {
   if (typeof window === 'undefined') return new Set()
   const out = new Set<string>()
+  const today = new Date().toISOString().slice(0, 10)
   for (const [board, raw] of Object.entries(RAW)) {
     const groups = loadGroups(board, raw.groups as BoardGroup[])
-    for (const g of groups) for (const item of g.items) {
-      if ((item.status ?? '').trim() === 'Done') out.add(`${board}:${item.id}`)
+    for (const g of groups) {
+      const groupIsDone = (g.name ?? '').toLowerCase() === 'done'
+      for (const item of g.items) {
+        if (groupIsDone) { out.add(`${board}:${item.id}`); continue }
+        if ((item.status ?? '').trim() === 'Done') { out.add(`${board}:${item.id}`); continue }
+        const end = (item.endDate ?? item.startDate) as string | null | undefined
+        if (end && end < today) out.add(`${board}:${item.id}`)
+      }
     }
   }
   return out
