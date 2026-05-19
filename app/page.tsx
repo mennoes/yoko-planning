@@ -13,13 +13,21 @@ import { VacationButton } from '@/components/VacationButton'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
+import {
+  loadSections as loadTodoSectionsStore,
+  saveSections as saveTodoSectionsStore,
+  pullFromRemote as pullTodos,
+  onTodosUpdate,
+  type Section as TodoSection,
+  type TodoItem as TodoStoreItem,
+} from '@/lib/todosStore'
 import teamData  from '@/data/team.json'
 import yokoRaw        from '@/data/boards/yoko.json'
 import pnpRaw         from '@/data/boards/pnp.json'
 import nederlandRaw   from '@/data/boards/nederland.json'
 import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
 import dienjaarRaw    from '@/data/boards/dienjaar.json'
-import { loadGroups } from '@/lib/boardStore'
+import { loadGroups, saveGroups, pushBoardToRemote } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, type Project } from '@/lib/workload'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
@@ -139,21 +147,22 @@ function helpHint({ slack, others }: { slack: number; others: { member: { name: 
   return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
 }
 
-type WorkloadItem = { id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }
+type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string; done: boolean }
 
 type Category = WorkloadCategory
 
 // Workload row. Click → opens the detail popover (with a category picker
 // and an explicit "Open agenda" link). Hover on desktop also previews the
 // popover. The row never navigates by itself — only the link inside does.
-function WorkloadItemRow({ item, override, onSetCategory }: {
+function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
   item: WorkloadItem
   override: Category | null
   onSetCategory: (id: string, cat: Category | null) => void
+  onToggleDone: (item: WorkloadItem, next: boolean) => void
 }) {
+  const router = useRouter()
   const [hoverRow, setHoverRow] = useState(false)
   const [hoverPop, setHoverPop] = useState(false)
-  const [tapOpen,  setTapOpen]  = useState(false)
   const rowRef = useRef<HTMLLIElement>(null)
   const [popPos, setPopPos] = useState<{ top: number; left: number; placeAbove: boolean } | null>(null)
   const cat       = effectiveCategory(item, override)
@@ -164,7 +173,10 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
     ? `${fmt(item.startDate)} – ${fmt(item.endDate)}`
     : 'Geen datums'
 
-  const popoverOpen = tapOpen || hoverRow || hoverPop
+  // Popover blijft alleen open op hover (desktop). Tap/klik op de row
+  // navigeert naar de bord-pagina en opent daar de volledige detail-drawer
+  // — dat is wat de gebruiker echt nodig heeft, niet alleen een mini-popup.
+  const popoverOpen = hoverRow || hoverPop
 
   // Bereken positie op basis van de row: voorkomt clipping door card-overflow
   // (we renderen de popover via een portal in document.body) en flipt boven
@@ -192,35 +204,34 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
     }
   }, [popoverOpen])
 
-  useEffect(() => {
-    if (!tapOpen) return
-    const handler = (e: Event) => {
-      const t = e.target as HTMLElement | null
-      if (!t || !t.closest(`[data-workload-row="${item.id}"]`)) setTapOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    document.addEventListener('touchstart', handler)
-    return () => {
-      document.removeEventListener('mousedown', handler)
-      document.removeEventListener('touchstart', handler)
-    }
-  }, [tapOpen, item.id])
-
   const rowVisualStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 8,
     padding: '4px 6px', margin: '0 -6px', borderRadius: 6,
     textDecoration: 'none',
-    background: hoverRow || tapOpen ? 'var(--bg-hover)' : 'transparent',
-    transition: 'background 0.12s',
+    background: hoverRow ? 'var(--bg-hover)' : 'transparent',
+    transition: 'background 0.12s, opacity 0.12s',
     width: '100%', textAlign: 'left',
     border: 'none', font: 'inherit', color: 'inherit',
     cursor: 'pointer',
+    opacity: item.done ? 0.55 : 1,
+  }
+
+  function openDetail() {
+    // Naar de bord-pagina met focus + drawer-param. BoardRow leest 'drawer'
+    // uit de URL en opent zijn detail-drawer automatisch zodra de juiste
+    // rij gerenderd is — geen extra klik nodig.
+    const url = `/projects/${item.board}?focus=${encodeURIComponent(item.rawItemId)}&drawer=${encodeURIComponent(item.rawItemId)}`
+    router.push(url)
   }
 
   const rowContent = (
     <>
       <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-      <span style={{ fontSize: 13, color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: cat === 'maken' ? 500 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+      <span style={{ fontSize: 13,
+        color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)',
+        fontWeight: cat === 'maken' ? 500 : 400, flex: 1,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        textDecoration: item.done ? 'line-through' : 'none' }}>{item.name}</span>
       {item.source === 'google' && (
         <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
           title="Open in Google Calendar"
@@ -232,9 +243,16 @@ function WorkloadItemRow({ item, override, onSetCategory }: {
   )
 
   return (
-    <li ref={rowRef} data-workload-row={item.id} style={{ position: 'relative' }}
+    <li ref={rowRef} data-workload-row={item.id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}
         onMouseEnter={() => setHoverRow(true)} onMouseLeave={() => setHoverRow(false)}>
-      <button type="button" onClick={() => setTapOpen(o => !o)} style={rowVisualStyle}>
+      {/* Checkbox: project Done/onDone togglen vanuit de werkdruk-widget.
+          stopPropagation zodat de row-klik niet ook navigeert. */}
+      <input type="checkbox" checked={item.done}
+        onClick={e => e.stopPropagation()}
+        onChange={e => { e.stopPropagation(); onToggleDone(item, e.target.checked) }}
+        title={item.done ? 'Markeer als nog niet klaar' : 'Markeer als Done'}
+        style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
+      <button type="button" onClick={openDetail} style={rowVisualStyle}>
         {rowContent}
       </button>
       {popoverOpen && popPos && typeof document !== 'undefined' && createPortal(
@@ -321,10 +339,11 @@ export default function HomePage() {
   const isMobile       = useIsMobile()
 
   const [recentPages,  setRecentPages]  = useState<PageDoc[]>([])
-  const [myTodos,      setMyTodos]      = useState<TodoItem[]>([])
+  const [myTodos,      setMyTodos]      = useState<TodoStoreItem[]>([])
+  const [newTodoText,  setNewTodoText]  = useState('')
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
-  const [weekItems,    setWeekItems]    = useState<{ id: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string }[]>([])
+  const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string; done: boolean }[]>([])
   const [weekOffset,   setWeekOffset]   = useState(0)
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
@@ -340,9 +359,23 @@ export default function HomePage() {
     setCategoryOverrides(loadCategoryOverrides())
     setRecentPages(loadRecentPages().slice(0, 9))
 
-    // My todos
-    const section = todosData.sections.find(s => s.id === memberId)
-    if (section) setMyTodos(section.items as TodoItem[])
+    // My todos: lees uit de live todosStore (zelfde bron als /todos pagina)
+    // i.p.v. de statische initial-data JSON. Subscribe op updates zodat
+    // wijzigingen op /todos hier meteen verschijnen.
+    function loadMine() {
+      const fallback: TodoSection[] = todosData.sections as TodoSection[]
+      const sections = loadTodoSectionsStore(fallback)
+      const s = sections.find(x => x.id === memberId)
+      setMyTodos((s?.items ?? []) as TodoStoreItem[])
+    }
+    loadMine()
+    pullTodos().then(remote => {
+      if (remote) {
+        const s = remote.find(x => x.id === memberId)
+        setMyTodos((s?.items ?? []) as TodoStoreItem[])
+      }
+    }).catch(() => {})
+    const offTodos = onTodosUpdate(loadMine)
 
     // Load all boards once for team status / deadlines / workload widgets
     const projectList: Project[] = []
@@ -388,6 +421,8 @@ export default function HomePage() {
     } catch {}
 
     setHydrated(true)
+
+    return () => { offTodos() }
   }, [memberId])
 
   // Recompute the workload list whenever the week offset (or the project list
@@ -402,11 +437,19 @@ export default function HomePage() {
       const sd = c.project.startDate ? new Date(c.project.startDate) : null
       const dayJs = sd ? sd.getDay() : 1
       const day   = (dayJs + 6) % 7
+      // c.project.id is geprefixt met '{board}__'; voor het mutator-pad
+      // hebben we de oorspronkelijke item-id nodig om de juiste row in
+      // board_items aan te raken.
+      const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
+        ? c.project.id.slice(c.project.board.length + 2)
+        : c.project.id
       return {
         id: c.project.id,
+        rawItemId,
         name: c.project.name, board: c.project.board, hours: c.hours, day,
         startDate: c.project.startDate, endDate: c.project.endDate,
         source: c.project.source, externalLink: c.project.externalLink,
+        done: c.project.status === 'done',
       }
     }))
   }, [memberId, weekOffset, allProjects])
@@ -431,6 +474,61 @@ export default function HomePage() {
 
   function setItemCategory(id: string, cat: Category | null) {
     setCategoryOverrides(setCategoryOverride(id, cat))
+  }
+
+  // Voeg een nieuwe todo toe vanuit de home 'Jouw taken'-kaart aan de eigen
+  // sectie in de todosStore. Houdt dezelfde data-bron aan als /todos zodat
+  // de telling daar meteen klopt.
+  function addHomeTodo(text: string) {
+    const t = text.trim()
+    if (!t || !memberId) return
+    const fallback: TodoSection[] = todosData.sections as TodoSection[]
+    const sections = loadTodoSectionsStore(fallback)
+    let found = false
+    const next = sections.map(s => {
+      if (s.id !== memberId) return s
+      found = true
+      return {
+        ...s,
+        items: [...s.items, { id: `home-${Date.now()}`, text: t, done: false }],
+      }
+    })
+    // Nog geen eigen sectie? Maak 'm aan zodat de todo ergens kan landen.
+    const finalSections: TodoSection[] = found ? next : [
+      ...next,
+      {
+        id: memberId,
+        title: profile?.name ?? memberId,
+        emoji: '👤',
+        items: [{ id: `home-${Date.now()}`, text: t, done: false }],
+      },
+    ]
+    saveTodoSectionsStore(finalSections)
+    setNewTodoText('')
+    const mine = finalSections.find(s => s.id === memberId)
+    if (mine) setMyTodos(mine.items as TodoStoreItem[])
+  }
+
+  // Tick een workload-item Done (of un-Done): laadt het juiste bord, zet
+  // status='Done' (of '' bij un-Done) op de matchende row, slaat op én pusht
+  // naar Supabase. Update óók optimistic in weekItems zodat de strike-through
+  // direct zichtbaar is zonder te wachten op de board-update-event.
+  async function toggleWorkloadDone(it: WorkloadItem, next: boolean) {
+    setWeekItems(items => items.map(w => w.id === it.id ? { ...w, done: next } : w))
+    const groups = loadGroups(it.board, [])
+    const updated = groups.map(g => ({
+      ...g,
+      items: g.items.map(i => {
+        if (i.id !== it.rawItemId) return i
+        // Bij uitvinken zetten we 'm terug naar 'Working on...' (default voor
+        // actief werk) tenzij 'ie al een andere niet-Done status had.
+        if (next) return { ...i, status: 'Done' }
+        const prev = (i.status as string) ?? ''
+        return { ...i, status: prev === 'Done' ? '' : prev }
+      }),
+    }))
+    saveGroups(it.board, updated)
+    pushBoardToRemote(it.board, updated).catch(() => {})
   }
 
   function moveSection(id: SectionId, dir: -1 | 1) {
@@ -612,7 +710,7 @@ export default function HomePage() {
           <Link href="/todos" style={cardLink}>Alle →</Link>
         </div>
         {memberId ? (
-          <div style={{ padding: '6px 0' }}>
+          <div style={{ padding: '6px 0 10px' }}>
             {openTodos.length === 0 ? (
               <p style={{ padding: '10px 20px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen open taken 🎉</p>
             ) : openTodos.slice(0, 5).map(t => (
@@ -622,6 +720,24 @@ export default function HomePage() {
               </div>
             ))}
             {doneTodos.length > 0 && <div style={{ padding: '4px 20px', fontSize: 12, color: 'var(--text-muted)' }}>✓ {doneTodos.length} afgerond</div>}
+            {/* Snelle invoer — direct vanuit home een taak aan jezelf
+                toewijzen, zelfde bron als /todos pagina. */}
+            <form onSubmit={e => { e.preventDefault(); addHomeTodo(newTodoText) }}
+              style={{ padding: '8px 20px 0', display: 'flex', gap: 8 }}>
+              <input value={newTodoText} onChange={e => setNewTodoText(e.target.value)}
+                placeholder="+ Voeg toe of typ /…"
+                style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 6,
+                  border: '1px solid var(--border-light)', background: 'var(--bg-base)',
+                  color: 'var(--text-primary)', outline: 'none' }} />
+              {newTodoText.trim() && (
+                <button type="submit"
+                  style={{ padding: '6px 12px', borderRadius: 6, border: 'none',
+                    background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer' }}>
+                  Toevoegen
+                </button>
+              )}
+            </form>
           </div>
         ) : (
           <p style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Stel je profiel in om taken te zien.</p>
@@ -725,7 +841,8 @@ export default function HomePage() {
                           {dayItems.map((item, i) => (
                             <WorkloadItemRow key={i} item={item}
                               override={categoryOverrides[item.id] ?? null}
-                              onSetCategory={setItemCategory} />
+                              onSetCategory={setItemCategory}
+                              onToggleDone={toggleWorkloadDone} />
                           ))}
                         </ul>
                       </div>
