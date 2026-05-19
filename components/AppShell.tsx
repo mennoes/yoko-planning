@@ -20,6 +20,8 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
 import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
 import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistry'
+import { loadSections as loadNavSections } from '@/lib/navStore'
+import teamData from '@/data/team.json'
 import { ensureRewindItems } from '@/lib/rewindScheduler'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
 import { pullCapacities, subscribeRemoteCapacities } from '@/lib/capacitiesStore'
@@ -105,6 +107,53 @@ function Inner({ children }: { children: ReactNode }) {
   }, [authChecked, isAuthenticated, pathname, router])
 
   useEffect(() => { setDrawerOpen(false); setSearchOpen(false) }, [pathname])
+
+  // Sync de browser-tab-title met de huidige route — makkelijker switchen
+  // tussen meerdere Yoko-tabs in dezelfde browser. We mappen vaste routes
+  // op een leesbaar label; voor dynamische routes (boards, pages, profielen)
+  // proberen we de geregistreerde sidebar-label of een fallback uit het
+  // pad-segment. Suffix '· Yoko' helpt om Yoko-tabs visueel te herkennen
+  // tussen andere apps.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    function titleFor(path: string): string {
+      if (!path || path === '/') return 'Home'
+      const seg = path.split('/').filter(Boolean)
+      const root = seg[0]
+      if (root === 'planning')  return 'Planning'
+      if (root === 'todos')     return "To do's"
+      if (root === 'team')      return 'Team'
+      if (root === 'kantoor')   return 'Kantoor'
+      if (root === 'activity')  return 'Activiteit'
+      if (root === 'accounts')  return 'Accounts'
+      if (root === 'login')     return 'Inloggen'
+      if (root === 'auth')      return 'Authenticatie'
+      if (root === 'share')     return 'Gedeelde weergave'
+      if (root === 'projects' && seg[1]) {
+        try {
+          const sections = loadNavSections()
+          const item = sections.flatMap(s => s.items).find(i => i.href === `/projects/${seg[1]}`)
+          if (item?.label) return item.label
+        } catch {}
+        return seg[1].charAt(0).toUpperCase() + seg[1].slice(1)
+      }
+      if (root === 'pages' && seg[1]) {
+        try {
+          const sections = loadNavSections()
+          const item = sections.flatMap(s => s.items).find(i => i.href === `/pages/${seg[1]}`)
+          if (item?.label) return item.label
+        } catch {}
+        return 'Pagina'
+      }
+      if (root === 'profile' && seg[1]) {
+        const m = teamData.members.find(x => x.id === seg[1])
+        if (m) return m.name
+        return 'Profiel'
+      }
+      return root.charAt(0).toUpperCase() + root.slice(1)
+    }
+    document.title = `${titleFor(pathname)} · Yoko`
+  }, [pathname])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
