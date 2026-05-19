@@ -283,15 +283,27 @@ function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
 
 function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const trigRef = useRef<HTMLDivElement>(null)
   const { profile } = useProfile()
   const team = teamData.members
   const toggle = (id: string) =>
     onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id])
 
+  // Yoko-collega's altijd bovenaan met grotere foto's zodat aanwijzen makkelijk
+  // is. Freelancers / externe contactpersonen verschijnen pas wanneer je
+  // begint te typen in het zoekveld eronder.
+  const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+  const yokoMembers   = team.filter(m => YOKO_IDS.has(m.id))
+  const otherMembers  = team.filter(m => !YOKO_IDS.has(m.id))
+  const q             = query.trim().toLowerCase()
+  const matchedOthers = q
+    ? otherMembers.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
+    : []
+
   return (
     <div>
-      <div ref={trigRef} onClick={() => setOpen(o => !o)}
+      <div ref={trigRef} onClick={() => { setOpen(o => !o); setQuery('') }}
         style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: 'nowrap', minWidth: 24 }}>
         {value.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
@@ -303,28 +315,71 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
         <PortalDropdown anchor={trigRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 6, minWidth: 190,
+            borderRadius: 10, padding: 6, minWidth: 240,
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
           }}>
-            {team.map(m => {
+            {yokoMembers.map(m => {
               const active = value.includes(m.id)
               const isMe   = profile?.memberId === m.id
               return (
                 <button key={m.id} onClick={() => toggle(m.id)} style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  width: '100%', padding: '6px 8px', borderRadius: 4,
-                  background: active ? m.color + '18' : 'transparent',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  width: '100%', padding: '7px 8px', borderRadius: 6,
+                  background: active ? m.color + '22' : 'transparent',
                   border: 'none', cursor: 'pointer',
-                  color: 'var(--text-secondary)', fontSize: 13, textAlign: 'left',
-                }}>
-                  <MemberAvatar id={m.id} size={22} />
-                  <span style={{ fontWeight: active ? 600 : 400 }}>
+                  color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left',
+                }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
+                  <MemberAvatar id={m.id} size={32} />
+                  <span style={{ fontWeight: active ? 700 : 500 }}>
                     {m.name}{isMe ? ' (jij)' : ''}
                   </span>
-                  {active && <span style={{ marginLeft: 'auto', color: m.color, fontSize: 12 }}>✓</span>}
+                  {active && <span style={{ marginLeft: 'auto', color: m.color, fontSize: 13, fontWeight: 700 }}>✓</span>}
                 </button>
               )
             })}
+
+            <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 4px 6px' }} />
+            <input value={query} onChange={e => setQuery(e.target.value)}
+              placeholder="Zoek freelancer of contact…"
+              style={{ width: '100%', boxSizing: 'border-box',
+                padding: '7px 10px', borderRadius: 6,
+                border: '1px solid var(--border-light)', background: 'var(--bg-base)',
+                color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
+
+            {/* Externe leden: alleen tonen bij actieve match, of toon
+                geselecteerde externen altijd zodat je 'm kunt deselecteren. */}
+            {(() => {
+              const showSelected = otherMembers.filter(m => value.includes(m.id) && !matchedOthers.find(o => o.id === m.id))
+              const list = [...matchedOthers, ...showSelected]
+              if (list.length === 0) {
+                if (q) return <div style={{ padding: '8px 8px 4px', fontSize: 12, color: 'var(--text-muted)' }}>Geen match.</div>
+                return null
+              }
+              return (
+                <div style={{ marginTop: 4 }}>
+                  {list.map(m => {
+                    const active = value.includes(m.id)
+                    return (
+                      <button key={m.id} onClick={() => toggle(m.id)} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        width: '100%', padding: '6px 8px', borderRadius: 6,
+                        background: active ? m.color + '22' : 'transparent',
+                        border: 'none', cursor: 'pointer',
+                        color: 'var(--text-secondary)', fontSize: 13, textAlign: 'left',
+                      }}
+                        onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                        onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
+                        <MemberAvatar id={m.id} size={24} />
+                        <span style={{ fontWeight: active ? 600 : 400 }}>{m.name}</span>
+                        {active && <span style={{ marginLeft: 'auto', color: m.color, fontSize: 12 }}>✓</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         </PortalDropdown>
       )}
