@@ -1176,7 +1176,9 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
       <div style={{
         display: 'grid', gridTemplateColumns: gridTemplate,
         alignItems: 'center', minHeight: 40,
-        borderBottom: expanded ? 'none' : '1px solid var(--border-light)',
+        // Rij-onderlijn iets prominenter dan border-light maar nog steeds
+        // zachter dan de groep-rand zelf.
+        borderBottom: expanded ? 'none' : '1px solid var(--border)',
         background: selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent'),
         transition: 'background 0.1s',
       }}
@@ -1978,7 +1980,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   return (
     <GroupCtx.Provider value={{ color: group.color }}>
       <div style={{
-        marginBottom: 20, borderRadius: 10, position: 'relative',
+        marginBottom: 18, borderRadius: 14, position: 'relative',
+        // Eigen rondingen + kader maakt 't visueel minder hoekig en geeft
+        // duidelijker een 'card per groep'-gevoel.
+        border: `1px solid var(--border)`,
+        overflow: 'hidden',
         outline: dropHover
           ? `3px solid ${group.color}`
           : isDropTarget
@@ -3041,7 +3047,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
       {/* Groepen — wrapped in een dropzone zodat hele groepen via header-
           handle naar een andere positie gesleept kunnen worden. */}
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'visible' }}>
+      {/* Geen eigen kader meer — elke groep is z'n eigen 'card' met rondingen.
+          Dat geeft visueel meer rust dan een dubbele rand. */}
+      <div style={{ overflow: 'visible' }}>
         {filteredGroups.map((group, gIdx) => (
           <div key={group.id}
             data-group-id={group.id}
@@ -3096,10 +3104,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           return (
             <div style={{
               display: 'grid', gridTemplateColumns: gridTemplate,
+              border: '1px solid var(--border)',
               borderTop: '2px solid var(--accent)',
               background: 'var(--bg-card)',
               fontSize: 13, color: 'var(--text-primary)', fontWeight: 700,
-              borderRadius: '0 0 10px 10px',
+              borderRadius: 14,
+              marginTop: 6,
             }}>
               <div />
               <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
