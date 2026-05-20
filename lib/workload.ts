@@ -29,12 +29,71 @@ export type Project = {
 }
 
 import { getBoardColor } from './boardsRegistry'
+import type { BoardGroup } from './boards'
 // Proxy zodat code als BOARD_COLORS[boardId] blijft werken, maar nu
 // dynamisch op de registry. Toegevoegde borden krijgen hun eigen kleur
 // uit de boards-tabel; onbekende keys vallen terug op grijs.
 export const BOARD_COLORS = new Proxy({} as Record<string, string>, {
   get(_t, prop: string) { return getBoardColor(prop) },
 })
+
+// Bouw een vlakke project-lijst uit bord-groepen. Subitems die hun eigen
+// startDate/endDate hebben (typisch: recurring Google-events, één per
+// instance) worden als afzonderlijke projects gerenderd zodat ze in de
+// werkdruk-widget op de juiste dag landen met de juiste duur — anders
+// zou bv. 'Weekstart (34×)' als één multi-week-project van 28 mrt t/m
+// 24 mei tellen i.p.v. een half-uurtje per maandag.
+//
+// Subitems zonder eigen datums vallen onder de parent: we sommeren hun
+// uren en gebruiken de parent-datums. Subitems met status='Done' slaan
+// we over zodat afgevinkte instances niet meer in totalen meetellen.
+export function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
+  return groups.flatMap(g =>
+    g.items
+      .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
+      .flatMap((i): Project[] => {
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string }> | undefined) ?? []
+        const subsWithDates = subs.filter(si => (si.status ?? '') !== 'Done' && (si.startDate || si.endDate))
+        if (subsWithDates.length > 0) {
+          return subsWithDates.map((si, idx): Project => ({
+            id:        `${boardName}__${i.id}__si${idx}`,
+            name:      `${i.name}${si.name ? ' · ' + si.name : ''}`,
+            board:     boardName,
+            group:     g.name,
+            ownerIds:  (si.ownerIds && si.ownerIds.length ? si.ownerIds : (i.ownerIds as string[])),
+            startDate: si.startDate ?? null,
+            endDate:   si.endDate ?? si.startDate ?? null,
+            startTime: si.startTime ?? null,
+            endTime:   si.endTime ?? null,
+            estHours:  Number(si.estHours) || 0,
+            status:    (i.status as string) === 'Done' ? 'done' : 'active',
+            source:    (i.source as 'manual' | 'google' | undefined),
+            externalLink: (i.externalLink as string | undefined),
+          }))
+        }
+        const activeSubs = subs.filter(si => (si.status ?? '') !== 'Done')
+        const hours = activeSubs.length > 0
+          ? activeSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+          : (Number(i.estHours) || 0)
+        return [{
+          id: `${boardName}__${i.id}`,
+          name: i.name as string,
+          board: boardName,
+          group: g.name,
+          ownerIds:  i.ownerIds  as string[],
+          startDate: i.startDate as string | null,
+          endDate:   i.endDate   as string | null,
+          startTime: (i.startTime as string | null | undefined) ?? null,
+          endTime:   (i.endTime   as string | null | undefined) ?? null,
+          estHours:  hours,
+          ownerHours: (i.ownerHours as Record<string, number> | undefined),
+          status:    (i.status as string) === 'Done' ? 'done' : 'active',
+          source:        (i.source as 'manual' | 'google' | undefined),
+          externalLink:  (i.externalLink as string | undefined),
+        }]
+      })
+  )
+}
 
 /** Returns the Monday of the week containing `date` */
 export function getWeekStart(date: Date): Date {

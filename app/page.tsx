@@ -28,7 +28,7 @@ import nederlandRaw   from '@/data/boards/nederland.json'
 import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
 import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, pushBoardToRemote } from '@/lib/boardStore'
-import { getWeekStart, memberContributions, BOARD_COLORS, type Project } from '@/lib/workload'
+import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
   effectiveCategory,
@@ -82,16 +82,11 @@ const QUICK_LINKS: { groups: { name: string; items: { label: string; href: strin
 
 const NL_MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
-function groupsToProjects(board: string, groups: BoardGroup[]): Project[] {
-  return groups.flatMap(g =>
-    g.items.filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0).map(i => ({
-      id: `${board}__${i.id}`, name: i.name, board, group: g.name,
-      ownerIds: i.ownerIds as string[], startDate: i.startDate as string | null,
-      endDate: i.endDate as string | null, estHours: (i.estHours as number) ?? 0,
-      status: (i.status as string) === 'Done' ? 'done' : 'active',
-    } satisfies Project))
-  )
-}
+// groupsToProjects is verhuisd naar lib/workload.ts zodat home en planning
+// exact dezelfde explosion-logica gebruiken. Belangrijk verschil met de
+// oude home-only versie: subitems met eigen datums (bv. de 34 instances
+// van een wekelijkse meeting) worden nu als losse projects opgeleverd
+// met hun eigen korte duur, in plaats van als één multi-week parent.
 
 function fmtDate(iso: string) {
   const d = new Date(iso)
