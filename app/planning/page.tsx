@@ -786,7 +786,12 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // All-day drag: verschuift de datum (en duur blijft). Pure x-as.
   const [dayDrag, setDayDrag] = useState<null | {
     p: Project; mouseX0: number; deltaDays: number;
-    startIso: string; endIso: string | null
+    startIso: string; endIso: string | null;
+    // mode bepaalt welke kant verschuift bij mouse-move:
+    //   move          → start + end schuiven samen (verplaatsen)
+    //   resize-start  → alleen startDate schuift (linker grens)
+    //   resize-end    → alleen endDate schuift   (rechter grens)
+    mode: 'move' | 'resize-start' | 'resize-end'
   }>(null)
   // ScrollLeft van de buitenste horizontaal-scrollende container houden we
   // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
@@ -993,7 +998,20 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           const d = new Date(iso); d.setDate(d.getDate() + days)
           return d.toISOString().slice(0, 10)
         }
-        onDateDragEnd(dayDrag.p, shift(dayDrag.startIso) ?? null, shift(dayDrag.endIso) ?? null)
+        let nextStart: string | null = dayDrag.startIso
+        let nextEnd:   string | null = dayDrag.endIso ?? dayDrag.startIso
+        if (dayDrag.mode === 'move') {
+          nextStart = shift(dayDrag.startIso) ?? null
+          nextEnd   = shift(dayDrag.endIso ?? dayDrag.startIso) ?? null
+        } else if (dayDrag.mode === 'resize-start') {
+          nextStart = shift(dayDrag.startIso) ?? null
+          // Clamp: start mag niet voorbij end komen
+          if (nextStart && nextEnd && nextStart > nextEnd) nextStart = nextEnd
+        } else if (dayDrag.mode === 'resize-end') {
+          nextEnd = shift(dayDrag.endIso ?? dayDrag.startIso) ?? null
+          if (nextStart && nextEnd && nextEnd < nextStart) nextEnd = nextStart
+        }
+        onDateDragEnd(dayDrag.p, nextStart, nextEnd)
       }
       setDayDrag(null)
     }
@@ -1041,18 +1059,41 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const isGoogle = b.p.source === 'google'
             const isDraggingMe = dayDrag?.p.id === b.p.id
             const colW = cols[0]?.widthPx ?? 200
-            const shiftPx = isDraggingMe && dayDrag ? dayDrag.deltaDays * colW : 0
+            // Visuele preview tijdens drag: hangt af van mode.
+            let shiftLeft = 0
+            let shiftWidth = 0
+            if (isDraggingMe && dayDrag) {
+              if (dayDrag.mode === 'move') {
+                shiftLeft = dayDrag.deltaDays * colW
+              } else if (dayDrag.mode === 'resize-start') {
+                shiftLeft  = dayDrag.deltaDays * colW
+                shiftWidth = -dayDrag.deltaDays * colW
+              } else if (dayDrag.mode === 'resize-end') {
+                shiftWidth = dayDrag.deltaDays * colW
+              }
+            }
+            const HANDLE_W = 8
             return (
               <div key={b.p.id}
                 onMouseDown={e => {
                   if (isGoogle || !onDateDragEnd) return  // Google = read-only
                   e.preventDefault()
+                  // Klik dichtbij de rand = trim; midden = verplaats.
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  const x    = e.clientX - rect.left
+                  const w    = rect.width
+                  const mode: 'move' | 'resize-start' | 'resize-end' =
+                    x < HANDLE_W ? 'resize-start'
+                    : x > w - HANDLE_W ? 'resize-end'
+                    : 'move'
                   setDayDrag({ p: b.p, mouseX0: e.clientX, deltaDays: 0,
-                    startIso: b.p.startDate ?? '', endIso: b.p.endDate ?? null })
+                    startIso: b.p.startDate ?? '', endIso: b.p.endDate ?? null,
+                    mode })
                 }}
                 onClick={e => { if (!isDraggingMe) { e.stopPropagation(); onSelect(b.p) } }}
-                title={b.p.name + (isGoogle ? ' (Google, niet versleepbaar)' : '')}
-                style={{ position: 'absolute', left: b.left + 2 + shiftPx, top, width: b.width, height: allDayLaneH,
+                title={b.p.name + (isGoogle ? ' (Google, niet versleepbaar)' : ' (sleep om te verplaatsen, randen om te trimmen)')}
+                style={{ position: 'absolute', left: b.left + 2 + shiftLeft, top,
+                  width: Math.max(40, b.width + shiftWidth), height: allDayLaneH,
                   background: color, color: '#fff', border: 'none', borderRadius: 7,
                   padding: '4px 9px', cursor: isGoogle || !onDateDragEnd ? 'pointer' : 'grab', textAlign: 'left',
                   fontSize: 12, fontWeight: 600, lineHeight: 1.25,
@@ -1062,6 +1103,15 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   userSelect: 'none',
                   zIndex: isDraggingMe ? 5 : 1,
                 }}>
+                {/* Trim-handles links/rechts — onzichtbaar maar geven een
+                    col-resize cursor en vangen de mousedown af zonder dat de
+                    pill-positie eerst hoeft te bewegen. */}
+                {!isGoogle && onDateDragEnd && (
+                  <>
+                    <div aria-hidden style={{ position: 'absolute', left: 0, top: 0, width: HANDLE_W, height: '100%', cursor: 'col-resize', zIndex: 2 }} />
+                    <div aria-hidden style={{ position: 'absolute', right: 0, top: 0, width: HANDLE_W, height: '100%', cursor: 'col-resize', zIndex: 2 }} />
+                  </>
+                )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                   marginLeft: titleShift,
                   textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>

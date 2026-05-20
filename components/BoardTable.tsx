@@ -1149,7 +1149,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
       <div style={{
         display: 'grid', gridTemplateColumns: gridTemplate,
         alignItems: 'center', minHeight: 40,
-        borderBottom: expanded ? 'none' : '1px solid var(--border)',
+        borderBottom: expanded ? 'none' : '1px solid var(--border-light)',
         background: selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent'),
         transition: 'background 0.1s',
       }}
@@ -1173,8 +1173,12 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               flexShrink: 0, width: 13, textAlign: 'center', transition: 'color 0.1s',
             }}>{expanded ? '▼' : '▶'}</button>
 
-          {hasSubitems && !expanded && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--overlay-medium)', borderRadius: 3, padding: '0 4px', flexShrink: 0 }}>
+          {hasSubitems && (
+            // Subitem-tellen tonen we nu altijd (Monday-stijl) ipv alleen bij
+            // collapsed — kort overzicht van 'hoe groot is dit item'.
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+              background: 'var(--bg-hover)', borderRadius: 999,
+              padding: '1px 8px', flexShrink: 0, minWidth: 18, textAlign: 'center' }}>
               {subitems.length}
             </span>
           )}
@@ -1212,7 +1216,8 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                 // I-beam cursor voor handmatige items zodat 'rename-baar'
                 // visueel duidelijk is — net als in Monday. Google-items
                 // krijgen een gewone pointer omdat ze read-only zijn qua naam.
-                style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
+                style={{ fontSize: 14.5, color: 'var(--text-primary)', fontWeight: 600,
+                  letterSpacing: '-0.005em',
                   cursor: item.source === 'google' ? 'pointer' : 'text',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {item.name}
