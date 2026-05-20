@@ -1205,13 +1205,16 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
     const subEnds   = dateSubs.map(s => s.endDate).filter(Boolean) as string[]
     if (!item.startDate && subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
     if (!item.endDate   && subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
-    const parentOwnersEmpty = !item.ownerIds || item.ownerIds.length === 0
-      || (item.ownerIds.length === 1 && item.ownerIds[0] === 'unassigned')
-    if (parentOwnersEmpty) {
-      const subOwners = new Set<string>()
-      for (const s of subitems) for (const oid of (s.ownerIds ?? [])) if (oid && oid !== 'unassigned') subOwners.add(oid)
-      if (subOwners.size > 0) updates.ownerIds = [...subOwners]
-    }
+    // Owner-rollup: alle eigenaren over subitems verzamelen en samenvoegen
+    // met de parent eigen ownerIds. Voorheen vulden we alleen aan wanneer
+    // de parent helemaal leeg was; daardoor zag je niet de Yoko-collega's
+    // die aan bv. instances van een Google recurring-meeting waren
+    // toegevoegd. Display-only: een klik op de owner-cel schrijft alleen
+    // naar de parent's ownerIds, subitem-owners blijven onaangeraakt.
+    const ownerSet = new Set<string>()
+    for (const oid of (item.ownerIds ?? [])) if (oid && oid !== 'unassigned') ownerSet.add(oid)
+    for (const s of subitems) for (const oid of (s.ownerIds ?? [])) if (oid && oid !== 'unassigned') ownerSet.add(oid)
+    if (ownerSet.size > 0) updates.ownerIds = [...ownerSet]
     // Status NIET auto-rollen. Done subitems blijven gewoon in het
     // parent-item zichtbaar; pas wanneer jij het item zelf op Done zet
     // verhuist 't naar de Done-groep. Voorkomt dat een item ongewenst
