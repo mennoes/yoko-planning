@@ -279,6 +279,7 @@ export function subscribeRemoteBoard(boardName: string): () => void {
 // dezelfde naam dezelfde regel triggeren. Inserten alleen wanneer er nog
 // geen identieke regel staat — de upsert lost duplicaten anders silent op.
 async function learnBoardRoutingRule(itemName: string, targetBoard: string): Promise<void> {
+  if (!supabase) return
   const pattern = normalizeTitle(itemName)
   if (!pattern || pattern.length < 3) return  // te kort = te breed
   // Check op een bestaande regel met dit pattern. Als die al richting het
