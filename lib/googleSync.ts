@@ -85,7 +85,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null }
+type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
 type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null }
 type Rule     = { pattern: string; board_id: string }
 
@@ -626,6 +626,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         estHours:  eventHours(ev) * finalOwners.length,
         // Per-instance Meet-link — sommige reeksen verschillen per moment.
         meetLink:  ev.hangoutLink ?? prev?.meetLink ?? null,
+        // Per-instance Google-Calendar-link — zo kan de UI naar de juiste
+        // datum springen ipv het master-event.
+        externalLink: ev.htmlLink ?? prev?.externalLink ?? null,
+        source:    'google' as const,
       }
     })
     const id          = lookup.id

@@ -1208,17 +1208,23 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               flexShrink: 0, width: 13, textAlign: 'center', transition: 'color 0.1s',
             }}>{expanded ? '▼' : '▶'}</button>
 
-          {hasSubitems && (
-            // Subitem-tellen tonen we nu altijd (Monday-stijl) ipv alleen bij
-            // collapsed — kort overzicht van 'hoe groot is dit item'.
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
-              background: 'var(--bg-hover)', borderRadius: 999,
-              padding: '1px 8px', flexShrink: 0, minWidth: 18, textAlign: 'center' }}>
-              {subitems.length}
-            </span>
-          )}
+          {/* Subitem-count badge weggehaald — de '5'-pill voegde visuele
+              ruis toe. Het chevron-icoon laat al genoeg zien dat er
+              subitems onder zitten. */}
 
-          {item.source === 'google' && <GoogleBadge href={item.externalLink} />}
+          {item.source === 'google' && (() => {
+            // Voor recurring meetings: pak de eerstvolgende instance vanaf
+            // vandaag (of de laatste als alles voorbij is) — diens htmlLink
+            // wijst naar het juiste datum-moment in Google Calendar. Anders
+            // valt 'ie terug op het parent-event-link.
+            const today = new Date().toISOString().slice(0, 10)
+            const upcoming = (item.subitems ?? [])
+              .filter(s => s.externalLink)
+              .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
+            const next = upcoming.find(s => (s.startDate ?? '') >= today) ?? upcoming[upcoming.length - 1]
+            const href = next?.externalLink ?? item.externalLink ?? undefined
+            return <GoogleBadge href={href} />
+          })()}
           {typeof item.meetLink === 'string' && item.meetLink && (
             <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
@@ -2020,8 +2026,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
           </div>
         )}
 
-        {/* Groep header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderLeft: `4px solid ${group.color}`, background: 'var(--overlay-subtle)' }}
+        {/* Groep header — Monday-stijl: geen balk, geen achtergrond, alleen
+            chevron + gekleurde naam + telling. De gekleurde linker-strip
+            zit alleen op de inhoud (rijen) eronder. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 6px' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
 
           {/* Drag-handle voor group-reorder. Alleen dit element initieert
@@ -2126,7 +2134,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
           const stuck   = group.items.filter(i => i.status === 'Stuck').length
           const pct     = Math.round(done / total * 100)
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 14px 6px', borderLeft: `4px solid ${group.color}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 14px 6px' }}>
               <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'var(--overlay-medium)', overflow: 'hidden', display: 'flex' }}>
                 <div style={{ width: `${done / total * 100}%`, background: 'var(--green)', transition: 'width 0.3s' }} />
                 <div style={{ width: `${working / total * 100}%`, background: '#ff7b24', transition: 'width 0.3s' }} />
@@ -2139,8 +2147,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
 
         {!collapsed && (
           <div style={{ borderLeft: `4px solid ${group.color}` }}>
-            {/* Kolom headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--bg-hover)', borderBottom: '1px solid var(--border)' }}>
+            {/* Kolom headers — sticky bovenaan zodat ze in beeld blijven
+                tijdens scroll door lange lijsten (Monday-stijl). */}
+            <div style={{ display: 'grid', gridTemplateColumns: gridTemplate,
+              background: 'var(--bg-card)', borderBottom: '1px solid var(--border)',
+              position: 'sticky', top: 0, zIndex: 5 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <input type="checkbox"
                   checked={group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))}
