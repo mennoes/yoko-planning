@@ -777,12 +777,17 @@ function Cell({ item, col, onUpdate }: {
 // ─── Subitem grid template ────────────────────────────────────────────────────
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
   onToggleSelect?: () => void
   isLast?: boolean
+  // Voor drag-to-unnest: we slepen de subitem naar een andere groep waar
+  // 'ie als top-level item belandt. Bewaar parent + bron-groep in
+  // dataTransfer zodat de drop-handler de juiste oudere kan strippen.
+  parentItemId?: string
+  fromGroupId?: string
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -816,12 +821,23 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   }
 
   return (
-    <div style={{
+    <div
+      draggable={!editName && !!parentItemId && !!fromGroupId}
+      onDragStart={e => {
+        if (!parentItemId || !fromGroupId) return
+        e.stopPropagation()
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('application/x-yoko-subitem', JSON.stringify({
+          subitemId: subitem.id, parentItemId, fromGroupId,
+        }))
+      }}
+      style={{
       display: 'grid', gridTemplateColumns: gridTemplate,
       alignItems: 'center', minHeight: 40,
       borderBottom: '1px solid var(--border-light)',
       background: selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent'),
       transition: 'background 0.1s',
+      cursor: !editName && parentItemId ? 'grab' : 'default',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {/* Eerste kolom: checkbox + boom-connector (verticale lijn met
@@ -867,11 +883,13 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, onUpdate }: {
+function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
+  parentItemId?: string
+  fromGroupId?: string
   onUpdate: (u: SubItem[]) => void
 }) {
   function updateOne(id: string, u: Partial<SubItem>) { onUpdate(subitems.map(s => s.id === id ? { ...s, ...u } : s)) }
@@ -909,6 +927,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
       <SubitemRows subitems={subitems} cols={cols} gridTemplate={gridTemplate}
         rail={rail}
         selectedIds={selectedIds} onToggleSelect={onToggleSelect}
+        parentItemId={parentItemId} fromGroupId={fromGroupId}
         updateOne={updateOne} deleteOne={deleteOne} />
       <div style={{ padding: '6px 10px 6px 60px' }}>
         <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
@@ -923,9 +942,11 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, updateOne, deleteOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, updateOne, deleteOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
+  parentItemId?: string
+  fromGroupId?: string
   updateOne: (id: string, u: Partial<SubItem>) => void
   deleteOne: (id: string) => void
 }) {
@@ -954,6 +975,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           selected={selectedIds?.has(sub.id) ?? false}
           onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
+          parentItemId={parentItemId} fromGroupId={fromGroupId}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
       {hasDone && (
@@ -985,6 +1007,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               selected={selectedIds?.has(sub.id) ?? false}
               onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
               isLast={idx === lastDoneIdx}
+              parentItemId={parentItemId} fromGroupId={fromGroupId}
               onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
           ))}
         </>
@@ -1023,12 +1046,15 @@ function NotesPreview({ value, onOpen }: { value: string; onOpen: () => void }) 
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
+function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
   selected: boolean
   accentColor?: string
   selectedIds?: Set<string>
   onToggleSubitem?: (id: string) => void
+  // Voor subitem-drag-to-unnest: subitems moeten weten welke parent + groep
+  // ze verlaten zodat de drop-handler kan opruimen.
+  groupId?: string
   onToggleSelect: () => void
   reorderMode: boolean
   isFirst: boolean
@@ -1263,6 +1289,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           accentColor={accentColor}
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
+          parentItemId={item.id} fromGroupId={groupId}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
       {showDetail && (
@@ -1652,7 +1679,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onNestItem, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onNestItem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
   boardId: string
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   selectedIds: Set<string>
@@ -1664,6 +1691,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
   onNestItem:     (sourceId: string, fromGroupId: string, targetId: string) => void
+  onUnnestSubitemHere: (subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) => void
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
 }) {
@@ -1826,7 +1854,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   // gedropt worden — we accepteren alleen onze eigen dataTransfer type
   // zodat externe drags (afbeeldingen e.d.) genegeerd worden.
   function onContainerDragOver(e: React.DragEvent) {
-    if (!e.dataTransfer.types.includes('application/x-yoko-item')) return
+    if (
+      !e.dataTransfer.types.includes('application/x-yoko-item') &&
+      !e.dataTransfer.types.includes('application/x-yoko-subitem')
+    ) return
     e.preventDefault()
     if (!dropHover) setDropHover(true)
   }
@@ -1836,14 +1867,29 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   }
   function onContainerDrop(e: React.DragEvent) {
     setDropHover(false)
-    const raw = e.dataTransfer.getData('application/x-yoko-item')
-    if (!raw) return
-    try {
-      const { itemId, fromGroupId } = JSON.parse(raw) as { itemId: string; fromGroupId: string }
-      if (!itemId || !fromGroupId || fromGroupId === group.id) return
-      e.preventDefault()
-      onMoveItemHere(itemId, fromGroupId)
-    } catch {}
+    // Top-level item naar deze groep
+    const rawItem = e.dataTransfer.getData('application/x-yoko-item')
+    if (rawItem) {
+      try {
+        const { itemId, fromGroupId } = JSON.parse(rawItem) as { itemId: string; fromGroupId: string }
+        if (itemId && fromGroupId && fromGroupId !== group.id) {
+          e.preventDefault()
+          onMoveItemHere(itemId, fromGroupId)
+        }
+      } catch {}
+      return
+    }
+    // Subitem uit een ander item → un-nesten naar deze groep als top-level item
+    const rawSub = e.dataTransfer.getData('application/x-yoko-subitem')
+    if (rawSub) {
+      try {
+        const { subitemId, parentItemId, fromGroupId } = JSON.parse(rawSub) as { subitemId: string; parentItemId: string; fromGroupId: string }
+        if (subitemId && parentItemId && fromGroupId) {
+          e.preventDefault()
+          onUnnestSubitemHere(subitemId, parentItemId, fromGroupId, group.id)
+        }
+      } catch {}
+    }
   }
 
   return (
@@ -2100,7 +2146,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   } catch {}
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
-                <BoardRow item={item} cols={cols} gridTemplate={gridTemplate}
+                <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
                   selected={selectedIds.has(item.id)}
                   accentColor={group.color}
                   onToggleSelect={() => onToggleSelect(item.id)}
@@ -2420,6 +2466,46 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const isMobile = useIsMobile()
   const [moreOpen, setMoreOpen] = useState(false)
   const moreBtnRef = useRef<HTMLButtonElement>(null)
+
+  // Un-nest een subitem terug naar een top-level item in de gekozen groep.
+  // Subitem verdwijnt uit z'n parent.subitems en verschijnt als nieuw
+  // BoardItem onderaan de doel-groep.
+  function unnestSubitemHere(subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) {
+    const fromGroup = groups.find(g => g.id === fromGroupId)
+    const parent    = fromGroup?.items.find(i => i.id === parentItemId)
+    const sub       = parent?.subitems?.find(s => s.id === subitemId)
+    if (!fromGroup || !parent || !sub) return
+    const promoted: BoardItem = {
+      id:         sub.id,
+      name:       sub.name,
+      ownerIds:   sub.ownerIds ?? [],
+      status:     sub.status ?? '',
+      startDate:  sub.startDate ?? null,
+      endDate:    sub.endDate ?? null,
+      deadline:   null,
+      estHours:   Number(sub.estHours) || 0,
+      dagen:      0,
+      startTime:  (sub as { startTime?: string | null }).startTime ?? null,
+      endTime:    (sub as { endTime?:   string | null }).endTime   ?? null,
+    } as BoardItem
+    onChange(groups.map(g => {
+      if (g.id === fromGroupId) {
+        return {
+          ...g,
+          items: g.items.map(i =>
+            i.id === parentItemId
+              ? { ...i, subitems: (i.subitems ?? []).filter(s => s.id !== subitemId) }
+              : i
+          ),
+        }
+      }
+      if (g.id === toGroupId) {
+        const exists = g.items.some(i => i.id === promoted.id)
+        return exists ? g : { ...g, items: [...g.items, promoted] }
+      }
+      return g
+    }))
+  }
 
   // Sleep een item van de ene groep naar de andere. Aangeroepen vanuit de
   // drop-handler op de doel-groep zodra een item er overheen wordt gelaten.
@@ -2880,6 +2966,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
               onNestItem={nestItemUnder}
+              onUnnestSubitemHere={unnestSubitemHere}
               onDeleteGroup={() => handleDeleteGroup(group.id)} />
           </div>
         ))}
