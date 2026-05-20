@@ -828,7 +828,9 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }
 
   type TimedBar = { p: Project; left: number; width: number; top: number; height: number; iso: string; startMin: number; durMin: number }
-  const timedBars: TimedBar[] = []
+  // Per dag: groep events bij elkaar zodat overlap z'n eigen kolom-stukje
+  // krijgt (events worden naast elkaar zichtbaar i.p.v. boven elkaar).
+  const byIso = new Map<string, { p: Project; startMin: number; endMin: number; info: { col: Col; left: number; idx: number } }[]>()
   for (const p of timed) {
     const iso = p.startDate; if (!iso) continue
     const info = colByIso.get(iso); if (!info) continue
@@ -836,12 +838,37 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     const [eh, em] = (p.endTime ?? p.startTime ?? '00:00').split(':').map(Number)
     const startMin = sh * 60 + sm
     const endMin   = Math.max(startMin + 15, eh * 60 + em)
-    const top = (startMin - HOUR_START * 60) / 60 * HOUR_H
-    const height = Math.max(22, (endMin - startMin) / 60 * HOUR_H)
-    timedBars.push({
-      p, iso, startMin, durMin: endMin - startMin,
-      left: info.left + 2, width: info.col.widthPx - 4,
-      top, height,
+    const arr = byIso.get(iso) ?? []
+    arr.push({ p, startMin, endMin, info })
+    byIso.set(iso, arr)
+  }
+
+  const timedBars: TimedBar[] = []
+  for (const arr of byIso.values()) {
+    // Lane-pack per dag op tijdsoverlap. Lane = kolom-positie binnen
+    // de dagkolom; laneCount = totaal aantal naast elkaar nodig.
+    const sorted = [...arr].sort((a, b) => a.startMin - b.startMin)
+    const laneEnds: number[] = []
+    const laneByIdx: number[] = []
+    sorted.forEach((ev, i) => {
+      let lane = laneEnds.findIndex(end => end <= ev.startMin)
+      if (lane < 0) { lane = laneEnds.length; laneEnds.push(0) }
+      laneEnds[lane] = ev.endMin
+      laneByIdx[i] = lane
+    })
+    const laneCount = Math.max(1, laneEnds.length)
+    sorted.forEach((ev, i) => {
+      const lane = laneByIdx[i]
+      const colInner = ev.info.col.widthPx - 4
+      const slotW = colInner / laneCount
+      const top = (ev.startMin - HOUR_START * 60) / 60 * HOUR_H
+      const height = Math.max(22, (ev.endMin - ev.startMin) / 60 * HOUR_H)
+      timedBars.push({
+        p: ev.p, iso: ev.p.startDate ?? '', startMin: ev.startMin, durMin: ev.endMin - ev.startMin,
+        left: ev.info.left + 2 + lane * slotW,
+        width: Math.max(40, slotW - 2),
+        top, height,
+      })
     })
   }
 
@@ -1014,15 +1041,30 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   opacity: isDragging ? 0.92 : 1,
                   userSelect: 'none', zIndex: isDragging ? 5 : 1,
                 }}>
-                <span style={{ fontSize: 9.5, opacity: 0.92, fontWeight: 700 }}>
-                  {fmtMin(showStart)}–{fmtMin(showEnd)}
-                </span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
-                {owners.length > 0 && (
-                  <span style={{ display: 'flex', gap: 2, marginTop: 'auto' }}>
-                    {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={14} />)}
+                {/* Titel altijd eerst en prominent — pas daarna tijd. Korte
+                    events krijgen tijd in dezelfde regel rechts, zodat de
+                    naam nooit wegvalt. */}
+                {height < 36 ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      textShadow: '0 1px 1px rgba(0,0,0,0.18)', flex: 1 }}>{b.p.name}</span>
+                    <span style={{ fontSize: 9.5, opacity: 0.9, fontWeight: 700, flexShrink: 0 }}>
+                      {fmtMin(showStart)}
+                    </span>
                   </span>
+                ) : (
+                  <>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      textShadow: '0 1px 1px rgba(0,0,0,0.18)', fontWeight: 700 }}>{b.p.name}</span>
+                    <span style={{ fontSize: 9.5, opacity: 0.9, fontWeight: 600 }}>
+                      {fmtMin(showStart)}–{fmtMin(showEnd)}
+                    </span>
+                    {owners.length > 0 && (
+                      <span style={{ display: 'flex', gap: 2, marginTop: 'auto' }}>
+                        {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={14} />)}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             )
