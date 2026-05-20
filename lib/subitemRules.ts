@@ -64,7 +64,11 @@ function saveRules(rules: SubitemRule[]): void {
 
 export function addRule(itemName: string, parentBoardId: string, parentItemId: string, parentName: string): void {
   const pattern = normalizeTitle(itemName)
-  if (!pattern || pattern.length < 3) return  // te kort om uniek te zijn
+  // Min lengte: 3 → 8. Korte/generieke patronen ('call', 'lunch', 'sync')
+  // sleepten via prefix-match in matchRule onbedoeld andere items mee
+  // naar een parent op een ander bord. 8 chars dwingt af dat het pattern
+  // specifiek genoeg is voor één serie.
+  if (!pattern || pattern.length < 8) return
   const rules = getRules().filter(r => !(r.pattern === pattern && r.parentItemId === parentItemId))
   rules.push({ pattern, parentBoardId, parentItemId, parentName, createdAt: new Date().toISOString() })
   saveRules(rules)
@@ -77,15 +81,14 @@ export function removeRule(pattern: string): void {
 function matchRule(name: string, rules: SubitemRule[]): SubitemRule | null {
   const norm = normalizeTitle(name)
   if (!norm) return null
-  // Exacte match heeft voorrang; daarna langste startWith-match.
-  let best: SubitemRule | null = null
+  // Alleen EXACTE match op genormaliseerde titel. De vroegere
+  // startsWith-fallback haalde ongerelateerde items binnen wanneer
+  // patronen een gemeenschappelijk begin hadden ('wekelijkse check-in'
+  // vs 'wekelijkse check-up' bv.). Liever één regel = één serie.
   for (const r of rules) {
     if (r.pattern === norm) return r
-    if (norm.startsWith(r.pattern) || r.pattern.startsWith(norm)) {
-      if (!best || r.pattern.length > best.pattern.length) best = r
-    }
   }
-  return best
+  return null
 }
 
 function itemToSubitem(item: BoardItem): SubItem {
@@ -111,6 +114,14 @@ function itemToSubitem(item: BoardItem): SubItem {
 // met een regel en verplaatst die items als subitem onder de geregistreerde
 // parent. Pusht alleen de borden die daadwerkelijk veranderden.
 export async function applySubitemRules(): Promise<{ moved: number }> {
+  // Eénmalige cleanup: oude regels met pattern < 8 chars die door de
+  // verlaagde drempel + prefix-match items onbedoeld lieten verspringen
+  // tussen borden. Idempotent — daarna is er niks meer te slopen.
+  {
+    const all = getRules()
+    const keep = all.filter(r => (r.pattern ?? '').length >= 8)
+    if (keep.length !== all.length) saveRules(keep)
+  }
   const rules = getRules()
   if (rules.length === 0) return { moved: 0 }
 
