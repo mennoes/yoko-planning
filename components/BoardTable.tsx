@@ -904,7 +904,16 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   fromGroupId?: string
   onUpdate: (u: SubItem[]) => void
 }) {
-  function updateOne(id: string, u: Partial<SubItem>) { onUpdate(subitems.map(s => s.id === id ? { ...s, ...u } : s)) }
+  function updateOne(id: string, u: Partial<SubItem>) {
+    // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
+    // wijziging op alle geselecteerde subitems binnen dit item toe. Zo kun
+    // je alle subitems aanvinken en met één klik op 'Done' alles meenemen.
+    const bulk = !!selectedIds && selectedIds.size > 1 && selectedIds.has(id)
+    onUpdate(subitems.map(s => {
+      if (bulk ? selectedIds!.has(s.id) : s.id === id) return { ...s, ...u }
+      return s
+    }))
+  }
   function deleteOne(id: string) { onUpdate(subitems.filter(s => s.id !== id)) }
   function addOne() {
     onUpdate([...subitems, { id: Date.now().toString(), name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
