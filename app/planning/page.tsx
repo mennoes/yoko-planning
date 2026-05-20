@@ -1508,7 +1508,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null }>) => void
   onDuplicate?: () => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
@@ -1589,6 +1589,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
   type Patch = Partial<{
     startDate: string | null
     endDate:   string | null
+    startTime: string | null
+    endTime:   string | null
     estHours:  number
     notes:     string
     journal:   import('@/lib/boards').JournalEntry[]
@@ -1619,6 +1621,8 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
       ownerIds: finalOwners,
       links: nextLinks,
     }
+    if (patch.startTime !== undefined) extra.startTime = patch.startTime
+    if (patch.endTime   !== undefined) extra.endTime   = patch.endTime
     if (!hasSubitems) extra.estHours = nextEst
     onUpdate(project, nextStart, nextEnd, extra)
 
@@ -1750,20 +1754,23 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
             })}
         </div>
       )}
-      {!isMerged && isGoogle && (() => {
-        // Voor subitem-projects (recurring meeting instances) zit de link op
-        // het parent-item, niet op de subitem. Project.externalLink wordt al
-        // doorgegeven vanuit de parent — pak die als fallback. Als er nog
-        // niets is, zoeken we 'm op de parent-rij in allGroups.
+      {!isMerged && (() => {
+        // Externe link opzoeken: rawItem, project zelf, of de parent-rij bij
+        // subitem-projects. Dat doen we los van isGoogle zodat een meeting
+        // waarvan het source-stempel verdween (manueel verplaatst, oud item
+        // etc.) toch nog de Google-link laat zien.
         let href = (rawItem?.externalLink as string | undefined) ?? project.externalLink ?? null
         if (!href && project.id.includes('__si')) {
           const parentSuffix = project.id.slice(project.board.length + 2).split('__si')[0]
           const parent = allGroups[project.board]?.flatMap(g => g.items).find(i => i.id === parentSuffix)
           href = (parent?.externalLink as string | undefined) ?? null
         }
+        if (!isGoogle && !href) return null
         return (
           <div style={{ padding: '10px 18px', background: 'rgba(216,182,46,0.18)', borderBottom: '1px solid var(--border)', fontSize: 12.5, fontWeight: 600, color: '#7a5a0a', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>Read-only — wijzig dit item in Google Calendar.</span>
+            {isGoogle
+              ? <span>Read-only — wijzig dit item in Google Calendar.</span>
+              : <span>Dit item is verbonden met een Google Calendar-event.</span>}
             {href && (
               <a href={href} target="_blank" rel="noopener noreferrer"
                 style={{ marginLeft: 'auto', color: '#7a5a0a', fontWeight: 700, textDecoration: 'underline',
@@ -1937,7 +1944,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
           </div>
         </Row>
         <Row label="Timeline">
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <input type="date" value={startDate} disabled={isGoogle}
               onChange={e => { setStartDate(e.target.value); commit({ startDate: e.target.value || null }) }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
@@ -1946,6 +1953,21 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
               onChange={e => { setEndDate(e.target.value); commit({ endDate: e.target.value || null }) }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
           </div>
+          {/* Tijd-of-dag inputs (HH:MM): nodig om 't event in 't uur-grid van
+              Week-view te zien. Leeg laten = all-day. Werkt op manuele items;
+              Google-events nemen hun tijden uit de sync zelf. */}
+          {!isGoogle && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+              <input type="time" value={(rawItem?.startTime as string | undefined) ?? ''}
+                onChange={e => commit({ startTime: e.target.value || null } as Partial<BoardItem>)}
+                style={{ ...dateInput, width: 100 }} />
+              <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>tot</span>
+              <input type="time" value={(rawItem?.endTime as string | undefined) ?? ''}
+                onChange={e => commit({ endTime: e.target.value || null } as Partial<BoardItem>)}
+                style={{ ...dateInput, width: 100 }} />
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>laat leeg voor de hele dag</span>
+            </div>
+          )}
           {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
         </Row>
         {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
@@ -2675,7 +2697,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[] }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     // Snapshot huidige board-state vóór de wijziging — Cmd+Z herstelt dit
