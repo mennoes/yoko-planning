@@ -889,10 +889,37 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             style={{ ...editInput, flex: 1 }} />
         ) : (
           <>
-            <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
-              style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-              {subitem.name}
-            </span>
+            {(() => {
+              const isGoogleSub = !!subitem.externalLink || subitem.id?.startsWith('si_g_')
+              // Bij Google-subitems opent klikken het Google-event direct in
+              // een nieuw tabblad — handig voor 'wie was hier ook al weer
+              // bij?' of om de Meet-link op te halen. Dubbelklik blijft
+              // rename triggeren. Voor handmatige subitems opent klikken
+              // gewoon rename zoals voorheen.
+              if (isGoogleSub && subitem.externalLink) {
+                return (
+                  <a href={subitem.externalLink} target="_blank" rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    onDoubleClick={e => { e.preventDefault(); e.stopPropagation(); setNameDraft(subitem.name); setEditName(true) }}
+                    title="Open in Google Calendar · dubbelklik om te hernoemen"
+                    style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500,
+                      textDecoration: 'none',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      flex: 1, minWidth: 0, cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                    onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
+                    {subitem.name}
+                  </a>
+                )
+              }
+              return (
+                <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
+                  title="Klik om te hernoemen"
+                  style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                  {subitem.name}
+                </span>
+              )
+            })()}
             {subitem.meetLink && (
               <a href={subitem.meetLink} target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
@@ -1037,7 +1064,10 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
       ))}
       {hasDone && (
         <>
-          <button onClick={() => setDoneOpen(o => !o)}
+          <button
+            type="button"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); setDoneOpen(o => !o) }}
+            onPointerDown={e => e.stopPropagation()}
             style={{
               width: '100%', textAlign: 'left',
               background: 'var(--overlay-faint)', border: 'none',

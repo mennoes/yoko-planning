@@ -36,7 +36,13 @@ function resolveAttendeeEmail(email: string): string | null {
   return null
 }
 
-const WINDOW_DAYS_FUTURE = 56   // ~8 weeks ahead
+// Vooruitblik beperken tot 2 weken: anders explodeert een recurring meeting
+// als 30+ subitems en wordt het bord onleesbaar. De sync draait elke 5
+// minuten (én bij elke pageload), dus nieuwe instances binnen de horizon
+// komen automatisch binnen rollen zonder dat de gebruiker iets hoeft te
+// doen. 14 dagen geeft genoeg ruimte voor 'wat staat er deze + volgende
+// week'.
+const WINDOW_DAYS_FUTURE = 14
 const WINDOW_DAYS_PAST   = 180  // 6 months back — zodat recurring meetings
                                  //   ook hun historische instances meenemen
 const AUTO_DONE_AFTER_DAYS = 3  // events waarvan de end-date > N dagen
@@ -892,6 +898,25 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
 }
 
 export async function syncCalendarsForUser(admin: SupabaseClient, userId: string) {
+  // Eenmalige opruim: oude auto-geleerde routing-regels met een te-kort
+  // pattern (< 8 chars) verwijderen. Die ontstonden vóór de bijgewerkte
+  // drempel en sleepten via substring-match onbedoeld events mee naar
+  // andere borden. We filteren in JS-land (pattern lengte) zodat we
+  // geen Postgres-specifieke functies hoeven aan te roepen. Idempotent:
+  // na de eerste run is er niks meer om op te ruimen.
+  try {
+    const { data: short } = await admin
+      .from('calendar_routing_rules')
+      .select('id, pattern, position')
+      .gte('position', 100)   // alleen user-leerde regels; seed-regels (positie < 100) blijven
+    const tooShort = ((short as { id: string; pattern: string }[] | null) ?? [])
+      .filter(r => (r.pattern ?? '').length < 8)
+      .map(r => r.id)
+    if (tooShort.length > 0) {
+      await admin.from('calendar_routing_rules').delete().in('id', tooShort)
+    }
+  } catch {}
+
   const { data: cals } = await admin
     .from('google_calendars').select('*').eq('user_id', userId)
   const list = (cals as GoogleCalRow[] | null) ?? []
