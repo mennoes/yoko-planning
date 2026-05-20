@@ -211,10 +211,10 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
   return (
     <div>
       <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
-        padding: '3px 12px', borderRadius: 999, cursor: 'pointer', border: 'none',
+        padding: '6px 16px', borderRadius: 999, cursor: 'pointer', border: 'none',
         background: opt.color || 'var(--overlay-medium)',
         color: opt.color ? '#fff' : 'var(--text-muted)',
-        fontSize: 12.5, fontWeight: opt.color ? 600 : 400,
+        fontSize: 12.5, fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
         whiteSpace: 'nowrap', maxWidth: '100%',
         overflow: 'hidden', textOverflow: 'ellipsis',
       }}>
@@ -605,9 +605,9 @@ function DateRangeCell({
         position: 'relative', overflow: 'hidden',
         width: '100%', textAlign: 'left', cursor: 'pointer',
         border: hasAny ? `1px solid ${pillClr}55` : 'none',
-        borderRadius: 999, padding: '3px 10px',
+        borderRadius: 999, padding: '5px 14px',
         background: hasAny ? pillClr + '22' : 'transparent',
-        display: 'flex', alignItems: 'center', gap: 5, minHeight: 26,
+        display: 'flex', alignItems: 'center', gap: 5, minHeight: 30,
       }}>
         {hasAny && (
           <span style={{
@@ -1247,10 +1247,10 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           <button onClick={() => setExpanded(e => !e)}
             title={hasSubitems ? `${subitems.length} subitems` : 'Subitems toevoegen'}
             style={{
-              background: 'none', border: 'none', padding: '1px 2px', cursor: 'pointer',
-              fontSize: 8, lineHeight: 1,
-              color: hasSubitems ? (expanded ? 'var(--text-secondary)' : 'var(--text-muted)') : hover ? 'rgba(122,132,160,0.4)' : 'transparent',
-              flexShrink: 0, width: 13, textAlign: 'center', transition: 'color 0.1s',
+              background: 'none', border: 'none', padding: '3px 4px', cursor: 'pointer',
+              fontSize: 13, lineHeight: 1,
+              color: hasSubitems ? (expanded ? 'var(--text-primary)' : 'var(--text-secondary)') : hover ? 'rgba(122,132,160,0.4)' : 'transparent',
+              flexShrink: 0, width: 22, textAlign: 'center', transition: 'color 0.1s',
             }}>{expanded ? '▼' : '▶'}</button>
 
           {/* Subitem-count badge weggehaald — de '5'-pill voegde visuele
