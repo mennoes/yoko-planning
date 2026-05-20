@@ -8,6 +8,8 @@ import { getBoardIds } from './boardsRegistry'
 import { createNotification } from './notificationsStore'
 
 const WORKING = 'Working on...'
+const DONE    = 'Done'
+const AUTO_DONE_AFTER_DAYS = 3
 
 function isLive(start: string | null | undefined, end: string | null | undefined, today: string): boolean {
   if (!start) return false
@@ -19,6 +21,22 @@ function isLive(start: string | null | undefined, end: string | null | undefined
 function needsAuto(status: string | undefined | null): boolean {
   const s = (status ?? '').trim()
   return s === '' || s === 'Not started'
+}
+
+// Auto-Done na N dagen — voor subitems die de googleSync had moeten Done
+// zetten maar niet altijd doet (oude state, sync nog niet gedraaid op dit
+// device, niet-Google subitem, etc.). Client-side opruimen zodat de
+// werkdruk-totalen en visuele staat kloppen. Handmatige Stuck/Done laten
+// we ongemoeid.
+function shouldAutoDone(status: string | undefined | null, end: string | null | undefined, today: string): boolean {
+  const s = (status ?? '').trim()
+  if (s === DONE || s === 'Stuck') return false
+  if (!end) return false
+  // diff in dagen op stringbasis is rommelig; converteer.
+  const endTs   = Date.parse(end)
+  const todayTs = Date.parse(today)
+  if (Number.isNaN(endTs) || Number.isNaN(todayTs)) return false
+  return (todayTs - endTs) / 86400000 > AUTO_DONE_AFTER_DAYS
 }
 
 export async function applyAutoStatus(): Promise<{ changed: number }> {
@@ -35,9 +53,16 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
         let mutated = item
         // Subitems eerst — die rollen niet automatisch op naar de parent
         // (zie eerdere keuze), maar mogen wel zelf hun status oppikken.
+        //  - Loopt vandaag → Working on...
+        //  - End-datum > 3 dagen voorbij → Done. Vangt Google-instances op
+        //    die nog niet in een sync-pass zaten. Stuck/Done blijven.
         if (item.subitems && item.subitems.length > 0) {
           let subChanged = false
           const subs: SubItem[] = item.subitems.map(sub => {
+            if (shouldAutoDone(sub.status, sub.endDate ?? sub.startDate, today)) {
+              subChanged = true
+              return { ...sub, status: DONE }
+            }
             if (needsAuto(sub.status) && isLive(sub.startDate, sub.endDate, today)) {
               subChanged = true
               return { ...sub, status: WORKING }

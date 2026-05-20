@@ -869,9 +869,13 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         <div aria-hidden style={{ position: 'absolute', right: 0, top: '50%', width: 6, height: 2, background: rail ?? 'var(--accent)' }} />
       </div>
       <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        {/* Google-link badge wanneer 't een Google-item is dat als subitem
-            werd genest (externalLink + source bewaard tijdens nesting). */}
-        {(subitem.source === 'google' || subitem.externalLink) && (
+        {/* Google-link badge. Drie bronnen om het te detecteren:
+            - subitem.source === 'google' (set bij handmatige nesting)
+            - subitem.externalLink aanwezig (zelfde)
+            - id-prefix 'si_g_' (gegenereerd door de googleSync voor
+              recurring instances). Die laatste vangt oude rijen op
+              die nog geen source/externalLink-veld hebben gekregen. */}
+        {(subitem.source === 'google' || subitem.externalLink || subitem.id?.startsWith('si_g_')) && (
           <GoogleBadge href={subitem.externalLink ?? undefined} size={13} />
         )}
         {editName ? (
