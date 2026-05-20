@@ -214,7 +214,7 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
         padding: '3px 10px', borderRadius: 4, cursor: 'pointer', border: 'none',
         background: opt.color || 'var(--overlay-medium)',
         color: opt.color ? '#fff' : 'var(--text-muted)',
-        fontSize: 12, fontWeight: opt.color ? 600 : 400,
+        fontSize: 12.5, fontWeight: opt.color ? 600 : 400,
         whiteSpace: 'nowrap', maxWidth: '100%',
         overflow: 'hidden', textOverflow: 'ellipsis',
       }}>
@@ -880,7 +880,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         ) : (
           <>
             <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
-              style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+              style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
               {subitem.name}
             </span>
             {subitem.meetLink && (
@@ -889,14 +889,14 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
                 title="Open Google Meet voor deze meeting"
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 3,
-                  padding: '1px 6px 1px 5px', borderRadius: 5,
+                  padding: '2px 7px 2px 6px', borderRadius: 5,
                   background: '#00ac47', color: '#fff',
-                  fontSize: 9.5, fontWeight: 800, lineHeight: 1.3,
+                  fontSize: 11, fontWeight: 500, lineHeight: 1.3,
                   flexShrink: 0, textDecoration: 'none', marginLeft: 6,
                   boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
                 }}>
                 Meet
-                <span style={{ fontSize: 8.5, opacity: 0.85 }}>↗</span>
+                <span style={{ fontSize: 10, opacity: 0.85 }}>↗</span>
               </a>
             )}
           </>
@@ -937,7 +937,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     onUpdate([...subitems, { id: Date.now().toString(), name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
   }
   const rail = accentColor ?? 'var(--accent)'
-  const hdrCell: React.CSSProperties = { padding: '6px 8px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-light)' }
+  const hdrCell: React.CSSProperties = { padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-light)' }
 
   // Subitem-only header labels per known column key. Falls back to the
   // parent column label so custom columns get something sensible.
@@ -957,7 +957,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     <div style={{ borderBottom: '1px solid var(--border)', padding: '4px 18px 8px 30px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--bg-hover)', borderBottom: '1px solid var(--border-light)' }}>
         <div />
-        <div style={{ padding: '6px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
+        <div style={{ padding: '6px 10px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
         {cols.map(c => (
           <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
         ))}
@@ -1219,14 +1219,14 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               title="Open Google Meet"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '1px 7px 1px 5px', borderRadius: 5,
+                padding: '2px 8px 2px 6px', borderRadius: 5,
                 background: '#00ac47', color: '#fff',
-                fontSize: 10, fontWeight: 800, lineHeight: 1.3,
+                fontSize: 11, fontWeight: 500, lineHeight: 1.3,
                 flexShrink: 0, textDecoration: 'none',
                 boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
               }}>
               Meet
-              <span style={{ fontSize: 9, opacity: 0.85 }}>↗</span>
+              <span style={{ fontSize: 10, opacity: 0.85 }}>↗</span>
             </a>
           )}
 
@@ -1261,7 +1261,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                 // I-beam cursor voor handmatige items zodat 'rename-baar'
                 // visueel duidelijk is — net als in Monday. Google-items
                 // krijgen een gewone pointer omdat ze read-only zijn qua naam.
-                style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
+                style={{ fontSize: 14.5, color: 'var(--text-primary)', fontWeight: 500,
                   cursor: item.source === 'google' ? 'pointer' : 'text',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {item.name}
@@ -2144,7 +2144,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
               </div>
               <div style={{ position: 'relative', display: 'flex' }}>
                 <button onClick={() => onToggleSort('name')}
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 11, fontWeight: 800, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 12, fontWeight: 800, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
                   Item
                   {sortBy?.key === 'name' && (
                     <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
@@ -2166,7 +2166,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   }} />
               </div>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 11, fontWeight: 800, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 800, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
                   onClick={() => onToggleSort(col.key)}>
                   {col.label}
                   {sortBy?.key === col.key && (
