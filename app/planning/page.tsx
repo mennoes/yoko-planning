@@ -746,6 +746,12 @@ function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
 // ─── Week-time-grid (Google Calendar-stijl uur-positie + drag) ───────────────
 function pad2(n: number) { return n < 10 ? '0' + n : String(n) }
 function fmtMin(m: number) { return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60) }
+// LOKALE iso (YYYY-MM-DD op basis van local-time, niet UTC). toISOString
+// shift de datum bij niet-UTC tijdzones — in NL (UTC+1/+2) gaf dat een dag
+// te vroeg waardoor events op de verkeerde kolom belandden.
+function localIso(d: Date): string {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
+}
 
 function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, onSelect, onTimedDrag, onDateDragEnd, onReassign }: {
   cols: Col[]
@@ -846,7 +852,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
       const s = new Date(p.startDate!)
       const e = p.endDate ? new Date(p.endDate) : new Date(p.startDate!)
       for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        const iso = d.toISOString().slice(0, 10)
+        const iso = localIso(d)
         timed.push({
           ...p,
           id: `${p.id}__vrij_${iso}`,
@@ -893,7 +899,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   {
     let acc = 0
     cols.forEach((col, i) => {
-      const iso = col.rangeStart.toISOString().slice(0, 10)
+      const iso = localIso(col.rangeStart)
       colByIso.set(iso, { col, left: acc, idx: i })
       acc += col.widthPx
     })
@@ -1058,7 +1064,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
-                borderLeft: '1px solid var(--border-light)',
+                borderLeft: '1px solid var(--border-strong)',
                 background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
                 pointerEvents: 'none',
               }} />
@@ -1159,7 +1165,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           overflow: 'hidden' }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => (
             <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: HOUR_H,
-              borderBottom: '1px solid var(--border-light)', pointerEvents: 'none' }} />
+              borderBottom: '1px solid var(--border)', pointerEvents: 'none' }} />
           ))}
           {cols.map((col, idx) => {
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
@@ -1168,7 +1174,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
-                borderLeft: '1px solid var(--border-light)',
+                borderLeft: '1px solid var(--border-strong)',
                 background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
                 pointerEvents: 'none',
               }} />
@@ -1177,7 +1183,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           {(() => {
             // Rode 'nu'-lijn op vandaag
             const now = new Date()
-            const todayIso = now.toISOString().slice(0, 10)
+            const todayIso = localIso(now)
             const info = colByIso.get(todayIso); if (!info) return null
             const min = now.getHours() * 60 + now.getMinutes()
             const top = (min - HOUR_START * 60) / 60 * HOUR_H
