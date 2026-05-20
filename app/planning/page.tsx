@@ -769,9 +769,34 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   const HOUR_H     = 44
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<null | {
     p: Project; durMin: number; newIso: string; newStartMin: number;
   }>(null)
+  // ScrollLeft van de buitenste horizontaal-scrollende container houden we
+  // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
+  // naam blijft links in beeld zolang de pill nog door 't viewport loopt).
+  const [scrollLeft, setScrollLeft] = useState(0)
+  useEffect(() => {
+    let el: HTMLElement | null = rootRef.current
+    while (el && el !== document.body) {
+      const s = getComputedStyle(el)
+      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
+      el = el.parentElement
+    }
+    if (!el || el === document.body) return
+    const scroller = el
+    const update = () => setScrollLeft(scroller.scrollLeft)
+    update()
+    scroller.addEventListener('scroll', update, { passive: true })
+    return () => scroller.removeEventListener('scroll', update)
+  }, [])
+  // nameW is de sticky linker-kolom; titels moeten daar 8px naast komen.
+  function titleOffsetFor(barLeft: number, barWidth: number, padLeft: number) {
+    const want = scrollLeft - barLeft + 8
+    const max  = Math.max(0, barWidth - 90)
+    return Math.max(0, Math.min(want - padLeft, max))
+  }
 
   // Filter visible projects
   const visible = projects.filter(p => {
@@ -908,7 +933,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
 
   return (
-    <>
+    <div ref={rootRef}>
       {/* All-day banner */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
         <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
@@ -934,6 +959,9 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const color = BOARD_COLORS[b.p.board] ?? '#888'
             const top = 6 + b.lane * (allDayLaneH + 4)
             const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
+            // Titel laat 'm meeschuiven met de viewport zodat lang-lopende
+            // events leesbaar blijven terwijl je naar rechts scrollt.
+            const titleShift = titleOffsetFor(b.left + 2, b.width, 9)
             return (
               <button key={b.p.id} onClick={() => onSelect(b.p)} title={b.p.name}
                 style={{ position: 'absolute', left: b.left + 2, top, width: b.width, height: allDayLaneH,
@@ -944,6 +972,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
                 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                  marginLeft: titleShift,
                   textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
                 <span style={{ display: 'flex', gap: 3 }}>
                   {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={16} />)}
@@ -1071,7 +1100,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           })}
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -3168,6 +3197,7 @@ export default function PlanningPage() {
             const yokoVisible = team
               .filter(m => YOKO_IDS.has(m.id) && isMemberVisible(m.id))
               .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
+            const unassignedVisible = team.filter(m => m.id === 'unassigned' && isMemberVisible(m.id))
             const freelancersVisible = team.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id))
 
             const renderPerson = (m: TeamMember) => {
@@ -3225,6 +3255,8 @@ export default function PlanningPage() {
               <>
                 {yokoVisible.length > 0 && sectionLabel('Studio Yoko', yokoVisible.length)}
                 {yokoVisible.map(renderPerson)}
+                {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length)}
+                {unassignedVisible.map(renderPerson)}
                 {freelancersVisible.length > 0 && (
                   <>
                     {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersOpen(o => !o), freelancersOpen)}
