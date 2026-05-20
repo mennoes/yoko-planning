@@ -744,10 +744,13 @@ function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
 function pad2(n: number) { return n < 10 ? '0' + n : String(n) }
 function fmtMin(m: number) { return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60) }
 
-function WeekTimeGrid({ cols, projects, filterMembers, team, nameW, stickyBg, onSelect, onTimedDrag }: {
+function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, onSelect, onTimedDrag }: {
   cols: Col[]
   projects: Project[]
-  filterMembers: Set<string>
+  // Wanneer memberId niet gezet is, gebruiken we deze predicate om te
+  // bepalen welke projects we tonen (team-brede week-view).
+  isMemberVisible?: (id: string) => boolean
+  memberId?: string  // alleen projects waar deze persoon owner van is
   team: TeamMember[]
   nameW: number
   stickyBg: string
@@ -766,7 +769,11 @@ function WeekTimeGrid({ cols, projects, filterMembers, team, nameW, stickyBg, on
   // Filter visible projects
   const visible = projects.filter(p => {
     if (!p.startDate && !p.endDate) return false
-    if (filterMembers.size > 0 && !p.ownerIds.some(id => filterMembers.has(id))) return false
+    if (memberId) {
+      if (!p.ownerIds.includes(memberId)) return false
+    } else if (isMemberVisible) {
+      if (!p.ownerIds.some(id => isMemberVisible(id))) return false
+    }
     return true
   })
   const allDay: Project[] = []
@@ -2916,43 +2923,73 @@ export default function PlanningPage() {
       )}
 
       {/* ── Mensen filter popup ── */}
-      {peopleOpen && (
-        <Popup title="Filter op mensen" onClose={() => setPeopleOpen(false)}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {filterMembers.size === 0 ? 'Iedereen zichtbaar' : `${filterMembers.size} geselecteerd`}
-            </span>
-            {filterMembers.size > 0 && (
-              <button onClick={() => setFilterMembers(new Set())}
-                style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: 0, textDecoration: 'underline' }}>
-                Reset
-              </button>
+      {peopleOpen && (() => {
+        const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+        const yokoTeam    = team.filter(m => YOKO_IDS.has(m.id))
+        const unassigned  = team.filter(m => m.id === 'unassigned')
+        const freelancers = team.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned')
+        function toggle(id: string) {
+          setFilterMembers(prev => {
+            const next = new Set(prev)
+            // First interaction met lege set = start met alleen Yoko-crew aan
+            // (rust voor het oog; voeg vanaf daar handmatig freelancers toe).
+            if (next.size === 0) { yokoTeam.forEach(t => next.add(t.id)); unassigned.forEach(t => next.add(t.id)) }
+            if (next.has(id)) next.delete(id); else next.add(id)
+            // Alles geselecteerd? Behandel als 'geen filter'.
+            if (next.size === team.length) return new Set()
+            return next
+          })
+        }
+        const row = (m: TeamMember) => {
+          const checked = filterMembers.size === 0 ? YOKO_IDS.has(m.id) || m.id === 'unassigned' : filterMembers.has(m.id)
+          return (
+            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={checked} onChange={() => toggle(m.id)}
+                style={{ width: 18, height: 18, accentColor: m.color, cursor: 'pointer', flexShrink: 0 }} />
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
+            </label>
+          )
+        }
+        return (
+          <Popup title="Filter op mensen" onClose={() => setPeopleOpen(false)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {filterMembers.size === 0 ? 'Alleen Studio Yoko zichtbaar (standaard)' : `${filterMembers.size} geselecteerd`}
+              </span>
+              {filterMembers.size > 0 && (
+                <button onClick={() => setFilterMembers(new Set())}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: 0, textDecoration: 'underline' }}>
+                  Reset
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 10, marginBottom: 2 }}>
+              Studio Yoko
+            </div>
+            {yokoTeam.map(row)}
+            {unassigned.length > 0 && (
+              <>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 14, marginBottom: 2 }}>
+                  Overig
+                </div>
+                {unassigned.map(row)}
+              </>
             )}
-          </div>
-          {team.map(m => {
-            const checked = filterMembers.size === 0 || filterMembers.has(m.id)
-            return (
-              <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={checked}
-                  onChange={() => {
-                    setFilterMembers(prev => {
-                      const next = new Set(prev)
-                      // first interaction with empty set = start picking
-                      if (next.size === 0) { team.forEach(t => next.add(t.id)) }
-                      if (next.has(m.id)) next.delete(m.id); else next.add(m.id)
-                      // if all selected, treat as "no filter"
-                      if (next.size === team.length) return new Set()
-                      return next
-                    })
-                  }}
-                  style={{ width: 18, height: 18, accentColor: m.color, cursor: 'pointer', flexShrink: 0 }} />
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
-              </label>
-            )
-          })}
-        </Popup>
-      )}
+            {freelancers.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
+                  fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em',
+                  padding: '8px 0', borderTop: '1px solid var(--border-light)' }}>
+                  <span>▸ Freelancers ({freelancers.length})</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', color: 'var(--text-muted)' }}>klik om uit te klappen</span>
+                </summary>
+                {freelancers.map(row)}
+              </details>
+            )}
+          </Popup>
+        )
+      })()}
 
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
@@ -3052,21 +3089,86 @@ export default function PlanningPage() {
             })}
           </div>
 
-          {/* Week-zoom (zoom === 'dag'): Google Calendar-stijl week-grid met
-              een all-day banner én een uur-grid voor getimede events. Drag
-              op een getimed event verschuift 'm naar een ander dag/uur. */}
-          {zoom === 'dag' ? (
-            <WeekTimeGrid
-              cols={cols}
-              projects={effectiveProjects}
-              filterMembers={filterMembers}
-              team={team}
-              nameW={nameW + namePad}
-              stickyBg={stickyBg}
-              onSelect={p => setDetailProject(p)}
-              onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
-            />
-          ) : (() => {
+          {/* Week-zoom (zoom === 'dag'): per-persoon Google Calendar-stijl
+              week-grid. Yoko-crew bovenaan (jij eerst), freelancers in een
+              eigen inklapbaar blok. Iedere persoon-sectie is op zichzelf
+              uit/in te klappen. */}
+          {zoom === 'dag' ? (() => {
+            const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+            const DEFAULT_VIS = new Set([...YOKO_IDS, 'unassigned'])
+            const isMemberVisible = (id: string) =>
+              filterMembers.size === 0 ? DEFAULT_VIS.has(id) : filterMembers.has(id)
+
+            const me = profile?.memberId
+            const yokoVisible = team
+              .filter(m => YOKO_IDS.has(m.id) && isMemberVisible(m.id))
+              .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
+            const freelancersVisible = team.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id))
+
+            const renderPerson = (m: TeamMember) => {
+              const isExp = expanded.has(m.id)
+              return (
+                <div key={m.id} data-member-id={m.id} style={{ borderBottom: '1px solid var(--border)', background: 'transparent' }}>
+                  <div style={{ display: 'flex' }}>
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+                      background: stickyBg, display: 'flex', alignItems: 'center',
+                      padding: `8px 12px 8px ${namePad}px`, borderRight: '1px solid var(--border-light)' }}>
+                      <button onClick={() => toggleExpand(m.id)}
+                        title={isExp ? 'Inklappen' : 'Uitvouwen'}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', minWidth: 0, flex: 1, padding: 0, textAlign: 'left' }}>
+                        <span style={{ fontSize: 9, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)',
+                          display: 'inline-block', width: 10, transform: isExp ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.15s' }}>▼</span>
+                        <MemberAvatar member={m} size={av} />
+                        <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                      </button>
+                    </div>
+                  </div>
+                  {isExp && (
+                    <WeekTimeGrid
+                      cols={cols}
+                      projects={effectiveProjects}
+                      memberId={m.id}
+                      team={team}
+                      nameW={nameW + namePad}
+                      stickyBg={stickyBg}
+                      onSelect={p => setDetailProject(p)}
+                      onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
+                    />
+                  )}
+                </div>
+              )
+            }
+
+            const sectionLabel = (label: string, count: number, onClick?: () => void, isOpen?: boolean) => (
+              <div onClick={onClick}
+                style={{ borderBottom: '1px solid var(--border-light)',
+                  background: 'var(--overlay-faint)', cursor: onClick ? 'pointer' : 'default', userSelect: 'none' }}>
+                <div style={{ position: 'sticky', left: 0, width: 'max-content',
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {onClick && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'inline-block',
+                      transform: isOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>▶</span>
+                  )}
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
+                </div>
+              </div>
+            )
+
+            return (
+              <>
+                {yokoVisible.length > 0 && sectionLabel('Studio Yoko', yokoVisible.length)}
+                {yokoVisible.map(renderPerson)}
+                {freelancersVisible.length > 0 && (
+                  <>
+                    {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersOpen(o => !o), freelancersOpen)}
+                    {freelancersOpen && freelancersVisible.map(renderPerson)}
+                  </>
+                )}
+              </>
+            )
+          })() : (() => {
             const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
             const visible = team.filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
             // Eigen rij staat altijd bovenaan in Team Yoko zodat je 'm meteen
