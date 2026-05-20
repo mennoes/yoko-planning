@@ -900,11 +900,23 @@ function GoogleConnector() {
                 Bord:
                 <select value={c.boardId ?? ''} disabled={busy}
                   onChange={e => setBoard(c.calendarId, e.target.value)}
-                  style={{ flex: 1, padding: '5px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }}>
+                  style={{ flex: 1, padding: '5px 7px', borderRadius: 6,
+                    border: c.boardId ? '1px solid var(--border)' : '1px solid var(--red, #C9483D)',
+                    background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }}>
                   <option value="">— Geen —</option>
                   {boards.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
                 </select>
               </label>
+              {!c.boardId && (
+                // Zonder bord-koppeling slaat de sync deze kalender over en
+                // komen er geen events binnen. Hier waarschuwen we expliciet,
+                // anders denkt de gebruiker dat de sync stuk is.
+                <div style={{ padding: '6px 8px', borderRadius: 5,
+                  background: 'rgba(201,72,61,0.12)', color: 'var(--red, #C9483D)',
+                  fontSize: 11, fontWeight: 600, marginBottom: 8, lineHeight: 1.35 }}>
+                  Geen bord gekoppeld — events worden niet ingeladen. Kies hierboven een bord.
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={async () => { setBusy(true); await runSync(); await reload(); setBusy(false) }} disabled={busy}

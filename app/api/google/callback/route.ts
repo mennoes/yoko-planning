@@ -34,11 +34,22 @@ export async function GET(req: NextRequest) {
 
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
+    // Geen boardId in de OAuth-state? Pak dan automatisch het eerste bord uit
+    // de boards-tabel zodat events vanaf de eerste sync ergens binnenkomen,
+    // i.p.v. zwijgend nergens te landen.
+    let boardId = payload.boardId ?? null
+    if (!boardId) {
+      const { data: bRow } = await supabaseAdmin
+        .from('boards').select('id').order('position', { ascending: true }).limit(1)
+      const fallback = (bRow as { id: string }[] | null)?.[0]?.id ?? null
+      if (fallback) boardId = fallback
+    }
+
     const { error } = await supabaseAdmin.from('google_calendars').upsert({
       user_id:       payload.uid,
       calendar_id:   cal.id,
       calendar_name: cal.summary,
-      board_id:      payload.boardId,
+      board_id:      boardId,
       refresh_token: tokens.refresh_token,
       access_token:  tokens.access_token,
       expires_at:    expiresAt,
