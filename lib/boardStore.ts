@@ -2,6 +2,7 @@ import type { BoardGroup, BoardItem, SubItem } from './boards'
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 import { getBoardIds } from './boardsRegistry'
+import { normalizeTitle } from './subitemRules'
 
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
 // migraties van Google-id-vormen (it_g_{ev.id} → it_g_{iCalUID}) konden
@@ -272,6 +273,38 @@ export function subscribeRemoteBoard(boardName: string): () => void {
 // created when missing); other items land in the target's first group, or
 // in a new "Verplaatst" group if the target board is empty. Both boards get
 // saved (which propagates to Supabase + dispatches yoko-board-update).
+// Leer een routing-regel wanneer een gebruiker een Google-event handmatig
+// naar een ander bord verplaatst. We normaliseren de titel (zonder episode-
+// nummers, datums, "aflv 3", "(2×)" suffixen) zodat alle afleveringen onder
+// dezelfde naam dezelfde regel triggeren. Inserten alleen wanneer er nog
+// geen identieke regel staat — de upsert lost duplicaten anders silent op.
+async function learnBoardRoutingRule(itemName: string, targetBoard: string): Promise<void> {
+  const pattern = normalizeTitle(itemName)
+  if (!pattern || pattern.length < 3) return  // te kort = te breed
+  // Check op een bestaande regel met dit pattern. Als die al richting het
+  // doel-bord wijst zijn we klaar; wijst-ie naar een ander bord, update 'm
+  // naar de nieuwste keuze (gebruiker stuurt hier expliciet bij).
+  const { data: existing } = await supabase
+    .from('calendar_routing_rules')
+    .select('id, board_id')
+    .eq('pattern', pattern)
+    .limit(1)
+  const row = (existing as { id: string; board_id: string }[] | null)?.[0]
+  if (row) {
+    if (row.board_id === targetBoard) return
+    await supabase.from('calendar_routing_rules')
+      .update({ board_id: targetBoard, enabled: true })
+      .eq('id', row.id)
+    return
+  }
+  await supabase.from('calendar_routing_rules').insert({
+    pattern,
+    board_id: targetBoard,
+    enabled:  true,
+    position: 100,  // user-leerde regels achteraan; expliciete seed-regels behouden voorrang
+  })
+}
+
 export function moveItemToBoard(
   itemId:        string,
   sourceBoard:   string,
@@ -284,6 +317,13 @@ export function moveItemToBoard(
   const srcGroups = loadGroups(sourceBoard, fallbackGroups[sourceBoard] ?? [])
   const movedItem = srcGroups.flatMap(g => g.items).find(i => i.id === itemId) ?? null
   if (!movedItem) return { ok: false, message: 'Item niet gevonden op bron-bord' }
+
+  // Leer een routing-regel wanneer een Google-event handmatig naar een ander
+  // bord wordt gezet. Volgende syncs vinden events met dezelfde (genormali-
+  // seerde) titel automatisch hier terug — geen handmatig verslepen meer.
+  if (movedItem.source === 'google') {
+    learnBoardRoutingRule(movedItem.name, targetBoard).catch(() => {})
+  }
   const updatedSource = srcGroups.map(g => ({
     ...g,
     items: g.items.filter(i => i.id !== itemId),
