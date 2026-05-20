@@ -565,6 +565,26 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
   const didDrag = useRef(false)
   const dpx = 7 / colW
 
+  // Volg de horizontale scroll-positie van de timeline-container zodat de
+  // titel mee kan schuiven (Google-Cal-stijl). Anders verdwijnt de tekst van
+  // brede bars onder de sticky linker-kolom zodra je rechts scrolt.
+  const barRef = useRef<HTMLDivElement | null>(null)
+  const [scrollLeft, setScrollLeft] = useState(0)
+  useEffect(() => {
+    let el: HTMLElement | null = barRef.current
+    while (el && el !== document.body) {
+      const s = getComputedStyle(el)
+      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
+      el = el.parentElement
+    }
+    if (!el || el === document.body) return
+    const scroller = el
+    const update = () => setScrollLeft(scroller.scrollLeft)
+    update()
+    scroller.addEventListener('scroll', update, { passive: true })
+    return () => scroller.removeEventListener('scroll', update)
+  }, [])
+
   const isReadOnly = project.source === 'google'
 
   // Snapshot van alle member-rijen op het moment dat de drag start. Gebruiken
@@ -686,6 +706,13 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
 
   const g = ghost ?? { left, width }
   const barTop = BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
+  // Titel-shift: schuif de tekst met de scroll mee zolang de bar nog (deels)
+  // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
+  // tekst niet pal tegen de sticky kolomrand plakt.
+  const barLeftAbs = g.left + 2
+  const wantShift  = scrollLeft + 8 - barLeftAbs
+  const maxShift   = Math.max(0, g.width - 90)
+  const titleShift = Math.max(0, Math.min(wantShift, maxShift))
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
@@ -701,6 +728,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
           pointerEvents: 'auto' }}
       />
       <div
+        ref={barRef}
         onMouseDown={e => startDrag(e, 'move')}
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
         style={{ position: 'absolute', top: barTop, left: g.left + 2, width: g.width, height: barH,
@@ -715,7 +743,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
           style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
         </div>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 8, paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: titleShift }}>
           {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {project.name}{project.group ? ` | ${project.group}` : ''}
