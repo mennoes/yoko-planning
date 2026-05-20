@@ -273,7 +273,19 @@ async function ensureFreshAccessToken(
 }
 
 async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promise<{ added: number; updated: number; removed: number }> {
-  if (!cal.board_id) return { added: 0, updated: 0, removed: 0 }
+  // Fallback-bord: vroeger was cal.board_id verplicht en sloegen we kalenders
+  // zonder selectie over. Dat dwong de user om per kalender een bord te
+  // kiezen. Nu: routing-regels per event bepalen het juiste bord; events
+  // zonder match landen op het eerste bord in de registry (of cal.board_id
+  // als die nog gezet is voor backwards compat).
+  let defaultBoard = cal.board_id
+  if (!defaultBoard) {
+    const { data: bRow } = await admin
+      .from('boards').select('id').order('position', { ascending: true }).limit(1)
+    defaultBoard = (bRow as { id: string }[] | null)?.[0]?.id ?? null
+  }
+  if (!defaultBoard) return { added: 0, updated: 0, removed: 0 }
+  const fallbackBoard: string = defaultBoard
   const accessToken = await ensureFreshAccessToken(admin, cal)
 
   // Routing-regels (substring → board). Wordt per event toegepast; valt
@@ -498,7 +510,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const { start, end } = eventDates(ev)
       if (!start) continue
       const name        = ev.summary ?? '(geen titel)'
-      const targetBoard = routeEvent(name, cal.board_id, rules)
+      const targetBoard = routeEvent(name, fallbackBoard, rules)
       const targetGroup = await getGroupFor(targetBoard)
       seenExt.add(ev.id)
       const icalUid     = ev.iCalUID ?? null
@@ -586,7 +598,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // be missing from seenExt and get cleaned up below.
     seenExt.add(groupKey)
     const baseName    = sorted[0].summary ?? '(geen titel)'
-    const targetBoard = routeEvent(baseName, cal.board_id, rules)
+    const targetBoard = routeEvent(baseName, fallbackBoard, rules)
     const targetGroup = await getDoorlopendGroupFor(targetBoard)
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
@@ -762,7 +774,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // Dedup zoekt op ALLE boards die we via routing geraakt hebben, niet
   // alleen het default-bord. Een UvVL-event landt nu op Vlaanderen, dus
   // de XLSX-duplicaat staat ook dáár.
-  const boardsTouched = new Set<string>([cal.board_id])
+  const boardsTouched = new Set<string>([fallbackBoard])
   for (const u of upserts) boardsTouched.add(String(u.board_id))
   if (upsertedNames.size > 0) {
     const { data: dupRows } = await admin

@@ -897,26 +897,22 @@ function GoogleConnector() {
               )}
 
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                Bord:
+                Fallback-bord:
                 <select value={c.boardId ?? ''} disabled={busy}
                   onChange={e => setBoard(c.calendarId, e.target.value)}
                   style={{ flex: 1, padding: '5px 7px', borderRadius: 6,
-                    border: c.boardId ? '1px solid var(--border)' : '1px solid var(--red, #C9483D)',
+                    border: '1px solid var(--border)',
                     background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }}>
-                  <option value="">— Geen —</option>
+                  <option value="">— Automatisch (eerste bord) —</option>
                   {boards.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
                 </select>
               </label>
-              {!c.boardId && (
-                // Zonder bord-koppeling slaat de sync deze kalender over en
-                // komen er geen events binnen. Hier waarschuwen we expliciet,
-                // anders denkt de gebruiker dat de sync stuk is.
-                <div style={{ padding: '6px 8px', borderRadius: 5,
-                  background: 'rgba(201,72,61,0.12)', color: 'var(--red, #C9483D)',
-                  fontSize: 11, fontWeight: 600, marginBottom: 8, lineHeight: 1.35 }}>
-                  Geen bord gekoppeld — events worden niet ingeladen. Kies hierboven een bord.
-                </div>
-              )}
+              <div style={{ padding: '6px 8px', borderRadius: 5,
+                background: 'var(--bg-base)', color: 'var(--text-muted)',
+                fontSize: 11, marginBottom: 8, lineHeight: 1.35 }}>
+                Events worden via routing-regels over álle borden verdeeld.
+                Wat niet matcht landt op het fallback-bord.
+              </div>
 
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={async () => { setBusy(true); await runSync(); await reload(); setBusy(false) }} disabled={busy}
