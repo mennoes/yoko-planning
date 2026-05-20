@@ -1577,17 +1577,30 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
             })}
         </div>
       )}
-      {!isMerged && isGoogle && (
-        <div style={{ padding: '10px 18px', background: 'rgba(216,182,46,0.18)', borderBottom: '1px solid var(--border)', fontSize: 12.5, fontWeight: 600, color: '#7a5a0a', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>Read-only — wijzig dit item in Google Calendar.</span>
-          {rawItem?.externalLink && (
-            <a href={rawItem.externalLink as string} target="_blank" rel="noopener noreferrer"
-              style={{ marginLeft: 'auto', color: '#7a5a0a', fontWeight: 700, textDecoration: 'underline' }}>
-              Open in Google ↗
-            </a>
-          )}
-        </div>
-      )}
+      {!isMerged && isGoogle && (() => {
+        // Voor subitem-projects (recurring meeting instances) zit de link op
+        // het parent-item, niet op de subitem. Project.externalLink wordt al
+        // doorgegeven vanuit de parent — pak die als fallback. Als er nog
+        // niets is, zoeken we 'm op de parent-rij in allGroups.
+        let href = (rawItem?.externalLink as string | undefined) ?? project.externalLink ?? null
+        if (!href && project.id.includes('__si')) {
+          const parentSuffix = project.id.slice(project.board.length + 2).split('__si')[0]
+          const parent = allGroups[project.board]?.flatMap(g => g.items).find(i => i.id === parentSuffix)
+          href = (parent?.externalLink as string | undefined) ?? null
+        }
+        return (
+          <div style={{ padding: '10px 18px', background: 'rgba(216,182,46,0.18)', borderBottom: '1px solid var(--border)', fontSize: 12.5, fontWeight: 600, color: '#7a5a0a', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Read-only — wijzig dit item in Google Calendar.</span>
+            {href && (
+              <a href={href} target="_blank" rel="noopener noreferrer"
+                style={{ marginLeft: 'auto', color: '#7a5a0a', fontWeight: 700, textDecoration: 'underline',
+                  display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                Open in Google Calendar ↗
+              </a>
+            )}
+          </div>
+        )
+      })()}
       {!isMerged && <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
         <Row label="Owner">
           <div ref={ownerPickerRef} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
