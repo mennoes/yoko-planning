@@ -843,8 +843,8 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       }}
       style={{
       display: 'grid', gridTemplateColumns: gridTemplate,
-      alignItems: 'center', minHeight: 40,
-      borderBottom: '1px solid var(--border-light)',
+      alignItems: 'center', minHeight: 44,
+      borderBottom: '1px solid var(--border)',
       background: isDraggingMe ? 'var(--accent-light)' : (selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent')),
       opacity:    isDraggingMe ? 0.5 : 1,
       transform:  isDraggingMe ? 'scale(0.985)' : 'none',
@@ -956,30 +956,38 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     return fallback
   }
 
-  // Monday-stijl: korte rail-segmentjes per rij (geen doorlopende balk),
-  // links uitgelijnd net naast de eerste cel. Header & content delen de
-  // parent grid-template zodat kolombreedtes matchen.
+  // Monday-stijl: subitems leven in een eigen 'sub-card' met ruimte aan
+  // de linkerkant voor de connector-lijn, witruimte boven en onder, en
+  // een eigen lichte achtergrond. Eindigt onder met de '+ subitem' actie.
   return (
-    <div style={{ borderBottom: '1px solid var(--border)', padding: '4px 18px 8px 30px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'var(--bg-hover)', borderBottom: '1px solid var(--border-light)' }}>
-        <div />
-        <div style={{ padding: '6px 10px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
-        {cols.map(c => (
-          <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
-        ))}
-        <div style={{ borderLeft: '1px solid var(--border-light)' }} />
-      </div>
-      <SubitemRows subitems={subitems} cols={cols} gridTemplate={gridTemplate}
-        rail={rail}
-        selectedIds={selectedIds} onToggleSelect={onToggleSelect}
-        parentItemId={parentItemId} fromGroupId={fromGroupId}
-        updateOne={updateOne} deleteOne={deleteOne} />
-      <div style={{ padding: '6px 10px 6px 60px' }}>
-        <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-          + Voeg subitem toe
-        </button>
+    <div style={{ background: 'var(--bg-base)', padding: '14px 24px 14px 48px', position: 'relative' }}>
+      {/* Connector-lijn van de parent-rij naar de subitem-block — zacht
+          gekleurde verticale lijn, gevolgd door een ronde 'turn' rechts. */}
+      <div aria-hidden style={{ position: 'absolute', left: 32, top: 0, bottom: 14, width: 2, background: rail, opacity: 0.55 }} />
+      <div style={{
+        background: 'var(--bg-card)', borderRadius: 10,
+        border: '1px solid var(--border-strong)', overflow: 'hidden',
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'transparent', borderBottom: '1px solid var(--border)' }}>
+          <div />
+          <div style={{ padding: '8px 12px', fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
+          {cols.map(c => (
+            <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
+          ))}
+          <div style={{ borderLeft: '1px solid var(--border-light)' }} />
+        </div>
+        <SubitemRows subitems={subitems} cols={cols} gridTemplate={gridTemplate}
+          rail={rail}
+          selectedIds={selectedIds} onToggleSelect={onToggleSelect}
+          parentItemId={parentItemId} fromGroupId={fromGroupId}
+          updateOne={updateOne} deleteOne={deleteOne} />
+        <div style={{ padding: '8px 12px 8px 56px' }}>
+          <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+            + Voeg subitem toe
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1181,7 +1189,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
     <>
       <div style={{
         display: 'grid', gridTemplateColumns: gridTemplate,
-        alignItems: 'center', minHeight: 40,
+        alignItems: 'center', minHeight: 44,
         // Rij-onderlijn iets prominenter dan border-light maar nog steeds
         // zachter dan de groep-rand zelf.
         borderBottom: expanded ? 'none' : '1px solid var(--border)',
