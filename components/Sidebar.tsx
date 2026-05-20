@@ -898,22 +898,11 @@ function GoogleConnector() {
                 </label>
               )}
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                Fallback-bord:
-                <select value={c.boardId ?? ''} disabled={busy}
-                  onChange={e => setBoard(c.calendarId, e.target.value)}
-                  style={{ flex: 1, padding: '5px 7px', borderRadius: 6,
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }}>
-                  <option value="">— Automatisch (eerste bord) —</option>
-                  {boards.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-                </select>
-              </label>
               <div style={{ padding: '6px 8px', borderRadius: 5,
                 background: 'var(--bg-base)', color: 'var(--text-muted)',
                 fontSize: 11, marginBottom: 8, lineHeight: 1.35 }}>
-                Events worden via routing-regels over álle borden verdeeld.
-                Wat niet matcht landt op het fallback-bord.
+                Events worden via routing-regels automatisch over álle borden
+                verdeeld ({boards.map(b => b.label).join(', ')}).
               </div>
 
               <div style={{ display: 'flex', gap: 6 }}>
