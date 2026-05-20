@@ -92,7 +92,7 @@ type GoogleCalRow = {
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
 type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
-type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null }
 type Rule     = { pattern: string; board_id: string }
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
@@ -397,7 +397,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // overschrijven bij de volgende Google-sync.
   const { data: existingRows } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id')
+    .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
@@ -472,7 +472,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   if (wantedICals.length > 0) {
     const { data: sharedRows } = await admin
       .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position')
       .eq('source', 'google')
       .in('ical_uid', Array.from(new Set(wantedICals)))
     for (const r of (sharedRows as ItemRow[] | null) ?? []) {
@@ -582,7 +582,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
           // Google Meet-link wanneer 't event er één heeft (videocall-meetings).
           ...(ev.hangoutLink ? { meetLink: ev.hangoutLink } : {}),
         },
-        position:            0,
+        // Position bewaren als er al een rij was — anders sprong een
+        // handmatig gesleept item bij elke sync terug naar bovenaan.
+        position:            existingRow?.position ?? 0,
         source:              'google',
         external_id:         ev.id,
         ical_uid:            icalUid,
@@ -724,7 +726,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         // hele reeks; pak gewoon de eerste niet-lege).
         ...(() => { const m = sorted.find(ev => ev.hangoutLink)?.hangoutLink; return m ? { meetLink: m } : {} })(),
       },
-      position:            0,
+      // Position bewaren — anders sprong een handmatig gesleept item
+      // bij elke sync terug naar bovenaan.
+      position:            existingRow?.position ?? 0,
       source:              'google',
       external_id:         groupKey,
       ical_uid:            icalUid,
