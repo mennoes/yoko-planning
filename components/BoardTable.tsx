@@ -1760,7 +1760,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onNestItem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
   boardId: string
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   selectedIds: Set<string>
@@ -1771,6 +1771,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   reorderMode: boolean
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
+  onMoveItemsHere: (itemIds: string[]) => void
   onNestItem:     (sourceId: string, fromGroupId: string, targetId: string) => void
   onUnnestSubitemHere: (subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) => void
   onDeleteGroup: () => void
@@ -1965,14 +1966,20 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   }
   function onContainerDrop(e: React.DragEvent) {
     setDropHover(false)
-    // Top-level item naar deze groep
+    // Top-level item(s) naar deze groep
     const rawItem = e.dataTransfer.getData('application/x-yoko-item')
     if (rawItem) {
       try {
-        const { itemId, fromGroupId } = JSON.parse(rawItem) as { itemId: string; fromGroupId: string }
-        if (itemId && fromGroupId && fromGroupId !== group.id) {
+        const data = JSON.parse(rawItem) as { itemId: string; fromGroupId: string; itemIds?: string[] }
+        // Multi-select drag: alle geselecteerde items naar deze groep.
+        // Zonder de selectie was ie tegen z'n eigen drop in eerdere versie
+        // niks aan 't doen — daar viel ie terug op alleen het gegrepen item.
+        if (data.itemIds && data.itemIds.length > 1) {
           e.preventDefault()
-          onMoveItemHere(itemId, fromGroupId)
+          onMoveItemsHere(data.itemIds)
+        } else if (data.itemId && data.fromGroupId && data.fromGroupId !== group.id) {
+          e.preventDefault()
+          onMoveItemHere(data.itemId, data.fromGroupId)
         }
       } catch {}
       return
@@ -2225,9 +2232,16 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 onDragStart={e => {
                   dragRowRef.current = realIdx
                   e.dataTransfer.effectAllowed = 'move'
-                  // Geef ook expliciet door welke groep + item we slepen,
-                  // zodat een andere BoardGroupSection het in de drop kan oppakken.
-                  e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({ itemId: item.id, fromGroupId: group.id, fromBoard: boardId }))
+                  // Geef ook expliciet door welke groep + item we slepen.
+                  // Als het gesleepte item geselecteerd is én er zijn meerdere
+                  // selecties, nemen we de hele selectie mee — drop op een
+                  // andere groep verplaatst dan álles in één keer.
+                  const isMulti = selectedIds.has(item.id) && selectedIds.size > 1
+                  const itemIds = isMulti ? Array.from(selectedIds) : [item.id]
+                  e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({
+                    itemId: item.id, fromGroupId: group.id, fromBoard: boardId,
+                    itemIds,
+                  }))
                 }}
                 onDragOver={e => {
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
@@ -2658,6 +2672,30 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       if (g.id === fromGroupId) return { ...g, items: g.items.filter(i => i.id !== itemId) }
       if (g.id === toGroupId)   return { ...g, items: [...g.items, item] }
       return g
+    }))
+  }
+
+  // Verplaats meerdere items in één keer naar `toGroupId`. We zoeken ze
+  // op id over alle groepen heen (sneller dan per item een aparte
+  // onChange-pass) en plakken ze in de doel-groep in de oude volgorde.
+  function moveItemsBetweenGroups(itemIds: string[], toGroupId: string) {
+    if (itemIds.length === 0) return
+    const idSet = new Set(itemIds)
+    const collected: BoardItem[] = []
+    for (const g of groups) {
+      for (const it of g.items) if (idSet.has(it.id)) collected.push(it)
+    }
+    if (collected.length === 0) return
+    onChange(groups.map(g => {
+      const filtered = g.id === toGroupId ? g.items : g.items.filter(i => !idSet.has(i.id))
+      if (g.id !== toGroupId) {
+        return filtered.length === g.items.length ? g : { ...g, items: filtered }
+      }
+      // Doel-groep: voeg alleen items toe die nog niet aanwezig waren.
+      const existing = new Set(g.items.map(i => i.id))
+      const toAdd = collected.filter(i => !existing.has(i.id))
+      if (toAdd.length === 0) return g
+      return { ...g, items: [...g.items, ...toAdd] }
     }))
   }
 
@@ -3112,6 +3150,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               reorderMode={reorderMode}
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
+              onMoveItemsHere={(itemIds) => moveItemsBetweenGroups(itemIds, group.id)}
               onNestItem={nestItemUnder}
               onUnnestSubitemHere={unnestSubitemHere}
               onDeleteGroup={() => handleDeleteGroup(group.id)} />
