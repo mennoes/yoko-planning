@@ -792,9 +792,11 @@ function GoogleConnector() {
 
   async function runSync() {
     const results = await syncGoogleNow()
-    // Refresh local cache for every board the user has connected
-    const boards = new Set(connections.map(c => c.boardId).filter(Boolean) as string[])
-    for (const b of boards) await pullBoardFromRemote(b)
+    // Refresh local cache voor ÁLLE borden — events worden via routing-regels
+    // over meerdere borden verdeeld, niet alleen het fallback-bord van de
+    // kalender. Anders zou een sync wel goed naar Supabase schrijven, maar
+    // de UI zou pas bij een page-reload het volledige resultaat tonen.
+    await Promise.all(BOARD_NAMES.map(b => pullBoardFromRemote(b)))
 
     const errs = results.filter(r => r.error)
     if (errs.length > 0) {
@@ -931,6 +933,13 @@ function GoogleConnector() {
               )}
             </div>
           ))}
+          <button onClick={async () => { setBusy(true); await runSync(); await reload(); setBusy(false) }} disabled={busy}
+            style={{ padding: '9px', borderRadius: 7,
+              border: '1px solid var(--accent)',
+              background: 'var(--accent)', color: '#fff',
+              fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>
+            ↻ Sync alle borden nu
+          </button>
           <button onClick={async () => {
               if (!confirm('Verwijder alle handmatige rijen die dezelfde naam hebben als een Google-event? (Bijv. duplicaten van vóór de Google koppeling.)')) return
               setBusy(true)

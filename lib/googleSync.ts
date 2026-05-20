@@ -533,11 +533,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // voorrang (events kunnen oud-en-afgehandeld zijn). Anders volgen we
       // bestaande logica: gebruiker-keuze respecteren, anders targetGroup.
       const isVrij = isVrijTitle(name)
+      // existingRow.group_id ALTIJD respecteren (zelfs voor Vrij-events) —
+      // anders zou een sync door een ander teamlid een handmatig verplaatst
+      // item terug naar Vrij/route-target schuiven. Alleen Done overruled:
+      // afgevinkte items horen in de Done-bucket. Voor nieuwe rijen (geen
+      // existingRow) gebruiken we Vrij/target als startpositie.
       const keepGroup = newStatus === 'Done'
         ? await getDoneGroupFor(keepBoard)
-        : isVrij
-          ? await getVrijGroupFor(keepBoard)
-          : (existingRow?.group_id ?? targetGroup)
+        : (existingRow?.group_id
+            ?? (isVrij ? await getVrijGroupFor(keepBoard) : targetGroup))
       const eventOwners = ownersForEvent(ev)
       // Union van bestaande + Google-attendees: bestaande user-toevoegingen
       // blijven staan, en nieuwe Yoko-deelnemers uit Google worden vanzelf
