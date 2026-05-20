@@ -100,6 +100,9 @@ function itemToSubitem(item: BoardItem): SubItem {
     // het uur kwijt zodra een Google-event als subitem wordt geplaatst.
     startTime: (item as { startTime?: string | null }).startTime ?? null,
     endTime:   (item as { endTime?:   string | null }).endTime   ?? null,
+    externalLink: item.externalLink ?? null,
+    meetLink:     (item as { meetLink?: string | null }).meetLink ?? null,
+    source:       item.source,
     estHours:  Number(item.estHours) || 0,
   }
 }

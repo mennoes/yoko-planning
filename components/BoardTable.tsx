@@ -852,22 +852,28 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       cursor: !editName && parentItemId ? (isDraggingMe ? 'grabbing' : 'grab') : 'default',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-      {/* Eerste kolom: checkbox + boom-connector (verticale lijn met
-          horizontale elbow per rij — als een Monday/file-tree). */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%', paddingRight: 0, position: 'relative' }}>
+      {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
+          (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
+          checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative', padding: '0 0 0 10px' }}>
         {onToggleSelect && (
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
             style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 13, height: 13,
               opacity: selected || hover ? 1 : 0.4, transition: 'opacity 0.15s', flexShrink: 0, zIndex: 1 }} />
         )}
-        {/* Boom-connector: top-half is altijd zichtbaar (verbindt met boven),
-            bottom-half is verborgen op de laatste rij (eindigt bij elbow). */}
+        {/* Boom-connector: verticale lijn helemaal rechts, niet over de
+            checkbox heen. Top-half altijd zichtbaar; bottom-half verbergen
+            op laatste rij. */}
         <div aria-hidden style={{ position: 'absolute', right: 4, top: 0, bottom: isLast ? '50%' : 0, width: 2, background: rail ?? 'var(--accent)' }} />
-        {/* Horizontale elbow naar de eerste cel. */}
         <div aria-hidden style={{ position: 'absolute', right: 0, top: '50%', width: 6, height: 2, background: rail ?? 'var(--accent)' }} />
       </div>
-      <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+      <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        {/* Google-link badge wanneer 't een Google-item is dat als subitem
+            werd genest (externalLink + source bewaard tijdens nesting). */}
+        {(subitem.source === 'google' || subitem.externalLink) && (
+          <GoogleBadge href={subitem.externalLink ?? undefined} size={13} />
+        )}
         {editName ? (
           <input autoFocus value={nameDraft}
             onChange={e => setNameDraft(e.target.value)}
@@ -2655,6 +2661,11 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       // 'De hele dag'-blok van de Week-view zodra ze als subitem genest zijn.
       startTime: (source as { startTime?: string | null }).startTime ?? null,
       endTime:   (source as { endTime?:   string | null }).endTime   ?? null,
+      // Bron-link + Meet-link bewaren zodat 'Open in Google ↗' en de Meet-pill
+      // op de subitem-rij ook blijven werken na nesting.
+      externalLink: (source as { externalLink?: string | null }).externalLink ?? null,
+      meetLink:     (source as { meetLink?:     string | null }).meetLink     ?? null,
+      source:       source.source,
       estHours:  Number(source.estHours) || 0,
     }
     // Onthoud de nesting-keuze voor Google-items: een volgende episode met

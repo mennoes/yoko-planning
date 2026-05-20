@@ -13,6 +13,10 @@ export type SubItem = {
   endTime?:     string | null
   // Google Meet-link wanneer 't event er één heeft (video-meetings).
   meetLink?:    string | null
+  // Bron-link: bewaard wanneer 'n Google-item handmatig genest wordt als
+  // subitem, zodat 'Open in Google ↗' beschikbaar blijft.
+  externalLink?: string | null
+  source?:      'manual' | 'google'
   estHours:     number
   echtGewerkt?: number
 }

@@ -29,7 +29,7 @@ export function GoogleBadge({ href, size = 14, style, title }: Props) {
         display: 'inline-flex', alignItems: 'center', gap: 4,
         padding: '1px 6px 1px 4px', borderRadius: 5,
         background: 'var(--sup-yellow)', color: '#000',
-        fontSize: size - 3, fontWeight: 800, lineHeight: 1.2,
+        fontSize: size - 3, fontWeight: 600, lineHeight: 1.2,
         flexShrink: 0, textDecoration: 'none', cursor: 'pointer',
         boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
         ...style,
@@ -37,8 +37,8 @@ export function GoogleBadge({ href, size = 14, style, title }: Props) {
       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.92)')}
       onMouseLeave={e => (e.currentTarget.style.filter = 'none')}>
       <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: size, height: size, fontSize: size - 4 }}>G</span>
-      <span style={{ fontSize: size - 5, fontWeight: 700, opacity: 0.85 }}>↗</span>
+        width: size, height: size, fontSize: size - 4, fontWeight: 700 }}>G</span>
+      <span style={{ fontSize: size - 5, fontWeight: 500, opacity: 0.85 }}>↗</span>
     </a>
   )
 }
