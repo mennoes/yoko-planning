@@ -211,7 +211,7 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
   return (
     <div>
       <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
-        padding: '3px 10px', borderRadius: 4, cursor: 'pointer', border: 'none',
+        padding: '3px 12px', borderRadius: 999, cursor: 'pointer', border: 'none',
         background: opt.color || 'var(--overlay-medium)',
         color: opt.color ? '#fff' : 'var(--text-muted)',
         fontSize: 12.5, fontWeight: opt.color ? 600 : 400,
@@ -605,14 +605,14 @@ function DateRangeCell({
         position: 'relative', overflow: 'hidden',
         width: '100%', textAlign: 'left', cursor: 'pointer',
         border: hasAny ? `1px solid ${pillClr}55` : 'none',
-        borderRadius: 4, padding: '3px 8px',
+        borderRadius: 999, padding: '3px 10px',
         background: hasAny ? pillClr + '22' : 'transparent',
         display: 'flex', alignItems: 'center', gap: 5, minHeight: 26,
       }}>
         {hasAny && (
           <span style={{
             position: 'absolute', inset: 0, width: `${progressPct}%`,
-            background: pillClr + 'cc', borderRadius: 3,
+            background: pillClr + 'cc', borderRadius: 999,
             transition: 'width 0.4s ease', pointerEvents: 'none', zIndex: 0,
           }} />
         )}
