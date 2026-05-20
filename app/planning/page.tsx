@@ -17,7 +17,7 @@ import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, type Project, type 
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
-  effectiveCategory,
+  effectiveCategory, isVrijTitle,
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
@@ -825,7 +825,34 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   })
   const allDay: Project[] = []
   const timed:  Project[] = []
-  for (const p of visible) (p.startTime ? timed : allDay).push(p)
+  // Vrij-events (vakantie, feestdag, Pinksterdag, etc.) tonen we als full-
+  // workday-blok in het uur-grid (09:00–17:00) ipv in de all-day banner —
+  // dan zie je ze duidelijk de werkdag opvullen.
+  function isVrij(p: Project) {
+    if (isVrijTitle(p.name)) return true
+    const g = (p.group ?? '').toLowerCase()
+    return g === 'vrij' || g.includes('vakantie')
+  }
+  for (const p of visible) {
+    if (p.startTime) { timed.push(p); continue }
+    if (isVrij(p)) {
+      // Synthesische tijd: 09:00 → 17:00 per dag. Multi-day vrij-events
+      // (Pasen weekend, vakantie-week) fanen we uit naar een blok per dag.
+      const s = new Date(p.startDate!)
+      const e = p.endDate ? new Date(p.endDate) : new Date(p.startDate!)
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        const iso = d.toISOString().slice(0, 10)
+        timed.push({
+          ...p,
+          id: `${p.id}__vrij_${iso}`,
+          startDate: iso, endDate: iso,
+          startTime: '09:00', endTime: '17:00',
+        } as Project)
+      }
+      continue
+    }
+    allDay.push(p)
+  }
 
   const gridStart = cols[0]?.rangeStart
   if (!gridStart) return null

@@ -38,8 +38,14 @@ const OVERHEAD_PATTERNS = [
 ]
 const VRIJ_PATTERNS = [
   /\bvrij\b/i, /\bvakantie\b/i, /\bverlof\b/i, /\bthuiswerken\b/i, /\bziek\b/i,
-  /\bfeestdag\b/i, /\bhemelvaart\b/i, /\bpinksteren\b/i, /\bpasen\b/i, /\bkerst\b/i,
+  /\bfeestdag/i,         // feestdag, feestdagen
+  /\bhemelvaart/i,       // hemelvaart, hemelvaartdag
+  /\bpinkster/i,         // pinksteren, pinksterdag, tweede pinksterdag
+  /\bpasen\b/i, /\bpaasdag/i,
+  /\bkerst/i,            // kerst, kerstdag, kerstavond
+  /\bnieuwjaar/i,
   /\bkoningsdag\b/i, /\bbevrijdingsdag\b/i,
+  /\bgoede vrijdag\b/i,
 ]
 
 // Door de Google-sync gebruikt om events met 'Vrij'/'Vakantie' in de titel
