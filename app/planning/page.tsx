@@ -82,7 +82,11 @@ function vc(vs: ViewSize) {
 // met owner + naam goed leesbaar zijn (zoals Google Cal week-view).
 const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 }
 // How many columns of history to render before today on first load.
-const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 14, week: 4, maand: 2 }
+// Voor de Week-view (dag-zoom) maar 1 dag terug zodat 'vandaag' linksboven
+// in beeld staat én er nog 13 dagen vooruit zichtbaar zijn. Eerder was 14
+// terug + 14 totaal, wat betekende dat 'vandaag' helemaal niet zichtbaar
+// was en je alleen achteruit kon scrollen.
+const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 1, week: 4, maand: 2 }
 // Column counts per zoom
 // 14 dagen = 2 werkweken in beeld bij de Week (Google Cal-stijl) zoom; was
 // 60 wat horizontaal scrollen omslachtig maakte. Overzicht (week-zoom) en
