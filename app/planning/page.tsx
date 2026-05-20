@@ -78,13 +78,16 @@ function vc(vs: ViewSize) {
   return                     { cs: 46, or: 20, hh:  72, av: 44 }
 }
 // Column widths per zoom
-// 'dag' = Google-Agenda-stijl Week (dagkolommen) — flink wijder dan eerst
-// (46→136) zodat items van één dag eindelijk leesbaar zijn ipv ingedrukt.
-const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 136, week: 104, maand: 120 }
+// 'dag' = Google-Agenda-stijl Week (dagkolommen). Wijder zodat eventblokken
+// met owner + naam goed leesbaar zijn (zoals Google Cal week-view).
+const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 }
 // How many columns of history to render before today on first load.
 const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 14, week: 4, maand: 2 }
 // Column counts per zoom
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 60, week: 56, maand: 18 }
+// 14 dagen = 2 werkweken in beeld bij de Week (Google Cal-stijl) zoom; was
+// 60 wat horizontaal scrollen omslachtig maakte. Overzicht (week-zoom) en
+// maand-fallback blijven hun bredere range houden.
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 14, week: 56, maand: 18 }
 const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
@@ -2730,9 +2733,111 @@ export default function PlanningPage() {
             })}
           </div>
 
-          {/* Member rows (filtered by people-picker if active),
-              grouped: TEAM YOKO > UNASSIGNED > FREELANCERS (collapsible) */}
-          {(() => {
+          {/* Week-zoom (zoom === 'dag'): Google Calendar-stijl week-grid.
+              Eén grote oppervlakte, alle items als gekleurde event-pills
+              gepositioneerd op hun datum-range, lane-pack om overlap te
+              vermijden. Vervangt de per-persoon rijen in deze zoom. */}
+          {zoom === 'dag' ? (() => {
+            const visible = effectiveProjects.filter(p => {
+              if (!p.startDate && !p.endDate) return false
+              if (filterMembers.size > 0 && !p.ownerIds.some(id => filterMembers.has(id))) return false
+              return true
+            })
+            const gridStart = cols[0]?.rangeStart
+            if (!gridStart) return null
+            const gridStartMs = gridStart.getTime()
+            const totalWidth  = cols.reduce((s, c) => s + c.widthPx, 0)
+            const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
+            const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
+
+            type Raw = { p: Project; left: number; width: number }
+            const raw: Raw[] = []
+            for (const p of visible) {
+              const s = new Date(p.startDate ?? p.endDate!).getTime()
+              const e = (p.endDate ? new Date(p.endDate).getTime() : s) + 86400000
+              if (e < gridStartMs || s > gridEndMs) continue
+              const cs   = Math.max(s, gridStartMs)
+              const ce   = Math.min(e, gridEndMs)
+              const left = (cs - gridStartMs) / msPerPx
+              const width = Math.max((ce - cs) / msPerPx - 4, 80)
+              raw.push({ p, left, width })
+            }
+            const sorted = [...raw].sort((a, b) => a.left - b.left)
+            const laneEnds: number[] = []
+            const bars = sorted.map(b => {
+              let lane = laneEnds.findIndex(end => end <= b.left + 1)
+              if (lane < 0) { lane = laneEnds.length; laneEnds.push(0) }
+              laneEnds[lane] = b.left + b.width
+              return { ...b, lane }
+            })
+            const laneCount = Math.max(1, laneEnds.length)
+            const laneH = 52
+            const gridH = laneCount * (laneH + 6) + 14
+
+            return (
+              <div style={{ display: 'flex' }}>
+                <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+                  background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
+                <div style={{ position: 'relative', width: totalWidth, minHeight: gridH, background: stickyBg }}>
+                  {/* Day-cell achtergronden (weekend / vandaag highlights) */}
+                  {(() => {
+                    let acc = 0
+                    return cols.map(col => {
+                      const left = acc; acc += col.widthPx
+                      const dow = col.rangeStart.getDay()
+                      const weekend = dow === 0 || dow === 6
+                      return (
+                        <div key={col.key} style={{
+                          position: 'absolute', left, top: 0, width: col.widthPx, height: gridH,
+                          borderLeft: '1px solid var(--border-light)',
+                          background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
+                          pointerEvents: 'none',
+                        }} />
+                      )
+                    })
+                  })()}
+                  {/* Event pills */}
+                  {bars.map(b => {
+                    const color = BOARD_COLORS[b.p.board] ?? '#888'
+                    const top   = 10 + b.lane * (laneH + 6)
+                    const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
+                    return (
+                      <button key={b.p.id} onClick={() => setDetailProject(b.p)}
+                        title={b.p.name}
+                        style={{
+                          position: 'absolute', left: b.left + 2, top,
+                          width: b.width, height: laneH,
+                          background: color, color: '#fff',
+                          border: 'none', borderRadius: 7,
+                          padding: '6px 10px', cursor: 'pointer', textAlign: 'left',
+                          fontSize: 12, fontWeight: 600, lineHeight: 1.25,
+                          display: 'flex', flexDirection: 'column', gap: 4,
+                          overflow: 'hidden',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                        }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 'auto' }}>
+                          {owners.slice(0, 4).map(m => (
+                            <MemberAvatar key={m.id} member={m} size={18} />
+                          ))}
+                          {owners.length > 4 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.9 }}>+{owners.length - 4}</span>
+                          )}
+                          {b.p.estHours > 0 && (
+                            <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 600,
+                              background: 'rgba(0,0,0,0.18)', padding: '1px 6px', borderRadius: 999 }}>
+                              {b.p.estHours}u
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })() : (() => {
             const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
             const visible = team.filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
             const yokoTeam     = visible.filter(m => YOKO_IDS.has(m.id))
@@ -2825,8 +2930,9 @@ export default function PlanningPage() {
                   {cols.map(col => {
                     const contribs = memberHoursInCol(effectiveProjects, member.id, col)
                     const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
-                    const dow      = zoom === 'dag' ? col.rangeStart.getDay() : -1
-                    const weekend  = dow === 0 || dow === 6
+                    // In Overzicht-zoom is een 'kolom' een hele week, dus
+                    // weekend-highlighting is hier niet relevant.
+                    const weekend  = false
                     return (
                       <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-light)', padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent', position: 'relative' }}>
