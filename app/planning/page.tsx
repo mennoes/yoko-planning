@@ -78,7 +78,9 @@ function vc(vs: ViewSize) {
   return                     { cs: 46, or: 20, hh:  72, av: 44 }
 }
 // Column widths per zoom
-const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 46, week: 104, maand: 120 }
+// 'dag' = Google-Agenda-stijl Week (dagkolommen) — flink wijder dan eerst
+// (46→136) zodat items van één dag eindelijk leesbaar zijn ipv ingedrukt.
+const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 136, week: 104, maand: 120 }
 // How many columns of history to render before today on first load.
 const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 14, week: 4, maand: 2 }
 // Column counts per zoom
@@ -1816,7 +1818,9 @@ export default function PlanningPage() {
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     if (typeof window === 'undefined') return 'week'
     const v = localStorage.getItem('planning-zoom') as ZoomLevel
-    return (v === 'dag' || v === 'week' || v === 'maand') ? v : 'week'
+    // 'maand' is uit het UI maar oude opgeslagen waardes vallen terug op week.
+    if (v === 'maand') return 'week'
+    return (v === 'dag' || v === 'week') ? v : 'week'
   })
   const gridRef = useRef<HTMLDivElement>(null)
   const dragScrollRef = useRef<{ startX: number; scrollLeft: number } | null>(null)
@@ -2281,10 +2285,14 @@ export default function PlanningPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap', marginBottom: isMobile ? 10 : 16 }}>
           {/* Zoom */}
           <div style={segGroup}>
-            {(['dag', 'week', 'maand'] as ZoomLevel[]).map(z => (
+            {/* 'maand' is uit het keuzemenu gehaald — gebruik de week-zoom
+                (overzicht) voor een groter tijdsbereik. De interne ZoomLevel
+                blijft hetzelfde zodat opgeslagen localStorage-waardes geen
+                regressie geven. */}
+            {(['dag', 'week'] as ZoomLevel[]).map(z => (
               <button key={z} onClick={() => { setZoom(z); setColOffset(0) }}
                 style={segBtn(zoom === z)}>
-                {z === 'dag' ? 'Dag' : z === 'week' ? 'Week' : 'Maand'}
+                {z === 'dag' ? 'Week' : 'Overzicht'}
               </button>
             ))}
           </div>
