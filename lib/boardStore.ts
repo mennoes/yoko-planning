@@ -281,7 +281,11 @@ export function subscribeRemoteBoard(boardName: string): () => void {
 async function learnBoardRoutingRule(itemName: string, targetBoard: string): Promise<void> {
   if (!supabase) return
   const pattern = normalizeTitle(itemName)
-  if (!pattern || pattern.length < 3) return  // te kort = te breed
+  // Min lengte ophogen van 3 → 8 zodat we niet leren op te-korte/te-generieke
+  // patronen ('call', 'lunch', 'sync') die via substring-match later
+  // onvoorspelbare events zouden meeslepen. Voorbeelden die wél door komen:
+  // 'wekelijkse check-in' (19), 'team standup' (12), 'femsplainers' (12).
+  if (!pattern || pattern.length < 8) return
   // Check op een bestaande regel met dit pattern. Als die al richting het
   // doel-bord wijst zijn we klaar; wijst-ie naar een ander bord, update 'm
   // naar de nieuwste keuze (gebruiker stuurt hier expliciet bij).
@@ -296,6 +300,7 @@ async function learnBoardRoutingRule(itemName: string, targetBoard: string): Pro
     await supabase.from('calendar_routing_rules')
       .update({ board_id: targetBoard, enabled: true })
       .eq('id', row.id)
+    logRoutingRuleChange(pattern, targetBoard, 'updated').catch(() => {})
     return
   }
   await supabase.from('calendar_routing_rules').insert({
@@ -303,6 +308,26 @@ async function learnBoardRoutingRule(itemName: string, targetBoard: string): Pro
     board_id: targetBoard,
     enabled:  true,
     position: 100,  // user-leerde regels achteraan; expliciete seed-regels behouden voorrang
+  })
+  logRoutingRuleChange(pattern, targetBoard, 'created').catch(() => {})
+}
+
+// Audit-log entry zodat in de Activiteit-feed te zien is wanneer en waarom
+// er een routing-regel is bijgekomen. Daarvoor was 't onzichtbaar dat een
+// item-verplaatsing automatisch ook toekomstige events zou meeslepen —
+// gebruikers kwamen voor verrassingen te staan ('waarom verschijnen er
+// opeens nieuwe items in dit bord?').
+async function logRoutingRuleChange(pattern: string, targetBoard: string, action: 'created' | 'updated'): Promise<void> {
+  if (!supabase) return
+  const uid = await getCurrentUserId()
+  if (!uid) return
+  const verb   = action === 'created' ? 'Routing-regel aangemaakt' : 'Routing-regel bijgewerkt'
+  const detail = `Toekomstige events met '${pattern}' → bord '${targetBoard}'`
+  await supabase.from('activity').insert({
+    user_id: uid,
+    action:  verb,
+    target:  `routing_rule:${pattern}`,
+    detail,
   })
 }
 
