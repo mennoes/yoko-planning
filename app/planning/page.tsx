@@ -761,9 +761,12 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   onSelect: (p: Project) => void
   onTimedDrag: (p: Project, ns: string, ne: string, nst: string, net: string) => void
 }) {
-  const HOUR_START = 7
-  const HOUR_END   = 22
-  const HOUR_H     = 40
+  // Werkdag-venster: 09:00 – 18:00. Events buiten dit bereik (vroege Google-
+  // afspraken, avond-syncs) worden netjes geclipt zodat 't overzicht
+  // compact blijft.
+  const HOUR_START = 9
+  const HOUR_END   = 18
+  const HOUR_H     = 44
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<null | {
@@ -938,7 +941,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             )
           })}
         </div>
-        <div ref={gridRef} style={{ position: 'relative', width: totalWidth, height: timeGridH, background: stickyBg }}>
+        <div ref={gridRef} style={{ position: 'relative', width: totalWidth, height: timeGridH, background: stickyBg,
+          // Events buiten 09:00–18:00 worden geclipt — geen visuele
+          // overspill onder/boven het raster.
+          overflow: 'hidden' }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => (
             <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: HOUR_H,
               borderBottom: '1px solid var(--border-light)', pointerEvents: 'none' }} />
