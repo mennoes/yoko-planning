@@ -85,7 +85,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; estHours?: number }
+type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number }
 type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null }
 type Rule     = { pattern: string; board_id: string }
 
@@ -93,6 +93,15 @@ function eventDates(ev: GoogleEvent): { start: string | null; end: string | null
   const s = ev.start.date ?? ev.start.dateTime?.slice(0, 10) ?? null
   const e = ev.end.date   ?? ev.end.dateTime?.slice(0, 10)   ?? null
   return { start: s, end: e }
+}
+
+// Pakt HH:MM uit ev.start.dateTime / ev.end.dateTime — alleen aanwezig
+// bij timed events (geen all-day). Wordt in extra.startTime / extra.endTime
+// opgeslagen zodat de Week-view ze op uur-positie kan renderen.
+function eventTimes(ev: GoogleEvent): { startTime: string | null; endTime: string | null } {
+  const startTime = ev.start.dateTime ? ev.start.dateTime.slice(11, 16) : null
+  const endTime   = ev.end.dateTime   ? ev.end.dateTime.slice(11, 16)   : null
+  return { startTime, endTime }
 }
 
 // Estimate planning-hours from a Google event. Timed events use the actual
@@ -572,7 +581,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
         subitems:           [],
         journal:            existingRow?.journal ?? [],
-        extra:              { ownerHours: ownerHoursMap },
+        extra:              { ownerHours: ownerHoursMap, ...(() => { const t = eventTimes(ev); return t.startTime || t.endTime ? { startTime: t.startTime, endTime: t.endTime } : {} })() },
         position:            0,
         source:              'google',
         external_id:         ev.id,
@@ -622,6 +631,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const priorById = new Map<string, SubItemSnapshot>(priorSubs.map(s => [s.id, s]))
     const subitems = sorted.map(ev => {
       const { start, end } = eventDates(ev)
+      const { startTime, endTime } = eventTimes(ev)
       const dateLabel = start ? new Date(start).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
       const sid  = `si_g_${ev.id}`
       const prev = priorById.get(sid)
@@ -633,6 +643,8 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         status:    resolveStatus(prev?.status, end ?? start),
         startDate: start,
         endDate:   end ?? start,
+        startTime,
+        endTime,
         estHours:  eventHours(ev) * finalOwners.length,
       }
     })

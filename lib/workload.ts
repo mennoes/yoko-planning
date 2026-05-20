@@ -13,6 +13,11 @@ export type Project = {
   ownerIds: string[]
   startDate: string | null
   endDate: string | null
+  // HH:MM strings (24-uurs) wanneer er een specifieke tijd bekend is —
+  // Google-events met dateTime krijgen hem mee, all-day blijft null. De
+  // Week-zoom in Planning gebruikt 'm voor uur-positionering.
+  startTime?: string | null
+  endTime?:   string | null
   estHours: number
   ownerHours?: Record<string, number>   // optional per-owner hours override
   status: 'active' | 'done'

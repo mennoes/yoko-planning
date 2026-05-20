@@ -180,7 +180,7 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
     g.items
       .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; ownerIds?: string[] }> | undefined) ?? []
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[] }> | undefined) ?? []
         // Subitems with their own dates → render each one as a separate bar
         // so the planner shows when each piece actually happens. Parent bar
         // is suppressed to avoid double-counting hours.
@@ -194,6 +194,8 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
             ownerIds:  (si.ownerIds && si.ownerIds.length ? si.ownerIds : (i.ownerIds as string[])),
             startDate: si.startDate ?? null,
             endDate:   si.endDate ?? si.startDate ?? null,
+            startTime: si.startTime ?? null,
+            endTime:   si.endTime ?? null,
             estHours:  Number(si.estHours) || 0,
             status:    (i.status as string) === 'Done' ? 'done' : 'active',
             source:    (i.source as 'manual' | 'google' | undefined),
@@ -212,6 +214,8 @@ function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
           ownerIds:  i.ownerIds  as string[],
           startDate: i.startDate as string | null,
           endDate:   i.endDate   as string | null,
+          startTime: (i.startTime as string | null | undefined) ?? null,
+          endTime:   (i.endTime as string | null | undefined) ?? null,
           estHours:  hours,
           ownerHours: (i.ownerHours as Record<string, number> | undefined),
           status:    (i.status as string) === 'Done' ? 'done' : 'active',
@@ -734,6 +738,282 @@ function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
   const dowMon = ((days % 7) + 7) % 7  // 0=Mon..6=Sun (gridStart is a Mon)
   const cellInWeek = Math.min(dowMon, 5) // Sat/Sun snap to col-end
   return weekIdx * weekColW + (cellInWeek / 5) * weekColW
+}
+
+// ─── Week-time-grid (Google Calendar-stijl uur-positie + drag) ───────────────
+function pad2(n: number) { return n < 10 ? '0' + n : String(n) }
+function fmtMin(m: number) { return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60) }
+
+function WeekTimeGrid({ cols, projects, filterMembers, team, nameW, stickyBg, onSelect, onTimedDrag }: {
+  cols: Col[]
+  projects: Project[]
+  filterMembers: Set<string>
+  team: TeamMember[]
+  nameW: number
+  stickyBg: string
+  onSelect: (p: Project) => void
+  onTimedDrag: (p: Project, ns: string, ne: string, nst: string, net: string) => void
+}) {
+  const HOUR_START = 7
+  const HOUR_END   = 22
+  const HOUR_H     = 40
+  const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<null | {
+    p: Project; durMin: number; newIso: string; newStartMin: number;
+  }>(null)
+
+  // Filter visible projects
+  const visible = projects.filter(p => {
+    if (!p.startDate && !p.endDate) return false
+    if (filterMembers.size > 0 && !p.ownerIds.some(id => filterMembers.has(id))) return false
+    return true
+  })
+  const allDay: Project[] = []
+  const timed:  Project[] = []
+  for (const p of visible) (p.startTime ? timed : allDay).push(p)
+
+  const gridStart = cols[0]?.rangeStart
+  if (!gridStart) return null
+  const gridStartMs = gridStart.getTime()
+  const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
+  const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
+
+  // All-day lane-pack
+  type AllDayBar = { p: Project; left: number; width: number; lane: number }
+  const rawAllDay: { p: Project; left: number; width: number }[] = []
+  for (const p of allDay) {
+    const s = new Date(p.startDate ?? p.endDate!).getTime()
+    const e = (p.endDate ? new Date(p.endDate).getTime() : s) + 86400000
+    if (e < gridStartMs || s > gridEndMs) continue
+    const cs = Math.max(s, gridStartMs); const ce = Math.min(e, gridEndMs)
+    const left = (cs - gridStartMs) / msPerPx
+    const width = Math.max((ce - cs) / msPerPx - 4, 80)
+    rawAllDay.push({ p, left, width })
+  }
+  const laneEnds: number[] = []
+  const allDayBars: AllDayBar[] = [...rawAllDay].sort((a, b) => a.left - b.left).map(b => {
+    let lane = laneEnds.findIndex(end => end <= b.left + 1)
+    if (lane < 0) { lane = laneEnds.length; laneEnds.push(0) }
+    laneEnds[lane] = b.left + b.width
+    return { ...b, lane }
+  })
+  const allDayLaneCount = Math.max(1, laneEnds.length)
+  const allDayLaneH = 32
+  const allDayH = allDayLaneCount * (allDayLaneH + 4) + 8
+
+  // Col-index voor het positioneren van getimede events per dag
+  const colByIso = new Map<string, { col: Col; left: number; idx: number }>()
+  {
+    let acc = 0
+    cols.forEach((col, i) => {
+      const iso = col.rangeStart.toISOString().slice(0, 10)
+      colByIso.set(iso, { col, left: acc, idx: i })
+      acc += col.widthPx
+    })
+  }
+
+  type TimedBar = { p: Project; left: number; width: number; top: number; height: number; iso: string; startMin: number; durMin: number }
+  const timedBars: TimedBar[] = []
+  for (const p of timed) {
+    const iso = p.startDate; if (!iso) continue
+    const info = colByIso.get(iso); if (!info) continue
+    const [sh, sm] = (p.startTime ?? '00:00').split(':').map(Number)
+    const [eh, em] = (p.endTime ?? p.startTime ?? '00:00').split(':').map(Number)
+    const startMin = sh * 60 + sm
+    const endMin   = Math.max(startMin + 15, eh * 60 + em)
+    const top = (startMin - HOUR_START * 60) / 60 * HOUR_H
+    const height = Math.max(22, (endMin - startMin) / 60 * HOUR_H)
+    timedBars.push({
+      p, iso, startMin, durMin: endMin - startMin,
+      left: info.left + 2, width: info.col.widthPx - 4,
+      top, height,
+    })
+  }
+
+  // Drag handlers (mouse op timed pill → updaten via document-events).
+  useEffect(() => {
+    if (!drag) return
+    function onMove(ev: MouseEvent) {
+      const el = gridRef.current; if (!el || !drag) return
+      const rect = el.getBoundingClientRect()
+      const x = ev.clientX - rect.left
+      const y = ev.clientY - rect.top
+      let foundIso = drag.newIso
+      for (const [iso, info] of colByIso) {
+        if (x >= info.left && x < info.left + info.col.widthPx) { foundIso = iso; break }
+      }
+      const rawMin = y / HOUR_H * 60 + HOUR_START * 60
+      const snapped = Math.round(rawMin / 15) * 15
+      const clamped = Math.max(HOUR_START * 60, Math.min(HOUR_END * 60 - drag.durMin, snapped))
+      setDrag(d => d ? { ...d, newIso: foundIso, newStartMin: clamped } : d)
+    }
+    function onUp() {
+      if (!drag) return
+      const startTime = fmtMin(drag.newStartMin)
+      const endTime   = fmtMin(drag.newStartMin + drag.durMin)
+      onTimedDrag(drag.p, drag.newIso, drag.newIso, startTime, endTime)
+      setDrag(null)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag])
+
+  const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
+
+  return (
+    <>
+      {/* All-day banner */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+          background: stickyBg, borderRight: '1px solid var(--border-light)',
+          display: 'flex', alignItems: 'center', padding: '0 12px',
+          fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
+        }}>De hele dag</div>
+        <div style={{ position: 'relative', width: totalWidth, minHeight: allDayH, background: stickyBg }}>
+          {cols.map((col, idx) => {
+            const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
+            const dow = col.rangeStart.getDay()
+            const weekend = dow === 0 || dow === 6
+            return (
+              <div key={col.key} style={{
+                position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
+                borderLeft: '1px solid var(--border-light)',
+                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
+                pointerEvents: 'none',
+              }} />
+            )
+          })}
+          {allDayBars.map(b => {
+            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            const top = 6 + b.lane * (allDayLaneH + 4)
+            const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
+            return (
+              <button key={b.p.id} onClick={() => onSelect(b.p)} title={b.p.name}
+                style={{ position: 'absolute', left: b.left + 2, top, width: b.width, height: allDayLaneH,
+                  background: color, color: '#fff', border: 'none', borderRadius: 7,
+                  padding: '4px 9px', cursor: 'pointer', textAlign: 'left',
+                  fontSize: 12, fontWeight: 600, lineHeight: 1.25,
+                  display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
+                <span style={{ display: 'flex', gap: 3 }}>
+                  {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={16} />)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Uur-grid */}
+      <div style={{ display: 'flex' }}>
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+          background: stickyBg, borderRight: '1px solid var(--border-light)' }}>
+          {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => {
+            const hour = HOUR_START + i
+            return (
+              <div key={hour} style={{ height: HOUR_H, padding: '2px 10px 0 0',
+                fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)',
+                textAlign: 'right', borderBottom: '1px solid var(--border-light)',
+              }}>{pad2(hour)}:00</div>
+            )
+          })}
+        </div>
+        <div ref={gridRef} style={{ position: 'relative', width: totalWidth, height: timeGridH, background: stickyBg }}>
+          {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => (
+            <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: HOUR_H,
+              borderBottom: '1px solid var(--border-light)', pointerEvents: 'none' }} />
+          ))}
+          {cols.map((col, idx) => {
+            const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
+            const dow = col.rangeStart.getDay()
+            const weekend = dow === 0 || dow === 6
+            return (
+              <div key={col.key} style={{
+                position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
+                borderLeft: '1px solid var(--border-light)',
+                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
+                pointerEvents: 'none',
+              }} />
+            )
+          })}
+          {(() => {
+            // Rode 'nu'-lijn op vandaag
+            const now = new Date()
+            const todayIso = now.toISOString().slice(0, 10)
+            const info = colByIso.get(todayIso); if (!info) return null
+            const min = now.getHours() * 60 + now.getMinutes()
+            const top = (min - HOUR_START * 60) / 60 * HOUR_H
+            if (top < 0 || top > timeGridH) return null
+            return (
+              <div style={{ position: 'absolute', left: info.left, top, width: info.col.widthPx, height: 2,
+                background: '#e2445c', pointerEvents: 'none', zIndex: 2 }} />
+            )
+          })()}
+          {timedBars.map(b => {
+            const isDragging = drag?.p.id === b.p.id
+            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
+            const isGoogle = b.p.source === 'google'
+            const renderInfo = isDragging && drag ? (() => {
+              const info = colByIso.get(drag.newIso); if (!info) return null
+              return {
+                left: info.left + 2,
+                width: info.col.widthPx - 4,
+                top: (drag.newStartMin - HOUR_START * 60) / 60 * HOUR_H,
+                height: Math.max(22, drag.durMin / 60 * HOUR_H),
+                startMin: drag.newStartMin,
+              }
+            })() : null
+            const left   = renderInfo?.left   ?? b.left
+            const width  = renderInfo?.width  ?? b.width
+            const top    = renderInfo?.top    ?? b.top
+            const height = renderInfo?.height ?? b.height
+            const showStart = renderInfo ? renderInfo.startMin : b.startMin
+            const showEnd   = showStart + b.durMin
+            return (
+              <div key={b.p.id}
+                onMouseDown={e => {
+                  if (isGoogle) return
+                  e.preventDefault()
+                  setDrag({ p: b.p, durMin: b.durMin, newIso: b.iso, newStartMin: b.startMin })
+                }}
+                onClick={e => { if (!isDragging) { e.stopPropagation(); onSelect(b.p) } }}
+                title={`${b.p.name} · ${fmtMin(b.startMin)}–${fmtMin(b.startMin + b.durMin)}${isGoogle ? ' (Google, sleep niet mogelijk)' : ''}`}
+                style={{ position: 'absolute', left, top, width, height,
+                  background: color, color: '#fff', borderRadius: 6,
+                  padding: '3px 7px', cursor: isGoogle ? 'pointer' : 'grab',
+                  fontSize: 11, fontWeight: 600, lineHeight: 1.2,
+                  display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden',
+                  boxShadow: isDragging ? '0 6px 20px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.12)',
+                  opacity: isDragging ? 0.92 : 1,
+                  userSelect: 'none', zIndex: isDragging ? 5 : 1,
+                }}>
+                <span style={{ fontSize: 9.5, opacity: 0.92, fontWeight: 700 }}>
+                  {fmtMin(showStart)}–{fmtMin(showEnd)}
+                </span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
+                {owners.length > 0 && (
+                  <span style={{ display: 'flex', gap: 2, marginTop: 'auto' }}>
+                    {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={14} />)}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
 }
 
 function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDragMove, onDragEnd, onBarClick, onReassign }: {
@@ -1762,6 +2042,16 @@ export default function PlanningPage() {
   // Always start at this week (don't persist colOffset between sessions)
   const [colOffset,    setColOffset]    = useState<number>(0)
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
+  // Standaard staat de eigen rij open zodra je ingelogd bent — dan zie je
+  // bij binnenkomst meteen je eigen timeline-bars zonder eerst te moeten
+  // uitvouwen. Een keer handmatig dichtklikken houdt 'm daarna gewoon dicht.
+  const ownExpandedRef = useRef(false)
+  useEffect(() => {
+    if (ownExpandedRef.current) return
+    if (!profile?.memberId) return
+    ownExpandedRef.current = true
+    setExpanded(prev => prev.has(profile.memberId!) ? prev : new Set([...prev, profile.memberId!]))
+  }, [profile?.memberId])
   const [detailProject, setDetailProject] = useState<Project | null>(null)
   const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
   const [urenOpen,     setUrenOpen]     = useState(false)
@@ -2055,6 +2345,35 @@ export default function PlanningPage() {
     logActivity('Datums bijgewerkt', project.name, `${prevStart ?? '—'} → ${newStart ?? '—'} / ${prevEnd ?? '—'} → ${newEnd ?? '—'}`)
     if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     pushUndo(() => apply(prevStart, prevEnd), `Datums bijgewerkt op '${project.name}'`)
+  }
+
+  // Drag-end voor de uur-positionering in de Week-zoom: zet zowel datum
+  // als HH:MM-tijden weg. Werkt op het top-level item (subitems hebben hier
+  // hun eigen pad — voor v1 alleen top-level items draggen).
+  function handleTimedDragEnd(project: Project, newStart: string, newEnd: string, newStartTime: string, newEndTime: string) {
+    setShadowDrag(null)
+    if (project.source === 'google') return  // Google items zijn read-only
+    const boardName  = project.board
+    const origItemId = project.id.slice(boardName.length + 2)
+    const prev = {
+      start: project.startDate, end: project.endDate,
+      startTime: project.startTime ?? null, endTime: project.endTime ?? null,
+    }
+    const apply = (s: string, e: string, st: string | null, et: string | null) => {
+      const groups = (allGroups[boardName] ?? []).map(g => ({
+        ...g, items: g.items.map(i => i.id === origItemId
+          ? { ...i, startDate: s, endDate: e, startTime: st, endTime: et }
+          : i),
+      }))
+      saveGroups(boardName, groups)
+      setAllGroups(prev2 => ({ ...prev2, [boardName]: groups }))
+    }
+    apply(newStart, newEnd, newStartTime, newEndTime)
+    logActivity('Tijd bijgewerkt', project.name, `${prev.startTime ?? '—'} → ${newStartTime} op ${newStart}`)
+    if (detailProject?.id === project.id) {
+      setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd, startTime: newStartTime, endTime: newEndTime })
+    }
+    pushUndo(() => apply(prev.start ?? newStart, prev.end ?? newEnd, prev.startTime, prev.endTime), `Tijd terug op '${project.name}'`)
   }
   function handleReassignOwner(project: Project, fromMemberId: string, toMemberId: string) {
     setShadowDrag(null)
@@ -2733,114 +3052,34 @@ export default function PlanningPage() {
             })}
           </div>
 
-          {/* Week-zoom (zoom === 'dag'): Google Calendar-stijl week-grid.
-              Eén grote oppervlakte, alle items als gekleurde event-pills
-              gepositioneerd op hun datum-range, lane-pack om overlap te
-              vermijden. Vervangt de per-persoon rijen in deze zoom. */}
-          {zoom === 'dag' ? (() => {
-            const visible = effectiveProjects.filter(p => {
-              if (!p.startDate && !p.endDate) return false
-              if (filterMembers.size > 0 && !p.ownerIds.some(id => filterMembers.has(id))) return false
-              return true
-            })
-            const gridStart = cols[0]?.rangeStart
-            if (!gridStart) return null
-            const gridStartMs = gridStart.getTime()
-            const totalWidth  = cols.reduce((s, c) => s + c.widthPx, 0)
-            const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
-            const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
-
-            type Raw = { p: Project; left: number; width: number }
-            const raw: Raw[] = []
-            for (const p of visible) {
-              const s = new Date(p.startDate ?? p.endDate!).getTime()
-              const e = (p.endDate ? new Date(p.endDate).getTime() : s) + 86400000
-              if (e < gridStartMs || s > gridEndMs) continue
-              const cs   = Math.max(s, gridStartMs)
-              const ce   = Math.min(e, gridEndMs)
-              const left = (cs - gridStartMs) / msPerPx
-              const width = Math.max((ce - cs) / msPerPx - 4, 80)
-              raw.push({ p, left, width })
-            }
-            const sorted = [...raw].sort((a, b) => a.left - b.left)
-            const laneEnds: number[] = []
-            const bars = sorted.map(b => {
-              let lane = laneEnds.findIndex(end => end <= b.left + 1)
-              if (lane < 0) { lane = laneEnds.length; laneEnds.push(0) }
-              laneEnds[lane] = b.left + b.width
-              return { ...b, lane }
-            })
-            const laneCount = Math.max(1, laneEnds.length)
-            const laneH = 52
-            const gridH = laneCount * (laneH + 6) + 14
-
-            return (
-              <div style={{ display: 'flex' }}>
-                <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
-                  background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
-                <div style={{ position: 'relative', width: totalWidth, minHeight: gridH, background: stickyBg }}>
-                  {/* Day-cell achtergronden (weekend / vandaag highlights) */}
-                  {(() => {
-                    let acc = 0
-                    return cols.map(col => {
-                      const left = acc; acc += col.widthPx
-                      const dow = col.rangeStart.getDay()
-                      const weekend = dow === 0 || dow === 6
-                      return (
-                        <div key={col.key} style={{
-                          position: 'absolute', left, top: 0, width: col.widthPx, height: gridH,
-                          borderLeft: '1px solid var(--border-light)',
-                          background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
-                          pointerEvents: 'none',
-                        }} />
-                      )
-                    })
-                  })()}
-                  {/* Event pills */}
-                  {bars.map(b => {
-                    const color = BOARD_COLORS[b.p.board] ?? '#888'
-                    const top   = 10 + b.lane * (laneH + 6)
-                    const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
-                    return (
-                      <button key={b.p.id} onClick={() => setDetailProject(b.p)}
-                        title={b.p.name}
-                        style={{
-                          position: 'absolute', left: b.left + 2, top,
-                          width: b.width, height: laneH,
-                          background: color, color: '#fff',
-                          border: 'none', borderRadius: 7,
-                          padding: '6px 10px', cursor: 'pointer', textAlign: 'left',
-                          fontSize: 12, fontWeight: 600, lineHeight: 1.25,
-                          display: 'flex', flexDirection: 'column', gap: 4,
-                          overflow: 'hidden',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-                        }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 'auto' }}>
-                          {owners.slice(0, 4).map(m => (
-                            <MemberAvatar key={m.id} member={m} size={18} />
-                          ))}
-                          {owners.length > 4 && (
-                            <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.9 }}>+{owners.length - 4}</span>
-                          )}
-                          {b.p.estHours > 0 && (
-                            <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 600,
-                              background: 'rgba(0,0,0,0.18)', padding: '1px 6px', borderRadius: 999 }}>
-                              {b.p.estHours}u
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })() : (() => {
+          {/* Week-zoom (zoom === 'dag'): Google Calendar-stijl week-grid met
+              een all-day banner én een uur-grid voor getimede events. Drag
+              op een getimed event verschuift 'm naar een ander dag/uur. */}
+          {zoom === 'dag' ? (
+            <WeekTimeGrid
+              cols={cols}
+              projects={effectiveProjects}
+              filterMembers={filterMembers}
+              team={team}
+              nameW={nameW + namePad}
+              stickyBg={stickyBg}
+              onSelect={p => setDetailProject(p)}
+              onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
+            />
+          ) : (() => {
             const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
             const visible = team.filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
-            const yokoTeam     = visible.filter(m => YOKO_IDS.has(m.id))
+            // Eigen rij staat altijd bovenaan in Team Yoko zodat je 'm meteen
+            // ziet zonder te scrollen. Verder respecteren we de bestaande
+            // team-volgorde (uit localStorage / team.json).
+            const me = profile?.memberId
+            const yokoTeam = visible
+              .filter(m => YOKO_IDS.has(m.id))
+              .sort((a, b) => {
+                if (a.id === me) return -1
+                if (b.id === me) return 1
+                return 0
+              })
             const unassigned   = visible.filter(m => m.id === 'unassigned')
             const freelancers  = visible.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned')
 
