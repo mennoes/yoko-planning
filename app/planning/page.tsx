@@ -747,7 +747,7 @@ function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
 function pad2(n: number) { return n < 10 ? '0' + n : String(n) }
 function fmtMin(m: number) { return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60) }
 
-function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, onSelect, onTimedDrag }: {
+function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, onSelect, onTimedDrag, onDateDragEnd, onReassign }: {
   cols: Col[]
   projects: Project[]
   // Wanneer memberId niet gezet is, gebruiken we deze predicate om te
@@ -757,8 +757,19 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   team: TeamMember[]
   nameW: number
   stickyBg: string
+  // Custom inhoud voor de sticky linker-cel van de all-day rij. Bij
+  // per-persoon rendering laat de planning-pagina hier de avatar+naam
+  // zien — zo start het eerste event op dezelfde hoogte als de avatar.
+  leftHeader?: React.ReactNode
+  // Mag het uur-grid getoond worden? Bij collapsed person: false; dan zien
+  // we alleen de all-day banner met avatar links.
+  expanded?: boolean
   onSelect: (p: Project) => void
   onTimedDrag: (p: Project, ns: string, ne: string, nst: string, net: string) => void
+  // Drag op all-day pills naar een andere dag (datum-shift, duur blijft).
+  onDateDragEnd?: (p: Project, ns: string | null, ne: string | null) => void
+  // Sleep een pill naar een ander persoon-row → reassign owner.
+  onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   // Werkdag-venster: 09:00 – 18:00. Events buiten dit bereik (vroege Google-
   // afspraken, avond-syncs) worden netjes geclipt zodat 't overzicht
@@ -771,6 +782,11 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   const rootRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<null | {
     p: Project; durMin: number; newIso: string; newStartMin: number;
+  }>(null)
+  // All-day drag: verschuift de datum (en duur blijft). Pure x-as.
+  const [dayDrag, setDayDrag] = useState<null | {
+    p: Project; mouseX0: number; deltaDays: number;
+    startIso: string; endIso: string | null
   }>(null)
   // ScrollLeft van de buitenste horizontaal-scrollende container houden we
   // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
@@ -929,17 +945,53 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag])
 
+  // All-day pill drag — verschuift de pill x-as → datum, duur blijft hetzelfde.
+  useEffect(() => {
+    if (!dayDrag) return
+    const colW = cols[0]?.widthPx ?? 200
+    function onMove(ev: MouseEvent) {
+      if (!dayDrag) return
+      const delta = ev.clientX - dayDrag.mouseX0
+      const newDays = Math.round(delta / colW)
+      if (newDays !== dayDrag.deltaDays) {
+        setDayDrag(d => d ? { ...d, deltaDays: newDays } : d)
+      }
+    }
+    function onUp() {
+      if (!dayDrag) return
+      const days = dayDrag.deltaDays
+      if (days !== 0 && onDateDragEnd) {
+        const shift = (iso: string | null) => {
+          if (!iso) return iso
+          const d = new Date(iso); d.setDate(d.getDate() + days)
+          return d.toISOString().slice(0, 10)
+        }
+        onDateDragEnd(dayDrag.p, shift(dayDrag.startIso) ?? null, shift(dayDrag.endIso) ?? null)
+      }
+      setDayDrag(null)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayDrag])
+
   const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
 
   return (
     <div ref={rootRef}>
-      {/* All-day banner */}
+      {/* All-day banner — sticky-left cel toont 'De hele dag' OR de avatar
+          (bij per-persoon-rendering, zodat het eerste event op dezelfde
+          hoogte als de avatar start). */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
         <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
           background: stickyBg, borderRight: '1px solid var(--border-light)',
-          display: 'flex', alignItems: 'center', padding: '0 12px',
+          display: 'flex', alignItems: 'center', padding: leftHeader ? '0' : '0 12px',
           fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
-        }}>De hele dag</div>
+        }}>{leftHeader ?? 'De hele dag'}</div>
         <div style={{ position: 'relative', width: totalWidth, minHeight: allDayH, background: stickyBg }}>
           {cols.map((col, idx) => {
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
@@ -958,17 +1010,30 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const color = BOARD_COLORS[b.p.board] ?? '#888'
             const top = 6 + b.lane * (allDayLaneH + 4)
             const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
-            // Titel laat 'm meeschuiven met de viewport zodat lang-lopende
-            // events leesbaar blijven terwijl je naar rechts scrollt.
             const titleShift = titleOffsetFor(b.left + 2, b.width, 9)
+            const isGoogle = b.p.source === 'google'
+            const isDraggingMe = dayDrag?.p.id === b.p.id
+            const colW = cols[0]?.widthPx ?? 200
+            const shiftPx = isDraggingMe && dayDrag ? dayDrag.deltaDays * colW : 0
             return (
-              <button key={b.p.id} onClick={() => onSelect(b.p)} title={b.p.name}
-                style={{ position: 'absolute', left: b.left + 2, top, width: b.width, height: allDayLaneH,
+              <div key={b.p.id}
+                onMouseDown={e => {
+                  if (isGoogle || !onDateDragEnd) return  // Google = read-only
+                  e.preventDefault()
+                  setDayDrag({ p: b.p, mouseX0: e.clientX, deltaDays: 0,
+                    startIso: b.p.startDate ?? '', endIso: b.p.endDate ?? null })
+                }}
+                onClick={e => { if (!isDraggingMe) { e.stopPropagation(); onSelect(b.p) } }}
+                title={b.p.name + (isGoogle ? ' (Google, niet versleepbaar)' : '')}
+                style={{ position: 'absolute', left: b.left + 2 + shiftPx, top, width: b.width, height: allDayLaneH,
                   background: color, color: '#fff', border: 'none', borderRadius: 7,
-                  padding: '4px 9px', cursor: 'pointer', textAlign: 'left',
+                  padding: '4px 9px', cursor: isGoogle || !onDateDragEnd ? 'pointer' : 'grab', textAlign: 'left',
                   fontSize: 12, fontWeight: 600, lineHeight: 1.25,
                   display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                  boxShadow: isDraggingMe ? '0 6px 20px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.12)',
+                  opacity: isDraggingMe ? 0.92 : 1,
+                  userSelect: 'none',
+                  zIndex: isDraggingMe ? 5 : 1,
                 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                   marginLeft: titleShift,
@@ -976,13 +1041,15 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 <span style={{ display: 'flex', gap: 3 }}>
                   {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={16} />)}
                 </span>
-              </button>
+              </div>
             )
           })}
         </div>
       </div>
 
-      {/* Uur-grid */}
+      {/* Uur-grid — alleen tonen wanneer de persoon is uitgeklapt. Collapsed
+          ziet de gebruiker enkel de all-day banner hierboven. */}
+      {expanded !== false && (
       <div style={{ display: 'flex' }}>
         <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
           background: stickyBg, borderRight: '1px solid var(--border-light)' }}>
@@ -1099,6 +1166,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           })}
         </div>
       </div>
+      )}
     </div>
   )
 }
@@ -3201,35 +3269,34 @@ export default function PlanningPage() {
 
             const renderPerson = (m: TeamMember) => {
               const isExp = expanded.has(m.id)
+              const header = (
+                <button onClick={() => toggleExpand(m.id)}
+                  title={isExp ? 'Inklappen' : 'Uitvouwen'}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer',
+                    width: '100%', height: '100%', minWidth: 0, padding: `0 12px 0 ${namePad}px`, textAlign: 'left' }}>
+                  <span style={{ fontSize: 9, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)',
+                    display: 'inline-block', width: 10, transform: isExp ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▼</span>
+                  <MemberAvatar member={m} size={av} />
+                  <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                </button>
+              )
               return (
                 <div key={m.id} data-member-id={m.id} style={{ borderBottom: '1px solid var(--border)', background: 'transparent' }}>
-                  <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
-                      background: stickyBg, display: 'flex', alignItems: 'center',
-                      padding: `8px 12px 8px ${namePad}px`, borderRight: '1px solid var(--border-light)' }}>
-                      <button onClick={() => toggleExpand(m.id)}
-                        title={isExp ? 'Inklappen' : 'Uitvouwen'}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', minWidth: 0, flex: 1, padding: 0, textAlign: 'left' }}>
-                        <span style={{ fontSize: 9, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)',
-                          display: 'inline-block', width: 10, transform: isExp ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.15s' }}>▼</span>
-                        <MemberAvatar member={m} size={av} />
-                        <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                      </button>
-                    </div>
-                  </div>
-                  {isExp && (
-                    <WeekTimeGrid
-                      cols={cols}
-                      projects={effectiveProjects}
-                      memberId={m.id}
-                      team={team}
-                      nameW={nameW + namePad}
-                      stickyBg={stickyBg}
-                      onSelect={p => setDetailProject(p)}
-                      onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
-                    />
-                  )}
+                  <WeekTimeGrid
+                    cols={cols}
+                    projects={effectiveProjects}
+                    memberId={m.id}
+                    team={team}
+                    nameW={nameW + namePad}
+                    stickyBg={stickyBg}
+                    leftHeader={header}
+                    expanded={isExp}
+                    onSelect={p => setDetailProject(p)}
+                    onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
+                    onDateDragEnd={(p, ns, ne) => handleDragEnd(p, ns, ne)}
+                    onReassign={handleReassignOwner}
+                  />
                 </div>
               )
             }
