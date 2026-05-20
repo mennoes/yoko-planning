@@ -820,6 +820,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
     }
   }
 
+  const [isDraggingMe, setIsDraggingMe] = useState(false)
   return (
     <div
       draggable={!editName && !!parentItemId && !!fromGroupId}
@@ -830,14 +831,25 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         e.dataTransfer.setData('application/x-yoko-subitem', JSON.stringify({
           subitemId: subitem.id, parentItemId, fromGroupId,
         }))
+        setIsDraggingMe(true)
+        // Broadcast: alle groepen op het bord moeten 'oplichten' als
+        // potentieel drop-doel zodat de gebruiker direct ziet waar 'ie
+        // de subitem heen kan slepen.
+        window.dispatchEvent(new CustomEvent('yoko-subitem-drag-start', { detail: { subitemId: subitem.id, name: subitem.name } }))
+      }}
+      onDragEnd={() => {
+        setIsDraggingMe(false)
+        window.dispatchEvent(new CustomEvent('yoko-subitem-drag-end'))
       }}
       style={{
       display: 'grid', gridTemplateColumns: gridTemplate,
       alignItems: 'center', minHeight: 40,
       borderBottom: '1px solid var(--border-light)',
-      background: selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent'),
-      transition: 'background 0.1s',
-      cursor: !editName && parentItemId ? 'grab' : 'default',
+      background: isDraggingMe ? 'var(--accent-light)' : (selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent')),
+      opacity:    isDraggingMe ? 0.5 : 1,
+      transform:  isDraggingMe ? 'scale(0.985)' : 'none',
+      transition: 'background 0.1s, opacity 0.1s, transform 0.1s',
+      cursor: !editName && parentItemId ? (isDraggingMe ? 'grabbing' : 'grab') : 'default',
     }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {/* Eerste kolom: checkbox + boom-connector (verticale lijn met
@@ -1696,6 +1708,23 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   onResizeCol: (key: string, width: number) => void
 }) {
   const [dropHover, setDropHover] = useState(false)
+  // 'Ghost mode': zodra ergens op het bord een subitem versleept wordt,
+  // krijgt elke groep een opvallende drop-zone-stijl zodat de gebruiker
+  // direct ziet WAAR 'ie kan loslaten. Reset bij dragend.
+  const [subDragName, setSubDragName] = useState<string | null>(null)
+  useEffect(() => {
+    function onStart(e: Event) {
+      const ce = e as CustomEvent<{ name?: string }>
+      setSubDragName(ce.detail?.name ?? 'Subitem')
+    }
+    function onEnd() { setSubDragName(null); setDropHover(false) }
+    window.addEventListener('yoko-subitem-drag-start', onStart)
+    window.addEventListener('yoko-subitem-drag-end',   onEnd)
+    return () => {
+      window.removeEventListener('yoko-subitem-drag-start', onStart)
+      window.removeEventListener('yoko-subitem-drag-end',   onEnd)
+    }
+  }, [])
   const { pushUndo, showToast } = useUndo()
   // Collapsed-state komt rechtstreeks uit de group-data (gestored in
   // localStorage + Supabase via boardStore). Toggle persisteert via
@@ -1890,19 +1919,47 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
         }
       } catch {}
     }
+    setSubDragName(null)
   }
 
+  // Visual states bij subitem-drag:
+  //  - subDragName !== null = ergens op het bord wordt iets gesleept
+  //    → álle groepen krijgen een subtiele animerende stippel-rand
+  //      ("hier kan je loslaten")
+  //  - dropHover = je hovert nú boven deze groep → opvallend accent
+  const isDropTarget = !!subDragName
   return (
     <GroupCtx.Provider value={{ color: group.color }}>
       <div style={{
-        marginBottom: 20, borderRadius: 8,
-        outline: dropHover ? `2px dashed ${group.color}` : '2px dashed transparent',
+        marginBottom: 20, borderRadius: 10, position: 'relative',
+        outline: dropHover
+          ? `3px solid ${group.color}`
+          : isDropTarget
+            ? `2px dashed ${group.color}88`
+            : '2px dashed transparent',
         outlineOffset: -2,
-        transition: 'outline-color 0.12s',
+        background: dropHover ? group.color + '12' : 'transparent',
+        transition: 'outline 0.12s, background 0.12s',
       }}
         onDragOver={onContainerDragOver}
         onDragLeave={onContainerDragLeave}
         onDrop={onContainerDrop}>
+        {/* Drop-indicator: 'Laat los om hier te plaatsen' verschijnt prominent
+            in het midden zodra je boven deze groep zweeft tijdens een drag. */}
+        {dropHover && subDragName && (
+          <div style={{
+            position: 'absolute', top: 4, right: 4, zIndex: 30,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', borderRadius: 999,
+            background: group.color, color: '#fff',
+            fontSize: 12, fontWeight: 700, letterSpacing: '0.02em',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+            pointerEvents: 'none',
+          }}>
+            <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span>
+            <span>Verplaats &lsquo;{subDragName}&rsquo; naar {group.name}</span>
+          </div>
+        )}
 
         {/* Groep header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderLeft: `4px solid ${group.color}`, background: 'var(--overlay-subtle)' }}
