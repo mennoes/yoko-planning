@@ -629,10 +629,24 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const dateLabel = start ? new Date(start).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
       const sid  = `si_g_${ev.id}`
       const prev = priorById.get(sid)
+      // Naam-bepaling voor recurring instances, prioriteit:
+      //   1. Heeft de gebruiker dit specifieke event in Google een eigen
+      //      titel gegeven (anders dan de master)? → die Google-titel
+      //      gebruiken. Vangt cases af zoals 'NL College S04 E40' waar
+      //      elke aflevering een eigen titel krijgt op een recurring slot.
+      //   2. Heeft de gebruiker 'm in de tool handmatig hernoemd (prev
+      //      ≠ dateLabel-formaat)? → die handmatige naam bewaren.
+      //   3. Fallback: het dag-datum-label ('ma 26 mei').
+      const evTitle = (ev.summary ?? '').trim()
+      const instanceRenamedInGoogle = evTitle.length > 0 && evTitle !== baseName.trim()
+      const subitemName = instanceRenamedInGoogle
+        ? evTitle
+        : (prev?.name && prev.name !== '—' && !/^[a-z]{2,3}\s+\d/i.test(prev.name)
+            ? prev.name
+            : dateLabel)
       return {
         id:        sid,
-        // Bewaar handmatig hernoemde subitems; anders standaard de datum-label.
-        name:      prev?.name && prev.name !== '—' && !/^[a-z]{2,3}\s+\d/i.test(prev.name) ? prev.name : dateLabel,
+        name:      subitemName,
         ownerIds:  prev?.ownerIds && prev.ownerIds.length > 0 ? prev.ownerIds : finalOwners,
         status:    resolveStatus(prev?.status, end ?? start),
         startDate: start,
