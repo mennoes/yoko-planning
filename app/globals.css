@@ -39,14 +39,15 @@
   --accent-light: #B0C6EB22;
   --accent-mid:   #B0C6EB44;
 
-  /* Backgrounds: a touch cooler / greyer than warm off-white */
-  --bg-base:    #F2F3F5;
+  /* Backgrounds: een tintje lichter zodat 'cards' meer afsteken tegen 't canvas */
+  --bg-base:    #F6F7F9;
   --bg-sidebar: #FFFFFF;
-  --bg-card:    #FAFAFB;
+  --bg-card:    #FFFFFF;
   --bg-hover:   rgba(0,0,0,0.04);
 
-  --border:       #E2E4E8;
-  --border-light: #ECEEF2;
+  --border:        #E2E4E8;
+  --border-light:  #ECEEF2;
+  --border-strong: #CCD0D6;
 
   --text-primary:   #1A1714;
   --text-secondary: #4A4540;
@@ -95,8 +96,9 @@
   --bg-card:    #1B1E23;
   --bg-hover:   rgba(255,255,255,0.07);
 
-  --border:       #3A3F47;
-  --border-light: #2E3239;
+  --border:        #3A3F47;
+  --border-light:  #2E3239;
+  --border-strong: #4D525B;
 
   --text-primary:   #ECEDEF;
   --text-secondary: #C8CCD2;
@@ -140,8 +142,9 @@
     --bg-sidebar: #0E1014;
     --bg-card:    #1B1E23;
     --bg-hover:   rgba(255,255,255,0.07);
-    --border:       #3A3F47;
-    --border-light: #2E3239;
+    --border:        #3A3F47;
+    --border-light:  #2E3239;
+    --border-strong: #4D525B;
     --text-primary:   #ECEDEF;
     --text-secondary: #C8CCD2;
     --text-muted:     #8A8E94;

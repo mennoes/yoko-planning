@@ -1319,7 +1319,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
         </div>
 
         {cols.map(col => (
-          <div key={col.key} style={{ padding: '4px 8px', borderLeft: '1px solid var(--border)', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+          <div key={col.key} style={{ padding: '4px 8px', borderLeft: '1px solid var(--border-strong)', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
             {col.key === 'notes' ? (
               // Notes is een vrije-tekst-veld dat al snel niet meer in één
               // cel past. Klikken opent het detail-drawer met een groot
@@ -1331,7 +1331,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           </div>
         ))}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%', gap: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border-strong)', height: '100%', gap: 2 }}>
           {reorderMode ? (
             <>
               <button onClick={onMoveUp} disabled={isFirst} title="Omhoog"
@@ -2144,7 +2144,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
               </div>
               <div style={{ position: 'relative', display: 'flex' }}>
                 <button onClick={() => onToggleSort('name')}
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 12, fontWeight: 800, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 12, fontWeight: 600, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
                   Item
                   {sortBy?.key === 'name' && (
                     <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
@@ -2166,7 +2166,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   }} />
               </div>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 800, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-strong)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
                   onClick={() => onToggleSort(col.key)}>
                   {col.label}
                   {sortBy?.key === col.key && (
