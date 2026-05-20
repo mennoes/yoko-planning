@@ -695,7 +695,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       id,
       group_id:           keepGroup,
       board_id:           keepBoard,
-      name:               baseName + ` (${instances.length}×)`,
+      // Geen '(N×)'-suffix meer op de recurring parent — de subitem-
+      // teller staat al in de tooltip van de expand-knop, een dubbel-
+      // signaal in de naam maakt het visueel rommelig. Bij volgende
+      // sync overschrijven we automatisch ook bestaande rijen met
+      // suffix.
+      name:               baseName,
       owner_ids:          finalOwners,
       status:             newStatus,
       start_date:         minStart,
