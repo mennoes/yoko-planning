@@ -164,11 +164,11 @@ async function ensureGoogleGroup(
   return newId
 }
 
-// Doorlopende meetings (recurring events) krijgen een eigen "Doorlopend"
-// groep — gebruikers willen die niet tussen losse projecten zien staan.
-// Standaardplek: positie 1 (tweede slot, direct onder de Google Agenda-
-// groep). Bestaande Doorlopend-groep wordt hergebruikt en zo nodig naar
-// positie 1 verplaatst.
+// Recurring events krijgen géén opgedrongen "Doorlopend"-groep meer. Als de
+// gebruiker zo'n groep heeft staan (case-insensitive op naam) gebruiken we
+// die voor nieuwe recurring meetings; anders vallen we terug op dezelfde
+// target-groep als losse events. Auto-aanmaken of repositioneren doen we
+// niet — wat de gebruiker hernoemt of weggooit blijft hernoemd of weg.
 async function ensureDoorlopendGroup(
   admin:   SupabaseClient,
   boardId: string,
@@ -179,37 +179,10 @@ async function ensureDoorlopendGroup(
     .order('position', { ascending: true })
   const groups = (rows as { id: string; name: string; position: number }[] | null) ?? []
   const existing = groups.find(g => g.name.toLowerCase() === 'doorlopend')
-
-  // Snelle exit: groep zit al op positie 1, niets doen.
-  if (existing && existing.position === 1) return existing.id
-
-  // Bouw de gewenste volgorde: alle andere groepen op hun huidige relatieve
-  // volgorde, met Doorlopend als tweede item (index 1). Zo behoudt de
-  // bovenste groep (meestal 'Google Agenda' of het standaard-board) z'n
-  // plek bovenaan en schuift de rest één naar beneden.
-  const others = groups.filter(g => g.id !== existing?.id)
-  const doorlopendId = existing?.id ?? `g_doorlopend_${boardId}_${Date.now()}`
-  if (!existing) {
-    await admin.from('board_groups').insert({
-      id:        doorlopendId,
-      board_id:  boardId,
-      name:      'Doorlopend',
-      color:     '#579bfc',
-      collapsed: false,
-      position:  1,
-    })
-  } else {
-    await admin.from('board_groups').update({ position: 1 }).eq('id', existing.id)
-  }
-  // Renummer de overige groepen: index 0 blijft op 0, vanaf index 1 schuift
-  // alles +1 omdat Doorlopend nu op 1 zit.
-  for (let i = 0; i < others.length; i++) {
-    const targetPos = i === 0 ? 0 : i + 1
-    if (others[i].position !== targetPos) {
-      await admin.from('board_groups').update({ position: targetPos }).eq('id', others[i].id)
-    }
-  }
-  return doorlopendId
+  if (existing) return existing.id
+  // Geen Doorlopend-groep aanwezig (omdat de gebruiker 'm verwijderd of
+  // hernoemd heeft) → fallback naar de standaard Google-groep.
+  return await ensureGoogleGroup(admin, boardId)
 }
 
 // Done-groep — gebruikers willen items die op Done staan terugzien in een
