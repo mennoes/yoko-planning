@@ -18,6 +18,7 @@ export type GoogleEvent = {
   summary?:           string
   description?:       string
   htmlLink?:          string
+  hangoutLink?:       string                       // Google Meet-link (alleen wanneer 't event er één heeft)
   start:              { dateTime?: string; date?: string; timeZone?: string }
   end:                { dateTime?: string; date?: string; timeZone?: string }
   updated?:           string

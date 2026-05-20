@@ -878,10 +878,28 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             }}
             style={{ ...editInput, flex: 1 }} />
         ) : (
-          <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
-            style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-            {subitem.name}
-          </span>
+          <>
+            <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
+              style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+              {subitem.name}
+            </span>
+            {subitem.meetLink && (
+              <a href={subitem.meetLink} target="_blank" rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                title="Open Google Meet voor deze meeting"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  padding: '1px 6px 1px 5px', borderRadius: 5,
+                  background: '#00ac47', color: '#fff',
+                  fontSize: 9.5, fontWeight: 800, lineHeight: 1.3,
+                  flexShrink: 0, textDecoration: 'none', marginLeft: 6,
+                  boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
+                }}>
+                Meet
+                <span style={{ fontSize: 8.5, opacity: 0.85 }}>↗</span>
+              </a>
+            )}
+          </>
         )}
       </div>
       {cols.map(c => <div key={c.key}>{renderCol(c)}</div>)}
@@ -1193,6 +1211,22 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           )}
 
           {item.source === 'google' && <GoogleBadge href={item.externalLink} />}
+          {typeof item.meetLink === 'string' && item.meetLink && (
+            <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              title="Open Google Meet"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '1px 7px 1px 5px', borderRadius: 5,
+                background: '#00ac47', color: '#fff',
+                fontSize: 10, fontWeight: 800, lineHeight: 1.3,
+                flexShrink: 0, textDecoration: 'none',
+                boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
+              }}>
+              Meet
+              <span style={{ fontSize: 9, opacity: 0.85 }}>↗</span>
+            </a>
+          )}
 
           {editName && item.source !== 'google' ? (
             <input autoFocus value={nameDraft}
@@ -1225,8 +1259,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                 // I-beam cursor voor handmatige items zodat 'rename-baar'
                 // visueel duidelijk is — net als in Monday. Google-items
                 // krijgen een gewone pointer omdat ze read-only zijn qua naam.
-                style={{ fontSize: 14.5, color: 'var(--text-primary)', fontWeight: 600,
-                  letterSpacing: '-0.005em',
+                style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 500,
                   cursor: item.source === 'google' ? 'pointer' : 'text',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {item.name}

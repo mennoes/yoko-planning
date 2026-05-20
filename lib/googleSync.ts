@@ -85,7 +85,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number }
+type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null }
 type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null }
 type Rule     = { pattern: string; board_id: string }
 
@@ -581,7 +581,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
         subitems:           [],
         journal:            existingRow?.journal ?? [],
-        extra:              { ownerHours: ownerHoursMap, ...(() => { const t = eventTimes(ev); return t.startTime || t.endTime ? { startTime: t.startTime, endTime: t.endTime } : {} })() },
+        extra:              {
+          ownerHours: ownerHoursMap,
+          ...(() => { const t = eventTimes(ev); return t.startTime || t.endTime ? { startTime: t.startTime, endTime: t.endTime } : {} })(),
+          // Google Meet-link wanneer 't event er één heeft (videocall-meetings).
+          ...(ev.hangoutLink ? { meetLink: ev.hangoutLink } : {}),
+        },
         position:            0,
         source:              'google',
         external_id:         ev.id,
@@ -646,6 +651,8 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         startTime,
         endTime,
         estHours:  eventHours(ev) * finalOwners.length,
+        // Per-instance Meet-link — sommige reeksen verschillen per moment.
+        meetLink:  ev.hangoutLink ?? prev?.meetLink ?? null,
       }
     })
     const id          = lookup.id
@@ -688,7 +695,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
       subitems,
       journal:            existingRow?.journal ?? [],
-      extra:              { ownerHours: ownerHoursMap },
+      extra:              {
+        ownerHours: ownerHoursMap,
+        // Pak een Meet-link uit één van de instances (vaak hetzelfde voor de
+        // hele reeks; pak gewoon de eerste niet-lege).
+        ...(() => { const m = sorted.find(ev => ev.hangoutLink)?.hangoutLink; return m ? { meetLink: m } : {} })(),
+      },
       position:            0,
       source:              'google',
       external_id:         groupKey,

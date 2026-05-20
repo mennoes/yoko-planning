@@ -11,6 +11,8 @@ export type SubItem = {
   // all-day events of handmatige subitems blijft 't null.
   startTime?:   string | null
   endTime?:     string | null
+  // Google Meet-link wanneer 't event er één heeft (video-meetings).
+  meetLink?:    string | null
   estHours:     number
   echtGewerkt?: number
 }
