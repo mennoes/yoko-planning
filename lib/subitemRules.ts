@@ -96,6 +96,10 @@ function itemToSubitem(item: BoardItem): SubItem {
     status:    item.status ?? '',
     startDate: item.startDate ?? null,
     endDate:   item.endDate ?? null,
+    // Tijden bewaren bij auto-nesting — anders raakt Week-view in Planning
+    // het uur kwijt zodra een Google-event als subitem wordt geplaatst.
+    startTime: (item as { startTime?: string | null }).startTime ?? null,
+    endTime:   (item as { endTime?:   string | null }).endTime   ?? null,
     estHours:  Number(item.estHours) || 0,
   }
 }

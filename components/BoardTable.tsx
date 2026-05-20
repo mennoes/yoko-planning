@@ -2450,6 +2450,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       status:    source.status ?? '',
       startDate: source.startDate ?? null,
       endDate:   source.endDate ?? null,
+      // Tijden meenemen — anders vallen Google-events zonder reden in het
+      // 'De hele dag'-blok van de Week-view zodra ze als subitem genest zijn.
+      startTime: (source as { startTime?: string | null }).startTime ?? null,
+      endTime:   (source as { endTime?:   string | null }).endTime   ?? null,
       estHours:  Number(source.estHours) || 0,
     }
     // Onthoud de nesting-keuze voor Google-items: een volgende episode met
