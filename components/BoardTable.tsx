@@ -2546,10 +2546,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       endTime:    (sub as { endTime?:   string | null }).endTime   ?? null,
     } as BoardItem
     onChange(groups.map(g => {
+      // BELANGRIJK: een groep kan tegelijk de bron-groep én de doel-groep
+      // zijn (subitem in dezelfde groep terugplaatsen). Daarom apply'en we
+      // beide transformaties cumulatief op dezelfde `next`-kopie ipv te
+      // early-returnen — anders verdwijnt 't item bij same-group unnest.
+      let next = g
       if (g.id === fromGroupId) {
-        return {
-          ...g,
-          items: g.items.map(i =>
+        next = {
+          ...next,
+          items: next.items.map(i =>
             i.id === parentItemId
               ? { ...i, subitems: (i.subitems ?? []).filter(s => s.id !== subitemId) }
               : i
@@ -2557,10 +2562,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         }
       }
       if (g.id === toGroupId) {
-        const exists = g.items.some(i => i.id === promoted.id)
-        return exists ? g : { ...g, items: [...g.items, promoted] }
+        const exists = next.items.some(i => i.id === promoted.id)
+        if (!exists) next = { ...next, items: [...next.items, promoted] }
       }
-      return g
+      return next
     }))
   }
 
