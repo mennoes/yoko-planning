@@ -214,7 +214,7 @@ async function ensureDoneGroup(
     board_id:  boardId,
     name:      'Done',
     color:     '#9aa39a',
-    collapsed: false,
+    collapsed: true,
     position:  maxPos + 1,
   })
   return newId

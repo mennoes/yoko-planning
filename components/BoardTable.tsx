@@ -2393,7 +2393,7 @@ function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
     )
   }
   return [...updated, {
-    id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: false,
+    id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: true,
     items: additions,
   }]
 }
