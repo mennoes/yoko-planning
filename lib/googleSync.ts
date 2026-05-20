@@ -645,13 +645,18 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     //    huidige bord, óók als ze ooit in 'Losse projecten' belandden.
     // Manuele bord-verplaatsingen (keepBoard) blijven gerespecteerd.
     const isVrij = isVrijTitle(baseName)
+    // Eerst kijken of de gebruiker dit item al naar een eigen groep heeft
+    // verplaatst — die keuze respecteren we. Alleen Done schuift er overheen
+    // (Done-bucket is altijd waar Done's horen). Vrij komt op de tweede plek;
+    // pas als 'ie nog niet bestaat (nieuw item) maken we 'm zelf aan.
     const keepGroup = newStatus === 'Done'
       ? await getDoneGroupFor(keepBoard)
-      : isVrij
-        ? await getVrijGroupFor(keepBoard)
-        : (keepBoard === targetBoard
-            ? targetGroup
-            : await getDoorlopendGroupFor(keepBoard))
+      : (existingRow?.group_id
+          ?? (isVrij
+                ? await getVrijGroupFor(keepBoard)
+                : (keepBoard === targetBoard
+                    ? targetGroup
+                    : await getDoorlopendGroupFor(keepBoard))))
     upserts.push({
       id,
       group_id:           keepGroup,

@@ -928,11 +928,24 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
       laneEnds[lane] = ev.endMin
       laneByIdx[i] = lane
     })
-    const laneCount = Math.max(1, laneEnds.length)
     sorted.forEach((ev, i) => {
       const lane = laneByIdx[i]
+      // Niet de globale laneCount, maar het max-aantal banen dat ACTIEF is
+      // tijdens dít event. Een event dat alleen in de dag staat krijgt zo
+      // de hele kolombreedte; alleen wanneer 't echt met een ander overlapt
+      // wordt 'ie smaller. (Eerder kreeg ie laneCount-breedte ongeacht of
+      // er nu daadwerkelijk overlap was.)
+      let maxLane = lane
+      for (let j = 0; j < sorted.length; j++) {
+        if (i === j) continue
+        const o = sorted[j]
+        if (o.startMin < ev.endMin && o.endMin > ev.startMin) {
+          if (laneByIdx[j] > maxLane) maxLane = laneByIdx[j]
+        }
+      }
+      const slotsHere = maxLane + 1
       const colInner = ev.info.col.widthPx - 4
-      const slotW = colInner / laneCount
+      const slotW = colInner / slotsHere
       const top = (ev.startMin - HOUR_START * 60) / 60 * HOUR_H
       const height = Math.max(22, (ev.endMin - ev.startMin) / 60 * HOUR_H)
       timedBars.push({
@@ -1851,11 +1864,17 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
                 const target = e.target.value
                 if (!target || target === project.board) return
                 const targetName = BOARD_CONFIGS[target]?.name ?? target
-                if (!confirm(`Verplaats '${project.name}' naar bord '${targetName}'?`)) {
+                // Subitem-projects (ID bevat __si) horen bij hun parent —
+                // verplaats dan de PARENT inclusief alle subitems ipv te
+                // proberen de niet-bestaande subitem-rij te verplaatsen.
+                const rawItemId = project.id.includes('__si')
+                  ? project.id.slice(project.board.length + 2).split('__si')[0]
+                  : project.id.slice(project.board.length + 2)
+                const moveLabel = project.id.includes('__si') ? `de hele meeting van '${project.name.split(' · ')[0]}'` : `'${project.name}'`
+                if (!confirm(`Verplaats ${moveLabel} naar bord '${targetName}'?`)) {
                   e.target.value = ''
                   return
                 }
-                const rawItemId = project.id.slice(project.board.length + 2)
                 const res = moveItemToBoard(rawItemId, project.board, target, allGroups)
                 if (!res.ok) {
                   alert(res.message ?? 'Verplaatsen mislukt')
