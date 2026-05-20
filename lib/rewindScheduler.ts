@@ -31,13 +31,19 @@ export function ensureRewindItems(monthsAhead = 2): void {
     const year  = target.getFullYear()
     const monthName = NL_MONTHS[month] + ' ' + year
 
-    // Skip als er al een Rewind-item is dat in deze maand begint.
-    const alreadyExists = rewindGroup.items.some(it => {
+    // Skip als er al ergens op dit bord een Rewind-item voor deze maand
+    // bestaat. Eerder keken we alleen binnen de Rewind-groep — gevolg: zodra
+    // de user 'm op Done zette en 'ie naar de Done-groep verhuisde, maakte de
+    // scheduler 'm gewoon opnieuw aan. Nu vegen we door alle groepen.
+    // Ook op deterministic id matchen voor het geval naam handmatig veranderd.
+    const expectedId = `rewind-${year}-${String(month + 1).padStart(2, '0')}`
+    const alreadyExists = groups.some(g => g.items.some(it => {
+      if (it.id === expectedId) return true
       if (!it.startDate) return false
       const d = new Date(it.startDate)
       if (d.getMonth() !== month || d.getFullYear() !== year) return false
       return it.name.toLowerCase().includes('rewind')
-    })
+    }))
     if (alreadyExists) continue
 
     const lastDay = new Date(year, month + 1, 0)
