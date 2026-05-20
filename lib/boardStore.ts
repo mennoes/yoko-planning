@@ -60,13 +60,7 @@ export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGrou
   if (typeof window === 'undefined') return fallback
   try {
     const raw = localStorage.getItem(key(boardName))
-    const parsed = raw ? (JSON.parse(raw) as BoardGroup[]) : fallback
-    // Done-groep altijd ingeklapt — een berg afgevinkte items leidt af van
-    // wat er nog te doen valt. User kan 'm tijdens een sessie nog uitklappen
-    // via de chevron; bij de volgende load gaat-ie weer dicht.
-    return parsed.map(g =>
-      g.name?.toLowerCase() === 'done' && !g.collapsed ? { ...g, collapsed: true } : g
-    )
+    return raw ? (JSON.parse(raw) as BoardGroup[]) : fallback
   } catch { return fallback }
 }
 
