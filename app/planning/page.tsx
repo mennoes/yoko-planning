@@ -82,16 +82,15 @@ function vc(vs: ViewSize) {
 // met owner + naam goed leesbaar zijn (zoals Google Cal week-view).
 const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 }
 // How many columns of history to render before today on first load.
-// Voor de Week-view (dag-zoom) maar 1 dag terug zodat 'vandaag' linksboven
-// in beeld staat én er nog 13 dagen vooruit zichtbaar zijn. Eerder was 14
-// terug + 14 totaal, wat betekende dat 'vandaag' helemaal niet zichtbaar
-// was en je alleen achteruit kon scrollen.
-const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 1, week: 4, maand: 2 }
+// Voor de Week-view (dag-zoom) 7 dagen terug + 14 vooruit (totaal 21 dagen
+// in cols). Initial auto-scroll plaatst 'vandaag' aan de linkerkant van het
+// viewport, maar je kunt door naar links te scrollen óók de afgelopen week
+// inzien — zonder eerst de jump-back-knop te hoeven gebruiken.
 // Column counts per zoom
-// 14 dagen = 2 werkweken in beeld bij de Week (Google Cal-stijl) zoom; was
-// 60 wat horizontaal scrollen omslachtig maakte. Overzicht (week-zoom) en
-// maand-fallback blijven hun bredere range houden.
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 14, week: 56, maand: 18 }
+// Week-zoom: 21 dagen = 7 dagen historie + vandaag + 13 dagen vooruit (zie
+// HISTORY_BACK). Overzicht (week-zoom) en maand-fallback hun bredere range.
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 21, week: 56, maand: 18 }
+const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 7, week: 4, maand: 2 }
 const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
