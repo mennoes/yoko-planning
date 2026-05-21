@@ -682,24 +682,44 @@ export default function TodosPage() {
     }
   }, [])
 
-  // ── Seed Socials/Reminders/Kansen secties als ze nog niet bestaan ──────────
-  // Eenmalige migratie voor bestaande Supabase-data: nieuwe secties uit
-  // todos.json toevoegen die nog niet aanwezig zijn in de remote. Idempotent
-  // — zodra de secties bestaan doet de check niets meer. Pakt de items
-  // uit initialData zodat we geen dubbele bron-van-waarheid hebben.
+  // ── Seed Socials/Reminders/Kansen secties + missende items ────────────────
+  // Twee stappen in één migratie:
+  //  1. Bestaat een sectie nog niet? Insert 'm met al z'n initiële items.
+  //  2. Bestaat-ie wel, maar mist 'r items uit de seed? Voeg de ontbrekende
+  //     items achteraan toe, met behoud van wat er al stond (en de
+  //     done-state van bestaande items). Vergelijking case-insensitive op
+  //     tekst zodat we geen duplicates maken als de gebruiker handmatig
+  //     'Flinders' had toegevoegd. Idempotent.
   useEffect(() => {
     if (!hydrated || sections.length === 0) return
+    const seedSections = initialData.sections as Section[]
     const wantedIds = ['socials', 'reminders', 'kansen']
-    const existing = new Set(sections.map(s => s.id))
-    const missing = wantedIds.filter(id => !existing.has(id))
-    if (missing.length === 0) return
-    const seed: Section[] = (initialData.sections as Section[]).filter(s => missing.includes(s.id))
-    if (seed.length === 0) return
-    // Volgorde: nieuwe secties direct na 'ideeen' (of aan het eind als die
-    // er niet is) zodat ze visueel naast Ideeën verschijnen op desktop.
-    const ideeenIdx = sections.findIndex(s => s.id === 'ideeen')
-    const insertAt  = ideeenIdx >= 0 ? ideeenIdx + 1 : sections.length
-    const next = [...sections.slice(0, insertAt), ...seed, ...sections.slice(insertAt)]
+    let changed = false
+    let next = sections.slice()
+
+    for (const wantedId of wantedIds) {
+      const seed = seedSections.find(s => s.id === wantedId)
+      if (!seed) continue
+      const existing = next.find(s => s.id === wantedId)
+      if (!existing) {
+        // Hele sectie ontbreekt → toevoegen na 'ideeen' (of aan het eind).
+        const ideeenIdx = next.findIndex(s => s.id === 'ideeen')
+        const insertAt  = ideeenIdx >= 0 ? ideeenIdx + 1 : next.length
+        next = [...next.slice(0, insertAt), seed, ...next.slice(insertAt)]
+        changed = true
+        continue
+      }
+      // Sectie bestaat — voeg missende items toe (vergelijken op normalisatie
+      // van tekst zodat 'HEY U' en 'hey u' niet allebei verschijnen).
+      const norm = (s: string) => s.trim().toLowerCase()
+      const existingTexts = new Set(existing.items.map(i => norm(i.text)))
+      const missingItems = seed.items.filter(i => !existingTexts.has(norm(i.text)))
+      if (missingItems.length === 0) continue
+      next = next.map(s => s.id === wantedId ? { ...s, items: [...s.items, ...missingItems] } : s)
+      changed = true
+    }
+
+    if (!changed) return
     setSections(next)
     saveTodoSections(next)
   }, [hydrated, sections])

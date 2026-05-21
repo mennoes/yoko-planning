@@ -22,6 +22,33 @@ export default function NederlandPage() {
     return () => window.removeEventListener('yoko-board-update', onUpdate)
   }, [])
 
+  // Eenmalige migratie: items uit de seed-JSON die nog niet op het Nederland-
+  // bord voorkomen (case-insensitive op naam) inserten in de eerste groep.
+  // Idempotent — zodra ze bestaan doet de check niets meer. Gate via
+  // localStorage zodat we 'm hooguit één keer per device proberen ook al
+  // schopt de gebruiker een item later weer weg.
+  useEffect(() => {
+    if (!loadedRef.current) return
+    if (typeof window === 'undefined') return
+    const MIG_KEY = 'yoko-nederland-uvnl-s04-seed-v1'
+    if (localStorage.getItem(MIG_KEY) === '1') return
+    if (groups.length === 0) return
+    const seedItems = (initialData.groups[0]?.items ?? []) as BoardGroup['items']
+    const targetGroupIdx = 0
+    const targetGroup = groups[targetGroupIdx]
+    if (!targetGroup) { localStorage.setItem(MIG_KEY, '1'); return }
+    const allNames = new Set(
+      groups.flatMap(g => g.items.map(i => (i.name ?? '').trim().toLowerCase()))
+    )
+    const missing = seedItems.filter(i => !allNames.has((i.name ?? '').trim().toLowerCase()))
+    if (missing.length === 0) { localStorage.setItem(MIG_KEY, '1'); return }
+    const next = groups.map((g, gi) =>
+      gi === targetGroupIdx ? { ...g, items: [...g.items, ...missing] } : g
+    )
+    setGroups(next)
+    localStorage.setItem(MIG_KEY, '1')
+  }, [groups])
+
   useEffect(() => {
     if (!loadedRef.current) { loadedRef.current = true; return }
     saveGroups('nederland', groups)
