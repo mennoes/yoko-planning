@@ -24,6 +24,52 @@
       ]
     },
     {
+      "id": "socials",
+      "title": "Socials",
+      "emoji": "🦄",
+      "items": [
+        { "id": "s1",  "text": "Faces of Science", "done": false },
+        { "id": "s2",  "text": "HEY U", "done": false },
+        { "id": "s3",  "text": "Baby fok 13 feb", "done": false },
+        { "id": "s4",  "text": "Laugh is All You Need : V", "done": false },
+        { "id": "s5",  "text": "Taboes : M", "done": true },
+        { "id": "s6",  "text": "Ontsnapt : M", "done": false },
+        { "id": "s7",  "text": "Z!N : M", "done": false },
+        { "id": "s8",  "text": "polarsteps : M", "done": false },
+        { "id": "s9",  "text": "UvNL randomness : AF", "done": false },
+        { "id": "s10", "text": "Thought leader thumbs : AF", "done": false }
+      ]
+    },
+    {
+      "id": "reminders",
+      "title": "Reminders",
+      "emoji": "🚀",
+      "items": [
+        { "id": "r1",  "text": "Flinders", "done": false },
+        { "id": "r2",  "text": "Tomis: Filiaal illustraties", "done": true },
+        { "id": "r3",  "text": "Luc Campers", "done": false },
+        { "id": "r4",  "text": "What the Fact", "done": true },
+        { "id": "r5",  "text": "Lab Digital", "done": true },
+        { "id": "r6",  "text": "OLVG, Heldergroen, Insify, verve, La Plume", "done": false },
+        { "id": "r7",  "text": "vixy", "done": true },
+        { "id": "r8",  "text": "TNO", "done": false },
+        { "id": "r9",  "text": "Omroep Zwart samenwerking", "done": false },
+        { "id": "r10", "text": "Tino/idents", "done": false },
+        { "id": "r11", "text": "Abovo slidedeck", "done": false },
+        { "id": "r12", "text": "Polarsteps (renderbot)", "done": false },
+        { "id": "r13", "text": "Nieuwsuur?", "done": false }
+      ]
+    },
+    {
+      "id": "kansen",
+      "title": "Kansen",
+      "emoji": "💕",
+      "items": [
+        { "id": "k1", "text": "Explainer", "done": false },
+        { "id": "k2", "text": "ZIN", "done": false }
+      ]
+    },
+    {
       "id": "menno",
       "title": "Menno",
       "emoji": "🧑",

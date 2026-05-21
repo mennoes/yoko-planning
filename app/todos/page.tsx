@@ -682,6 +682,28 @@ export default function TodosPage() {
     }
   }, [])
 
+  // ── Seed Socials/Reminders/Kansen secties als ze nog niet bestaan ──────────
+  // Eenmalige migratie voor bestaande Supabase-data: nieuwe secties uit
+  // todos.json toevoegen die nog niet aanwezig zijn in de remote. Idempotent
+  // — zodra de secties bestaan doet de check niets meer. Pakt de items
+  // uit initialData zodat we geen dubbele bron-van-waarheid hebben.
+  useEffect(() => {
+    if (!hydrated || sections.length === 0) return
+    const wantedIds = ['socials', 'reminders', 'kansen']
+    const existing = new Set(sections.map(s => s.id))
+    const missing = wantedIds.filter(id => !existing.has(id))
+    if (missing.length === 0) return
+    const seed: Section[] = (initialData.sections as Section[]).filter(s => missing.includes(s.id))
+    if (seed.length === 0) return
+    // Volgorde: nieuwe secties direct na 'ideeen' (of aan het eind als die
+    // er niet is) zodat ze visueel naast Ideeën verschijnen op desktop.
+    const ideeenIdx = sections.findIndex(s => s.id === 'ideeen')
+    const insertAt  = ideeenIdx >= 0 ? ideeenIdx + 1 : sections.length
+    const next = [...sections.slice(0, insertAt), ...seed, ...sections.slice(insertAt)]
+    setSections(next)
+    saveTodoSections(next)
+  }, [hydrated, sections])
+
   // ── Auto-seed open Monday-projecten in mijn to-do-sectie ────────────────────
   // Niet-Google items waar ik eigenaar van ben en die nog niet Done zijn,
   // verschijnen automatisch als gekoppelde todo in mijn eigen kaart. De
