@@ -3688,7 +3688,7 @@ export default function PlanningPage() {
                       )}
                       <button onClick={() => { if (!editOrder) toggleExpand(member.id) }}
                         title={isExp ? 'Inklappen' : 'Uitvouwen'}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', minWidth: 0, flex: 1, padding: 0, textAlign: 'left' }}>
+                        style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'none', border: 'none', cursor: 'pointer', minWidth: 0, flex: 1, padding: 0, textAlign: 'left' }}>
                         <MemberAvatar member={member} size={av} />
                         <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.015em' }}>{member.name}</span>
