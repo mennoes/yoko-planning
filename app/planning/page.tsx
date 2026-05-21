@@ -2058,6 +2058,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
               owners={ownerIds.filter(id => id !== 'unassigned')}
               total={hasSubitems ? subitemsTotal : (parseFloat(estHours) || 0)}
               values={ownerHours}
+              onLive={next => setOwnerHours(next)}
               onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
               teamLookup={oid => team.find(t => t.id === oid) ?? null}
             />
@@ -2367,11 +2368,16 @@ function StatusPicker({ value, onChange }: { value: string; onChange: (v: string
 // Wijzig je één persoon, dan herverdelen de overigen proportioneel zodat de
 // som klopt. Door uren én % zij-aan-zij te tonen kun je sneller schakelen
 // tussen "Vincent doet 60% hiervan" en absolute uren.
-function DistributionEditor({ owners, total, values, onChange, teamLookup }: {
+function DistributionEditor({ owners, total, values, onChange, onLive, teamLookup }: {
   owners:     string[]
   total:      number
   values:     Record<string, number>
+  // onChange = live state + DB-commit. Wordt gebruikt bij inputs en bij het
+  // einde van een pie-drag.
   onChange:   (next: Record<string, number>) => void
+  // onLive = alleen lokale state-update voor smooth visuele feedback tijdens
+  // pie-drag. Geen DB-write. Optioneel; valt terug op onChange.
+  onLive?:    (next: Record<string, number>) => void
   teamLookup: (id: string) => TeamMember | null
 }) {
   const { getPhoto } = useTeamPhotos()
@@ -2430,7 +2436,8 @@ function DistributionEditor({ owners, total, values, onChange, teamLookup }: {
           interactive
           showAvatars
           innerLabel={`${round1(total)}u`}
-          onChange={onChange}
+          onChange={onLive ?? onChange}
+          onCommit={onChange}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
           {owners.map(oid => {

@@ -29,7 +29,12 @@ type Props = {
   total:        number
   size?:        number        // diameter in px
   interactive?: boolean
+  // onChange fired tijdens drag voor live visuele updates. Kan veel keren
+  // achter elkaar afgaan — gebruik 'm voor in-memory state, niet voor I/O.
   onChange?:    (next: Record<string, number>) => void
+  // onCommit fired ÉÉN keer wanneer de gebruiker de drag loslaat. Hier
+  // hoort de DB-push thuis zodat we niet honderden writes per drag doen.
+  onCommit?:    (next: Record<string, number>) => void
   className?:   string
   innerLabel?:  string        // optionele tekst middenin (bv. "12u")
   showAvatars?: boolean       // toon mini-avatars/initialen in elk segment
@@ -57,7 +62,7 @@ function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle
 }
 
 export function DistributionPie({
-  segments, total, size = 120, interactive = false, onChange,
+  segments, total, size = 120, interactive = false, onChange, onCommit,
   className, innerLabel, showAvatars = false,
 }: Props) {
   const cx = size / 2, cy = size / 2
@@ -123,6 +128,9 @@ export function DistributionPie({
     }
     setDrag(start)
 
+    // Laatste payload tijdens drag — onUp gebruikt 'm voor onCommit.
+    let latest: Record<string, number> = { ...snapshot }
+
     function onMove(ev: PointerEvent) {
       const cur  = angleAt(ev)
       let dA = cur - start.startAngle
@@ -134,16 +142,21 @@ export function DistributionPie({
       // houdt de som van de twee deelnemers EN het totaal constant.
       const realDV   = newLeft - start.leftStart
       const newRight = Math.max(0, Math.min(total, start.rightStart - realDV))
-      const next: Record<string, number> = { ...snapshot }
-      next[start.leftId]  = round1(newLeft)
-      next[start.rightId] = round1(newRight)
-      onChange!(next)
+      latest = { ...snapshot }
+      latest[start.leftId]  = round1(newLeft)
+      latest[start.rightId] = round1(newRight)
+      onChange?.(latest)
     }
     function onUp(ev: PointerEvent) {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup',   onUp)
       try { svgRef.current?.releasePointerCapture(ev.pointerId) } catch {}
       setDrag(null)
+      // Eén keer committen aan het eind — zo doen we niet honderden writes
+      // per drag. Alleen wanneer de gebruiker daadwerkelijk iets verschoven
+      // heeft (anders is `latest` gelijk aan `snapshot`).
+      const moved = Object.keys(latest).some(k => latest[k] !== snapshot[k])
+      if (moved) onCommit?.(latest)
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup',   onUp)
