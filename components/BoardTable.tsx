@@ -2098,9 +2098,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 6px' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
 
-          {/* Drag-handle voor group-reorder. Alleen dit element initieert
-              de drag; klikken op andere header-elementen (kleur, naam, ×)
-              blijft gewoon werken zonder per ongeluk een drag te starten. */}
+          {/* Drag-handle voor group-reorder. Groter en altijd zichtbaar
+              (was 14px / 0.4 opacity → bijna niet te zien én klein om te
+              raken). Alleen dit element initieert de drag; klikken op
+              andere header-elementen (kleur, naam, ×) blijft gewoon werken
+              zonder per ongeluk een drag te starten. */}
           <span
             draggable
             onDragStart={e => {
@@ -2108,8 +2110,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
               e.dataTransfer.effectAllowed = 'move'
               e.dataTransfer.setData('application/x-yoko-group', JSON.stringify({ groupId: group.id, fromBoard: boardId }))
             }}
-            title="Sleep om volgorde te wijzigen"
-            style={{ cursor: 'grab', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0, opacity: headerHover ? 1 : 0.4, transition: 'opacity 0.12s', userSelect: 'none' }}>
+            title="Sleep om groep-volgorde te wijzigen"
+            style={{ cursor: 'grab', color: headerHover ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontSize: 18, lineHeight: 1, padding: '4px 6px', borderRadius: 5,
+              flexShrink: 0, opacity: headerHover ? 1 : 0.7, transition: 'opacity 0.12s, background 0.12s, color 0.12s',
+              userSelect: 'none', background: headerHover ? 'var(--bg-hover)' : 'transparent' }}>
             ⋮⋮
           </span>
 
@@ -2597,6 +2602,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }
 
   function addGroup() {
+    // Append aan het einde — saveBoard schrijft position = array-index,
+    // dus de nieuwe groep krijgt de hoogste position en verschijnt
+    // onderaan na de eerstvolgende pull. Voorkomt dat 'ie bovenaan
+    // landt en bestaande groepen overschaduwt.
     onChange([...groups, { id: Date.now().toString(), name: 'Nieuwe groep', color, collapsed: false, items: [] }])
   }
 
