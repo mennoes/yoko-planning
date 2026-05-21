@@ -75,9 +75,12 @@ export function DistributionPie({
 
   const [drag, setDrag] = useState<{
     boundaryIdx: number
+    pointerId:   number
     startAngle:  number
     leftStart:   number  // value van het segment links van de boundary bij drag-start
     rightStart:  number  // value rechts
+    leftId:      string
+    rightId:     string
   } | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
 
@@ -97,51 +100,49 @@ export function DistributionPie({
     if (!interactive || !onChange) return
     e.preventDefault()
     e.stopPropagation()
+    // Pointer-capture op de SVG zodat móve-events blijven aankomen ook als
+    // de cursor over een ander element heen schuift. Anders kan een
+    // re-render door onChange de circle remounten en de drag stilvallen.
+    try { svgRef.current?.setPointerCapture(e.pointerId) } catch {}
+
     const leftIdx  = boundaryIdx === 0 ? segments.length - 1 : boundaryIdx - 1
     const rightIdx = boundaryIdx
+    // Snapshot van de huidige waarden — vasthouden tijdens de drag zodat
+    // onChange-callbacks niet onze own state telkens overschrijven met een
+    // stale segments-prop.
+    const snapshot: Record<string, number> = {}
+    for (const s of segments) snapshot[s.id] = s.value
     const start = {
       boundaryIdx,
+      pointerId:  e.pointerId,
       startAngle: angleAt(e),
       leftStart:  segments[leftIdx].value,
       rightStart: segments[rightIdx].value,
+      leftId:     segments[leftIdx].id,
+      rightId:    segments[rightIdx].id,
     }
     setDrag(start)
 
     function onMove(ev: PointerEvent) {
       const cur  = angleAt(ev)
       let dA = cur - start.startAngle
-      // Wrap-handling: spring niet door 2π — clamp Δ tot de twee buur-segmenten
-      // niet onder 0 vallen.
       if (dA >  Math.PI) dA -= Math.PI * 2
       if (dA < -Math.PI) dA += Math.PI * 2
       const dV = (dA / (Math.PI * 2)) * total
       const newLeft  = Math.max(0, Math.min(total, start.leftStart  + dV))
-      const newRight = Math.max(0, Math.min(total, start.rightStart - dV))
-      // Cap zodat we niet de hele taart wijzigen — andere segmenten ongemoeid.
-      const sumChange = (newLeft - start.leftStart) + (newRight - start.rightStart)
-      if (Math.abs(sumChange) > 0.05) {
-        // Eén kant geclampt, andere kant uit balans → herstel symmetrie zodat
-        // de som constant blijft.
-        const adj = (newLeft - start.leftStart)
-        const fixedRight = start.rightStart - adj
-        if (fixedRight < 0) return
-        if (fixedRight > total) return
-        const next: Record<string, number> = {}
-        for (const s of segments) next[s.id] = s.value
-        next[segments[leftIdx].id]  = round1(newLeft)
-        next[segments[rightIdx].id] = round1(fixedRight)
-        onChange!(next)
-        return
-      }
-      const next: Record<string, number> = {}
-      for (const s of segments) next[s.id] = s.value
-      next[segments[leftIdx].id]  = round1(newLeft)
-      next[segments[rightIdx].id] = round1(newRight)
+      // Spiegel: wat de linker-buur erbij krijgt, gaat van rechts af. Dat
+      // houdt de som van de twee deelnemers EN het totaal constant.
+      const realDV   = newLeft - start.leftStart
+      const newRight = Math.max(0, Math.min(total, start.rightStart - realDV))
+      const next: Record<string, number> = { ...snapshot }
+      next[start.leftId]  = round1(newLeft)
+      next[start.rightId] = round1(newRight)
       onChange!(next)
     }
-    function onUp() {
+    function onUp(ev: PointerEvent) {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup',   onUp)
+      try { svgRef.current?.releasePointerCapture(ev.pointerId) } catch {}
       setDrag(null)
     }
     window.addEventListener('pointermove', onMove)
@@ -202,11 +203,16 @@ export function DistributionPie({
         const [hx, hy] = polar(cx, cy, r, boundaryAngle)
         const active = drag?.boundaryIdx === i
         return (
-          <circle key={`b-${i}`} cx={hx} cy={hy} r={active ? 8 : 6}
-            fill={active ? 'var(--accent)' : '#fff'}
-            stroke="var(--text-secondary)" strokeWidth={1.5}
-            style={{ cursor: 'grab', touchAction: 'none' }}
-            onPointerDown={e => startDrag(i, e)} />
+          <g key={`b-${i}`} style={{ cursor: 'grab', touchAction: 'none' }}
+            onPointerDown={e => startDrag(i, e)}>
+            {/* Onzichtbaar grote hit-zone zodat de handle makkelijker te grijpen
+                is — anders moest je een 6px-cirkel exact raken. */}
+            <circle cx={hx} cy={hy} r={16} fill="transparent" />
+            <circle cx={hx} cy={hy} r={active ? 8 : 6}
+              fill={active ? 'var(--accent)' : '#fff'}
+              stroke="var(--text-secondary)" strokeWidth={1.5}
+              style={{ pointerEvents: 'none' }} />
+          </g>
         )
       })}
     </svg>
