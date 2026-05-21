@@ -1120,7 +1120,17 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   opacity: isDraggingMe ? 0.92 : 1,
                   userSelect: 'none',
                   zIndex: isDraggingMe ? 5 : 1,
+                  ...(isGoogle ? { borderLeft: '3px solid #facc15' } : {}),
                 }}>
+                {isGoogle && (
+                  <span aria-hidden style={{
+                    position: 'absolute', top: 3, right: 3,
+                    background: '#facc15', color: '#000',
+                    fontSize: 9, fontWeight: 800, lineHeight: 1,
+                    padding: '2px 4px', borderRadius: 3,
+                    pointerEvents: 'none',
+                  }}>G</span>
+                )}
                 {/* Trim-handles links/rechts — onzichtbaar maar geven een
                     col-resize cursor en vangen de mousedown af zonder dat de
                     pill-positie eerst hoeft te bewegen. */}
@@ -1228,22 +1238,33 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   boxShadow: isDragging ? '0 6px 20px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.12)',
                   opacity: isDragging ? 0.92 : 1,
                   userSelect: 'none', zIndex: isDragging ? 5 : 1,
+                  // Google-events krijgen een gele strip aan de linkerkant +
+                  // een diagonale highlight in de hoek — meteen herkenbaar als
+                  // 'komt uit Google Calendar'.
+                  ...(isGoogle ? { borderLeft: '3px solid #facc15' } : {}),
                 }}>
-                {/* Titel altijd eerst en prominent — pas daarna tijd. Korte
-                    events krijgen tijd in dezelfde regel rechts, zodat de
-                    naam nooit wegvalt. */}
+                {/* G-pill in top-right corner for Google events */}
+                {isGoogle && (
+                  <span aria-hidden style={{
+                    position: 'absolute', top: 3, right: 3,
+                    background: '#facc15', color: '#000',
+                    fontSize: 9, fontWeight: 800, lineHeight: 1,
+                    padding: '2px 4px', borderRadius: 3,
+                    pointerEvents: 'none',
+                  }}>G</span>
+                )}
+                {/* Titel altijd eerst en prominent. Op 1-regel-balken
+                    laten we de tijd weg (staat al in de tooltip / DetailPanel)
+                    zodat de naam volledig leesbaar blijft. */}
                 {height < 36 ? (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      textShadow: '0 1px 1px rgba(0,0,0,0.18)', flex: 1 }}>{b.p.name}</span>
-                    <span style={{ fontSize: 9.5, opacity: 0.9, fontWeight: 700, flexShrink: 0 }}>
-                      {fmtMin(showStart)}
-                    </span>
-                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    textShadow: '0 1px 1px rgba(0,0,0,0.18)',
+                    paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
                 ) : (
                   <>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      textShadow: '0 1px 1px rgba(0,0,0,0.18)', fontWeight: 700 }}>{b.p.name}</span>
+                      textShadow: '0 1px 1px rgba(0,0,0,0.18)', fontWeight: 700,
+                      paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
                     <span style={{ fontSize: 9.5, opacity: 0.9, fontWeight: 600 }}>
                       {fmtMin(showStart)}–{fmtMin(showEnd)}
                     </span>
