@@ -2018,45 +2018,13 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
         </Row>
         {!isGoogle && ownerIds.filter(id => id !== 'unassigned').length > 1 && (
           <Row label="Verdeling">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                Standaard verdeeld; vul in om handmatig per persoon te splitsen.
-              </div>
-              {ownerIds.filter(id => id !== 'unassigned').map(oid => {
-                const m = team.find(t => t.id === oid)
-                if (!m) return null
-                const total = hasSubitems ? subitemsTotal : (parseFloat(estHours) || 0)
-                const def   = total / Math.max(ownerIds.filter(id => id !== 'unassigned').length, 1)
-                const cur   = ownerHours[oid]
-                return (
-                  <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <UserAvatar memberId={oid} size={20} />
-                    <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)' }}>{m.name}</span>
-                    <input type="number" step="0.5" min="0"
-                      placeholder={String(Math.round(def * 10) / 10)}
-                      value={cur === undefined ? '' : cur}
-                      onChange={e => {
-                        const v = e.target.value
-                        setOwnerHours(prev => {
-                          const n = { ...prev }
-                          if (v === '') delete n[oid]
-                          else n[oid] = parseFloat(v) || 0
-                          return n
-                        })
-                      }}
-                      onBlur={e => {
-                        const v = e.target.value
-                        const next = { ...ownerHours }
-                        if (v === '') delete next[oid]
-                        else next[oid] = parseFloat(v) || 0
-                        commit({ ownerHours: next })
-                      }}
-                      style={{ ...dateInput, width: 70 }} />
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>uur</span>
-                  </div>
-                )
-              })}
-            </div>
+            <DistributionEditor
+              owners={ownerIds.filter(id => id !== 'unassigned')}
+              total={hasSubitems ? subitemsTotal : (parseFloat(estHours) || 0)}
+              values={ownerHours}
+              onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
+              teamLookup={oid => team.find(t => t.id === oid) ?? null}
+            />
           </Row>
         )}
         <Row label="Tijd">
@@ -2283,6 +2251,77 @@ const popupLabel: React.CSSProperties = {
 const popupSelect: React.CSSProperties = {
   padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+}
+
+// Verdeling-editor — bewerk uren/% per persoon en houd het totaal op `total`.
+// Wijzig je één persoon, dan herverdelen de overigen proportioneel zodat de
+// som klopt. Door uren én % zij-aan-zij te tonen kun je sneller schakelen
+// tussen "Vincent doet 60% hiervan" en absolute uren.
+function DistributionEditor({ owners, total, values, onChange, teamLookup }: {
+  owners:     string[]
+  total:      number
+  values:     Record<string, number>
+  onChange:   (next: Record<string, number>) => void
+  teamLookup: (id: string) => TeamMember | null
+}) {
+  const defaultPer = owners.length > 0 ? total / owners.length : 0
+  const current: Record<string, number> = {}
+  for (const o of owners) current[o] = values[o] ?? defaultPer
+
+  function round1(n: number): number { return Math.round(n * 10) / 10 }
+
+  // Herverdeling: pas één owner aan op `newVal`, schaal de rest zodat de som
+  // weer `total` is. Als de rest 0 was, verdeel gelijkmatig over hen.
+  function rebalance(changedId: string, newVal: number): Record<string, number> {
+    const clamped = Math.max(0, Math.min(total, newVal))
+    const others  = owners.filter(o => o !== changedId)
+    const remain  = Math.max(0, total - clamped)
+    const next: Record<string, number> = { [changedId]: round1(clamped) }
+    if (others.length === 0) return next
+    const otherSum = others.reduce((s, o) => s + (current[o] ?? 0), 0)
+    if (otherSum <= 0) {
+      const per = remain / others.length
+      for (const o of others) next[o] = round1(per)
+    } else {
+      for (const o of others) {
+        const cur = current[o] ?? 0
+        next[o]   = round1(remain * (cur / otherSum))
+      }
+    }
+    return next
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        Pas één waarde aan — de rest schaalt automatisch zodat de som {round1(total)} uur blijft.
+      </div>
+      {owners.map(oid => {
+        const m = teamLookup(oid)
+        if (!m) return null
+        const val = current[oid] ?? 0
+        const pct = total > 0 ? Math.round((val / total) * 100) : 0
+        const setHours = (h: number) => onChange(rebalance(oid, h))
+        const setPct   = (p: number) => onChange(rebalance(oid, (Math.max(0, Math.min(100, p)) / 100) * total))
+        return (
+          <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <UserAvatar memberId={oid} size={20} />
+            <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)' }}>{m.name}</span>
+            <input type="number" step="0.5" min="0" max={total}
+              value={val}
+              onChange={e => setHours(parseFloat(e.target.value) || 0)}
+              style={{ ...dateInput, width: 64 }} />
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>uur</span>
+            <input type="number" step="5" min="0" max={100}
+              value={pct}
+              onChange={e => setPct(parseFloat(e.target.value) || 0)}
+              style={{ ...dateInput, width: 52 }} />
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>%</span>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -3513,7 +3552,7 @@ export default function PlanningPage() {
                         style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', minWidth: 0, flex: 1, padding: 0, textAlign: 'left' }}>
                         <MemberAvatar member={member} size={av} />
                         <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</span>
+                          <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.015em' }}>{member.name}</span>
                           {(() => {
                             const v = vacations[member.id]
                             if (!v?.until) return null

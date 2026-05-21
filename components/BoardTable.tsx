@@ -776,8 +776,28 @@ function Cell({ item, col, onUpdate }: {
 
 // ─── Subitem grid template ────────────────────────────────────────────────────
 
+// Converteer een SubItem naar een BoardItem-shape zodat we ItemDetailDrawer
+// kunnen hergebruiken voor subitem-details. Velden die SubItem niet heeft
+// (deadline, dagen, notes) blijven leeg.
+function subitemAsItem(s: SubItem): BoardItem {
+  return {
+    id:           s.id,
+    name:         s.name,
+    ownerIds:     s.ownerIds ?? [],
+    status:       s.status ?? '',
+    startDate:    s.startDate ?? null,
+    endDate:      s.endDate ?? null,
+    deadline:     null,
+    estHours:     s.estHours ?? 0,
+    dagen:        0,
+    source:       s.source,
+    externalLink: s.externalLink ?? null,
+    echtGewerkt:  s.echtGewerkt,
+  } as BoardItem
+}
+
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -791,6 +811,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   // Master-link van de recurring parent — fallback wanneer de subitem
   // zelf nog geen per-instance externalLink heeft (oude data).
   parentExternalLink?: string | null
+  // Klik op naam → open detail-drawer met alle info, comments etc. De G-knop
+  // links blijft naar Google leiden voor wie alleen het event wil openen.
+  onOpenDetail?: () => void
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -892,40 +915,22 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             style={{ ...editInput, flex: 1 }} />
         ) : (
           <>
+            {/* Naam-klik opent altijd de detail-drawer — daar zie je status,
+                owners, comments, etc. De G-knop links opent eventueel het
+                Google-event in een nieuw tabblad. Hernoemen via het potlood-
+                icoon dat op hover verschijnt (alleen voor niet-Google). */}
+            <span onClick={() => onOpenDetail?.()}
+              title={onOpenDetail ? 'Klik om details te openen' : undefined}
+              style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, cursor: onOpenDetail ? 'pointer' : 'default', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+              {subitem.name}
+            </span>
             {(() => {
               const isGoogleSub = !!subitem.externalLink || subitem.id?.startsWith('si_g_')
-              // Google-subitems: klikken opent het event in een nieuw
-              // tabblad. Eerst eigen externalLink, daarna fallback op de
-              // master-link van de parent zodat oudere rijen zonder
-              // per-instance link ook openen. Geen rename mogelijk —
-              // Google overschrijft de titel toch bij elke sync.
-              const link = isGoogleSub ? (subitem.externalLink ?? parentExternalLink ?? null) : null
-              if (isGoogleSub) {
-                const common = {
-                  style: { fontSize: 14, color: 'var(--text-primary)', fontWeight: 500,
-                    textDecoration: 'none' as const,
-                    overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const,
-                    flex: 1, minWidth: 0, cursor: link ? 'pointer' as const : 'default' as const },
-                  title: link ? 'Open in Google Calendar' : 'Google Calendar item (bewerk in Google Calendar)',
-                  children: subitem.name,
-                }
-                if (link) {
-                  return (
-                    <a href={link} target="_blank" rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                      onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                      {...common} />
-                  )
-                }
-                return <span {...common} />
-              }
+              if (isGoogleSub || !hover) return null
               return (
-                <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
-                  title="Klik om te hernoemen"
-                  style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                  {subitem.name}
-                </span>
+                <button onClick={e => { e.stopPropagation(); setNameDraft(subitem.name); setEditName(true) }}
+                  title="Naam aanpassen"
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: '2px 4px', borderRadius: 3, flexShrink: 0 }}>✎</button>
               )
             })()}
             {subitem.meetLink && (
@@ -958,7 +963,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onUpdate }: {
+function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
@@ -966,6 +971,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   parentItemId?: string
   fromGroupId?: string
   parentExternalLink?: string | null
+  onOpenDetail?: (sub: SubItem) => void
   onUpdate: (u: SubItem[]) => void
 }) {
   function updateOne(id: string, u: Partial<SubItem>) {
@@ -1020,6 +1026,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           rail={rail}
           selectedIds={selectedIds} onToggleSelect={onToggleSelect}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
+          onOpenDetail={onOpenDetail}
           updateOne={updateOne} deleteOne={deleteOne} />
         <div style={{ padding: '8px 12px 8px 56px' }}>
           <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
@@ -1035,7 +1042,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, updateOne, deleteOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, updateOne, deleteOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
@@ -1044,6 +1051,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
   // subitems die nog geen eigen externalLink hebben (oude rows van vóór
   // de per-instance link werd opgeslagen).
   parentExternalLink?: string | null
+  onOpenDetail?: (sub: SubItem) => void
   updateOne: (id: string, u: Partial<SubItem>) => void
   deleteOne: (id: string) => void
 }) {
@@ -1073,6 +1081,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
+          onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
       {hasDone && (
@@ -1108,6 +1117,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
               isLast={idx === lastDoneIdx}
               parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
+              onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
               onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
           ))}
         </>
@@ -1174,6 +1184,8 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   // maar bereikbaar via een knop direct op de rij.
   const [commentCount, setCommentCount] = useState(0)
   const [showDetail, setShowDetail] = useState(false)
+  // Subitem-detail: zelfde drawer als parent items, maar voor één subitem.
+  const [openSub, setOpenSub] = useState<SubItem | null>(null)
   useEffect(() => {
     const refresh = () => {
       const threads = loadCommentsFor('board-item:' + item.id)
@@ -1422,11 +1434,34 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           onToggleSelect={onToggleSubitem}
           parentItemId={item.id} fromGroupId={groupId}
           parentExternalLink={item.externalLink ?? null}
+          onOpenDetail={sub => setOpenSub(sub)}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
       {showDetail && (
         <ItemDetailDrawer item={item} cols={cols} accentColor={accentColor}
           onUpdate={onUpdate} onClose={() => setShowDetail(false)} />
+      )}
+      {openSub && (
+        <ItemDetailDrawer
+          item={subitemAsItem(openSub)}
+          cols={cols}
+          accentColor={accentColor}
+          onUpdate={u => {
+            // Vertaal BoardItem-update terug naar SubItem-update; alleen
+            // velden die SubItem ook kent landen in de array.
+            const subFields: Partial<SubItem> = {}
+            if ('name'        in u) subFields.name        = u.name as string
+            if ('ownerIds'    in u) subFields.ownerIds    = u.ownerIds as string[]
+            if ('status'      in u) subFields.status      = u.status as string
+            if ('startDate'   in u) subFields.startDate   = u.startDate as string | null
+            if ('endDate'     in u) subFields.endDate     = u.endDate as string | null
+            if ('estHours'    in u) subFields.estHours    = u.estHours as number
+            if ('echtGewerkt' in u) subFields.echtGewerkt = u.echtGewerkt as number | undefined
+            const nextSubs = (item.subitems ?? []).map(s => s.id === openSub.id ? { ...s, ...subFields } : s)
+            onUpdate({ subitems: nextSubs })
+            setOpenSub(prev => prev ? { ...prev, ...subFields } : prev)
+          }}
+          onClose={() => setOpenSub(null)} />
       )}
     </>
   )
