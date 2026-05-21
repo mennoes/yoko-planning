@@ -1677,9 +1677,10 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
       ownerIds: finalOwners,
       links: nextLinks,
     }
-    if (patch.startTime !== undefined) extra.startTime = patch.startTime
-    if (patch.endTime   !== undefined) extra.endTime   = patch.endTime
-    if (patch.status    !== undefined) extra.status    = patch.status
+    if (patch.startTime          !== undefined) extra.startTime          = patch.startTime
+    if (patch.endTime            !== undefined) extra.endTime            = patch.endTime
+    if (patch.status             !== undefined) extra.status             = patch.status
+    if (patch.hiddenFromPlanning !== undefined) extra.hiddenFromPlanning = patch.hiddenFromPlanning
     if (!hasSubitems) extra.estHours = nextEst
     onUpdate(project, nextStart, nextEnd, extra)
 
@@ -2782,8 +2783,14 @@ export default function PlanningPage() {
     for (const [boardName, groups] of Object.entries(allGroups)) {
       for (const g of groups) {
         for (const i of g.items) {
-          const flagged = (i as { hiddenFromPlanning?: boolean }).hiddenFromPlanning
-          if (flagged) s.add(`${boardName}__${i.id}`)
+          const itemFlagged = (i as { hiddenFromPlanning?: boolean }).hiddenFromPlanning
+          if (itemFlagged) s.add(`${boardName}__${i.id}`)
+          // Per-subitem hide-vlag — wanneer de gebruiker een recurring
+          // instance verbergt via de detail-popup landt 'ie hier.
+          const subs = (i.subitems as Array<{ hiddenFromPlanning?: boolean }> | undefined) ?? []
+          subs.forEach((sub, idx) => {
+            if (sub?.hiddenFromPlanning) s.add(`${boardName}__${i.id}__si${idx}`)
+          })
         }
       }
     }
@@ -2795,12 +2802,19 @@ export default function PlanningPage() {
     if (shadowDrag) {
       next = next.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
     }
-    // Per-item: items die zelf geflagged zijn als hiddenFromPlanning, óók
-    // hun afgeleide subitem-projecten (id-vorm: '{board}__{itemId}__siN').
+    // Per-item filter: het project ZELF (via z'n volledige id) of de PARENT
+    // (via baseId zonder __siN-suffix) mag niet in de hidden-set zitten.
+    // Een hidden parent verbergt automatisch al z'n afgeleide subitems;
+    // een hidden subitem verbergt alleen dat ene event.
     if (hiddenIds.size > 0) {
       next = next.filter(p => {
-        const baseId = p.id.includes('__si') ? p.id.slice(0, p.id.indexOf('__si')) : p.id
-        return !hiddenIds.has(baseId)
+        if (hiddenIds.has(p.id)) return false
+        const subStart = p.id.indexOf('__si')
+        if (subStart >= 0) {
+          const parentBaseId = p.id.slice(0, subStart)
+          if (hiddenIds.has(parentBaseId)) return false
+        }
+        return true
       })
     }
     // Global: alle Google-items wanneer 'Verberg Google' actief is en de
@@ -2970,12 +2984,43 @@ export default function PlanningPage() {
   }
   function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
     const boardName  = project.board
-    const origItemId = project.id.slice(boardName.length + 2)
-    // Snapshot huidige board-state vóór de wijziging — Cmd+Z herstelt dit
-    // (alleen dit ene item verschilt; rest van het bord blijft gelijk).
+    const rawIdPart  = project.id.slice(boardName.length + 2)
+    // Recurring instance? Dan zit het project gemodelleerd als subitem van
+    // een board-item, met id-vorm '{itemId}__siN'. We splitsen 'm op zodat
+    // de update op de juiste plek landt (subitem-object i.p.v. top-level).
+    const subMatch   = rawIdPart.match(/^(.+)__si(\d+)$/)
+    const parentId   = subMatch ? subMatch[1] : rawIdPart
+    const subIdx     = subMatch ? parseInt(subMatch[2], 10) : -1
+    const isSubitem  = subIdx >= 0
     const before = allGroups[boardName] ?? []
     const groups = before.map(g => ({
-      ...g, items: g.items.map(i => i.id === origItemId ? { ...i, startDate: newStart, endDate: newEnd, ...(extra ?? {}) } : i),
+      ...g,
+      items: g.items.map(i => {
+        if (i.id !== parentId) return i
+        if (!isSubitem) {
+          // Top-level item: gewoon velden mergen.
+          return { ...i, startDate: newStart, endDate: newEnd, ...(extra ?? {}) }
+        }
+        // Subitem: muteer de juiste entry binnen i.subitems. Niet alle
+        // top-level velden gelden hier (notes/links/journal staan op de
+        // parent), maar startDate/endDate/estHours/ownerIds/ownerHours/
+        // status/hiddenFromPlanning passen op een subitem.
+        const subs = Array.isArray(i.subitems) ? i.subitems.slice() : []
+        if (subs[subIdx]) {
+          const subPatch: Record<string, unknown> = { startDate: newStart, endDate: newEnd }
+          if (extra) {
+            if (extra.estHours          !== undefined) subPatch.estHours          = extra.estHours
+            if (extra.ownerHours        !== undefined) subPatch.ownerHours        = extra.ownerHours
+            if (extra.ownerIds          !== undefined) subPatch.ownerIds          = extra.ownerIds
+            if (extra.status            !== undefined) subPatch.status            = extra.status
+            if (extra.startTime         !== undefined) subPatch.startTime         = extra.startTime
+            if (extra.endTime           !== undefined) subPatch.endTime           = extra.endTime
+            if (extra.hiddenFromPlanning !== undefined) subPatch.hiddenFromPlanning = extra.hiddenFromPlanning
+          }
+          subs[subIdx] = { ...subs[subIdx], ...subPatch }
+        }
+        return { ...i, subitems: subs }
+      }),
     }))
     saveGroups(boardName, groups)
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
@@ -2987,9 +3032,6 @@ export default function PlanningPage() {
     pushUndo(() => {
       saveGroups(boardName, before)
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
-      // Sluit de open popup — anders zou de lokale state in DetailPanel
-      // stale staan tegenover de net-herstelde data. Bij heropenen krijg
-      // je een verse render met de juiste waarden.
       setDetailProject(null)
     })
   }
