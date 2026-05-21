@@ -1546,7 +1546,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
   onDuplicate?: () => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
@@ -1636,16 +1636,24 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
     ownerIds:  string[]
     links:     import('@/lib/boards').ItemLink[]
     status:    string
+    hiddenFromPlanning: boolean
   }>
   function commit(patch: Patch) {
-    // Google-items zijn doorgaans read-only (sync overschrijft), maar status
-    // mag wel — die wordt door resolveStatus in googleSync gerespecteerd
-    // zodra-ie op Done/Stuck staat. Voor andere velden blokkeren we nog
-    // steeds zodat een commit niet onbedoeld notities/owners wijzigt.
+    // Google-items zijn voor naam/timeline read-only (sync overschrijft die),
+    // maar status, uren en owner-verdeling mogen wel — status wordt door
+    // googleSync.resolveStatus gerespecteerd, en estHours/ownerHours blijven
+    // staan op de bestaande row mits user-edit (zie sync-preservatie).
+    // Notities en journal blokkeren we nog steeds zodat een commit niet
+    // onbedoeld waarden van Google overschrijft.
     if (isGoogle) {
-      if (patch.status === undefined) return
-      const extraG: Patch = { status: patch.status }
-      onUpdate(project, project.startDate ?? null, project.endDate ?? null, extraG)
+      const allowed: Patch = {}
+      if (patch.status              !== undefined) allowed.status              = patch.status
+      if (patch.estHours            !== undefined) allowed.estHours            = patch.estHours
+      if (patch.ownerHours          !== undefined) allowed.ownerHours          = patch.ownerHours
+      if (patch.ownerIds            !== undefined) allowed.ownerIds            = patch.ownerIds
+      if (patch.hiddenFromPlanning  !== undefined) allowed.hiddenFromPlanning  = patch.hiddenFromPlanning
+      if (Object.keys(allowed).length === 0) return
+      onUpdate(project, project.startDate ?? null, project.endDate ?? null, allowed)
       return
     }
     // Bouw de volledige nieuwe state (patch overschrijft, anders fallback op
@@ -2165,6 +2173,21 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
           </span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          {/* Per-item verberg-toggle: handig voor items die niet in de
+              planning-overzicht horen (bv. half-day blokken die je liever
+              compact wilt zien, of items die je niet meetelt). Werkt voor
+              Google én handmatig. */}
+          {(() => {
+            const hidden = !!(rawItem as { hiddenFromPlanning?: boolean } | undefined)?.hiddenFromPlanning
+            return (
+              <button onClick={() => commit({ hiddenFromPlanning: !hidden })}
+                title={hidden ? 'Toon dit item weer in de planning' : 'Verberg dit item uit de planning (blijft op het bord)'}
+                style={{ ...cancelBtn, color: hidden ? color : 'var(--text-secondary)',
+                  borderColor: hidden ? color : 'var(--border)' }}>
+                {hidden ? '👁 Toon in planning' : '🚫 Verberg uit planning'}
+              </button>
+            )
+          })()}
           {!isMerged && onDuplicate && (
             <button onClick={onDuplicate} title="Dupliceer dit item naar dezelfde groep"
               style={{ ...cancelBtn, color: 'var(--text-secondary)' }}>
@@ -2570,6 +2593,13 @@ export default function PlanningPage() {
     return localStorage.getItem('planning-hide-meetings') === '1'
   })
   useEffect(() => { localStorage.setItem('planning-hide-meetings', hideMeetings ? '1' : '0') }, [hideMeetings])
+  // Toggle om álle Google-items te verbergen in Overzicht (week-zoom).
+  // Per-device in localStorage; reset niet bij refresh.
+  const [hideGoogle, setHideGoogle] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('planning-hide-google') === '1'
+  })
+  useEffect(() => { localStorage.setItem('planning-hide-google', hideGoogle ? '1' : '0') }, [hideGoogle])
 
   // Keyboard shortcuts: +/= zooms in, - zooms out (skip when typing in inputs)
   useEffect(() => {
@@ -2744,10 +2774,42 @@ export default function PlanningPage() {
     [allGroups]
   )
 
+  // Per-item verberg-vlag uit het bron-board uitlezen. Items met
+  // hiddenFromPlanning=true verschijnen niet meer in de planning-view
+  // maar blijven op het bord staan. Werkt voor Google én handmatig.
+  const hiddenIds = useMemo(() => {
+    const s = new Set<string>()
+    for (const [boardName, groups] of Object.entries(allGroups)) {
+      for (const g of groups) {
+        for (const i of g.items) {
+          const flagged = (i as { hiddenFromPlanning?: boolean }).hiddenFromPlanning
+          if (flagged) s.add(`${boardName}__${i.id}`)
+        }
+      }
+    }
+    return s
+  }, [allGroups])
+
   const effectiveProjects = useMemo(() => {
-    if (!shadowDrag) return projects
-    return projects.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
-  }, [projects, shadowDrag])
+    let next = projects
+    if (shadowDrag) {
+      next = next.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
+    }
+    // Per-item: items die zelf geflagged zijn als hiddenFromPlanning, óók
+    // hun afgeleide subitem-projecten (id-vorm: '{board}__{itemId}__siN').
+    if (hiddenIds.size > 0) {
+      next = next.filter(p => {
+        const baseId = p.id.includes('__si') ? p.id.slice(0, p.id.indexOf('__si')) : p.id
+        return !hiddenIds.has(baseId)
+      })
+    }
+    // Global: alle Google-items wanneer 'Verberg Google' actief is en de
+    // gebruiker in Overzicht (week-zoom) staat.
+    if (hideGoogle && zoom === 'week') {
+      next = next.filter(p => p.source !== 'google')
+    }
+    return next
+  }, [projects, shadowDrag, hideGoogle, zoom, hiddenIds])
 
   // Compute view constants
   const { cs, or, hh, av } = vc(viewSize)
@@ -2906,7 +2968,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     // Snapshot huidige board-state vóór de wijziging — Cmd+Z herstelt dit
@@ -3149,6 +3211,16 @@ export default function PlanningPage() {
                 style={ghostBtn(hideMeetings)}>
                 {hideMeetings ? '👁 Meetings' : '🚫 Meetings'}
               </button>
+              {/* Alleen in Overzicht (week-zoom) een knop die álle Google-
+                  items verbergt — handig voor 'wat staat er nog aan
+                  eigen werk' zonder agenda-ruis. */}
+              {zoom === 'week' && (
+                <button onClick={() => setHideGoogle(v => !v)}
+                  title={hideGoogle ? 'Google-items tonen' : 'Alle Google-items verbergen'}
+                  style={ghostBtn(hideGoogle)}>
+                  {hideGoogle ? '👁 Google' : '🚫 Google'}
+                </button>
+              )}
               <span style={separator} />
               <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
                 + Nieuw item
