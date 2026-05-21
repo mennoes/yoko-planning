@@ -777,7 +777,7 @@ function Cell({ item, col, onUpdate }: {
 // ─── Subitem grid template ────────────────────────────────────────────────────
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -788,6 +788,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   // dataTransfer zodat de drop-handler de juiste oudere kan strippen.
   parentItemId?: string
   fromGroupId?: string
+  // Master-link van de recurring parent — fallback wanneer de subitem
+  // zelf nog geen per-instance externalLink heeft (oude data).
+  parentExternalLink?: string | null
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -795,7 +798,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   const [nameDraft, setNameDraft] = useState(subitem.name)
 
   const cellBorder: React.CSSProperties = {
-    borderLeft: '1px solid var(--border-light)', height: '100%',
+    borderLeft: '1px solid var(--border)', height: '100%',
     display: 'flex', alignItems: 'center', padding: '3px 8px', overflow: 'hidden',
   }
 
@@ -891,26 +894,31 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           <>
             {(() => {
               const isGoogleSub = !!subitem.externalLink || subitem.id?.startsWith('si_g_')
-              // Bij Google-subitems opent klikken het Google-event direct in
-              // een nieuw tabblad — handig voor 'wie was hier ook al weer
-              // bij?' of om de Meet-link op te halen. Dubbelklik blijft
-              // rename triggeren. Voor handmatige subitems opent klikken
-              // gewoon rename zoals voorheen.
-              if (isGoogleSub && subitem.externalLink) {
-                return (
-                  <a href={subitem.externalLink} target="_blank" rel="noopener noreferrer"
-                    onClick={e => e.stopPropagation()}
-                    onDoubleClick={e => { e.preventDefault(); e.stopPropagation(); setNameDraft(subitem.name); setEditName(true) }}
-                    title="Open in Google Calendar · dubbelklik om te hernoemen"
-                    style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500,
-                      textDecoration: 'none',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      flex: 1, minWidth: 0, cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                    onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
-                    {subitem.name}
-                  </a>
-                )
+              // Google-subitems: klikken opent het event in een nieuw
+              // tabblad. Eerst eigen externalLink, daarna fallback op de
+              // master-link van de parent zodat oudere rijen zonder
+              // per-instance link ook openen. Geen rename mogelijk —
+              // Google overschrijft de titel toch bij elke sync.
+              const link = isGoogleSub ? (subitem.externalLink ?? parentExternalLink ?? null) : null
+              if (isGoogleSub) {
+                const common = {
+                  style: { fontSize: 14, color: 'var(--text-primary)', fontWeight: 500,
+                    textDecoration: 'none' as const,
+                    overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const,
+                    flex: 1, minWidth: 0, cursor: link ? 'pointer' as const : 'default' as const },
+                  title: link ? 'Open in Google Calendar' : 'Google Calendar item (bewerk in Google Calendar)',
+                  children: subitem.name,
+                }
+                if (link) {
+                  return (
+                    <a href={link} target="_blank" rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                      onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                      {...common} />
+                  )
+                }
+                return <span {...common} />
               }
               return (
                 <span onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
@@ -940,7 +948,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         )}
       </div>
       {cols.map(c => <div key={c.key}>{renderCol(c)}</div>)}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border-light)', height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%' }}>
         {hover && (
           <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
         )}
@@ -950,13 +958,14 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, onUpdate }: {
+function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
   parentItemId?: string
   fromGroupId?: string
+  parentExternalLink?: string | null
   onUpdate: (u: SubItem[]) => void
 }) {
   function updateOne(id: string, u: Partial<SubItem>) {
@@ -974,7 +983,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     onUpdate([...subitems, { id: Date.now().toString(), name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
   }
   const rail = accentColor ?? 'var(--accent)'
-  const hdrCell: React.CSSProperties = { padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-light)' }
+  const hdrCell: React.CSSProperties = { padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)' }
 
   // Subitem-only header labels per known column key. Falls back to the
   // parent column label so custom columns get something sensible.
@@ -1005,12 +1014,12 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           {cols.map(c => (
             <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
           ))}
-          <div style={{ borderLeft: '1px solid var(--border-light)' }} />
+          <div style={{ borderLeft: '1px solid var(--border)' }} />
         </div>
         <SubitemRows subitems={subitems} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
           selectedIds={selectedIds} onToggleSelect={onToggleSelect}
-          parentItemId={parentItemId} fromGroupId={fromGroupId}
+          parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           updateOne={updateOne} deleteOne={deleteOne} />
         <div style={{ padding: '8px 12px 8px 56px' }}>
           <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
@@ -1026,11 +1035,15 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, updateOne, deleteOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, updateOne, deleteOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
   fromGroupId?: string
+  // Master-link van de recurring parent — gebruiken we als fallback voor
+  // subitems die nog geen eigen externalLink hebben (oude rows van vóór
+  // de per-instance link werd opgeslagen).
+  parentExternalLink?: string | null
   updateOne: (id: string, u: Partial<SubItem>) => void
   deleteOne: (id: string) => void
 }) {
@@ -1059,7 +1072,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           selected={selectedIds?.has(sub.id) ?? false}
           onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
-          parentItemId={parentItemId} fromGroupId={fromGroupId}
+          parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
       {hasDone && (
@@ -1071,7 +1084,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
             style={{
               width: '100%', textAlign: 'left',
               background: 'var(--overlay-faint)', border: 'none',
-              borderBottom: '1px solid var(--border-light)',
+              borderBottom: '1px solid var(--border)',
               padding: '7px 14px 7px 56px', cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 8,
               fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
@@ -1094,7 +1107,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               selected={selectedIds?.has(sub.id) ?? false}
               onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
               isLast={idx === lastDoneIdx}
-              parentItemId={parentItemId} fromGroupId={fromGroupId}
+              parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
               onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
           ))}
         </>
@@ -1408,6 +1421,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
           parentItemId={item.id} fromGroupId={groupId}
+          parentExternalLink={item.externalLink ?? null}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
       {showDetail && (
@@ -1492,7 +1506,7 @@ function DedupModal({ groups, onClose, onDelete }: {
             const key = (arr[0].name ?? '').trim().toLowerCase()
             return (
               <div key={key} style={{ marginBottom: 16, border: '1px solid var(--border-light)', borderRadius: 8 }}>
-                <div style={{ padding: '8px 12px', background: 'var(--overlay-faint)', borderBottom: '1px solid var(--border-light)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                <div style={{ padding: '8px 12px', background: 'var(--overlay-faint)', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                   &ldquo;{arr[0].name}&rdquo; <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {arr.length}× gevonden</span>
                 </div>
                 {arr.map(i => {
