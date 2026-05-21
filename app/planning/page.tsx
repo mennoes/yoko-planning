@@ -31,6 +31,7 @@ import { LinksRow } from '@/components/LinksRow'
 import { ItemHistory } from '@/components/ItemHistory'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
+import { DistributionPie } from '@/components/DistributionPie'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
 import { startTimer, stopTimer, getActiveTimer, totalMinutesForProject, onTimerUpdate, fmtMinutes } from '@/lib/timerStore'
@@ -1132,9 +1133,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                   marginLeft: titleShift,
                   textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
-                <span style={{ display: 'flex', gap: 3 }}>
-                  {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={16} />)}
-                </span>
+                <OwnerCircle owners={owners} size={20} />
               </div>
             )
           })}
@@ -1249,8 +1248,8 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                       {fmtMin(showStart)}–{fmtMin(showEnd)}
                     </span>
                     {owners.length > 0 && (
-                      <span style={{ display: 'flex', gap: 2, marginTop: 'auto' }}>
-                        {owners.slice(0, 3).map(m => <MemberAvatar key={m.id} member={m} size={14} />)}
+                      <span style={{ marginTop: 'auto' }}>
+                        <OwnerCircle owners={owners} size={18} />
                       </span>
                     )}
                   </>
@@ -1614,9 +1613,19 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
     ownerHours: Record<string, number>
     ownerIds:  string[]
     links:     import('@/lib/boards').ItemLink[]
+    status:    string
   }>
   function commit(patch: Patch) {
-    if (isGoogle) return
+    // Google-items zijn doorgaans read-only (sync overschrijft), maar status
+    // mag wel — die wordt door resolveStatus in googleSync gerespecteerd
+    // zodra-ie op Done/Stuck staat. Voor andere velden blokkeren we nog
+    // steeds zodat een commit niet onbedoeld notities/owners wijzigt.
+    if (isGoogle) {
+      if (patch.status === undefined) return
+      const extraG: Patch = { status: patch.status }
+      onUpdate(project, project.startDate ?? null, project.endDate ?? null, extraG)
+      return
+    }
     // Bouw de volledige nieuwe state (patch overschrijft, anders fallback op
     // huidige local state) en stuur door naar handleDetailUpdate in de parent.
     const nextStart = patch.startDate !== undefined ? patch.startDate : (startDate || null)
@@ -1640,6 +1649,7 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
     }
     if (patch.startTime !== undefined) extra.startTime = patch.startTime
     if (patch.endTime   !== undefined) extra.endTime   = patch.endTime
+    if (patch.status    !== undefined) extra.status    = patch.status
     if (!hasSubitems) extra.estHours = nextEst
     onUpdate(project, nextStart, nextEnd, extra)
 
@@ -1855,7 +1865,12 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
             )}
           </div>
         </Row>
-        <Row label="Status"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{project.status === 'done' ? '✅ Done' : rawItem?.status as string || '—'}</span></Row>
+        <Row label="Status">
+          <StatusPicker
+            value={(rawItem?.status as string) ?? ''}
+            onChange={v => commit({ status: v })}
+          />
+        </Row>
         <Row label="Bord">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
@@ -2253,6 +2268,80 @@ const popupSelect: React.CSSProperties = {
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
 }
 
+// Owner-cirkel — toont meerdere eigenaren als één segment-cirkel i.p.v.
+// drie losse mini-avatars naast elkaar. Compacter en visueel ruster.
+// Op groottes ≥ 24px tonen we mini-foto's in de segmenten; daaronder
+// alleen kleur-segmenten zodat-ie leesbaar blijft.
+function OwnerCircle({ owners, size = 22 }: { owners: TeamMember[]; size?: number }) {
+  const { getPhoto } = useTeamPhotos()
+  if (owners.length === 0) return null
+  const segments = owners.map(m => ({
+    id:        m.id,
+    value:     1,
+    color:     m.color ?? '#9aa3ad',
+    label:     m.name,
+    avatarUrl: getPhoto(m.id),
+    initials:  m.name?.slice(0, 1).toUpperCase() ?? '?',
+  }))
+  return (
+    <DistributionPie segments={segments} total={owners.length} size={size} showAvatars={size >= 24} />
+  )
+}
+
+// Status-pill picker — klik opent een dropdown met de bekende statussen.
+// Werkt voor zowel handmatige als Google-items (de sync respecteert
+// Done/Stuck via resolveStatus, en laat 'Working on...' / leeg met rust).
+const STATUS_PICKER_OPTIONS = [
+  { label: '',              color: ''        , display: '—' },
+  { label: 'Working on...', color: '#ff7b24' , display: 'Working on...' },
+  { label: 'Done',          color: '#00c875' , display: 'Done' },
+  { label: 'Stuck',         color: '#e2445c' , display: 'Stuck' },
+  { label: 'Doorlopend',    color: '#579bfc' , display: 'Doorlopend' },
+]
+function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+  const cur = STATUS_PICKER_OPTIONS.find(o => o.label === value) ?? STATUS_PICKER_OPTIONS[0]
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{
+          padding: '6px 14px', borderRadius: 999, border: 'none',
+          background: cur.color || 'var(--overlay-medium)',
+          color: cur.color ? '#fff' : 'var(--text-muted)',
+          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: 'pointer',
+          minWidth: 110, textAlign: 'left',
+        }}>
+        {cur.display}
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 10,
+          background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+          padding: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {STATUS_PICKER_OPTIONS.map(o => (
+            <button key={o.label || 'empty'} onClick={() => { onChange(o.label); setOpen(false) }}
+              style={{
+                padding: '5px 10px', borderRadius: 6, border: 'none',
+                background: o.color || 'transparent',
+                color: o.color ? '#fff' : 'var(--text-secondary)',
+                fontSize: 12.5, fontWeight: o.color ? 600 : 500, textAlign: 'left', cursor: 'pointer',
+                minWidth: 120,
+              }}>
+              {o.display}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Verdeling-editor — bewerk uren/% per persoon en houd het totaal op `total`.
 // Wijzig je één persoon, dan herverdelen de overigen proportioneel zodat de
 // som klopt. Door uren én % zij-aan-zij te tonen kun je sneller schakelen
@@ -2264,6 +2353,7 @@ function DistributionEditor({ owners, total, values, onChange, teamLookup }: {
   onChange:   (next: Record<string, number>) => void
   teamLookup: (id: string) => TeamMember | null
 }) {
+  const { getPhoto } = useTeamPhotos()
   const defaultPer = owners.length > 0 ? total / owners.length : 0
   const current: Record<string, number> = {}
   for (const o of owners) current[o] = values[o] ?? defaultPer
@@ -2291,35 +2381,63 @@ function DistributionEditor({ owners, total, values, onChange, teamLookup }: {
     return next
   }
 
+  // Bouw segmenten voor de DistributionPie. Member-kleur als segment-kleur,
+  // photo of initialen voor identificatie in 't segment zelf.
+  const segments = owners.map(oid => {
+    const m = teamLookup(oid)
+    return {
+      id:        oid,
+      value:     current[oid] ?? 0,
+      color:     m?.color ?? '#9aa3ad',
+      label:     m?.name ?? oid,
+      avatarUrl: m ? getPhoto(m.id) : undefined,
+      initials:  m?.name?.slice(0, 1).toUpperCase() ?? '?',
+    }
+  })
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        Pas één waarde aan — de rest schaalt automatisch zodat de som {round1(total)} uur blijft.
+        Sleep de witte bolletjes op de taart om uren tussen mensen te verschuiven —
+        of bewerk de cijfers per rij.
       </div>
-      {owners.map(oid => {
-        const m = teamLookup(oid)
-        if (!m) return null
-        const val = current[oid] ?? 0
-        const pct = total > 0 ? Math.round((val / total) * 100) : 0
-        const setHours = (h: number) => onChange(rebalance(oid, h))
-        const setPct   = (p: number) => onChange(rebalance(oid, (Math.max(0, Math.min(100, p)) / 100) * total))
-        return (
-          <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <UserAvatar memberId={oid} size={20} />
-            <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)' }}>{m.name}</span>
-            <input type="number" step="0.5" min="0" max={total}
-              value={val}
-              onChange={e => setHours(parseFloat(e.target.value) || 0)}
-              style={{ ...dateInput, width: 64 }} />
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>uur</span>
-            <input type="number" step="5" min="0" max={100}
-              value={pct}
-              onChange={e => setPct(parseFloat(e.target.value) || 0)}
-              style={{ ...dateInput, width: 52 }} />
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>%</span>
-          </div>
-        )
-      })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <DistributionPie
+          segments={segments}
+          total={total}
+          size={130}
+          interactive
+          showAvatars
+          innerLabel={`${round1(total)}u`}
+          onChange={onChange}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          {owners.map(oid => {
+            const m = teamLookup(oid)
+            if (!m) return null
+            const val = current[oid] ?? 0
+            const pct = total > 0 ? Math.round((val / total) * 100) : 0
+            const setHours = (h: number) => onChange(rebalance(oid, h))
+            const setPct   = (p: number) => onChange(rebalance(oid, (Math.max(0, Math.min(100, p)) / 100) * total))
+            return (
+              <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color ?? '#9aa3ad', flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)' }}>{m.name}</span>
+                <input type="number" step="0.5" min="0" max={total}
+                  value={val}
+                  onChange={e => setHours(parseFloat(e.target.value) || 0)}
+                  style={{ ...dateInput, width: 56 }} />
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>u</span>
+                <input type="number" step="5" min="0" max={100}
+                  value={pct}
+                  onChange={e => setPct(parseFloat(e.target.value) || 0)}
+                  style={{ ...dateInput, width: 44 }} />
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>%</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
@@ -2759,7 +2877,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string }>) {
     const boardName  = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     // Snapshot huidige board-state vóór de wijziging — Cmd+Z herstelt dit
@@ -2773,7 +2891,7 @@ export default function PlanningPage() {
     // Houd detailProject in sync zodat project.startDate/endDate up-to-date
     // blijven na een commit (gebruikt door child components zoals de bar).
     setDetailProject(prev => prev && prev.id === project.id
-      ? { ...prev, startDate: newStart, endDate: newEnd, ...(extra ? { ownerIds: extra.ownerIds ?? prev.ownerIds, estHours: extra.estHours ?? prev.estHours, ownerHours: extra.ownerHours ?? prev.ownerHours } : {}) }
+      ? { ...prev, startDate: newStart, endDate: newEnd, ...(extra ? { ownerIds: extra.ownerIds ?? prev.ownerIds, estHours: extra.estHours ?? prev.estHours, ownerHours: extra.ownerHours ?? prev.ownerHours, status: (extra.status as Project['status']) ?? prev.status } : {}) }
       : prev)
     pushUndo(() => {
       saveGroups(boardName, before)
