@@ -1232,8 +1232,8 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 title={`${b.p.name} · ${fmtMin(b.startMin)}–${fmtMin(b.startMin + b.durMin)}${isGoogle ? ' (Google, sleep niet mogelijk)' : ''}`}
                 style={{ position: 'absolute', left, top, width, height,
                   background: color, color: '#fff', borderRadius: 6,
-                  padding: '3px 7px', cursor: isGoogle ? 'pointer' : 'grab',
-                  fontSize: 11, fontWeight: 600, lineHeight: 1.2,
+                  padding: '5px 8px', cursor: isGoogle ? 'pointer' : 'grab',
+                  fontSize: 12, fontWeight: 600, lineHeight: 1.2,
                   display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden',
                   boxShadow: isDragging ? '0 6px 20px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.12)',
                   opacity: isDragging ? 0.92 : 1,
@@ -1258,14 +1258,15 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                     zodat de naam volledig leesbaar blijft. */}
                 {height < 36 ? (
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    textShadow: '0 1px 1px rgba(0,0,0,0.18)',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.45)',
                     paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
                 ) : (
                   <>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      textShadow: '0 1px 1px rgba(0,0,0,0.18)', fontWeight: 700,
+                      textShadow: '0 1px 2px rgba(0,0,0,0.45)', fontWeight: 700, fontSize: 12.5,
                       paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
-                    <span style={{ fontSize: 9.5, opacity: 0.9, fontWeight: 600 }}>
+                    <span style={{ fontSize: 10, opacity: 0.95, fontWeight: 600,
+                      textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
                       {fmtMin(showStart)}–{fmtMin(showEnd)}
                     </span>
                     {owners.length > 0 && (
