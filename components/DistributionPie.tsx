@@ -20,7 +20,7 @@ export type PieSegment = {
   value:     number
   color:     string
   label?:    string
-  avatarUrl?: string         // optioneel — getoond als kleine circle in het segment
+  avatarUrl?: string | null  // optioneel — getoond als kleine circle in het segment
   initials?: string          // fallback als avatarUrl ontbreekt
 }
 
