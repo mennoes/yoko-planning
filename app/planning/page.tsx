@@ -827,6 +827,23 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }
   for (const p of visible) {
     if (p.startTime) { timed.push(p); continue }
+    // Korte items zonder concrete tijd-info maar mét uren (typisch een
+    // recurring meeting waarvan een oude sync-pass nog geen startTime
+    // bewaarde): plaats ze als 09:00-blok van estHours lang in het uur-
+    // grid i.p.v. in de all-day banner. Voorkomt dat een wekelijkse
+    // check-in van 0.5u als full-day strip verschijnt.
+    if (p.estHours > 0 && p.estHours < 8 && p.startDate) {
+      const dur = Math.max(0.25, p.estHours)
+      const endH = 9 + Math.floor(dur)
+      const endM = Math.round((dur - Math.floor(dur)) * 60)
+      const fmt = (h: number, m: number) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      timed.push({
+        ...p,
+        startTime: '09:00',
+        endTime:   fmt(endH, endM),
+      } as Project)
+      continue
+    }
     if (isVrij(p)) {
       // Synthesische tijd: 09:00 → 17:00 per dag. Multi-day vrij-events
       // (Pasen weekend, vakantie-week) fanen we uit naar een blok per dag.
