@@ -89,6 +89,90 @@
           "estHours": 24,
           "dagen": 3,
           "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_1_6_e36g",
+          "name": "NL College S04 E36 (Geheugentest)",
+          "ownerIds": ["anne-fleur"],
+          "status": "",
+          "startDate": "2026-06-01",
+          "endDate": "2026-06-04",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "loes@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_1_7_e37b",
+          "name": "NL College S04 E37 (Binaural beats)",
+          "ownerIds": ["anne-fleur"],
+          "status": "",
+          "startDate": "2026-06-08",
+          "endDate": "2026-06-11",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Anouk@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_1_8_he11",
+          "name": "HEY U E11 Drinkwater",
+          "ownerIds": ["anne-fleur"],
+          "status": "",
+          "startDate": "2026-06-16",
+          "endDate": "2026-06-18",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_1_9_e38m",
+          "name": "NL College S04 E38 (HEINEKEN 01) Moslims",
+          "ownerIds": ["anne-fleur"],
+          "status": "",
+          "startDate": "2026-06-22",
+          "endDate": "2026-06-25",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": "Eliane@universiteitvannederland.nl"
+        },
+        {
+          "id": "it_nederland_1_10_e39h",
+          "name": "NL College S04 E39 (HEINEKEN 02)",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2026-06-29",
+          "endDate": "2026-07-02",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": ""
+        },
+        {
+          "id": "it_nederland_1_11_e40h",
+          "name": "NL College S04 E40 (HEINEKEN 03)",
+          "ownerIds": [],
+          "status": "",
+          "startDate": "2026-07-06",
+          "endDate": "2026-07-09",
+          "deadline": null,
+          "estHours": 24,
+          "dagen": 3,
+          "contactpersoon": ""
+        },
+        {
+          "id": "it_nederland_1_12_he12",
+          "name": "HEY U E12 Migratie",
+          "ownerIds": ["anne-fleur"],
+          "status": "",
+          "startDate": "2026-07-14",
+          "endDate": "2026-07-16",
+          "deadline": null,
+          "estHours": 16,
+          "dagen": 2,
+          "contactpersoon": "julia@universiteitvannederland.nl"
         }
       ]
     },
