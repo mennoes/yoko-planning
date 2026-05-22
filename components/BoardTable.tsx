@@ -246,6 +246,78 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
   )
 }
 
+// ─── Share-knop ───────────────────────────────────────────────────────────────
+// Toggle-button die een PortalDropdown opent met de publieke share-URL en
+// een copy-knop. Alleen op borden waar de server `/api/share/[board]` data
+// voor teruggeeft (whitelist daar parallel). De popup legt ook uit wat
+// een externe lezer NIET ziet — zo weet de gebruiker waar 'ie tegenover
+// staat voordat-ie de link verstuurt.
+function ShareButton({ boardId, isMobile }: { boardId: string; isMobile: boolean }) {
+  const [open, setOpen]     = useState(false)
+  const [copied, setCopied] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const url = typeof window !== 'undefined' ? `${window.location.origin}/share/${boardId}` : `/share/${boardId}`
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch {}
+  }
+
+  return (
+    <>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+        title="Genereer een publieke read-only link"
+        style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+          background: open ? 'var(--accent-light)' : 'var(--bg-card)',
+          border: `1px solid ${open ? 'var(--accent)' : 'var(--border)'}`,
+          color: open ? 'var(--accent)' : 'var(--text-secondary)',
+          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        ↗ {isMobile ? '' : 'Deel'}
+      </button>
+      {open && (
+        <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: 14, width: 340,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.32)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+              Deelbare read-only link
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
+              Iedereen met deze URL kan dit bord zonder login bekijken.
+              Notities, contactgegevens, uren-inschattingen en deadlines
+              worden niet getoond.
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              <input readOnly value={url}
+                onFocus={e => e.currentTarget.select()}
+                style={{ flex: 1, padding: '6px 10px', borderRadius: 6,
+                  border: '1px solid var(--border-light)', background: 'var(--bg-base)',
+                  color: 'var(--text-primary)', fontSize: 11.5, outline: 'none', fontFamily: 'inherit' }} />
+              <button onClick={copy}
+                style={{ padding: '6px 14px', borderRadius: 6, border: 'none',
+                  background: copied ? 'var(--accent)' : 'var(--bg-hover)',
+                  color: copied ? '#fff' : 'var(--text-primary)',
+                  fontSize: 11.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  transition: 'background 0.15s' }}>
+                {copied ? '✓ Gekopieerd' : 'Kopieer'}
+              </button>
+            </div>
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer' }}>
+              Open in nieuwe tab →
+            </a>
+          </div>
+        </PortalDropdown>
+      )}
+    </>
+  )
+}
+
 // ─── Owners cel ───────────────────────────────────────────────────────────────
 function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
   const { profile }    = useProfile()
@@ -3011,6 +3083,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <IconActivity size={13} /> {isMobile ? '' : 'Activiteit'}
           </Link>
+          {/* Share-knop: alleen voor borden in de SHAREABLE_BOARDS-whitelist
+              op de server (zelfde lijst). Geeft een copy-able URL die
+              externen zonder login kunnen openen. Gevoelige velden
+              (notes / contactpersoon / journal / uren / deadline) worden
+              server-side al gestript in /api/share/[board]. */}
+          {(['nederland', 'vlaanderen'].includes(boardId)) && (
+            <ShareButton boardId={boardId} isMobile={isMobile} />
+          )}
           {!isMobile && (
             <>
               <button onClick={() => setReorderMode(r => !r)}
