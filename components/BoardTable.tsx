@@ -3088,7 +3088,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               externen zonder login kunnen openen. Gevoelige velden
               (notes / contactpersoon / journal / uren / deadline) worden
               server-side al gestript in /api/share/[board]. */}
-          {(['nederland', 'vlaanderen'].includes(boardId)) && (
+          {(['nederland', 'vlaanderen', 'pnp'].includes(boardId)) && (
             <ShareButton boardId={boardId} isMobile={isMobile} />
           )}
           {!isMobile && (

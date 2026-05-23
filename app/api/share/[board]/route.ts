@@ -4,11 +4,12 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// Whitelist van borden die public-shareable zijn. Andere borden (yoko, pnp,
-// dienjaar, etc.) blokkeren we op de API-laag zodat een gebruiker geen
+// Whitelist van borden die public-shareable zijn. Andere borden (yoko,
+// dienjaar) blokkeren we op de API-laag zodat een gebruiker geen
 // gevoelige board-namen kan gokken via de URL. Pas deze lijst aan als je
-// andere borden ook publiek wilt delen.
-const SHAREABLE_BOARDS = new Set(['nederland', 'vlaanderen'])
+// andere borden ook publiek wilt delen. Zelfde lijst staat in
+// components/BoardTable.tsx voor de Deel-knop — houd ze synchroon.
+const SHAREABLE_BOARDS = new Set(['nederland', 'vlaanderen', 'pnp'])
 
 // Velden die GEEN externe lezer zou moeten zien:
 //   - notes / journal: interne aantekeningen en discussies.
