@@ -1542,9 +1542,10 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
-function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate, onDelete }: {
+function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicate, onDelete }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
+  anchor?: { x: number; y: number } | null
   onClose: () => void
   onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
   onDuplicate?: () => void
@@ -1748,17 +1749,38 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate, onDel
   }
   const owners = team.filter(m => project.ownerIds.includes(m.id))
 
+  // Bereken een anker-positie naast de klik zodat de rest van de planning
+  // zichtbaar blijft. Valt bij ontbreken van anchor terug op gecentreerd.
+  const POP_W = 460
+  const POP_H_MAX = Math.min(700, typeof window !== 'undefined' ? window.innerHeight * 0.85 : 700)
+  const MARGIN = 12
+  const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  let popLeft = (vw - POP_W) / 2
+  let popTop  = (vh - POP_H_MAX) / 2
+  if (anchor) {
+    const rightOf = anchor.x + 16
+    const leftOf  = anchor.x - 16 - POP_W
+    if (rightOf + POP_W + MARGIN <= vw) popLeft = rightOf
+    else if (leftOf >= MARGIN)          popLeft = leftOf
+    else                                popLeft = Math.max(MARGIN, vw - POP_W - MARGIN)
+    popTop = Math.max(MARGIN, Math.min(vh - POP_H_MAX - MARGIN, anchor.y - POP_H_MAX / 2))
+  }
+
   return (
     <>
-    {/* Backdrop — click to close */}
+    {/* Lichte backdrop — vangt clicks-buiten voor sluiten, maar laat de
+        rest van de planning zichtbaar (geen blur, geen donkere overlay) zodat
+        je live ziet wat een wijziging met de workload doet. */}
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 299,
-        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} />
+      style={{ position: 'fixed', inset: 0, background: 'transparent', zIndex: 299 }} />
     <div style={{
-      position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-      width: 'min(480px, 92vw)', maxHeight: '85vh', zIndex: 300,
+      position: 'fixed', left: popLeft, top: popTop,
+      width: POP_W, maxHeight: POP_H_MAX, zIndex: 300,
       background: 'var(--bg-card)', borderRadius: 14, border: '1px solid var(--border)',
-      display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
+      boxShadow: '0 14px 36px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.04)',
+      overflow: 'hidden',
     }}>
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -2175,21 +2197,6 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate, onDel
           </span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          {/* Per-item verberg-toggle: handig voor items die niet in de
-              planning-overzicht horen (bv. half-day blokken die je liever
-              compact wilt zien, of items die je niet meetelt). Werkt voor
-              Google én handmatig. */}
-          {(() => {
-            const hidden = !!(rawItem as { hiddenFromPlanning?: boolean } | undefined)?.hiddenFromPlanning
-            return (
-              <button onClick={() => commit({ hiddenFromPlanning: !hidden })}
-                title={hidden ? 'Toon dit item weer in de planning' : 'Verberg dit item uit de planning (blijft op het bord)'}
-                style={{ ...cancelBtn, color: hidden ? color : 'var(--text-secondary)',
-                  borderColor: hidden ? color : 'var(--border)' }}>
-                {hidden ? '👁 Toon in planning' : '🚫 Verberg uit planning'}
-              </button>
-            )
-          })()}
           {!isMerged && !isGoogle && onDelete && (
             <button onClick={() => {
                 if (window.confirm(`'${project.name}' permanent verwijderen?`)) onDelete()
@@ -2572,6 +2579,23 @@ export default function PlanningPage() {
     setExpanded(prev => prev.has(profile.memberId!) ? prev : new Set([...prev, profile.memberId!]))
   }, [profile?.memberId])
   const [detailProject, setDetailProject] = useState<Project | null>(null)
+  // Klik-positie van de laatste bar-klik. Detail-popup positioneert zich
+  // hierop zodat-ie naast het aangeklikte bolletje verschijnt i.p.v.
+  // gecentreerd over de hele tijdlijn — zo zie je live wat een wijziging
+  // met de workload-overzicht doet.
+  const lastClickRef = useRef<{ x: number; y: number } | null>(null)
+  const [detailAnchor, setDetailAnchor] = useState<{ x: number; y: number } | null>(null)
+  useEffect(() => {
+    function onWinClick(e: MouseEvent) {
+      lastClickRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('click', onWinClick, true)
+    return () => window.removeEventListener('click', onWinClick, true)
+  }, [])
+  function openDetail(p: Project) {
+    setDetailAnchor(lastClickRef.current ? { ...lastClickRef.current } : null)
+    setDetailProject(p)
+  }
   const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
   const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
@@ -3795,7 +3819,7 @@ export default function PlanningPage() {
                     stickyBg={stickyBg}
                     leftHeader={header}
                     expanded={isExp}
-                    onSelect={p => setDetailProject(p)}
+                    onSelect={p => openDetail(p)}
                     onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
                     onDateDragEnd={(p, ns, ne) => handleDragEnd(p, ns, ne)}
                     onReassign={handleReassignOwner}
@@ -3943,7 +3967,7 @@ export default function PlanningPage() {
                     return (
                       <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-light)', padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent', position: 'relative' }}>
-                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => setDetailProject(p)} />
+                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => openDetail(p)} />
                       </div>
                     )
                   })}
@@ -3955,7 +3979,7 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 19, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
-                        onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => setDetailProject(p)}
+                        onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
                         onReassign={handleReassignOwner} />
                     </div>
                   </div>
@@ -4029,6 +4053,7 @@ export default function PlanningPage() {
 
       {detailProject && (
         <DetailPanel project={detailProject} allGroups={allGroups}
+          anchor={detailAnchor}
           onClose={() => setDetailProject(null)} onUpdate={handleDetailUpdate}
           onDuplicate={() => handleDetailDuplicate(detailProject)}
           onDelete={() => handleDetailDelete(detailProject)} />
