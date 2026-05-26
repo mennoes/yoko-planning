@@ -1542,12 +1542,13 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
-function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
+function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate, onDelete }: {
   project: Project
   allGroups: Record<string, BoardGroup[]>
   onClose: () => void
   onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
   onDuplicate?: () => void
+  onDelete?: () => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
   const team    = teamData.members
@@ -2189,6 +2190,14 @@ function DetailPanel({ project, allGroups, onClose, onUpdate, onDuplicate }: {
               </button>
             )
           })()}
+          {!isMerged && !isGoogle && onDelete && (
+            <button onClick={() => {
+                if (window.confirm(`'${project.name}' permanent verwijderen?`)) onDelete()
+              }} title="Verwijder dit item van het bord"
+              style={{ ...cancelBtn, color: 'var(--red, #C9483D)', border: '1px solid var(--border)' }}>
+              🗑 Verwijder
+            </button>
+          )}
           {!isMerged && onDuplicate && (
             <button onClick={onDuplicate} title="Dupliceer dit item naar dezelfde groep"
               style={{ ...cancelBtn, color: 'var(--text-secondary)' }}>
@@ -3034,6 +3043,37 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
       setDetailProject(null)
     })
+  }
+
+  function handleDetailDelete(project: Project) {
+    const boardName = project.board
+    const origItemId = project.id.slice(boardName.length + 2)
+    const before = allGroups[boardName] ?? []
+    // Subitem-projects (id bevat __si) verwijderen niet de hele parent —
+    // we strippen alleen de bewuste subitem uit de parent z'n subitems-lijst.
+    let groupsAfter: BoardGroup[]
+    if (project.id.includes('__si')) {
+      const parts = origItemId.split('__si')
+      const parentId = parts[0]
+      const subIdx = parseInt(parts[1] ?? '', 10)
+      if (!Number.isFinite(subIdx)) return
+      groupsAfter = before.map(g => ({
+        ...g,
+        items: g.items.map(i => i.id === parentId
+          ? { ...i, subitems: (i.subitems ?? []).filter((_, idx) => idx !== subIdx) }
+          : i),
+      }))
+    } else {
+      groupsAfter = before.map(g => ({ ...g, items: g.items.filter(i => i.id !== origItemId) }))
+    }
+    saveGroups(boardName, groupsAfter)
+    setAllGroups(prev => ({ ...prev, [boardName]: groupsAfter }))
+    logActivity('Project verwijderd', project.name)
+    setDetailProject(null)
+    pushUndo(() => {
+      saveGroups(boardName, before)
+      setAllGroups(prev => ({ ...prev, [boardName]: before }))
+    }, `'${project.name}' verwijderd`)
   }
 
   function handleDetailDuplicate(project: Project) {
@@ -3934,7 +3974,8 @@ export default function PlanningPage() {
       {detailProject && (
         <DetailPanel project={detailProject} allGroups={allGroups}
           onClose={() => setDetailProject(null)} onUpdate={handleDetailUpdate}
-          onDuplicate={() => handleDetailDuplicate(detailProject)} />
+          onDuplicate={() => handleDetailDuplicate(detailProject)}
+          onDelete={() => handleDetailDelete(detailProject)} />
       )}
 
       {newItemOpen && (
