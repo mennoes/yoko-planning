@@ -23,6 +23,13 @@ export function GoogleBadge({ href, size = 14, style, title }: Props) {
   }
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
+      // Belangrijk: parent-rijen zijn vaak `draggable` (subitem-drag). Een
+      // standaard <a> is óók draggable, waardoor mousedown een drag start
+      // i.p.v. een klik. Expliciet draggable=false + stopPropagation op
+      // dragstart en mousedown houdt de klik klikbaar.
+      draggable={false}
+      onDragStart={e => e.preventDefault()}
+      onMouseDown={e => e.stopPropagation()}
       onClick={e => e.stopPropagation()}
       title={labelTitle}
       style={{
