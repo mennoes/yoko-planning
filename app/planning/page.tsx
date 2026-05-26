@@ -1253,28 +1253,23 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                     pointerEvents: 'none',
                   }}>G</span>
                 )}
-                {/* Titel altijd eerst en prominent. Op 1-regel-balken
-                    laten we de tijd weg (staat al in de tooltip / DetailPanel)
-                    zodat de naam volledig leesbaar blijft. */}
-                {height < 36 ? (
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.45)',
-                    paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
-                ) : (
-                  <>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      textShadow: '0 1px 2px rgba(0,0,0,0.45)', fontWeight: 700, fontSize: 12.5,
-                      paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
-                    <span style={{ fontSize: 10, opacity: 0.95, fontWeight: 600,
-                      textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
-                      {fmtMin(showStart)}–{fmtMin(showEnd)}
-                    </span>
-                    {owners.length > 0 && (
-                      <span style={{ marginTop: 'auto' }}>
-                        <OwnerCircle owners={owners} size={18} />
-                      </span>
-                    )}
-                  </>
+                {/* Titel ALTIJD eerst en zichtbaar — ongeacht hoogte. Tijd
+                    en owner-circle worden alleen toegevoegd als er ruimte
+                    voor is, zodat korte bars (½h, 1h) nooit zonder naam
+                    eindigen. Volgorde van weglaten: owner → tijd → titel. */}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.55)', fontWeight: 700, fontSize: 12,
+                  paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
+                {height >= 30 && (
+                  <span style={{ fontSize: 9.5, opacity: 0.92, fontWeight: 600,
+                    textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
+                    {fmtMin(showStart)}–{fmtMin(showEnd)}
+                  </span>
+                )}
+                {height >= 56 && owners.length > 0 && (
+                  <span style={{ marginTop: 'auto' }}>
+                    <OwnerCircle owners={owners} size={18} />
+                  </span>
                 )}
               </div>
             )
@@ -1759,8 +1754,12 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   let popLeft = (vw - POP_W) / 2
   let popTop  = (vh - POP_H_MAX) / 2
   if (anchor) {
-    const rightOf = anchor.x + 16
-    const leftOf  = anchor.x - 16 - POP_W
+    // Extra-marge tussen klik en popup zodat het workload-bolletje en de
+    // omliggende tijdlijn-bars zichtbaar blijven naast de popup. 16px voelde
+    // te dicht — 120px laat de werklast goed in beeld.
+    const POP_OFFSET = 120
+    const rightOf = anchor.x + POP_OFFSET
+    const leftOf  = anchor.x - POP_OFFSET - POP_W
     if (rightOf + POP_W + MARGIN <= vw) popLeft = rightOf
     else if (leftOf >= MARGIN)          popLeft = leftOf
     else                                popLeft = Math.max(MARGIN, vw - POP_W - MARGIN)
