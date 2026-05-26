@@ -2651,8 +2651,8 @@ export default function PlanningPage() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (e.key === '+' || e.key === '=') { e.preventDefault(); setColWZoom(z => Math.min(300, z + 10)) }
-      else if (e.key === '-' || e.key === '_') { e.preventDefault(); setColWZoom(z => Math.max(50, z - 10)) }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => Math.min(300, z + 10)) }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => Math.max(50, z - 10)) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -2669,6 +2669,29 @@ export default function PlanningPage() {
   const dragScrollRef = useRef<{ startX: number; scrollLeft: number } | null>(null)
   const [isDragScrolling, setIsDragScrolling] = useState(false)
   const initialScrollDoneRef = useRef(false)
+  // Pending scroll-anker — wanneer ingesteld voor een re-render past de
+  // useEffect onderaan scrollLeft aan zodat de today-line op screenX blijft.
+  const pendingAnchorRef = useRef<{ screenX: number } | null>(null)
+  // Opgeslagen scrollLeft uit localStorage — bij eerste mount restoren we
+  // 'm zodat een refresh op exact dezelfde positie terugkomt.
+  const savedScrollLeftRef = useRef<number | null>(null)
+  if (savedScrollLeftRef.current === null && typeof window !== 'undefined') {
+    const v = parseInt(window.localStorage.getItem('planning-scroll-left') ?? '', 10)
+    if (Number.isFinite(v)) savedScrollLeftRef.current = v
+  }
+  // Setter-wrapper voor col-width-zoom die eerst de today-line z'n screenX
+  // vastlegt zodat we daar na de re-render weer op anker'en — voorkomt
+  // dat een zoom vanuit linker-rand werkt i.p.v. vanuit de today-line.
+  function anchoredColWZoom(updater: (z: number) => number) {
+    const el = gridRef.current
+    if (el && typeof window !== 'undefined') {
+      const todayEl = el.querySelector<HTMLElement>('[data-today-marker]')
+      if (todayEl) {
+        pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
+      }
+    }
+    setColWZoom(updater)
+  }
 
   useEffect(() => {
     function refresh() {
@@ -2873,16 +2896,65 @@ export default function PlanningPage() {
   const baseColW = zoom === 'dag' ? ZOOM_COL_W.dag : zoom === 'maand' ? ZOOM_COL_W.maand : (viewSize === 'large' ? 130 : 104)
   const colW = Math.round(baseColW * (colWZoom / 100))
 
-  // On first render (and when zoom changes back to colOffset 0), scroll the grid
-  // so "today" is near the left of the viewport — past columns are reachable
-  // by scrolling left without first jumping back.
+  // On first render, prefer a restored scrollLeft (van vorige sessie). Anders
+  // standaard: 'today' bij de linker viewport zodat verleden te bereiken is
+  // door naar links te scrollen. NA de eerste mount handelen handleZoomChange
+  // en handleColWZoom de scroll-anker zelf af; verder niet meer overrulen.
   useEffect(() => {
-    if (colOffset !== 0) return
+    if (initialScrollDoneRef.current) return
     const el = gridRef.current
     if (!el) return
-    const back = HISTORY_BACK[zoom]
-    el.scrollLeft = back * colW
+    if (savedScrollLeftRef.current !== null) {
+      el.scrollLeft = savedScrollLeftRef.current
+    } else if (colOffset === 0) {
+      const back = HISTORY_BACK[zoom]
+      el.scrollLeft = back * colW
+    }
     initialScrollDoneRef.current = true
+  }, [zoom, colW, colOffset])
+
+  // Persist scrollLeft elke keer dat de gebruiker scrolt. Throttle via een
+  // simpele microtask zodat we niet bij elke pixel een localStorage-write doen.
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    let queued = false
+    function onScroll() {
+      if (queued) return
+      queued = true
+      requestAnimationFrame(() => {
+        queued = false
+        const cur = gridRef.current?.scrollLeft
+        if (cur == null) return
+        try { window.localStorage.setItem('planning-scroll-left', String(cur)) } catch {}
+      })
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Pending anker toepassen: na een zoom-wissel komt nowOffset opnieuw uit
+  // de re-render. Plaats de today-line op exact dezelfde screenX als waar
+  // 'ie vóór de zoom-wissel stond, zodat er niet onverwacht naar links
+  // gesprongen wordt.
+  useEffect(() => {
+    const pending = pendingAnchorRef.current
+    if (!pending) return
+    const el = gridRef.current
+    if (!el) return
+    // Wacht 1 frame zodat de nieuwe layout (cols / colW) is doorgemeten.
+    requestAnimationFrame(() => {
+      pendingAnchorRef.current = null
+      const el2 = gridRef.current
+      if (!el2) return
+      // nowOffset is via useMemo herberekend bij elke render — pak 'm uit
+      // de closure van de useEffect runtime (niet beschikbaar hier), dus
+      // we lezen de huidige today-marker via de DOM querySelector.
+      const todayEl = el2.querySelector<HTMLElement>('[data-today-marker]')
+      if (!todayEl) return
+      const todayLeft = todayEl.offsetLeft
+      el2.scrollLeft = Math.max(0, todayLeft - pending.screenX)
+    })
   }, [zoom, colW, colOffset])
 
   // Compute from-date based on zoom and offset.
@@ -3288,10 +3360,15 @@ export default function PlanningPage() {
                 regressie geven. */}
             {(['dag', 'week'] as ZoomLevel[]).map(z => (
               <button key={z} onClick={() => {
-                  // Reken het huidige offset om naar het nieuwe zoomniveau in
-                  // dagen-eenheden — anders springt 'vandaag' onverwacht.
-                  // Resultaat: het zichtbare deel van de tijdlijn blijft
-                  // ongeveer op dezelfde plek staan na zoom-wissel.
+                  if (z === zoom) return
+                  // Capture huidige screen-X van de today-line zodat we 'm
+                  // na de zoom-wissel weer op dezelfde plek kunnen anker'en.
+                  const el = gridRef.current
+                  if (el && nowOffset !== null) {
+                    pendingAnchorRef.current = { screenX: nowOffset - el.scrollLeft }
+                  }
+                  // Reken colOffset om in dagen-eenheden zodat het nieuwe
+                  // tijdvenster ongeveer dezelfde periode dekt.
                   const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
                   const currentDays = colOffset * daysPerCol[zoom]
                   const newOffset = Math.round(currentDays / daysPerCol[z])
@@ -3310,16 +3387,16 @@ export default function PlanningPage() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
               background: 'var(--bg-card)', border: '1px solid var(--border-light)',
               borderRadius: 8, paddingLeft: 2, paddingRight: 2 }}>
-              <button onClick={() => setColWZoom(z => Math.max(50, z - 10))}
+              <button onClick={() => anchoredColWZoom(z => Math.max(50, z - 10))}
                 title="Smaller" aria-label="Smaller"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   padding: '6px 8px', lineHeight: 1 }}>−</button>
               <input type="range" min={50} max={300} step={5}
-                value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
+                value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                 title={`Kolombreedte ${colWZoom}%`}
                 style={{ width: 64, accentColor: 'var(--accent)' }} />
-              <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
+              <button onClick={() => anchoredColWZoom(z => Math.min(300, z + 10))}
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
@@ -3688,7 +3765,7 @@ export default function PlanningPage() {
               position with a VANDAAG pill at the top so the marker is hard
               to miss when scrolling through time. */}
           {nowOffset !== null && (
-            <div aria-hidden style={{
+            <div aria-hidden data-today-marker style={{
               position: 'absolute', top: 0, bottom: 0,
               left: nowOffset, width: 0,
               borderLeft: '2px solid var(--yellow)',
@@ -3744,14 +3821,14 @@ export default function PlanningPage() {
               </button>
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                  <button onClick={() => setColWZoom(z => Math.max(50, z - 10))}
+                  <button onClick={() => anchoredColWZoom(z => Math.max(50, z - 10))}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                   <input type="range" min={50} max={300} step={5}
-                    value={colWZoom} onChange={e => setColWZoom(parseInt(e.target.value))}
+                    value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                     title={`Kolom-breedte ${colWZoom}%   ·   sneltoetsen +/−`}
                     style={{ width: 80, accentColor: 'var(--accent)' }} />
-                  <button onClick={() => setColWZoom(z => Math.min(300, z + 10))}
+                  <button onClick={() => anchoredColWZoom(z => Math.min(300, z + 10))}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
                 </div>
