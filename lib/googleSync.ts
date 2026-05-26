@@ -539,15 +539,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // voorrang (events kunnen oud-en-afgehandeld zijn). Anders volgen we
       // bestaande logica: gebruiker-keuze respecteren, anders targetGroup.
       const isVrij = isVrijTitle(name)
-      // existingRow.group_id ALTIJD respecteren (zelfs voor Vrij-events) —
-      // anders zou een sync door een ander teamlid een handmatig verplaatst
-      // item terug naar Vrij/route-target schuiven. Alleen Done overruled:
-      // afgevinkte items horen in de Done-bucket. Voor nieuwe rijen (geen
-      // existingRow) gebruiken we Vrij/target als startpositie.
-      const keepGroup = newStatus === 'Done'
-        ? await getDoneGroupFor(keepBoard)
-        : (existingRow?.group_id
-            ?? (isVrij ? await getVrijGroupFor(keepBoard) : targetGroup))
+      // existingRow.group_id ALTIJD respecteren — ook wanneer status nu
+      // Done is. Zonder die respect schoof een sync de gebruiker z'n
+      // handmatige verplaatsing terug naar de Done-groep (klassiek probleem:
+      // 'ik heb het zojuist uit Done gehaald en nu staat het er weer').
+      // Voor NIEUWE rijen (zonder existingRow) defaulten we op de juiste
+      // status/Vrij/target-startpositie.
+      const keepGroup = existingRow?.group_id
+        ?? (newStatus === 'Done'
+              ? await getDoneGroupFor(keepBoard)
+              : (isVrij ? await getVrijGroupFor(keepBoard) : targetGroup))
       const eventOwners = ownersForEvent(ev)
       // Union van bestaande + Google-attendees: bestaande user-toevoegingen
       // blijven staan, en nieuwe Yoko-deelnemers uit Google worden vanzelf
@@ -700,14 +701,17 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // verplaatst — die keuze respecteren we. Alleen Done schuift er overheen
     // (Done-bucket is altijd waar Done's horen). Vrij komt op de tweede plek;
     // pas als 'ie nog niet bestaat (nieuw item) maken we 'm zelf aan.
-    const keepGroup = newStatus === 'Done'
-      ? await getDoneGroupFor(keepBoard)
-      : (existingRow?.group_id
-          ?? (isVrij
-                ? await getVrijGroupFor(keepBoard)
-                : (keepBoard === targetBoard
-                    ? targetGroup
-                    : await getDoorlopendGroupFor(keepBoard))))
+    // Zelfde regel als bij single-events: bestaande verplaatsing ALTIJD
+    // respecteren, ook bij Done. Default-keuzes (Done-bucket, Vrij-groep,
+    // Doorlopend) gelden alleen voor nieuwe rijen.
+    const keepGroup = existingRow?.group_id
+      ?? (newStatus === 'Done'
+            ? await getDoneGroupFor(keepBoard)
+            : (isVrij
+                  ? await getVrijGroupFor(keepBoard)
+                  : (keepBoard === targetBoard
+                      ? targetGroup
+                      : await getDoorlopendGroupFor(keepBoard))))
     upserts.push({
       id,
       group_id:           keepGroup,
