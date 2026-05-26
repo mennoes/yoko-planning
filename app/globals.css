@@ -77,6 +77,10 @@
   --overlay-sub:        rgba(0,0,0,0.04);
   --overlay-sub-header: rgba(0,0,0,0.05);
   --overlay-sub-border: rgba(0,0,0,0.06);
+  /* Apart token voor weekend-kolommen in de planning. Iets warmer/donkerder
+     dan --overlay-faint zodat ZA/ZO duidelijk te onderscheiden zijn van
+     werkdagen zonder de tijdlijn zwaar te maken. */
+  --weekend-bg:         rgba(120,108,90,0.10);
 
   --scrollbar:       #C8CACE;
   --scrollbar-hover: #A8AAAE;
@@ -122,6 +126,7 @@
   --overlay-subtle:     rgba(255,255,255,0.03);
   --overlay-faint:      rgba(255,255,255,0.015);
   --overlay-medium:     rgba(255,255,255,0.08);
+  --weekend-bg:         rgba(255,255,255,0.06);
   --overlay-sub:        rgba(0,0,0,0.2);
   --overlay-sub-header: rgba(0,0,0,0.25);
   --overlay-sub-border: rgba(0,0,0,0.15);

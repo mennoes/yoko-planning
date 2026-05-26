@@ -1064,7 +1064,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
                 borderLeft: '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
+                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
                 pointerEvents: 'none',
               }} />
             )
@@ -1182,7 +1182,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
                 borderLeft: '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent',
+                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
                 pointerEvents: 'none',
               }} />
             )
@@ -3841,7 +3841,7 @@ export default function PlanningPage() {
             {cols.map(col => {
               const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
               const weekend = dow === 0 || dow === 6
-              const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : stickyBg
+              const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
                 borderLeft: '1px solid var(--border-light)',
@@ -4057,7 +4057,7 @@ export default function PlanningPage() {
                     const weekend  = false
                     return (
                       <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-light)', padding: 2,
-                        background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--overlay-faint)' : 'transparent', position: 'relative' }}>
+                        background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent', position: 'relative' }}>
                         <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => openDetail(p)} />
                       </div>
                     )
