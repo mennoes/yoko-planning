@@ -3059,22 +3059,43 @@ export default function PlanningPage() {
     const boardName = project.board
     const origItemId = project.id.slice(boardName.length + 2)
     const before = allGroups[boardName] ?? []
-    // Subitem-projects (id bevat __si) verwijderen niet de hele parent —
-    // we strippen alleen de bewuste subitem uit de parent z'n subitems-lijst.
+    if (before.length === 0) {
+      // Board niet geladen — niets te doen. Sluit alleen de popup.
+      setDetailProject(null)
+      return
+    }
+    // Subitem-projects krijgen het suffix '__siN' van groupsToProjects.
+    // We splitsen ALTIJD op de LAATSTE '__si' zodat een parent-id die zelf
+    // toevallig '__si' bevat (zeldzaam, maar kan) niet de split kapotmaakt.
+    const siMatch = origItemId.match(/^(.+)__si(\d+)$/)
     let groupsAfter: BoardGroup[]
-    if (project.id.includes('__si')) {
-      const parts = origItemId.split('__si')
-      const parentId = parts[0]
-      const subIdx = parseInt(parts[1] ?? '', 10)
-      if (!Number.isFinite(subIdx)) return
+    let removedSomething = false
+    if (siMatch) {
+      const parentId = siMatch[1]
+      const subIdx   = parseInt(siMatch[2], 10)
       groupsAfter = before.map(g => ({
         ...g,
-        items: g.items.map(i => i.id === parentId
-          ? { ...i, subitems: (i.subitems ?? []).filter((_, idx) => idx !== subIdx) }
-          : i),
+        items: g.items.map(i => {
+          if (i.id !== parentId) return i
+          const subs = i.subitems ?? []
+          if (subIdx < 0 || subIdx >= subs.length) return i
+          removedSomething = true
+          return { ...i, subitems: subs.filter((_, idx) => idx !== subIdx) }
+        }),
       }))
     } else {
-      groupsAfter = before.map(g => ({ ...g, items: g.items.filter(i => i.id !== origItemId) }))
+      groupsAfter = before.map(g => {
+        const next = g.items.filter(i => i.id !== origItemId)
+        if (next.length !== g.items.length) removedSomething = true
+        return { ...g, items: next }
+      })
+    }
+    if (!removedSomething) {
+      // Niets gevonden om te verwijderen — sluit de popup wel zodat de
+      // gebruiker niet stranded blijft met een actie die ogenschijnlijk
+      // niets deed.
+      setDetailProject(null)
+      return
     }
     saveGroups(boardName, groupsAfter)
     setAllGroups(prev => ({ ...prev, [boardName]: groupsAfter }))
