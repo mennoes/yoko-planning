@@ -3152,13 +3152,18 @@ export default function PlanningPage() {
 
   function handleDetailDelete(project: Project) {
     const boardName = project.board
-    const origItemId = project.id.slice(boardName.length + 2)
+    let   origItemId = project.id.slice(boardName.length + 2)
     const before = allGroups[boardName] ?? []
     if (before.length === 0) {
       // Board niet geladen — niets te doen. Sluit alleen de popup.
       setDetailProject(null)
       return
     }
+    // Vrij-events worden per-dag gesynthetiseerd met suffix '__vrij_YYYY-MM-DD'.
+    // Voor het verwijderen willen we het ONDERLIGGENDE multi-day item raken,
+    // dus strippen we de vrij-suffix terug naar de echte item-id.
+    const vrijMatch = origItemId.match(/^(.+)__vrij_\d{4}-\d{2}-\d{2}$/)
+    if (vrijMatch) origItemId = vrijMatch[1]
     // Subitem-projects krijgen het suffix '__siN' van groupsToProjects.
     // We splitsen ALTIJD op de LAATSTE '__si' zodat een parent-id die zelf
     // toevallig '__si' bevat (zeldzaam, maar kan) niet de split kapotmaakt.
