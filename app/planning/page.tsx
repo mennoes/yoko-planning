@@ -2548,8 +2548,18 @@ export default function PlanningPage() {
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
   const [vacations,    setVacations]    = useState<Record<string, { from: string | null; until: string | null }>>({})
-  // Always start at this week (don't persist colOffset between sessions)
-  const [colOffset,    setColOffset]    = useState<number>(0)
+  // Persisted in localStorage zodat een refresh op dezelfde positie in
+  // de tijdlijn blijft staan — de balk springt niet meer terug naar
+  // 'vandaag' wanneer je de pagina herlaadt.
+  const [colOffset, setColOffset] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    const v = parseInt(window.localStorage.getItem('planning-col-offset') ?? '', 10)
+    return Number.isFinite(v) ? v : 0
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try { window.localStorage.setItem('planning-col-offset', String(colOffset)) } catch {}
+  }, [colOffset])
   const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
   // Standaard staat de eigen rij open zodra je ingelogd bent — dan zie je
   // bij binnenkomst meteen je eigen timeline-bars zonder eerst te moeten
@@ -3232,7 +3242,17 @@ export default function PlanningPage() {
                 blijft hetzelfde zodat opgeslagen localStorage-waardes geen
                 regressie geven. */}
             {(['dag', 'week'] as ZoomLevel[]).map(z => (
-              <button key={z} onClick={() => { setZoom(z); setColOffset(0) }}
+              <button key={z} onClick={() => {
+                  // Reken het huidige offset om naar het nieuwe zoomniveau in
+                  // dagen-eenheden — anders springt 'vandaag' onverwacht.
+                  // Resultaat: het zichtbare deel van de tijdlijn blijft
+                  // ongeveer op dezelfde plek staan na zoom-wissel.
+                  const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
+                  const currentDays = colOffset * daysPerCol[zoom]
+                  const newOffset = Math.round(currentDays / daysPerCol[z])
+                  setZoom(z)
+                  setColOffset(newOffset)
+                }}
                 style={segBtn(zoom === z)}>
                 {z === 'dag' ? 'Week' : 'Overzicht'}
               </button>
@@ -3930,20 +3950,35 @@ export default function PlanningPage() {
             }
 
             const out: React.ReactNode[] = []
+            // Focus-mode: wanneer minstens één rij is uitgeklapt, dempen we de
+            // niet-uitgeklapte rijen zodat de uitgevouwen persoon visueel
+            // pop't. Headers blijven op volle sterkte zodat de structuur
+            // herkenbaar blijft.
+            const focusMode = expanded.size > 0
+            const wrap = (m: TeamMember, key: string, i: number) => {
+              const dim = focusMode && !expanded.has(m.id)
+              return (
+                <div key={key} style={{
+                  opacity: dim ? 0.55 : 1,
+                  filter:  dim ? 'saturate(0.85)' : 'none',
+                  transition: 'opacity 0.18s, filter 0.18s',
+                }}>{renderMember(m, i)}</div>
+              )
+            }
             if (yokoTeam.length > 0) {
               out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => setYokoTeamOpen(o => !o), isOpen: yokoTeamOpen })}</div>)
               if (yokoTeamOpen) {
-                yokoTeam.forEach((m, i) => out.push(<div key={`y-${m.id}`}>{renderMember(m, i)}</div>))
+                yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }
             }
             if (unassigned.length > 0) {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
-              unassigned.forEach((m, i) => out.push(<div key={`u-${m.id}`}>{renderMember(m, i)}</div>))
+              unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
             }
             if (freelancers.length > 0) {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
               if (freelancersOpen) {
-                freelancers.forEach((m, i) => out.push(<div key={`f-${m.id}`}>{renderMember(m, i)}</div>))
+                freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               } else {
                 // Ingeklapt: toon alleen freelancers die in de zichtbare
                 // periode daadwerkelijk werk hebben. Voorkomt dat we de hele
@@ -3951,7 +3986,7 @@ export default function PlanningPage() {
                 const active = freelancers.filter(m =>
                   cols.some(col => memberHoursInCol(effectiveProjects, m.id, col).reduce((s, c) => s + c.hours, 0) > 0)
                 )
-                active.forEach((m, i) => out.push(<div key={`f-${m.id}`}>{renderMember(m, i)}</div>))
+                active.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
             }
             return out
