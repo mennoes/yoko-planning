@@ -3871,8 +3871,13 @@ export default function PlanningPage() {
             const unassignedVisible = team.filter(m => m.id === 'unassigned' && isMemberVisible(m.id))
             const freelancersVisible = team.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id))
 
+            // Focus-mode: zelfde gedrag als in Overzicht — wanneer iemand
+            // is uitgeklapt dempen we de andere rijen zodat de uitgevouwen
+            // persoon visueel naar voren springt.
+            const dagFocusMode = expanded.size > 0
             const renderPerson = (m: TeamMember) => {
               const isExp = expanded.has(m.id)
+              const dim = dagFocusMode && !isExp
               const header = (
                 <button onClick={() => toggleExpand(m.id)}
                   title={isExp ? 'Inklappen' : 'Uitvouwen'}
@@ -3886,7 +3891,12 @@ export default function PlanningPage() {
                 </button>
               )
               return (
-                <div key={m.id} data-member-id={m.id} style={{ borderBottom: '1px solid var(--border)', background: 'transparent' }}>
+                <div key={m.id} data-member-id={m.id} style={{
+                  borderBottom: '1px solid var(--border)', background: 'transparent',
+                  opacity: dim ? 0.55 : 1,
+                  filter:  dim ? 'saturate(0.85)' : 'none',
+                  transition: 'opacity 0.18s, filter 0.18s',
+                }}>
                   <WeekTimeGrid
                     cols={cols}
                     projects={effectiveProjects}
