@@ -11,7 +11,7 @@ import {
 } from '@/lib/accountsStore'
 
 export default function AccountsPage() {
-  const { profile } = useProfile()
+  const { isAuthenticated, authChecked } = useProfile()
   const { showToast } = useUndo()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
@@ -20,15 +20,17 @@ export default function AccountsPage() {
   const [editingCell, setEditingCell] = useState<{ id: string; field: keyof Account } | null>(null)
   const [editValue, setEditValue] = useState('')
 
-  // Authenticatie + initiële pull. Niet ingelogde gebruikers krijgen niks
-  // te zien — RLS blokkeert dat aan de DB-kant; hier tonen we een nette
-  // melding ipv 'leeg lijstje'.
+  // Authenticatie + initiële pull. De gate stond eerder op profile.memberId,
+  // maar dat blokkeerde team-leden zoals Odette wier profile-row in
+  // Supabase (nog) geen member_id had — terwijl ze gewoon ingelogd zijn en
+  // RLS-toegang hebben. Nu gaten we puur op de auth-sessie; RLS bepaalt
+  // verder of de query slaagt.
   useEffect(() => {
     let cancelled = false
     async function load() {
-      if (!requiresAuth || !profile?.memberId) {
-        setAuthBlocked(true); setLoading(false); return
-      }
+      if (!requiresAuth) { setAuthBlocked(true); setLoading(false); return }
+      if (!authChecked)  { setLoading(true); return }       // auth nog aan 't laden
+      if (!isAuthenticated) { setAuthBlocked(true); setLoading(false); return }
       setAuthBlocked(false)
       const rows = await pullAccounts()
       if (cancelled) return
@@ -40,7 +42,7 @@ export default function AccountsPage() {
       pullAccounts().then(rows => { if (rows && !cancelled) setAccounts(rows) })
     })
     return () => { cancelled = true; off() }
-  }, [profile?.memberId])
+  }, [isAuthenticated, authChecked])
 
   const startEdit = (account: Account, field: keyof Account) => {
     setEditingCell({ id: account.id, field })
