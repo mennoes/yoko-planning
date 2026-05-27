@@ -3850,7 +3850,7 @@ export default function PlanningPage() {
               const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
-                borderLeft: '1px solid var(--border-light)',
+                borderLeft: '1px solid var(--border)',
                 background: headerBg }}>
                 <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
                 <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
@@ -4062,7 +4062,7 @@ export default function PlanningPage() {
                     // weekend-highlighting is hier niet relevant.
                     const weekend  = false
                     return (
-                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-light)', padding: 2,
+                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border)', padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent', position: 'relative' }}>
                         <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => openDetail(p)} />
                       </div>
