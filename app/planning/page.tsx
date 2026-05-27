@@ -496,16 +496,28 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
 type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; startY: number; origStart: string | null; origEnd: string | null }
 
-function DraggableBar({ project, memberId, left, width, colW, small, onDragMove, onDragEnd, onClick, onReassign }: {
+function DraggableBar({ project, memberId, left, width, colW, small, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   left: number; width: number; colW: number
   small?: boolean
+  // Wanneer scaleByHours=true (week/overzicht zoom) schaalt de bar-hoogte mee
+  // met estHours: 8u = volledige laneH, 4u = halve laneH, etc. Bars worden
+  // dan bottom-anchored gerenderd zodat de korte bovenkant van langere
+  // events zichtbaar uitsteekt — een mini-staafdiagram per dag.
+  laneH?: number
+  scaleByHours?: boolean
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick:    () => void
   onReassign?: (project: Project, fromMemberId: string, toMemberId: string) => void
 }) {
-  const barH = small ? 10 : BAR_H
+  const FULL_DAY_HOURS = 8
+  const availH = (laneH ?? BAR_H + BAR_GAP) - BAR_GAP
+  const baseH  = small ? 10 : BAR_H
+  const scaledH = scaleByHours
+    ? Math.max(6, Math.min(availH, Math.round(((project.estHours || 0) / FULL_DAY_HOURS) * availH)))
+    : baseH
+  const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
   // groene look + palmboom-prefix zodat in één oogopslag duidelijk is dat
   // iemand niet werkt op die dagen — overruled meeting-geel en bord-kleur.
@@ -665,7 +677,11 @@ function DraggableBar({ project, memberId, left, width, colW, small, onDragMove,
   }
 
   const g = ghost ?? { left, width }
-  const barTop = BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
+  // In hour-scale mode (week-overzicht) anker'en we onderaan zodat langere
+  // events bovenuit steken — vrij (8u) vult volledig, 4u half, etc.
+  const barTop = scaleByHours
+    ? (laneH ?? BAR_H + BAR_GAP) - barH - 1
+    : BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
   // Titel-shift: schuif de tekst met de scroll mee zolang de bar nog (deels)
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
   // tekst niet pal tegen de sticky kolomrand plakt.
@@ -1392,7 +1408,11 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   const projectLanes  = projectPacked.numLanes
 
   const MEETING_LANE_H = MEETING_BAR_H + 4   // tighter than project lanes
-  const PROJECT_LANE_H = BAR_H + BAR_GAP
+  // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
+  // events als mini-staafdiagram per dag kunnen renderen (8u = volledige
+  // hoogte, 4u = half, 1u = klein staafje). DraggableBar krijgt dan
+  // scaleByHours=true en anker'd bottom-up.
+  const PROJECT_LANE_H = zoom === 'week' ? 64 : (BAR_H + BAR_GAP)
 
   function meetingLaneTop(lane: number) { return BAR_GAP + lane * MEETING_LANE_H }
   function projectLaneTop(lane: number) { return BAR_GAP + meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 6 : 0) + lane * PROJECT_LANE_H }
@@ -1432,6 +1452,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         return (
           <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H, pointerEvents: 'none' }}>
             <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
+              laneH={PROJECT_LANE_H} scaleByHours={zoom === 'week' && !b.isMeeting}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
