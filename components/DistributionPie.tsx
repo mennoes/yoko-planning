@@ -131,17 +131,24 @@ export function DistributionPie({
     // Laatste payload tijdens drag — onUp gebruikt 'm voor onCommit.
     let latest: Record<string, number> = { ...snapshot }
 
+    // Maximaal totaal dat het paar samen kan dragen: hun originele som. De
+    // andere segmenten blijven op hun snapshot-waarde, dus alleen binnen
+    // dit paar mag uitgewisseld worden. Voorheen werd geclamped op `total`
+    // (de hele taart) waardoor 3+-segment-configuraties boven de 100% konden
+    // uitkomen omdat één paar de totale taart opslokte.
+    const pairTotal = start.leftStart + start.rightStart
+
     function onMove(ev: PointerEvent) {
       const cur  = angleAt(ev)
       let dA = cur - start.startAngle
       if (dA >  Math.PI) dA -= Math.PI * 2
       if (dA < -Math.PI) dA += Math.PI * 2
       const dV = (dA / (Math.PI * 2)) * total
-      const newLeft  = Math.max(0, Math.min(total, start.leftStart  + dV))
+      const newLeft  = Math.max(0, Math.min(pairTotal, start.leftStart + dV))
       // Spiegel: wat de linker-buur erbij krijgt, gaat van rechts af. Dat
       // houdt de som van de twee deelnemers EN het totaal constant.
       const realDV   = newLeft - start.leftStart
-      const newRight = Math.max(0, Math.min(total, start.rightStart - realDV))
+      const newRight = Math.max(0, start.rightStart - realDV)
       latest = { ...snapshot }
       latest[start.leftId]  = round1(newLeft)
       latest[start.rightId] = round1(newRight)

@@ -168,8 +168,14 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   const totalMs   = pE.getTime() - pS.getTime()
   const overlapMs = oE.getTime() - oS.getTime()
   const fraction  = overlapMs / totalMs
-  const hpp       = project.estHours / Math.max(project.ownerIds.length, 1)
-  return Math.round(fraction * hpp * 10) / 10
+  // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
+  // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
+  // Zonder deze check viel een pie-chart-aanpassing buiten 't workload-overzicht
+  // en bleef de werkdruk-bol op de oude verdeling staan.
+  const myShare = project.ownerHours && memberId in project.ownerHours
+    ? Number(project.ownerHours[memberId]) || 0
+    : project.estHours / Math.max(project.ownerIds.length, 1)
+  return Math.round(fraction * myShare * 10) / 10
 }
 
 function memberHoursInCol(projects: Project[], memberId: string, col: Col) {
