@@ -20,21 +20,22 @@ export default function AccountsPage() {
   const [editingCell, setEditingCell] = useState<{ id: string; field: keyof Account } | null>(null)
   const [editValue, setEditValue] = useState('')
 
-  // Authenticatie + initiële pull. De gate stond eerder op profile.memberId,
-  // maar dat blokkeerde team-leden zoals Odette wier profile-row in
-  // Supabase (nog) geen member_id had — terwijl ze gewoon ingelogd zijn en
-  // RLS-toegang hebben. Nu gaten we puur op de auth-sessie; RLS bepaalt
-  // verder of de query slaagt.
+  // Authenticatie + initiële pull. We laten de gate aan de DATA-laag over:
+  // pullAccounts probeert sowieso de query. RLS blokkeert anon-toegang
+  // op database-niveau, dus een mislukte pull = niet-ingelogd of geen
+  // toegang. Voordeel: de pagina werkt ook als isAuthenticated-state
+  // hier-en-daar nog niet doorgekomen is (timing / localStorage-only
+  // profile-cache) — zolang de Supabase-sessie geldig is, krijgt de
+  // user de accounts. Lukt 't niet → nette lock-melding.
   useEffect(() => {
     let cancelled = false
     async function load() {
       if (!requiresAuth) { setAuthBlocked(true); setLoading(false); return }
       if (!authChecked)  { setLoading(true); return }       // auth nog aan 't laden
-      if (!isAuthenticated) { setAuthBlocked(true); setLoading(false); return }
-      setAuthBlocked(false)
       const rows = await pullAccounts()
       if (cancelled) return
       if (!rows) { setAuthBlocked(true); setLoading(false); return }
+      setAuthBlocked(false)
       setAccounts(rows); setLoading(false)
     }
     load()

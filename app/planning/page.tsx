@@ -1409,7 +1409,14 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   }
 
   const meetingItems = finalBars.filter((b): b is ClusterBar => b.kind === 'cluster')
-  const projectItems = finalBars.filter((b): b is SingleBar => b.kind === 'single')
+  // Vrij-events trekken we uit de lane-pack zodat ze geen rij vergroten —
+  // ze worden los gerenderd over de volle hoogte van de container, achter
+  // de andere events. Zo zie je een 'Vakantie'-blok over de hele dag
+  // heen i.p.v. een smalle balk in een eigen lane onderaan.
+  const projectAllSingles = finalBars.filter((b): b is SingleBar => b.kind === 'single')
+  const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
+  const vrijBars     = projectAllSingles.filter(isVrijBar)
+  const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
   const meetingPacked = packLanes(meetingItems)
   const projectPacked = packLanes(projectItems)
   const meetingLanes  = meetingPacked.numLanes
@@ -1432,12 +1439,15 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     ...projectPacked.items.map(b => ({ ...b, track: 'project' as const })),
   ]
 
-  if (bars.length === 0) return null
-  const height = BAR_GAP
+  if (bars.length === 0 && vrijBars.length === 0) return null
+  // Bij alleen vrij-events nog steeds een redelijke hoogte zodat de
+  // vol-hoogte achtergrond zichtbaar wordt (anders height=0).
+  const baseHeight = BAR_GAP
     + meetingLanes * MEETING_LANE_H
     + (meetingLanes > 0 ? 6 : 0)
     + projectLanes * PROJECT_LANE_H
     + 6
+  const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
   return (
     <div style={{ position: 'relative', height, overflow: 'visible' }}>
@@ -1449,6 +1459,29 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         <div style={{ position: 'absolute', top: BAR_GAP + meetingLanes * MEETING_LANE_H + 2, left: 0, right: 0,
           height: 1, background: 'var(--border-light)', pointerEvents: 'none', zIndex: 0 }} />
       )}
+      {/* Vrij-balken renderen we als volledige-hoogte achtergrond per
+          dag(en), met lage z-index zodat andere events er bovenop staan.
+          Klikken werkt nog steeds — geeft door aan onBarClick. */}
+      {vrijBars.map(b => (
+        <div key={`vrij_${b.p.id}`}
+          onClick={() => onBarClick(b.p)}
+          title={`${b.p.name} · klik voor details`}
+          style={{
+            position: 'absolute', top: 2, bottom: 2,
+            left: b.left + 2, width: Math.max(20, b.width - 4),
+            background: 'rgba(95,160,110,0.18)',
+            border: '1.5px solid rgba(95,160,110,0.55)',
+            borderRadius: 8,
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
+            padding: '4px 8px', gap: 6,
+            cursor: 'pointer', zIndex: 0,
+            fontSize: 12, fontWeight: 600, color: '#3b7a4b',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+          <span aria-hidden style={{ fontSize: 14 }}>🌴</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
+        </div>
+      ))}
       {bars.map((b, i) => {
         if (b.kind === 'cluster') {
           return (
