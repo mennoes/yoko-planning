@@ -118,23 +118,34 @@ function loadDoneProjectKeys(): Set<string> {
   return out
 }
 
-// Onthoud welke project-id's we al een keer als auto-todo hebben
-// toegevoegd, zodat een eenmaal door de gebruiker verwijderde todo
-// niet bij elke pageload terugkeert. Per-device (localStorage) is hier
-// genoeg — als je 'm op telefoon weghaalt en op laptop wilt terugzien,
-// kun je 'm daar handmatig toevoegen via '+ Voeg toe'.
-const SEEDED_KEY = 'yoko-todos-seeded-projects'
-function loadSeededProjectIds(): Set<string> {
+// Onthoud welke project-id's de gebruiker zelf uit z'n auto-seed-lijst
+// heeft gegooid, zodat ze niet bij elke pageload terugkomen. Per-device
+// (localStorage). Mark-as-done in plaats van verwijderen voorkomt dit
+// óók — alleen 'kruisje'-deletes belanden hier.
+const REMOVED_KEY = 'yoko-todos-removed-projects'
+function loadRemovedProjectIds(): Set<string> {
   if (typeof window === 'undefined') return new Set()
   try {
-    const raw = localStorage.getItem(SEEDED_KEY)
+    const raw = localStorage.getItem(REMOVED_KEY)
     return new Set(raw ? (JSON.parse(raw) as string[]) : [])
   } catch { return new Set() }
 }
-function saveSeededProjectIds(ids: Set<string>): void {
+function saveRemovedProjectIds(ids: Set<string>): void {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(SEEDED_KEY, JSON.stringify([...ids])) } catch {}
+  try { localStorage.setItem(REMOVED_KEY, JSON.stringify([...ids])) } catch {}
 }
+function markProjectRemoved(board: string, itemId: string): void {
+  const s = loadRemovedProjectIds()
+  s.add(`${board}:${itemId}`)
+  saveRemovedProjectIds(s)
+}
+
+// Oude cache-key — werd vóór '26 gebruikt om "ooit gezien" te tracken,
+// maar dat blokkeerde óók opnieuw-gewenste projecten. Migration onder
+// in TodosPage zet de niet-meer-aanwezige IDs over naar removed en
+// gooit deze key weg, zodat alle huidige non-Google projecten weer
+// vanzelf in je todo-lijst verschijnen.
+const LEGACY_SEEDED_KEY = 'yoko-todos-seeded-projects'
 function fmtRelative(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
   if (diff < 1)    return 'zojuist'
@@ -287,6 +298,10 @@ function TodoCard({
     setNewText('')
   }
   function remove(id: string) {
+    // Verwijdert de user een aan-een-project-gekoppelde todo, dan onthouden
+    // we dat zodat de auto-seed 'm niet bij elke pageload terugbrengt.
+    const target = section.items.find(i => i.id === id)
+    if (target?.projectRef) markProjectRemoved(target.projectRef.board, target.projectRef.itemId)
     const prev = { ...section, items: [...section.items] }
     onUpdate({ ...section, items: section.items.filter(i => i.id !== id) }, prev)
   }
@@ -824,41 +839,40 @@ export default function TodosPage() {
   }, [hydrated, sections])
 
   // ── Auto-seed open Monday-projecten in mijn to-do-sectie ────────────────────
-  // Niet-Google items waar ik eigenaar van ben en die nog niet Done zijn,
-  // verschijnen automatisch als gekoppelde todo in mijn eigen kaart. De
-  // 'seeded'-set in localStorage onthoudt welke ik al een keer heb gezien
-  // — zo komt een verwijderde auto-todo niet bij elke pageload terug.
-  // Projecten die ik al handmatig had gekoppeld (via '+ Voeg toe') tellen
-  // ook als 'gezien'.
+  // ALLE niet-Google, niet-Done, niet-past-due project-items rollen
+  // automatisch als gekoppelde todo in m'n eigen kaart binnen — behalve
+  // de items die ik zelf met 't kruisje weggegooid heb (die zitten in
+  // de 'removed'-cache). Zo zien nieuwe projecten op een bord direct
+  // op /todos op, zonder handmatig koppelen.
   useEffect(() => {
     const me = currentProfile?.memberId
     if (!me || !hydrated || sections.length === 0 || allProjects.length === 0) return
     const mySection = sections.find(s => s.id === me)
     if (!mySection) return
 
-    const seeded = loadSeededProjectIds()
-    const mine   = loadMyOpenProjects(me)
+    // ── Migratie van de oude 'seeded'-cache (één-malig). Die hield álles
+    //    vast wat ooit gezien was — daardoor leken projecten weg te blijven.
+    //    We gooien de key gewoon weg: ALLE huidige non-Google projecten
+    //    rollen alsnog binnen. Wat je daarna met 't kruisje weghaalt, gaat
+    //    naar de nieuwe 'removed'-cache en komt niet meer terug.
+    if (typeof window !== 'undefined') {
+      try { localStorage.removeItem(LEGACY_SEEDED_KEY) } catch {}
+    }
+
+    const removed = loadRemovedProjectIds()
+    const mine    = loadMyOpenProjects(me)
     const existingItemIds = new Set(
       mySection.items
         .map(i => i.projectRef?.itemId)
         .filter((x): x is string => !!x)
     )
 
-    // Markeer ook handmatig-gekoppelde projecten als 'gezien', anders
-    // zouden ze na verwijdering opnieuw als auto-todo terugkeren.
-    const nextSeeded = new Set(seeded)
-    for (const p of mine) {
-      if (existingItemIds.has(p.itemId)) nextSeeded.add(`${p.board}:${p.itemId}`)
-    }
-
     const toAdd = mine.filter(p => {
       const key = `${p.board}:${p.itemId}`
-      if (nextSeeded.has(key))         return false
+      if (removed.has(key))              return false
       if (existingItemIds.has(p.itemId)) return false
       return true
     })
-    for (const p of toAdd) nextSeeded.add(`${p.board}:${p.itemId}`)
-    if (nextSeeded.size !== seeded.size) saveSeededProjectIds(nextSeeded)
     if (toAdd.length === 0) return
 
     const newItems: TodoItem[] = toAdd.map((p, idx) => ({
