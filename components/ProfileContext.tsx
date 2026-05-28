@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import type { UserProfile } from '@/lib/profile'
 import { loadProfile, saveProfile } from '@/lib/profile'
 import { supabase, hasSupabase, requiresAuth, type DbProfile } from '@/lib/supabase'
+import { clearAuthCache } from '@/lib/sync'
 
 type Ctx = {
   profile:    UserProfile | null
@@ -60,6 +61,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
+        // Cache in getCurrentUserId leeggooien — die had eerder mogelijk
+        // een 'null' resultaat opgeslagen toen de sessie nog niet binnen
+        // was, en zou anders alle daaropvolgende RLS-queries laten falen
+        // alsof we niet ingelogd zijn.
+        clearAuthCache()
         setIsAuthenticated(true)
         loadFromSupabase(session.user.id)
       } else {
@@ -71,10 +77,18 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
+        clearAuthCache()
         setIsAuthenticated(true)
         loadFromSupabase(session.user.id)
       }
+      if (event === 'TOKEN_REFRESHED' && session?.user) {
+        // Token refresh kan op een nieuw user-id wijzen (zeldzaam) en in
+        // elk geval willen we de cache opnieuw vullen vanuit de verse
+        // sessie.
+        clearAuthCache()
+      }
       if (event === 'SIGNED_OUT') {
+        clearAuthCache()
         if (requiresAuth) setIsAuthenticated(false)
         setProfileState(null)
         setLoaded(true)
