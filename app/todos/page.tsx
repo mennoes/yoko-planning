@@ -63,34 +63,25 @@ function loadAllProjects(): ProjectLink[] {
 // auto-seed van de eigen to-do-sectie zodat nieuwe projecten meteen
 // als te-doen item verschijnen zonder dat de gebruiker ze handmatig
 // hoeft te koppelen.
-// Verzamel de open Monday-projecten waar `memberId` eigenaar van is OF die
-// in een 'Lopende projecten'-groep staan. Niet-Google items met status ≠
-// 'Done' en met een end-datum die nog niet voorbij is. Wordt gebruikt door
-// de auto-seed van de eigen to-do-sectie zodat actieve projecten meteen
-// als te-doen item verschijnen zonder dat de gebruiker ze handmatig hoeft
-// te koppelen.
-function loadMyOpenProjects(memberId: string): ProjectLink[] {
-  if (typeof window === 'undefined' || !memberId) return []
+// Verzamel ALLE open project-items van de borden (alle niet-Google, niet-
+// Done, niet-past-due items). Geen owner-filter, geen 'lopend'-filter —
+// het auto-seed-mechanisme markeert ze één keer als 'seen' in localStorage,
+// dus verwijdert de user 'm in z'n todo-lijst dan komt-ie niet terug.
+// Past-due items en Done-items vallen er nog steeds buiten zodat alleen
+// actief werk binnenrolt.
+function loadMyOpenProjects(_memberId: string): ProjectLink[] {
+  if (typeof window === 'undefined') return []
   const today = new Date().toISOString().slice(0, 10)
   const out: ProjectLink[] = []
   for (const [board, raw] of Object.entries(RAW)) {
     const groups = loadGroups(board, raw.groups as BoardGroup[])
     for (const g of groups) {
       const groupName = (g.name ?? '').toLowerCase()
-      if (groupName === 'done') continue  // Done-groep altijd skippen
-      // 'Lopende projecten' (en varianten als 'Lopend werk') zijn de
-      // expliciete actieve-werk-buckets. Alles daarbinnen telt mee als
-      // todo-kandidaat, ook als de huidige gebruiker geen owner is —
-      // zo zie je ook waar het team aan werkt, niet alleen je eigen
-      // toegewezen items.
-      const isRunningGroup = groupName.includes('lopend')
+      if (groupName === 'done') continue
       for (const item of g.items) {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
-        const isMine = item.ownerIds?.includes(memberId) ?? false
-        if (!isMine && !isRunningGroup) continue
-        // Past-due items skippen — niet meer toevoegen als auto-todo.
         const end = item.endDate ?? item.startDate
         if (end && end < today) continue
         out.push({ board, itemId: item.id, name: item.name })
@@ -533,7 +524,11 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
             onKeyDown={e => { if (e.key === 'Enter') onEditSave(); if (e.key === 'Escape') onEditCancel() }}
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--accent)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-primary)', fontSize: 16, outline: 'none' }} />
         ) : (
-          <span onDoubleClick={editOrder ? undefined : onEditStart} style={{ fontSize: 16, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0 }}>
+          <span
+            onClick={editOrder ? undefined : onEditStart}
+            onDoubleClick={editOrder ? undefined : onEditStart}
+            title={editOrder ? undefined : 'Klik om te bewerken'}
+            style={{ fontSize: 16, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0 }}>
             <TextWithItemRefs text={item.text} compact />
           </span>
         )}
