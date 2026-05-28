@@ -118,23 +118,34 @@ function loadDoneProjectKeys(): Set<string> {
   return out
 }
 
-// Onthoud welke project-id's we al een keer als auto-todo hebben
-// toegevoegd, zodat een eenmaal door de gebruiker verwijderde todo
-// niet bij elke pageload terugkeert. Per-device (localStorage) is hier
-// genoeg — als je 'm op telefoon weghaalt en op laptop wilt terugzien,
-// kun je 'm daar handmatig toevoegen via '+ Voeg toe'.
-const SEEDED_KEY = 'yoko-todos-seeded-projects'
-function loadSeededProjectIds(): Set<string> {
+// Onthoud welke project-id's de gebruiker zelf uit z'n auto-seed-lijst
+// heeft gegooid, zodat ze niet bij elke pageload terugkomen. Per-device
+// (localStorage). Mark-as-done in plaats van verwijderen voorkomt dit
+// óók — alleen 'kruisje'-deletes belanden hier.
+const REMOVED_KEY = 'yoko-todos-removed-projects'
+function loadRemovedProjectIds(): Set<string> {
   if (typeof window === 'undefined') return new Set()
   try {
-    const raw = localStorage.getItem(SEEDED_KEY)
+    const raw = localStorage.getItem(REMOVED_KEY)
     return new Set(raw ? (JSON.parse(raw) as string[]) : [])
   } catch { return new Set() }
 }
-function saveSeededProjectIds(ids: Set<string>): void {
+function saveRemovedProjectIds(ids: Set<string>): void {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(SEEDED_KEY, JSON.stringify([...ids])) } catch {}
+  try { localStorage.setItem(REMOVED_KEY, JSON.stringify([...ids])) } catch {}
 }
+function markProjectRemoved(board: string, itemId: string): void {
+  const s = loadRemovedProjectIds()
+  s.add(`${board}:${itemId}`)
+  saveRemovedProjectIds(s)
+}
+
+// Oude cache-key — werd vóór '26 gebruikt om "ooit gezien" te tracken,
+// maar dat blokkeerde óók opnieuw-gewenste projecten. Migration onder
+// in TodosPage zet de niet-meer-aanwezige IDs over naar removed en
+// gooit deze key weg, zodat alle huidige non-Google projecten weer
+// vanzelf in je todo-lijst verschijnen.
+const LEGACY_SEEDED_KEY = 'yoko-todos-seeded-projects'
 function fmtRelative(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
   if (diff < 1)    return 'zojuist'
@@ -287,6 +298,10 @@ function TodoCard({
     setNewText('')
   }
   function remove(id: string) {
+    // Verwijdert de user een aan-een-project-gekoppelde todo, dan onthouden
+    // we dat zodat de auto-seed 'm niet bij elke pageload terugbrengt.
+    const target = section.items.find(i => i.id === id)
+    if (target?.projectRef) markProjectRemoved(target.projectRef.board, target.projectRef.itemId)
     const prev = { ...section, items: [...section.items] }
     onUpdate({ ...section, items: section.items.filter(i => i.id !== id) }, prev)
   }
@@ -461,7 +476,10 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
 }) {
   const member = teamData.members.find(m => m.id === memberId)
   const color  = member?.color ?? 'var(--accent)'
-  const [dropHover, setDropHover] = useState(false)
+  // Drop-positie wordt afgeleid uit de cursor-Y t.o.v. het midden van de
+  // rij: boven 't midden → invoegen ervóór, eronder → invoegen erna. Zo
+  // kun je een item óók onder de laatste regel laten landen.
+  const [dropPos, setDropPos] = useState<'before' | 'after' | null>(null)
   const draggable = isMember && !editing && !editOrder && typeof dragIdx === 'number' && !!onDragStart
 
   // Comment count badge — refreshes when the threads change.
@@ -478,42 +496,61 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
 
   return (
     <li
-      draggable={draggable}
-      onDragStart={e => {
-        if (!draggable || typeof dragIdx !== 'number') return
-        e.dataTransfer.effectAllowed = 'move'
-        e.dataTransfer.setData('application/x-yoko-todo', String(dragIdx))
-        onDragStart?.(dragIdx)
-      }}
-      onDragEnter={e => {
-        if (!onDropOnIdx) return
-        if (!e.dataTransfer.types.includes('application/x-yoko-todo')) return
-        setDropHover(true)
-      }}
       onDragOver={e => {
         if (!onDropOnIdx) return
         if (!e.dataTransfer.types.includes('application/x-yoko-todo')) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'move'
+        const r = e.currentTarget.getBoundingClientRect()
+        setDropPos(e.clientY < r.top + r.height / 2 ? 'before' : 'after')
       }}
-      onDragLeave={() => setDropHover(false)}
+      onDragLeave={() => setDropPos(null)}
       onDrop={e => {
-        setDropHover(false)
+        const dp = dropPos
+        setDropPos(null)
         if (!onDropOnIdx || typeof dragIdx !== 'number') return
         const raw = e.dataTransfer.getData('application/x-yoko-todo')
         if (!raw) return
         e.preventDefault()
-        onDropOnIdx(dragIdx)
+        onDropOnIdx(dp === 'after' ? dragIdx + 1 : dragIdx)
       }}
-      onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 14px', position: 'relative',
-        cursor: draggable ? 'grab' : undefined,
-        borderTop: dropHover ? '2px solid var(--accent)' : '2px solid transparent',
-        background: dropHover ? 'var(--accent-light)' : 'transparent',
-        transition: 'background 0.1s' }}
-      onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '1' }}
-      onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '0' }}
+      onDragEnd={() => { setDropPos(null); onDragEnd?.() }}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 14px', position: 'relative',
+        borderTop:    dropPos === 'before' ? '3px solid var(--accent)' : '3px solid transparent',
+        borderBottom: dropPos === 'after'  ? '3px solid var(--accent)' : '3px solid transparent',
+        transition: 'border-color 0.08s' }}
+      onMouseEnter={e => {
+        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '1'
+        const h   = e.currentTarget.querySelector<HTMLElement>('.drag-handle'); if (h) h.style.opacity = '1'
+      }}
+      onMouseLeave={e => {
+        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '0'
+        const h   = e.currentTarget.querySelector<HTMLElement>('.drag-handle'); if (h) h.style.opacity = '0.35'
+      }}
     >
+      {draggable && (
+        <span
+          draggable
+          className="drag-handle"
+          title="Sleep om te verplaatsen"
+          onDragStart={e => {
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('application/x-yoko-todo', String(dragIdx))
+            // Gebruik de hele rij als drag-image i.p.v. alleen het icoontje,
+            // anders ziet de gebruiker bij 't slepen alleen een puntjes-glyph.
+            const li = e.currentTarget.closest('li')
+            if (li) e.dataTransfer.setDragImage(li, 20, 12)
+            onDragStart?.(dragIdx!)
+          }}
+          onDragEnd={() => onDragEnd?.()}
+          style={{
+            cursor: 'grab', userSelect: 'none', flexShrink: 0,
+            color: 'var(--text-muted)', fontSize: 16, lineHeight: 1,
+            padding: '2px 2px', marginTop: 1,
+            opacity: 0.35, transition: 'opacity 0.12s',
+          }}
+        >⠿</span>
+      )}
       <button onClick={onToggle} style={{ width: 16, height: 16, minWidth: 16, borderRadius: 4, border: item.done ? 'none' : '2px solid var(--border)', background: item.done ? color : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 2, padding: 0, flexShrink: 0 }}>
         {item.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
       </button>
@@ -802,41 +839,40 @@ export default function TodosPage() {
   }, [hydrated, sections])
 
   // ── Auto-seed open Monday-projecten in mijn to-do-sectie ────────────────────
-  // Niet-Google items waar ik eigenaar van ben en die nog niet Done zijn,
-  // verschijnen automatisch als gekoppelde todo in mijn eigen kaart. De
-  // 'seeded'-set in localStorage onthoudt welke ik al een keer heb gezien
-  // — zo komt een verwijderde auto-todo niet bij elke pageload terug.
-  // Projecten die ik al handmatig had gekoppeld (via '+ Voeg toe') tellen
-  // ook als 'gezien'.
+  // ALLE niet-Google, niet-Done, niet-past-due project-items rollen
+  // automatisch als gekoppelde todo in m'n eigen kaart binnen — behalve
+  // de items die ik zelf met 't kruisje weggegooid heb (die zitten in
+  // de 'removed'-cache). Zo zien nieuwe projecten op een bord direct
+  // op /todos op, zonder handmatig koppelen.
   useEffect(() => {
     const me = currentProfile?.memberId
     if (!me || !hydrated || sections.length === 0 || allProjects.length === 0) return
     const mySection = sections.find(s => s.id === me)
     if (!mySection) return
 
-    const seeded = loadSeededProjectIds()
-    const mine   = loadMyOpenProjects(me)
+    // ── Migratie van de oude 'seeded'-cache (één-malig). Die hield álles
+    //    vast wat ooit gezien was — daardoor leken projecten weg te blijven.
+    //    We gooien de key gewoon weg: ALLE huidige non-Google projecten
+    //    rollen alsnog binnen. Wat je daarna met 't kruisje weghaalt, gaat
+    //    naar de nieuwe 'removed'-cache en komt niet meer terug.
+    if (typeof window !== 'undefined') {
+      try { localStorage.removeItem(LEGACY_SEEDED_KEY) } catch {}
+    }
+
+    const removed = loadRemovedProjectIds()
+    const mine    = loadMyOpenProjects(me)
     const existingItemIds = new Set(
       mySection.items
         .map(i => i.projectRef?.itemId)
         .filter((x): x is string => !!x)
     )
 
-    // Markeer ook handmatig-gekoppelde projecten als 'gezien', anders
-    // zouden ze na verwijdering opnieuw als auto-todo terugkeren.
-    const nextSeeded = new Set(seeded)
-    for (const p of mine) {
-      if (existingItemIds.has(p.itemId)) nextSeeded.add(`${p.board}:${p.itemId}`)
-    }
-
     const toAdd = mine.filter(p => {
       const key = `${p.board}:${p.itemId}`
-      if (nextSeeded.has(key))         return false
+      if (removed.has(key))              return false
       if (existingItemIds.has(p.itemId)) return false
       return true
     })
-    for (const p of toAdd) nextSeeded.add(`${p.board}:${p.itemId}`)
-    if (nextSeeded.size !== seeded.size) saveSeededProjectIds(nextSeeded)
     if (toAdd.length === 0) return
 
     const newItems: TodoItem[] = toAdd.map((p, idx) => ({
