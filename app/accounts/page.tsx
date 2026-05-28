@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { IconKey } from '@/components/Icon'
 import { useProfile } from '@/components/ProfileContext'
 import { useUndo } from '@/components/UndoContext'
-import { requiresAuth } from '@/lib/supabase'
+import { requiresAuth, supabase } from '@/lib/supabase'
+import { clearAuthCache } from '@/lib/sync'
 import {
   pullAccounts, upsertAccount, deleteAccount, subscribeRemoteAccounts,
   type Account,
@@ -13,9 +15,13 @@ import {
 export default function AccountsPage() {
   const { isAuthenticated, authChecked } = useProfile()
   const { showToast } = useUndo()
+  const router = useRouter()
+  const pathname = usePathname()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [authBlocked, setAuthBlocked] = useState(false)
+  const [sessionInfo, setSessionInfo] = useState<{ hasSession: boolean; email?: string | null }>({ hasSession: false })
+  const [retrying, setRetrying] = useState(false)
   const [showPasswords, setShowPasswords] = useState(false)
   const [editingCell, setEditingCell] = useState<{ id: string; field: keyof Account } | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -32,6 +38,14 @@ export default function AccountsPage() {
     async function load() {
       if (!requiresAuth) { setAuthBlocked(true); setLoading(false); return }
       if (!authChecked)  { setLoading(true); return }       // auth nog aan 't laden
+      // Check de Supabase-sessie rechtstreeks, niet via de cache van
+      // ProfileContext — die kan stale zijn. Zo zien we ook in welke
+      // staat we hangen wanneer authBlocked uiteindelijk true wordt.
+      if (supabase) {
+        const { data } = await supabase.auth.getSession()
+        if (!cancelled) setSessionInfo({ hasSession: !!data.session, email: data.session?.user?.email })
+      }
+      clearAuthCache()
       const rows = await pullAccounts()
       if (cancelled) return
       if (!rows) { setAuthBlocked(true); setLoading(false); return }
@@ -43,7 +57,18 @@ export default function AccountsPage() {
       pullAccounts().then(rows => { if (rows && !cancelled) setAccounts(rows) })
     })
     return () => { cancelled = true; off() }
-  }, [isAuthenticated, authChecked])
+  }, [isAuthenticated, authChecked, retrying])
+
+  async function retry() {
+    if (!supabase) return
+    setLoading(true)
+    setRetrying(r => !r)  // dep flip → effect re-runs
+    try {
+      // Sessie pakken na een eventuele refresh — als de gebruiker net
+      // een tab terug komt na inactiviteit kan dit 'm weer wakker maken.
+      await supabase.auth.refreshSession()
+    } catch {}
+  }
 
   const startEdit = (account: Account, field: keyof Account) => {
     setEditingCell({ id: account.id, field })
@@ -101,10 +126,28 @@ export default function AccountsPage() {
           <IconKey size={32} />Accounts
         </h1>
         <div style={{ padding: '32px 28px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
-          <p style={{ margin: 0 }}>
+          <p style={{ margin: '0 0 16px' }}>
             🔒 De wachtwoorden zijn alleen zichtbaar voor ingelogde teamleden.
-            Log in via het menu (rechtsboven) en herlaad de pagina.
           </p>
+          <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-muted)' }}>
+            Status: {sessionInfo.hasSession
+              ? <>ingelogd als <strong>{sessionInfo.email}</strong>, maar de database wijst je af. Probeer opnieuw of log opnieuw in.</>
+              : <>geen actieve sessie gevonden.</>}
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={retry}
+              style={{ padding: '8px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+            >
+              Probeer opnieuw
+            </button>
+            <button
+              onClick={() => router.push(`/login?next=${encodeURIComponent(pathname || '/accounts')}`)}
+              style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+            >
+              Log in
+            </button>
+          </div>
         </div>
       </div>
     )

@@ -461,7 +461,10 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
 }) {
   const member = teamData.members.find(m => m.id === memberId)
   const color  = member?.color ?? 'var(--accent)'
-  const [dropHover, setDropHover] = useState(false)
+  // Drop-positie wordt afgeleid uit de cursor-Y t.o.v. het midden van de
+  // rij: boven 't midden → invoegen ervóór, eronder → invoegen erna. Zo
+  // kun je een item óók onder de laatste regel laten landen.
+  const [dropPos, setDropPos] = useState<'before' | 'after' | null>(null)
   const draggable = isMember && !editing && !editOrder && typeof dragIdx === 'number' && !!onDragStart
 
   // Comment count badge — refreshes when the threads change.
@@ -478,42 +481,61 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
 
   return (
     <li
-      draggable={draggable}
-      onDragStart={e => {
-        if (!draggable || typeof dragIdx !== 'number') return
-        e.dataTransfer.effectAllowed = 'move'
-        e.dataTransfer.setData('application/x-yoko-todo', String(dragIdx))
-        onDragStart?.(dragIdx)
-      }}
-      onDragEnter={e => {
-        if (!onDropOnIdx) return
-        if (!e.dataTransfer.types.includes('application/x-yoko-todo')) return
-        setDropHover(true)
-      }}
       onDragOver={e => {
         if (!onDropOnIdx) return
         if (!e.dataTransfer.types.includes('application/x-yoko-todo')) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'move'
+        const r = e.currentTarget.getBoundingClientRect()
+        setDropPos(e.clientY < r.top + r.height / 2 ? 'before' : 'after')
       }}
-      onDragLeave={() => setDropHover(false)}
+      onDragLeave={() => setDropPos(null)}
       onDrop={e => {
-        setDropHover(false)
+        const dp = dropPos
+        setDropPos(null)
         if (!onDropOnIdx || typeof dragIdx !== 'number') return
         const raw = e.dataTransfer.getData('application/x-yoko-todo')
         if (!raw) return
         e.preventDefault()
-        onDropOnIdx(dragIdx)
+        onDropOnIdx(dp === 'after' ? dragIdx + 1 : dragIdx)
       }}
-      onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 14px', position: 'relative',
-        cursor: draggable ? 'grab' : undefined,
-        borderTop: dropHover ? '2px solid var(--accent)' : '2px solid transparent',
-        background: dropHover ? 'var(--accent-light)' : 'transparent',
-        transition: 'background 0.1s' }}
-      onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '1' }}
-      onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '0' }}
+      onDragEnd={() => { setDropPos(null); onDragEnd?.() }}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 14px', position: 'relative',
+        borderTop:    dropPos === 'before' ? '3px solid var(--accent)' : '3px solid transparent',
+        borderBottom: dropPos === 'after'  ? '3px solid var(--accent)' : '3px solid transparent',
+        transition: 'border-color 0.08s' }}
+      onMouseEnter={e => {
+        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '1'
+        const h   = e.currentTarget.querySelector<HTMLElement>('.drag-handle'); if (h) h.style.opacity = '1'
+      }}
+      onMouseLeave={e => {
+        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '0'
+        const h   = e.currentTarget.querySelector<HTMLElement>('.drag-handle'); if (h) h.style.opacity = '0.35'
+      }}
     >
+      {draggable && (
+        <span
+          draggable
+          className="drag-handle"
+          title="Sleep om te verplaatsen"
+          onDragStart={e => {
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('application/x-yoko-todo', String(dragIdx))
+            // Gebruik de hele rij als drag-image i.p.v. alleen het icoontje,
+            // anders ziet de gebruiker bij 't slepen alleen een puntjes-glyph.
+            const li = e.currentTarget.closest('li')
+            if (li) e.dataTransfer.setDragImage(li, 20, 12)
+            onDragStart?.(dragIdx!)
+          }}
+          onDragEnd={() => onDragEnd?.()}
+          style={{
+            cursor: 'grab', userSelect: 'none', flexShrink: 0,
+            color: 'var(--text-muted)', fontSize: 16, lineHeight: 1,
+            padding: '2px 2px', marginTop: 1,
+            opacity: 0.35, transition: 'opacity 0.12s',
+          }}
+        >⠿</span>
+      )}
       <button onClick={onToggle} style={{ width: 16, height: 16, minWidth: 16, borderRadius: 4, border: item.done ? 'none' : '2px solid var(--border)', background: item.done ? color : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 2, padding: 0, flexShrink: 0 }}>
         {item.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
       </button>
