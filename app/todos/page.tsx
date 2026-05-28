@@ -63,6 +63,12 @@ function loadAllProjects(): ProjectLink[] {
 // auto-seed van de eigen to-do-sectie zodat nieuwe projecten meteen
 // als te-doen item verschijnen zonder dat de gebruiker ze handmatig
 // hoeft te koppelen.
+// Verzamel de open Monday-projecten waar `memberId` eigenaar van is OF die
+// in een 'Lopende projecten'-groep staan. Niet-Google items met status ≠
+// 'Done' en met een end-datum die nog niet voorbij is. Wordt gebruikt door
+// de auto-seed van de eigen to-do-sectie zodat actieve projecten meteen
+// als te-doen item verschijnen zonder dat de gebruiker ze handmatig hoeft
+// te koppelen.
 function loadMyOpenProjects(memberId: string): ProjectLink[] {
   if (typeof window === 'undefined' || !memberId) return []
   const today = new Date().toISOString().slice(0, 10)
@@ -70,12 +76,20 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
   for (const [board, raw] of Object.entries(RAW)) {
     const groups = loadGroups(board, raw.groups as BoardGroup[])
     for (const g of groups) {
-      if ((g.name ?? '').toLowerCase() === 'done') continue  // Done-groep skippen
+      const groupName = (g.name ?? '').toLowerCase()
+      if (groupName === 'done') continue  // Done-groep altijd skippen
+      // 'Lopende projecten' (en varianten als 'Lopend werk') zijn de
+      // expliciete actieve-werk-buckets. Alles daarbinnen telt mee als
+      // todo-kandidaat, ook als de huidige gebruiker geen owner is —
+      // zo zie je ook waar het team aan werkt, niet alleen je eigen
+      // toegewezen items.
+      const isRunningGroup = groupName.includes('lopend')
       for (const item of g.items) {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
-        if (!item.ownerIds?.includes(memberId)) continue
+        const isMine = item.ownerIds?.includes(memberId) ?? false
+        if (!isMine && !isRunningGroup) continue
         // Past-due items skippen — niet meer toevoegen als auto-todo.
         const end = item.endDate ?? item.startDate
         if (end && end < today) continue
