@@ -205,6 +205,11 @@ function TodoCard({
   const [editTxt, setEditTxt] = useState('')
   const [pickerIdx, setPickerIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Onthouden welk item we slepen — gevuld door TodoRow.onDragStart en
+  // door TodoRow.onDropOnIdx weer leeggemaakt. We gebruiken een ref omdat
+  // dataTransfer in sommige browsers (Firefox) tijdens dragover de
+  // payload nog niet leesbaar maakt; een ref blijft binnen 't tabblad.
+  const dragFromRef = useRef<number | null>(null)
   const [popPos, setPopPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const member = teamData.members.find(m => m.id === section.id)
   const { showMember } = useMemberPopup()
@@ -242,6 +247,19 @@ function TodoCard({
     if (next < 0 || next >= section.items.length) return
     const items = [...section.items]
     items[idx] = items[next]; items[next] = section.items[idx]
+    onUpdate({ ...section, items })
+  }
+  // Splice-based reorder voor drag-and-drop — verplaats item van fromIdx
+  // naar toIdx, alle items ertussen schuiven netjes op. Geen swap zoals
+  // bij de up/down-knoppen, dus je kunt een item meerdere posities ineens
+  // verschuiven.
+  function moveItemTo(fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return
+    if (fromIdx < 0 || fromIdx >= section.items.length) return
+    if (toIdx   < 0 || toIdx   >  section.items.length) return
+    const items = [...section.items]
+    const [picked] = items.splice(fromIdx, 1)
+    items.splice(toIdx > fromIdx ? toIdx - 1 : toIdx, 0, picked)
     onUpdate({ ...section, items })
   }
 
@@ -332,6 +350,15 @@ function TodoCard({
               onEditChange={setEditTxt}
               onEditSave={() => saveEdit(item.id)}
               onEditCancel={() => setEditId(null)}
+              dragIdx={itemIdx}
+              onDragStart={(from) => { dragFromRef.current = from }}
+              onDropOnIdx={(target) => {
+                const from = dragFromRef.current
+                if (from == null) return
+                dragFromRef.current = null
+                moveItemTo(from, target)
+              }}
+              onDragEnd={() => { dragFromRef.current = null }}
             />
           )
         })}
@@ -411,7 +438,7 @@ function TodoCard({
   )
 }
 
-function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirstItem, isLastItem, onMoveUp, onMoveDown, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel }: {
+function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirstItem, isLastItem, onMoveUp, onMoveDown, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel, dragIdx, onDragStart, onDropOnIdx, onDragEnd }: {
   item: TodoItem; isMember: boolean; memberId: string
   editing: boolean; editTxt: string
   editOrder: boolean
@@ -420,9 +447,17 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
   onMoveUp: () => void; onMoveDown: () => void
   onToggle: () => void; onRemove: () => void
   onEditStart: () => void; onEditChange: (v: string) => void; onEditSave: () => void; onEditCancel: () => void
+  // Drag-and-drop reorder (optioneel — alleen open items binnen één
+  // sectie gebruiken dit; voor afgeronde items blijven de props weg).
+  dragIdx?: number          // de globale item-index op de sectie
+  onDragStart?: (idx: number) => void
+  onDropOnIdx?: (targetIdx: number) => void
+  onDragEnd?:   () => void
 }) {
   const member = teamData.members.find(m => m.id === memberId)
   const color  = member?.color ?? 'var(--accent)'
+  const [dropHover, setDropHover] = useState(false)
+  const draggable = isMember && !editing && !editOrder && typeof dragIdx === 'number' && !!onDragStart
 
   // Comment count badge — refreshes when the threads change.
   const [commentCount, setCommentCount] = useState(0)
@@ -437,7 +472,40 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
   }, [item.id])
 
   return (
-    <li style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 14px', position: 'relative' }}
+    <li
+      draggable={draggable}
+      onDragStart={e => {
+        if (!draggable || typeof dragIdx !== 'number') return
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('application/x-yoko-todo', String(dragIdx))
+        onDragStart?.(dragIdx)
+      }}
+      onDragEnter={e => {
+        if (!onDropOnIdx) return
+        if (!e.dataTransfer.types.includes('application/x-yoko-todo')) return
+        setDropHover(true)
+      }}
+      onDragOver={e => {
+        if (!onDropOnIdx) return
+        if (!e.dataTransfer.types.includes('application/x-yoko-todo')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }}
+      onDragLeave={() => setDropHover(false)}
+      onDrop={e => {
+        setDropHover(false)
+        if (!onDropOnIdx || typeof dragIdx !== 'number') return
+        const raw = e.dataTransfer.getData('application/x-yoko-todo')
+        if (!raw) return
+        e.preventDefault()
+        onDropOnIdx(dragIdx)
+      }}
+      onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 14px', position: 'relative',
+        cursor: draggable ? 'grab' : undefined,
+        borderTop: dropHover ? '2px solid var(--accent)' : '2px solid transparent',
+        background: dropHover ? 'var(--accent-light)' : 'transparent',
+        transition: 'background 0.1s' }}
       onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '1' }}
       onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '0' }}
     >
