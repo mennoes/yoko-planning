@@ -784,8 +784,13 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // Werkdag-venster: 09:00 – 18:00. Events buiten dit bereik (vroege Google-
   // afspraken, avond-syncs) worden netjes geclipt zodat 't overzicht
   // compact blijft.
+  // Werkdag-raster: 09:00 → 22:00. Eerder eindigde 't grid op 18:00,
+  // waardoor avond-events (kroeg, premières, late shoots) buiten beeld
+  // vielen. Tot 22:00 dekt de meeste avondprogrammering; late-late
+  // events worden gecapped op 22:00 zodat ze nog wel zichtbaar zijn
+  // onderaan het raster i.p.v. eraf gelopen.
   const HOUR_START = 9
-  const HOUR_END   = 18
+  const HOUR_END   = 22
   const HOUR_H     = 44
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -850,13 +855,16 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }
   for (const p of visible) {
     if (p.startTime) { timed.push(p); continue }
-    // Korte items zonder concrete tijd-info maar mét uren (typisch een
-    // recurring meeting waarvan een oude sync-pass nog geen startTime
-    // bewaarde): plaats ze als 09:00-blok van estHours lang in het uur-
-    // grid i.p.v. in de all-day banner. Voorkomt dat een wekelijkse
-    // check-in van 0.5u als full-day strip verschijnt.
-    if (p.estHours > 0 && p.estHours < 8 && p.startDate) {
-      const dur = Math.max(0.25, p.estHours)
+    // Items zonder concrete tijd-info maar mét uren krijgen een
+    // synthetisch tijdblok zodat ze de visuele ruimte in het uur-grid
+    // pakken die ze in een werkdag innemen — niet alleen een dun
+    // strookje in de all-day banner. Een 0.5u recurring meeting wordt
+    // 09:00–09:30, een 8u 'Kroeg'-event 09:00–17:00 (volle werkdag,
+    // vergelijkbaar met de Vrij-rendering hieronder). estHours > 8
+    // (multi-day-totalen) cappen we op 8u/dag zodat het blok binnen
+    // het 09–18 raster blijft en niet onder de horizon zakt.
+    if (p.estHours > 0 && p.startDate) {
+      const dur = Math.max(0.25, Math.min(8, p.estHours))
       const endH = 9 + Math.floor(dur)
       const endM = Math.round((dur - Math.floor(dur)) * 60)
       const fmt = (h: number, m: number) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
