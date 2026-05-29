@@ -1341,8 +1341,18 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               opacity: selected || hover ? 1 : 0.5, transition: 'opacity 0.15s' }} />
         </div>
 
-        <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-          <button onClick={() => setExpanded(e => !e)}
+        <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, cursor: 'pointer' }}
+          onClick={e => {
+            // Klik op een 'leeg' deel van de title-cel (tussen checkbox en
+            // titel of net naast de pill-knoppen) opent 't detail-drawer.
+            // Inner buttons en de naam-span doen stopPropagation, dus daar
+            // bubbelt 't niet naartoe.
+            if (editName) return
+            const tgt = e.target as HTMLElement
+            if (tgt.closest('button, a, input, [data-no-detail]')) return
+            setShowDetail(true)
+          }}>
+          <button onClick={e => { e.stopPropagation(); setExpanded(x => !x) }}
             title={hasSubitems ? `${subitems.length} subitems` : 'Subitems toevoegen'}
             style={{
               background: 'none', border: 'none', padding: '3px 4px', cursor: 'pointer',
@@ -1397,7 +1407,8 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           ) : (
             <>
               <span
-                onClick={() => {
+                onClick={e => {
+                  e.stopPropagation()
                   // Monday-stijl: klik op de naam start rename direct voor
                   // handmatige items — geen omweg via dubbelklik of menu.
                   // Google-items zijn read-only qua naam, daar valt 't terug
