@@ -9,7 +9,12 @@ import { createNotification } from './notificationsStore'
 
 const WORKING = 'Working on...'
 const DONE    = 'Done'
-const AUTO_DONE_AFTER_DAYS = 3
+// Google-events worden agressiever opgeruimd dan zelf-gemaakte items: zodra
+// de dag erna is, mogen ze op Done. Voor handmatige items hanteren we 3
+// dagen zodat een vergeten afvinkje niet meteen weggewerkt wordt — de user
+// krijgt eerst een notificatie via notifyOverdueItems.
+const AUTO_DONE_AFTER_DAYS_GOOGLE = 0
+const AUTO_DONE_AFTER_DAYS_MANUAL = 3
 
 function isLive(start: string | null | undefined, end: string | null | undefined, today: string): boolean {
   if (!start) return false
@@ -23,20 +28,17 @@ function needsAuto(status: string | undefined | null): boolean {
   return s === '' || s === 'Not started'
 }
 
-// Auto-Done na N dagen — voor subitems die de googleSync had moeten Done
-// zetten maar niet altijd doet (oude state, sync nog niet gedraaid op dit
-// device, niet-Google subitem, etc.). Client-side opruimen zodat de
-// werkdruk-totalen en visuele staat kloppen. Handmatige Stuck/Done laten
-// we ongemoeid.
-function shouldAutoDone(status: string | undefined | null, end: string | null | undefined, today: string): boolean {
+// Auto-Done — Google-items zodra de dag erna is (>0 dagen voorbij),
+// handmatige items pas na 3 dagen. Handmatige Stuck/Done laten we ongemoeid.
+function shouldAutoDone(status: string | undefined | null, end: string | null | undefined, today: string, source: 'manual' | 'google' | undefined | null): boolean {
   const s = (status ?? '').trim()
   if (s === DONE || s === 'Stuck') return false
   if (!end) return false
-  // diff in dagen op stringbasis is rommelig; converteer.
   const endTs   = Date.parse(end)
   const todayTs = Date.parse(today)
   if (Number.isNaN(endTs) || Number.isNaN(todayTs)) return false
-  return (todayTs - endTs) / 86400000 > AUTO_DONE_AFTER_DAYS
+  const threshold = source === 'google' ? AUTO_DONE_AFTER_DAYS_GOOGLE : AUTO_DONE_AFTER_DAYS_MANUAL
+  return (todayTs - endTs) / 86400000 > threshold
 }
 
 export async function applyAutoStatus(): Promise<{ changed: number }> {
@@ -58,8 +60,14 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
         //    die nog niet in een sync-pass zaten. Stuck/Done blijven.
         if (item.subitems && item.subitems.length > 0) {
           let subChanged = false
+          // Subitems van een Google-parent (recurring instances) tellen als
+          // Google-source — die mogen agressief Done worden zodra de dag
+          // erna is. Voor subitems onder een handmatige parent valt het
+          // terug op de subitem's eigen source-veld of 'manual'.
+          const subSource: 'manual' | 'google' | undefined = item.source === 'google' ? 'google' : undefined
           const subs: SubItem[] = item.subitems.map(sub => {
-            if (shouldAutoDone(sub.status, sub.endDate ?? sub.startDate, today)) {
+            const effSource = subSource ?? (sub as { source?: 'manual' | 'google' }).source
+            if (shouldAutoDone(sub.status, sub.endDate ?? sub.startDate, today, effSource)) {
               subChanged = true
               return { ...sub, status: DONE }
             }
@@ -75,7 +83,15 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
             boardChanged = true
           }
         }
-        if (needsAuto(mutated.status) && isLive(mutated.startDate, mutated.endDate, today)) {
+        // Parent-item: Google-events die voorbij zijn (één-off of recurring
+        // waarvan de laatste instance gepasseerd is) op Done; live items
+        // krijgen Working on…; handmatige items vallen alleen onder de
+        // 3-dagen-regel zodat zelf-aangemaakt werk niet ongezien wegglijdt.
+        if (shouldAutoDone(mutated.status, mutated.endDate ?? mutated.startDate, today, mutated.source)) {
+          mutated = { ...mutated, status: DONE }
+          changed++
+          boardChanged = true
+        } else if (needsAuto(mutated.status) && isLive(mutated.startDate, mutated.endDate, today)) {
           mutated = { ...mutated, status: WORKING }
           changed++
           boardChanged = true

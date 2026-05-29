@@ -1253,6 +1253,21 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   const subitems    = item.subitems ?? []
   const hasSubitems = subitems.length > 0
 
+  // Voor recurring Google-events: bereken de link naar de éérstvolgende
+  // instance (of de laatste als alles voorbij is). We gebruiken 'm zowel
+  // voor 't Google-badge naast de naam als voor de naam-klik zelf op
+  // Google-parents, zodat één klik op de hoofd-rij direct in Google
+  // Calendar opent op het juiste moment.
+  const googleHref: string | undefined = (() => {
+    if (item.source !== 'google') return undefined
+    const today = new Date().toISOString().slice(0, 10)
+    const upcoming = (item.subitems ?? [])
+      .filter(s => s.externalLink)
+      .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
+    const next = upcoming.find(s => (s.startDate ?? '') >= today) ?? upcoming[upcoming.length - 1]
+    return next?.externalLink ?? item.externalLink ?? undefined
+  })()
+
   // Comments per board-item — leeft naast 'journal' in de DetailPanel,
   // maar bereikbaar via een knop direct op de rij.
   const [commentCount, setCommentCount] = useState(0)
@@ -1365,19 +1380,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
               ruis toe. Het chevron-icoon laat al genoeg zien dat er
               subitems onder zitten. */}
 
-          {item.source === 'google' && (() => {
-            // Voor recurring meetings: pak de eerstvolgende instance vanaf
-            // vandaag (of de laatste als alles voorbij is) — diens htmlLink
-            // wijst naar het juiste datum-moment in Google Calendar. Anders
-            // valt 'ie terug op het parent-event-link.
-            const today = new Date().toISOString().slice(0, 10)
-            const upcoming = (item.subitems ?? [])
-              .filter(s => s.externalLink)
-              .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
-            const next = upcoming.find(s => (s.startDate ?? '') >= today) ?? upcoming[upcoming.length - 1]
-            const href = next?.externalLink ?? item.externalLink ?? undefined
-            return <GoogleBadge href={href} />
-          })()}
+          {item.source === 'google' && <GoogleBadge href={googleHref} />}
           {typeof item.meetLink === 'string' && item.meetLink && (
             <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
@@ -1410,10 +1413,15 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                 onClick={e => {
                   e.stopPropagation()
                   // Monday-stijl: klik op de naam start rename direct voor
-                  // handmatige items — geen omweg via dubbelklik of menu.
-                  // Google-items zijn read-only qua naam, daar valt 't terug
-                  // op de detail-drawer als gewone klik-actie.
-                  if (item.source === 'google') { setShowDetail(true); return }
+                  // handmatige items. Voor Google-items openen we de eerst-
+                  // volgende instance rechtstreeks in Google Calendar —
+                  // recurring meetings hebben dan vaak verborgen subitems
+                  // die je anders niet snel kon openen. Detail-drawer
+                  // blijft bereikbaar via de ↗-knop of de comments-pill.
+                  if (item.source === 'google') {
+                    if (googleHref) window.open(googleHref, '_blank', 'noopener,noreferrer')
+                    return
+                  }
                   setNameDraft(item.name); setEditName(true)
                 }}
                 onDoubleClick={e => {
@@ -1422,7 +1430,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                   setNameDraft(item.name); setEditName(true)
                 }}
                 title={item.source === 'google'
-                  ? 'Bewerk in Google Calendar'
+                  ? (googleHref ? 'Open eerstvolgende in Google Calendar' : 'Google Calendar item')
                   : 'Klik om naam te bewerken'}
                 // I-beam cursor voor handmatige items zodat 'rename-baar'
                 // visueel duidelijk is — net als in Monday. Google-items
@@ -1432,7 +1440,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {item.name}
               </span>
-              {hover && item.source !== 'google' && (
+              {hover && (
                 <button
                   onClick={e => { e.stopPropagation(); setShowDetail(true) }}
                   title="Details openen"
