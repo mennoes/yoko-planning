@@ -24,6 +24,7 @@ import { addRule as addSubitemRule } from '@/lib/subitemRules'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
+import { DistributionPie } from './DistributionPie'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -1670,6 +1671,82 @@ function DedupModal({ groups, onClose, onDelete }: {
 
 // ─── Item-detail drawer ─ rechts-uitschuivend paneel met info + groot ──────
 // commentaar-veld, zoals Monday's item-modal. Klik op item-naam = open.
+// Verdeel-pie voor de detail-drawer. Toont per eigenaar 'n segment in de
+// kleur van die persoon en laat je via drag de uren-verdeling tussen
+// aangrenzende segmenten verschuiven. Lokale 'live'-state tijdens 't slepen,
+// DB-write pas op release.
+function OwnerDistributionSection({ item, owners, total, onUpdate }: {
+  item: BoardItem; owners: string[]; total: number
+  onUpdate: (u: Partial<BoardItem>) => void
+}) {
+  const { getPhoto } = useTeamPhotos()
+  const defaultPer = owners.length > 0 ? total / owners.length : 0
+  const ownersKey  = owners.join(',')
+  const valuesKey  = JSON.stringify(item.ownerHours ?? {})
+  const [live, setLive] = useState<Record<string, number>>(() => {
+    const next: Record<string, number> = {}
+    for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
+    return next
+  })
+  useEffect(() => {
+    const next: Record<string, number> = {}
+    for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
+    setLive(next)
+  }, [item.id, ownersKey, total, valuesKey, defaultPer])
+
+  const round1 = (n: number) => Math.round(n * 10) / 10
+
+  const segments = owners.map(oid => {
+    const m = teamData.members.find(x => x.id === oid)
+    return {
+      id:        oid,
+      value:     live[oid] ?? 0,
+      color:     m?.color ?? '#9aa3ad',
+      label:     m?.name ?? oid,
+      avatarUrl: m ? getPhoto(m.id) : null,
+      initials:  m?.name?.slice(0, 1).toUpperCase() ?? '?',
+    }
+  })
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        Verdeling
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 16px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        <DistributionPie
+          segments={segments}
+          total={total}
+          size={120}
+          interactive
+          showAvatars
+          innerLabel={`${round1(total)}u`}
+          onChange={setLive}
+          onCommit={(next) => onUpdate({ ownerHours: next })}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
+          {owners.map(oid => {
+            const m = teamData.members.find(x => x.id === oid)
+            if (!m) return null
+            const val = live[oid] ?? 0
+            const pct = total > 0 ? Math.round((val / total) * 100) : 0
+            return (
+              <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: m.color ?? '#9aa3ad', flexShrink: 0 }} />
+                <span style={{ flex: 1, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{round1(val)}u · {pct}%</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <p style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+        Sleep de witte bolletjes op de taart om uren tussen mensen te verdelen.
+      </p>
+    </div>
+  )
+}
+
 function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
   item: BoardItem; cols: ColumnDef[]; accentColor?: string
   onUpdate: (u: Partial<BoardItem>) => void
@@ -1805,6 +1882,15 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
               </div>
             ))}
           </div>
+
+          {/* Verdeling-pie — alleen wanneer meerdere eigenaren EN er uren zijn,
+              dan heeft 't visueel iets te zeggen. Anders skip 'm. */}
+          {(() => {
+            const owners = item.ownerIds.filter(id => id && id !== 'unassigned')
+            const total  = effectiveHours(item)
+            if (owners.length < 2 || total <= 0) return null
+            return <OwnerDistributionSection item={item} owners={owners} total={total} onUpdate={onUpdate} />
+          })()}
 
           {/* Notes */}
           {(typeof item.notes === 'string' || item.notes === undefined) && (
@@ -2205,11 +2291,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 6px' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
 
-          {/* Drag-handle voor group-reorder. Groter en altijd zichtbaar
-              (was 14px / 0.4 opacity → bijna niet te zien én klein om te
-              raken). Alleen dit element initieert de drag; klikken op
-              andere header-elementen (kleur, naam, ×) blijft gewoon werken
-              zonder per ongeluk een drag te starten. */}
+          {/* Drag-handle voor group-reorder. Groot, altijd zichtbaar en met
+              eigen hover-vlak zodat 't duidelijk is dat je hier kunt grijpen.
+              Alleen dit element initieert de drag; klikken op andere header-
+              elementen (kleur, naam, ×) blijft gewoon werken. */}
           <span
             draggable
             onDragStart={e => {
@@ -2218,11 +2303,17 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
               e.dataTransfer.setData('application/x-yoko-group', JSON.stringify({ groupId: group.id, fromBoard: boardId }))
             }}
             title="Sleep om groep-volgorde te wijzigen"
-            style={{ cursor: 'grab', color: headerHover ? 'var(--text-primary)' : 'var(--text-secondary)',
-              fontSize: 18, lineHeight: 1, padding: '4px 6px', borderRadius: 5,
-              flexShrink: 0, opacity: headerHover ? 1 : 0.7, transition: 'opacity 0.12s, background 0.12s, color 0.12s',
-              userSelect: 'none', background: headerHover ? 'var(--bg-hover)' : 'transparent' }}>
-            ⋮⋮
+            style={{ cursor: 'grab',
+              color: 'var(--text-secondary)',
+              fontSize: 20, lineHeight: 1, padding: '6px 8px', borderRadius: 6,
+              flexShrink: 0, userSelect: 'none',
+              background: headerHover ? 'var(--bg-hover)' : 'transparent',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          >
+            ⠿
           </span>
 
           <button onClick={toggleCollapsed} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
