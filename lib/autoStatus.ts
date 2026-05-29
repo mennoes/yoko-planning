@@ -6,6 +6,7 @@ import type { BoardGroup, BoardItem, SubItem } from './boards'
 import { loadGroups, saveGroups, pushBoardToRemote } from './boardStore'
 import { getBoardIds } from './boardsRegistry'
 import { createNotification } from './notificationsStore'
+import { autoMoveDoneItems } from './doneAutoMove'
 
 const WORKING = 'Working on...'
 const DONE    = 'Done'
@@ -101,8 +102,12 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
       return { ...g, items }
     })
     if (boardChanged) {
-      saveGroups(boardId, nextGroups)
-      pushBoardToRemote(boardId, nextGroups).catch(() => {})
+      // Items die zojuist op Done belandden willen we óók meteen naar de
+      // Done-groep schuiven, anders blijven ze tussen open werk staan in
+      // 'Projecten' / 'Meetings'. autoMoveDoneItems is idempotent.
+      const moved = autoMoveDoneItems(nextGroups)
+      saveGroups(boardId, moved)
+      pushBoardToRemote(boardId, moved).catch(() => {})
       dirty.add(boardId)
     }
   }
