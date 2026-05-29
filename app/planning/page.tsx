@@ -2712,7 +2712,7 @@ export default function PlanningPage() {
   })
   useEffect(() => { localStorage.setItem('planning-hide-google', hideGoogle ? '1' : '0') }, [hideGoogle])
 
-  // Keyboard shortcuts: +/= zooms in, - zooms out (skip when typing in inputs)
+  // Keyboard shortcuts: +/= zooms in, - zooms out, N opent nieuw-item-popup
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null
@@ -2720,6 +2720,7 @@ export default function PlanningPage() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => Math.min(300, z + 10)) }
       else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => Math.max(50, z - 10)) }
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setNewItemOpen(true) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -4233,6 +4234,24 @@ export default function PlanningPage() {
             logActivity('Item toegevoegd', item.name, `in ${boardName}`)
           }} />
       )}
+
+      {/* Floating "+" — altijd zichtbaar, ook bij scrollen en op mobiel.
+          De toolbar-knop bovenin verdwijnt onder de fold zodra je naar
+          beneden scrollt, dus deze FAB voorkomt dat je naar boven moet
+          om snel een item toe te voegen. */}
+      <button
+        onClick={() => setNewItemOpen(true)}
+        title="Nieuw item (N)"
+        aria-label="Nieuw item"
+        style={{
+          position: 'fixed', right: 22, bottom: 22, zIndex: 200,
+          width: 54, height: 54, borderRadius: '50%',
+          border: 'none', cursor: 'pointer',
+          background: 'var(--accent)', color: '#000',
+          fontSize: 26, fontWeight: 600, lineHeight: 1,
+          boxShadow: '0 6px 20px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.18)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>+</button>
     </div>
   )
 }
