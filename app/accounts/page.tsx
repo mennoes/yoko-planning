@@ -8,7 +8,7 @@ import { useUndo } from '@/components/UndoContext'
 import { requiresAuth, supabase } from '@/lib/supabase'
 import { clearAuthCache } from '@/lib/sync'
 import {
-  pullAccounts, upsertAccount, deleteAccount, subscribeRemoteAccounts,
+  pullAccounts, pullAccountsDetailed, upsertAccount, deleteAccount, subscribeRemoteAccounts,
   type Account,
 } from '@/lib/accountsStore'
 
@@ -20,7 +20,7 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [authBlocked, setAuthBlocked] = useState(false)
-  const [sessionInfo, setSessionInfo] = useState<{ hasSession: boolean; email?: string | null }>({ hasSession: false })
+  const [sessionInfo, setSessionInfo] = useState<{ hasSession: boolean; email?: string | null; dbError?: string }>({ hasSession: false })
   const [retrying, setRetrying] = useState(false)
   const [showPasswords, setShowPasswords] = useState(false)
   const [editingCell, setEditingCell] = useState<{ id: string; field: keyof Account } | null>(null)
@@ -41,16 +41,29 @@ export default function AccountsPage() {
       // Check de Supabase-sessie rechtstreeks, niet via de cache van
       // ProfileContext — die kan stale zijn. Zo zien we ook in welke
       // staat we hangen wanneer authBlocked uiteindelijk true wordt.
+      let sessEmail: string | null | undefined
+      let sessHas = false
       if (supabase) {
         const { data } = await supabase.auth.getSession()
-        if (!cancelled) setSessionInfo({ hasSession: !!data.session, email: data.session?.user?.email })
+        sessHas = !!data.session
+        sessEmail = data.session?.user?.email
       }
       clearAuthCache()
-      const rows = await pullAccounts()
+      const result = await pullAccountsDetailed()
       if (cancelled) return
-      if (!rows) { setAuthBlocked(true); setLoading(false); return }
+      if (!result.rows) {
+        setSessionInfo({
+          hasSession: sessHas,
+          email:      sessEmail,
+          dbError:    result.error?.message
+                      ? `${result.error.message}${result.error.code ? ` (${result.error.code})` : ''}`
+                      : (result.noAuth ? 'geen geldige sessie gevonden bij Supabase' : undefined),
+        })
+        setAuthBlocked(true); setLoading(false); return
+      }
+      setSessionInfo({ hasSession: sessHas, email: sessEmail })
       setAuthBlocked(false)
-      setAccounts(rows); setLoading(false)
+      setAccounts(result.rows); setLoading(false)
     }
     load()
     const off = subscribeRemoteAccounts(() => {
@@ -129,11 +142,16 @@ export default function AccountsPage() {
           <p style={{ margin: '0 0 16px' }}>
             🔒 De wachtwoorden zijn alleen zichtbaar voor ingelogde teamleden.
           </p>
-          <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-muted)' }}>
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-muted)' }}>
             Status: {sessionInfo.hasSession
-              ? <>ingelogd als <strong>{sessionInfo.email}</strong>, maar de database wijst je af. Probeer opnieuw of log opnieuw in.</>
+              ? <>ingelogd als <strong>{sessionInfo.email}</strong>, maar de database wijst je af.</>
               : <>geen actieve sessie gevonden.</>}
           </p>
+          {sessionInfo.dbError && (
+            <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: 'var(--bg-base)', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)' }}>
+              {sessionInfo.dbError}
+            </p>
+          )}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button
               onClick={retry}
