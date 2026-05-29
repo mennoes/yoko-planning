@@ -32,6 +32,7 @@ import { onAuthChange, isSyncing } from '@/lib/sync'
 import { syncGoogleNow } from '@/lib/googleClient'
 import { applySubitemRules } from '@/lib/subitemRules'
 import { applyAutoStatus, notifyOverdueItems } from '@/lib/autoStatus'
+import { pullExtrasFromRemote, subscribeRemoteExtras } from '@/lib/teamExtras'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -188,6 +189,10 @@ function Inner({ children }: { children: ReactNode }) {
       // Team capaciteiten (u/w per persoon)
       pullCapacities()
       unsubs.push(subscribeRemoteCapacities())
+      // Runtime-toegevoegde teamleden (via /team UI). Trekt 't merge-werk
+      // op localStorage-niveau zelf, deze pull haalt cross-device additions.
+      pullExtrasFromRemote()
+      unsubs.push(subscribeRemoteExtras())
       // Feedback / ideeën / bugs (floating bubble)
       pullFeedback()
       unsubs.push(subscribeRemoteFeedback())
