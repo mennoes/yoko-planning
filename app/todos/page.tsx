@@ -204,6 +204,7 @@ function reorderArrowBtn(disabled: boolean): React.CSSProperties {
 function TodoCard({
   section, isMember, onUpdate, allProjects, doneProjectKeys,
   editOrder, isFirstCard, isLastCard, onMoveCard,
+  onDeleteSection, onDragStartCard, onDropOnCard,
 }: {
   section: Section
   isMember: boolean
@@ -214,6 +215,14 @@ function TodoCard({
   isFirstCard: boolean
   isLastCard: boolean
   onMoveCard: (dir: -1 | 1) => void
+  // Verwijderen wordt aangeboden voor niet-member secties (handmatig
+  // aangemaakte categorieën). Member-secties horen bij een teamlid en
+  // blijven staan.
+  onDeleteSection?: () => void
+  // Drag-reorder van secties zelf — onDragStartCard fired bij grijpen van
+  // de handle, onDropOnCard wordt door de pagina afgehandeld.
+  onDragStartCard?: () => void
+  onDropOnCard?: () => void
 }) {
   const [newText, setNewText] = useState('')
   const [editId,  setEditId]  = useState<string | null>(null)
@@ -319,16 +328,77 @@ function TodoCard({
   const open    = visible.filter(i => !i.done)
   const done    = visible.filter(i =>  i.done)
 
+  // Editable header — handmatige (niet-member) secties: klik op emoji of
+  // titel om te bewerken. Member-secties tonen avatar + member-naam zoals
+  // voorheen.
+  const [editTitle, setEditTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(section.title)
+  const [editEmoji, setEditEmoji] = useState(false)
+  const [emojiDraft, setEmojiDraft] = useState(section.emoji)
+  const [headerHover, setHeaderHover] = useState(false)
+  function commitTitle() {
+    const next = titleDraft.trim() || section.title
+    if (next !== section.title) onUpdate({ ...section, title: next })
+    setEditTitle(false)
+  }
+  function commitEmoji() {
+    const next = (emojiDraft || section.emoji).slice(0, 4)
+    if (next !== section.emoji) onUpdate({ ...section, emoji: next })
+    setEditEmoji(false)
+  }
+
   return (
-    <div style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+    <div
+      onDragOver={e => {
+        if (!onDropOnCard) return
+        if (!e.dataTransfer.types.includes('application/x-yoko-todo-section')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }}
+      onDrop={e => {
+        if (!onDropOnCard) return
+        const raw = e.dataTransfer.getData('application/x-yoko-todo-section')
+        if (!raw) return
+        e.preventDefault()
+        onDropOnCard()
+      }}
+      style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ padding: '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 9 }}>
+      <div
+        onMouseEnter={() => setHeaderHover(true)}
+        onMouseLeave={() => setHeaderHover(false)}
+        style={{ padding: '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 9 }}>
+        {/* Drag-handle voor section-reorder */}
+        {onDragStartCard && (
+          <span
+            draggable
+            onDragStart={e => {
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('application/x-yoko-todo-section', section.id)
+              onDragStartCard()
+            }}
+            title="Sleep om volgorde van secties te wijzigen"
+            style={{ cursor: 'grab', userSelect: 'none', flexShrink: 0,
+              color: 'var(--text-muted)', fontSize: 16, lineHeight: 1,
+              padding: '2px 4px', borderRadius: 5,
+              opacity: headerHover ? 1 : 0.35, transition: 'opacity 0.12s' }}>⠿</span>
+        )}
         {isMember && member ? (
           <MemberAvatar memberId={section.id} size={28} />
+        ) : editEmoji ? (
+          <input autoFocus value={emojiDraft}
+            onChange={e => setEmojiDraft(e.target.value)}
+            onBlur={commitEmoji}
+            onKeyDown={e => { if (e.key === 'Enter') commitEmoji(); if (e.key === 'Escape') { setEmojiDraft(section.emoji); setEditEmoji(false) } }}
+            style={{ width: 32, padding: '2px 4px', fontSize: 17, textAlign: 'center', borderRadius: 4, border: '1px solid var(--accent)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }} />
         ) : (
-          <span style={{ fontSize: 17 }}>{section.emoji}</span>
+          <span onClick={() => { setEmojiDraft(section.emoji); setEditEmoji(true) }}
+            title="Klik om emoji aan te passen"
+            style={{ fontSize: 17, cursor: 'pointer', padding: '0 4px', borderRadius: 4 }}>
+            {section.emoji || '📋'}
+          </span>
         )}
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.01em' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.01em', minWidth: 0 }}>
           {isMember && member ? (
             <span onClick={e => showMember(section.id, e)}
               title="Klik voor profiel"
@@ -337,8 +407,29 @@ function TodoCard({
               onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-primary)')}>
               {section.title}
             </span>
-          ) : section.title}
+          ) : editTitle ? (
+            <input autoFocus value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={e => { if (e.key === 'Enter') commitTitle(); if (e.key === 'Escape') { setTitleDraft(section.title); setEditTitle(false) } }}
+              style={{ width: '100%', padding: '3px 6px', fontSize: 18, fontWeight: 700, borderRadius: 4, border: '1px solid var(--accent)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }} />
+          ) : (
+            <span onClick={() => { setTitleDraft(section.title); setEditTitle(true) }}
+              title="Klik om titel aan te passen"
+              style={{ cursor: 'pointer', display: 'inline-block', padding: '1px 2px', borderRadius: 4 }}>
+              {section.title}
+            </span>
+          )}
         </h2>
+        {onDeleteSection && headerHover && !editOrder && (
+          <button onClick={() => {
+            if (confirm(`Sectie '${section.title}' verwijderen (incl. ${section.items.length} items)?`)) onDeleteSection()
+          }} title="Sectie verwijderen"
+            style={{ background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
+        )}
         {editOrder ? (
           <>
             <button onClick={() => onMoveCard(-1)} disabled={isFirstCard} title="Omhoog"
@@ -479,7 +570,10 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
   // rij: boven 't midden → invoegen ervóór, eronder → invoegen erna. Zo
   // kun je een item óók onder de laatste regel laten landen.
   const [dropPos, setDropPos] = useState<'before' | 'after' | null>(null)
-  const draggable = isMember && !editing && !editOrder && typeof dragIdx === 'number' && !!onDragStart
+  // Drag-reorder werkt in álle secties (algemeen én persoonlijk). De
+  // isMember-gate was te beperkend — gebruikers wilden ook in Ideeën,
+  // Komend en eigen categorieën items kunnen schuiven.
+  const draggable = !editing && !editOrder && typeof dragIdx === 'number' && !!onDragStart
 
   // Comment count badge — refreshes when the threads change.
   const [commentCount, setCommentCount] = useState(0)
@@ -920,6 +1014,44 @@ export default function TodosPage() {
     saveSections(next)
   }
 
+  // Drag-reorder van secties: ref houdt bij wélke sectie we slepen, drop op
+  // een andere sectie verschuift hem ervóór (positie van target).
+  const dragSectionRef = useRef<string | null>(null)
+  function dropSectionOn(targetId: string) {
+    const from = dragSectionRef.current
+    dragSectionRef.current = null
+    if (!from || from === targetId) return
+    const next = [...sections]
+    const fromIdx = next.findIndex(s => s.id === from)
+    const toIdx   = next.findIndex(s => s.id === targetId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    setSections(next)
+    saveSections(next)
+  }
+
+  function addSection() {
+    const title = prompt('Naam van de nieuwe sectie?')?.trim()
+    if (!title) return
+    const id = `cat_${Date.now().toString(36)}`
+    const fresh: Section = { id, title, emoji: '📋', items: [] }
+    // Plaats 'm tussen general en personal — net na de laatste niet-member
+    // sectie zodat-ie meteen bovenaan staat in 't 'algemeen' blok.
+    const lastGeneralIdx = sections.map((s, i) => MEMBER_IDS.has(s.id) ? -1 : i).reduce((m, i) => i > m ? i : m, -1)
+    const insertAt = lastGeneralIdx + 1
+    const next = [...sections.slice(0, insertAt), fresh, ...sections.slice(insertAt)]
+    setSections(next)
+    saveSections(next)
+  }
+
+  function deleteSection(id: string) {
+    if (MEMBER_IDS.has(id)) return  // member-secties beschermen
+    const next = sections.filter(s => s.id !== id)
+    setSections(next)
+    saveSections(next)
+  }
+
   const general  = sections.filter(s => !MEMBER_IDS.has(s.id))
   // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
   // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
@@ -946,6 +1078,15 @@ export default function TodosPage() {
           <IconCheckList size={isMobile ? 22 : 28} />
           To do&apos;s
         </h1>
+        <button onClick={addSection}
+          title="Nieuwe sectie aanmaken"
+          style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
+            background: 'var(--bg-card)', color: 'var(--text-secondary)',
+            fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-card)')}>
+          + Nieuwe sectie
+        </button>
         <button onClick={() => setEditOrder(o => !o)}
           style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
             background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
@@ -1008,7 +1149,10 @@ export default function TodosPage() {
                   editOrder={editOrder}
                   isFirstCard={i === 0}
                   isLastCard={i === general.length - 1}
-                  onMoveCard={dir => moveCard(s.id, dir)} />
+                  onMoveCard={dir => moveCard(s.id, dir)}
+                  onDeleteSection={() => deleteSection(s.id)}
+                  onDragStartCard={() => { dragSectionRef.current = s.id }}
+                  onDropOnCard={() => dropSectionOn(s.id)} />
               ))}
             </div>
           </>
@@ -1032,7 +1176,10 @@ export default function TodosPage() {
                   editOrder={editOrder}
                   isFirstCard={i === 0}
                   isLastCard={i === general.length - 1}
-                  onMoveCard={dir => moveCard(s.id, dir)} />
+                  onMoveCard={dir => moveCard(s.id, dir)}
+                  onDeleteSection={() => deleteSection(s.id)}
+                  onDragStartCard={() => { dragSectionRef.current = s.id }}
+                  onDropOnCard={() => dropSectionOn(s.id)} />
               ))}
             </div>
 
@@ -1056,7 +1203,9 @@ export default function TodosPage() {
                   editOrder={editOrder}
                   isFirstCard={i === 0}
                   isLastCard={i === personal.length - 1}
-                  onMoveCard={dir => moveCard(s.id, dir)} />
+                  onMoveCard={dir => moveCard(s.id, dir)}
+                  onDragStartCard={() => { dragSectionRef.current = s.id }}
+                  onDropOnCard={() => dropSectionOn(s.id)} />
               ))}
             </div>
           </>
