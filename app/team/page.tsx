@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import contactsData from '@/data/contacts.json'
 import teamData     from '@/data/team.json'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
@@ -11,6 +12,7 @@ import {
   getContacts, saveContacts, onContactsChange,
   type ContactGroup as StoredGroup,
 } from '@/lib/teamPageStore'
+import { addExtra, removeExtra, listExtras, onTeamUpdate } from '@/lib/teamExtras'
 
 // ─── Contacts types ───────────────────────────────────────────────────────────
 type Contact = { id: string; name: string; role: string; email: string; phone: string }
@@ -355,6 +357,110 @@ function InlineField({ value, placeholder, onSave, style, type = 'text' }: {
   )
 }
 
+// ─── + Lid toevoegen modal ─────────────────────────────────────────────────
+const PALETTE = ['#579bfc','#9c7ee8','#e2445c','#00c875','#ffcb00','#ff7a00','#a25ddc','#26b3a4','#ec6e8b','#7a5af8','#1e8a4e','#1ab0d8']
+
+function slugify(name: string): string {
+  return name.trim().toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || `lid-${Date.now().toString(36)}`
+}
+
+function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [name, setName]   = useState('')
+  const [email, setEmail] = useState('')
+  const [cap, setCap]     = useState('40')
+  const [color, setColor] = useState(PALETTE[Math.floor(Math.random() * PALETTE.length)])
+  const [err, setErr]     = useState<string | null>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { nameRef.current?.focus() }, [])
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  function save() {
+    if (!name.trim()) { setErr('Naam is verplicht'); return }
+    const id = slugify(name)
+    if (teamData.members.some(m => m.id === id)) {
+      setErr(`Er bestaat al een lid met id '${id}'`)
+      return
+    }
+    const weeklyCapacity = Math.max(0, parseFloat(cap) || 0)
+    const ok = addExtra({ id, name: name.trim(), email: email.trim(), weeklyCapacity, color })
+    if (!ok) { setErr('Kon niet toevoegen — id-conflict?'); return }
+    onAdded()
+    onClose()
+  }
+
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9000, backdropFilter: 'blur(4px)' }} />
+      <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 9001,
+        width: 'min(440px, 92vw)', background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Lid toevoegen</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--text-muted)', lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label style={modalLabel}>Naam
+            <input ref={nameRef} value={name} onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') save() }}
+              placeholder="Henk de Vries" style={modalInput} />
+          </label>
+          <label style={modalLabel}>E-mail (optioneel)
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="henk@studioyoko.nl" style={modalInput} />
+          </label>
+          <label style={modalLabel}>Uren per week
+            <input type="number" min="0" step="0.5" value={cap} onChange={e => setCap(e.target.value)}
+              style={modalInput} />
+          </label>
+          <div>
+            <div style={{ ...modalLabel, marginBottom: 6 }}>Kleur</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {PALETTE.map(c => (
+                <button key={c} onClick={() => setColor(c)}
+                  style={{ width: 26, height: 26, borderRadius: 7, background: c,
+                    border: color === c ? '3px solid var(--text-primary)' : '2px solid transparent',
+                    cursor: 'pointer', padding: 0 }} />
+              ))}
+            </div>
+          </div>
+          {err && <p style={{ margin: 0, color: 'var(--red, #e2445c)', fontSize: 12.5 }}>{err}</p>}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              Annuleer
+            </button>
+            <button onClick={save}
+              style={{ flex: 2, padding: '9px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Toevoegen
+            </button>
+          </div>
+        </div>
+      </div>
+    </>,
+    document.body,
+  )
+}
+
+const modalLabel: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600,
+  color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
+}
+const modalInput: React.CSSProperties = {
+  padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border)',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function TeamPage() {
   // Capaciteiten zijn gedeeld met de Planning-pagina via localStorage; we
@@ -373,6 +479,14 @@ export default function TeamPage() {
     return onCapacitiesChange(refresh)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Trigger om de page te herrenderen wanneer iemand een lid toevoegt of
+  // verwijdert via onze /team UI (mutatie op teamData.members gebeurt al
+  // door de store; deze counter zorgt voor de React re-render).
+  const [, bumpRender] = useState(0)
+  useEffect(() => onTeamUpdate(() => bumpRender(x => x + 1)), [])
+  const [addOpen, setAddOpen] = useState(false)
+  const extraIds = new Set(listExtras().map(e => e.id))
 
   // Contacts leven in localStorage (override op data/contacts.json) en
   // worden via een custom event live ge-sync'd binnen dezelfde browser.
@@ -400,20 +514,46 @@ export default function TeamPage() {
 
       {/* ── Yoko team ── */}
       <div style={{ marginBottom: 40 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)', marginBottom: 16 }}>
-          Studio Yoko
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
+            Studio Yoko
+          </div>
+          <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
+          <button onClick={() => setAddOpen(true)}
+            style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border)',
+              background: 'var(--bg-card)', color: 'var(--text-secondary)',
+              fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-card)')}>
+            + Lid toevoegen
+          </button>
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {teamData.members.map(m => (
-            <TeamMemberCard key={m.id} member={m}
-              capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
-              onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
+            <div key={m.id} style={{ position: 'relative' }}>
+              <TeamMemberCard member={m}
+                capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
+                onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
+              {/* Door de UI toegevoegde leden mogen verwijderd worden;
+                  seed-leden uit data/team.json blijven onaantastbaar. */}
+              {extraIds.has(m.id) && (
+                <button onClick={() => {
+                  if (confirm(`'${m.name}' verwijderen?`)) removeExtra(m.id)
+                }} title="Lid verwijderen"
+                  style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.45)', color: '#fff', border: 'none', cursor: 'pointer',
+                    fontSize: 14, lineHeight: 1, padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              )}
+            </div>
           ))}
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
           Hover over een foto om te wijzigen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · je eigen profiel beheer je via de sidebar
         </p>
       </div>
+
+      {addOpen && <AddMemberModal onClose={() => setAddOpen(false)} onAdded={() => bumpRender(x => x + 1)} />}
 
       {/* ── Contacts ── */}
       {groups.length > 0 && (

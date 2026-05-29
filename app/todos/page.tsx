@@ -58,18 +58,16 @@ function loadAllProjects(): ProjectLink[] {
   return out
 }
 
-// Verzamel de open Monday-projecten waar `memberId` eigenaar van is:
-// niet-Google items met status ≠ 'Done'. Wordt gebruikt door de
-// auto-seed van de eigen to-do-sectie zodat nieuwe projecten meteen
-// als te-doen item verschijnen zonder dat de gebruiker ze handmatig
-// hoeft te koppelen.
-// Verzamel ALLE open project-items van de borden (alle niet-Google, niet-
-// Done, niet-past-due items). Geen owner-filter, geen 'lopend'-filter —
-// het auto-seed-mechanisme markeert ze één keer als 'seen' in localStorage,
-// dus verwijdert de user 'm in z'n todo-lijst dan komt-ie niet terug.
-// Past-due items en Done-items vallen er nog steeds buiten zodat alleen
-// actief werk binnenrolt.
-function loadMyOpenProjects(_memberId: string): ProjectLink[] {
+// Verzamel de open Monday-projecten waar `memberId` eigenaar van is.
+// Filters:
+//  - niet-Google (Google events horen niet in todo's, gebruik de agenda)
+//  - status ≠ 'Done' en niet in een 'Done'-groep
+//  - niet voorbij de eind-datum
+//  - memberId moet in ownerIds zitten (echte eigenaar in de agenda)
+// Het auto-seed-mechanisme markeert toegevoegde IDs als 'gezien' in
+// localStorage, dus verwijdert de user 'm in z'n todo-lijst dan komt-ie
+// niet terug.
+function loadMyOpenProjects(memberId: string): ProjectLink[] {
   if (typeof window === 'undefined') return []
   const today = new Date().toISOString().slice(0, 10)
   const out: ProjectLink[] = []
@@ -82,6 +80,7 @@ function loadMyOpenProjects(_memberId: string): ProjectLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
+        if (!Array.isArray(item.ownerIds) || !item.ownerIds.includes(memberId)) continue
         const end = item.endDate ?? item.startDate
         if (end && end < today) continue
         out.push({ board, itemId: item.id, name: item.name })
