@@ -50,6 +50,24 @@ export async function pullAccounts(): Promise<Account[] | null> {
   return (data as Row[]).map(rowToAccount)
 }
 
+// Variant van pullAccounts die ook de fout-informatie teruggeeft. De pagina
+// gebruikt deze om in 't lock-scherm te tonen *waarom* een query faalde —
+// of dat nou RLS, een verlopen JWT of een netwerk-issue is.
+export async function pullAccountsDetailed(): Promise<{
+  rows:    Account[] | null
+  error?:  { message: string; code?: string; hint?: string }
+  noAuth?: boolean
+}> {
+  if (!supabase) return { rows: null, error: { message: 'Supabase niet geconfigureerd' } }
+  if (!await getCurrentUserId()) return { rows: null, noAuth: true }
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('id, account, url, username, password, license_by, position')
+    .order('position', { ascending: true })
+  if (error) return { rows: null, error: { message: error.message, code: error.code, hint: error.hint } }
+  return { rows: (data as Row[] | null ?? []).map(rowToAccount) }
+}
+
 export async function upsertAccount(a: Account, position: number): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
