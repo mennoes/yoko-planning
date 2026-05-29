@@ -863,7 +863,13 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     // vergelijkbaar met de Vrij-rendering hieronder). estHours > 8
     // (multi-day-totalen) cappen we op 8u/dag zodat het blok binnen
     // het 09–18 raster blijft en niet onder de horizon zakt.
-    if (p.estHours > 0 && p.startDate) {
+    //
+    // BELANGRIJK: alleen toepassen op één-dags items. Een meerdaags
+    // project (startDate ≠ endDate) gaat naar de all-day rij waar 't
+    // als één doorlopende balk over de hele range rendert — anders
+    // zou een 40u-project dat van maandag t/m vrijdag loopt als één
+    // 8u-blok op maandag verschijnen i.p.v. uitgesmeerd over de week.
+    if (p.estHours > 0 && p.startDate && (!p.endDate || p.endDate === p.startDate)) {
       const dur = Math.max(0.25, Math.min(8, p.estHours))
       const endH = 9 + Math.floor(dur)
       const endM = Math.round((dur - Math.floor(dur)) * 60)
