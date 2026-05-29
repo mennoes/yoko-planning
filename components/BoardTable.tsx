@@ -25,6 +25,7 @@ import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
+import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -2611,79 +2612,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   )
 }
 
-// ─── Auto-move "Done" items into a dedicated "Done" group ───────────────────
-// Items with status === 'Done' that are currently in a non-Done group get
-// pulled into the Done group (created on first use). Items that are already
-// in the Done group are LEFT ALONE — preserves manually placed items + items
-// imported with localized status labels (e.g. "Klaar").
-//
-// Omgekeerd: items DIE in de Done-groep staan en waarvan de status weer
-// !== 'Done' is gezet, worden teruggestuurd naar hun oorspronkelijke groep
-// (opgeslagen in item.originGroupId bij de heenweg). Bestaat die groep niet
-// meer? Dan landen ze in de eerste niet-Done groep.
-function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
-  const doneIdx   = next.findIndex(g => g.name.toLowerCase() === 'done')
-  const doneGroup = doneIdx >= 0 ? next[doneIdx] : null
-
-  const additions: BoardItem[] = []
-  // Map van itemId → groep waar 'ie heen moet bij terug-uit-Done.
-  const restorations = new Map<string, { item: BoardItem; targetGroupId: string }>()
-
-  let updated = next.map(g => {
-    if (doneGroup && g.id === doneGroup.id) {
-      // In de Done-groep: items waarvan de status NIET meer 'Done' is gaan terug.
-      const keep: BoardItem[] = []
-      for (const i of g.items) {
-        if (i.status !== 'Done') {
-          const originId = (i as { originGroupId?: string }).originGroupId
-          const target = originId && next.some(g2 => g2.id === originId && g2.id !== doneGroup.id)
-            ? originId
-            : (next.find(g2 => g2.id !== doneGroup.id)?.id ?? doneGroup.id)
-          if (target === doneGroup.id) { keep.push(i); continue }
-          const { originGroupId: _drop, ...clean } = i as BoardItem & { originGroupId?: string }
-          void _drop
-          restorations.set(i.id, { item: clean as BoardItem, targetGroupId: target })
-        } else {
-          keep.push(i)
-        }
-      }
-      return keep.length === g.items.length ? g : { ...g, items: keep }
-    }
-    const stay = g.items.filter(i => {
-      if (i.status === 'Done') {
-        // Stempel waar 'ie vandaan kwam zodat we later kunnen terugkeren.
-        const tagged = { ...i, originGroupId: (i as { originGroupId?: string }).originGroupId ?? g.id } as BoardItem
-        additions.push(tagged)
-        return false
-      }
-      return true
-    })
-    return stay.length === g.items.length ? g : { ...g, items: stay }
-  })
-
-  // Pas eventuele restoraties toe — zet items terug in hun originele groep.
-  if (restorations.size > 0) {
-    updated = updated.map(g => {
-      const back = [...restorations.values()].filter(r => r.targetGroupId === g.id).map(r => r.item)
-      if (back.length === 0) return g
-      return { ...g, items: [...g.items, ...back] }
-    })
-  }
-
-  if (additions.length === 0) return restorations.size > 0 ? updated : next
-
-  if (doneGroup) {
-    return updated.map(g =>
-      g.id === doneGroup.id
-        ? { ...g, items: [...g.items, ...additions.filter(a => !g.items.some(b => b.id === a.id))] }
-        : g
-    )
-  }
-  return [...updated, {
-    id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: true,
-    items: additions,
-  }]
-}
+// Auto-move Done items → de helper-functie zit nu in lib/doneAutoMove.ts
+// zodat zowel deze UI-laag als de auto-status sweep 'm gebruiken.
 
 // ─── Periode-filter knop ─ chic pill die RangeCalendar opent ─────────────────
 function PeriodFilterButton({ from, until, color, onChange }: {
