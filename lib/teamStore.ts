@@ -59,12 +59,23 @@ function defaultKindFor(id: string): TeamKind {
 export async function pullTeam(): Promise<TeamMember[] | null> {
   if (!supabase) return null
   if (!await getCurrentUserId()) return null
+  const sel = 'id, name, email, color, weekly_capacity, position, hidden, kind'
   const { data, error } = await supabase
     .from('team_members')
-    .select('id, name, email, color, weekly_capacity, position, hidden, kind')
+    .select(sel)
     .order('position', { ascending: true })
-  if (error || !data) return null
-  return (data as Row[]).map(rowToMember)
+  if (!error && data) return (data as Row[]).map(rowToMember)
+  // Fallback: migratie 0018 niet gedraaid → kolom 'kind' bestaat niet.
+  // Probeer zonder kind zodat de UI alsnog leden toont; kind default
+  // wordt door normalizeKind ('yoko') aangevuld.
+  if (error && /kind/.test(error.message)) {
+    const fb = await supabase
+      .from('team_members')
+      .select('id, name, email, color, weekly_capacity, position, hidden')
+      .order('position', { ascending: true })
+    if (!fb.error && fb.data) return (fb.data as Row[]).map(rowToMember)
+  }
+  return null
 }
 
 export async function upsertTeamMember(m: TeamMember): Promise<{ ok: boolean; error?: string }> {
@@ -132,7 +143,12 @@ export async function ensureTeamSeed(): Promise<void> {
       updated_at:      new Date().toISOString(),
     }))
   if (missing.length === 0) return
-  await supabase.from('team_members').upsert(missing, { onConflict: 'id' })
+  const { error } = await supabase.from('team_members').upsert(missing, { onConflict: 'id' })
+  if (error && /kind/.test(error.message)) {
+    // Migratie 0018 (kind-kolom) nog niet gedraaid → probeer zonder.
+    const sansKind = missing.map(({ kind: _drop, ...rest }) => { void _drop; return rest })
+    await supabase.from('team_members').upsert(sansKind, { onConflict: 'id' })
+  }
 }
 
 export function subscribeRemoteTeam(onChange: () => void): () => void {
