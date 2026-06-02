@@ -688,7 +688,39 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // separate rows. If older syncs created per-instance rows, they'll
     // be missing from seenExt and get cleaned up below.
     seenExt.add(groupKey)
-    const baseName    = sorted[0].summary ?? '(geen titel)'
+    // Recurring rename-detect: Google geeft per instance een eigen summary,
+    // en bij 'rename this and following events' verschilt de oude voorkant
+    // van de nieuwe achterkant. Pak de summary die het VAAKST voorkomt
+    // (modus) — bij gelijke stand wint de meest recente instance. Zo
+    // volgt de bord-naam vanzelf wanneer de gebruiker in Google de hele
+    // reeks een nieuwe titel geeft.
+    const baseName = (() => {
+      const counts = new Map<string, number>()
+      for (const ev of sorted) {
+        const s = (ev.summary ?? '').trim()
+        if (!s) continue
+        counts.set(s, (counts.get(s) ?? 0) + 1)
+      }
+      if (counts.size === 0) return '(geen titel)'
+      // Sort: most-frequent first; tie-breaker = laatste instance met die naam.
+      let best: string | null = null
+      let bestCount = 0
+      let bestRecency = -1
+      for (const [name, count] of counts) {
+        const lastIdx = (() => {
+          for (let i = sorted.length - 1; i >= 0; i--) {
+            if ((sorted[i].summary ?? '').trim() === name) return i
+          }
+          return 0
+        })()
+        if (count > bestCount || (count === bestCount && lastIdx > bestRecency)) {
+          best = name
+          bestCount = count
+          bestRecency = lastIdx
+        }
+      }
+      return best ?? '(geen titel)'
+    })()
     const targetBoard = routeEvent(baseName, fallbackBoard, rules)
     // Doorlopend-group is vervangen door 'Meetings & doorlopend' voor
     // nieuwe rijen (zie keepGroup hieronder).
