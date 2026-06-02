@@ -1230,7 +1230,7 @@ function NotesPreview({ value, onOpen }: { value: string; onOpen: () => void }) 
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete }: {
+function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete, defaultEditName }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
   selected: boolean
   accentColor?: string
@@ -1246,9 +1246,13 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   onMoveUp: () => void
   onMoveDown: () => void
   onUpdate: (u: Partial<BoardItem>) => void; onDelete: () => void
+  // Wanneer true initialiseert de rij in name-edit-modus. Wordt door
+  // 'Voeg item toe' gezet zodat de gebruiker direct kan typen zonder
+  // eerst nog eens op de naam te hoeven klikken.
+  defaultEditName?: boolean
 }) {
   const [hover,     setHover]     = useState(false)
-  const [editName,  setEditName]  = useState(false)
+  const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(item.name)
   const [expanded,  setExpanded]  = useState(false)
   const subitems    = item.subitems ?? []
@@ -1402,6 +1406,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           {editName && item.source !== 'google' ? (
             <input autoFocus value={nameDraft}
               onChange={e => setNameDraft(e.target.value)}
+              onFocus={e => e.currentTarget.select()}
               onBlur={() => { onUpdate({ name: nameDraft }); setEditName(false) }}
               onKeyDown={e => {
                 if (e.key === 'Enter') { onUpdate({ name: nameDraft }); setEditName(false) }
@@ -2203,11 +2208,25 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
         return 0
       })
     : group.items
+  // Onthoud welk item zojuist via 'Voeg item toe' is aangemaakt zodat de
+  // bijbehorende rij direct in name-edit-modus opent (autoFocus + select).
+  // Wordt na het eerste render geconsumeerd zodat een refresh of nieuwe
+  // toevoeging niet stiekem een willekeurig ander item in edit triggert.
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null)
+  useEffect(() => {
+    if (justCreatedId == null) return
+    // Defer een tick zodat de nieuwe BoardRow z'n editName-state heeft
+    // kunnen initialiseren vanuit defaultEditName=true.
+    const t = setTimeout(() => setJustCreatedId(null), 50)
+    return () => clearTimeout(t)
+  }, [justCreatedId])
   function addItem() {
+    const newId = Date.now().toString()
     onUpdateGroup({ ...group, items: [...group.items, {
-      id: Date.now().toString(), name: 'Nieuw item', ownerIds: [], status: '',
+      id: newId, name: 'Nieuw item', ownerIds: [], status: '',
       startDate: null, endDate: null, deadline: null, estHours: 0, dagen: 0,
     }] })
+    setJustCreatedId(newId)
   }
 
   const totHours = group.items.reduce((s, i) => s + effectiveHours(i), 0)
@@ -2582,6 +2601,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   reorderMode={reorderMode}
                   isFirst={realIdx === 0}
                   isLast={realIdx === group.items.length - 1}
+                  defaultEditName={item.id === justCreatedId}
                   onMoveUp={() => moveItem(item.id, -1)}
                   onMoveDown={() => moveItem(item.id, 1)}
                   onUpdate={u => updateItem(item.id, u)} onDelete={() => deleteItem(item.id)} />
