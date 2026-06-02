@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useTeam } from '@/components/TeamContext'
-import { upsertTeamMember, deleteTeamMember, type TeamMember } from '@/lib/teamStore'
+import { upsertTeamMember, deleteTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
 import { useProfile } from '@/components/ProfileContext'
 import { IconUsers } from '@/components/Icon'
 
@@ -27,6 +27,7 @@ export default function TeamAdminPage() {
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState<TeamMember>({
     id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false,
+    kind: 'yoko',
   })
 
   if (!authChecked) return <Shell><p style={{ color: 'var(--text-muted)' }}>Laden…</p></Shell>
@@ -46,7 +47,7 @@ export default function TeamAdminPage() {
     await upsertTeamMember({ ...draft, id, position: pos })
     await refresh()
     setAdding(false)
-    setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false })
+    setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false, kind: 'yoko' })
   }
 
   async function updateField(id: string, patch: Partial<TeamMember>) {
@@ -104,6 +105,21 @@ export default function TeamAdminPage() {
               placeholder="lisa-de-vries"
               style={inputStyle} />
 
+            <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Team</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['yoko', 'freelance'] as TeamKind[]).map(k => (
+                <button key={k} onClick={() => setDraft(d => ({ ...d, kind: k }))}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border)',
+                    background: draft.kind === k ? 'var(--accent)' : 'transparent',
+                    color: draft.kind === k ? '#fff' : 'var(--text-secondary)',
+                    fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                  }}>
+                  {k === 'yoko' ? 'Studio Yoko' : 'Freelance'}
+                </button>
+              ))}
+            </div>
+
             <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Email</label>
             <input value={draft.email}
               onChange={e => setDraft(d => ({ ...d, email: e.target.value }))}
@@ -140,23 +156,42 @@ export default function TeamAdminPage() {
         </div>
       )}
 
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '32px 1.4fr 1.6fr 1fr 90px 120px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
-          <span></span>
-          <span>Naam</span>
-          <span>Email</span>
-          <span>Id</span>
-          <span>Uren/wk</span>
-          <span>Status</span>
-          <span></span>
-        </div>
-        {[...members].sort((a, b) => a.position - b.position).map(m => (
-          <Row key={m.id} member={m}
-            onChange={patch => updateField(m.id, patch)}
-            onDelete={() => remove(m.id)}
-            onToggleHidden={() => toggleHidden(m.id)} />
-        ))}
-      </div>
+      {(() => {
+        const sorted = [...members].sort((a, b) => a.position - b.position)
+        const yoko       = sorted.filter(m => m.kind === 'yoko' && m.id !== 'unassigned')
+        const freelance  = sorted.filter(m => m.kind === 'freelance' && m.id !== 'unassigned')
+        const unassigned = sorted.filter(m => m.id === 'unassigned' || m.kind === 'unassigned')
+        const renderSection = (label: string, rows: TeamMember[]) => rows.length === 0 ? null : (
+          <div key={label} style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, padding: '0 2px' }}>{label} · {rows.length}</div>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '32px 1.3fr 1.5fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+                <span></span>
+                <span>Naam</span>
+                <span>Email</span>
+                <span>Id</span>
+                <span>Uren/wk</span>
+                <span>Team</span>
+                <span>Status</span>
+                <span></span>
+              </div>
+              {rows.map(m => (
+                <Row key={m.id} member={m}
+                  onChange={patch => updateField(m.id, patch)}
+                  onDelete={() => remove(m.id)}
+                  onToggleHidden={() => toggleHidden(m.id)} />
+              ))}
+            </div>
+          </div>
+        )
+        return (
+          <>
+            {renderSection('Studio Yoko', yoko)}
+            {renderSection('Freelance', freelance)}
+            {renderSection('Systeem', unassigned)}
+          </>
+        )
+      })()}
     </Shell>
   )
 }
@@ -176,7 +211,7 @@ function Row({ member, onChange, onDelete, onToggleHidden }: {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '32px 1.4fr 1.6fr 1fr 90px 120px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-light)', alignItems: 'center', opacity: member.hidden ? 0.55 : 1 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '32px 1.3fr 1.5fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-light)', alignItems: 'center', opacity: member.hidden ? 0.55 : 1 }}>
       <button title="Kleur wijzigen"
         onClick={() => {
           const c = window.prompt('Hex-kleur (bv #579bfc):', member.color)
@@ -190,6 +225,13 @@ function Row({ member, onChange, onDelete, onToggleHidden }: {
         onBlur={() => blurField('weeklyCapacity', parseFloat(hours) || 0, member.weeklyCapacity)}
         type="number" min={0} max={80} step={4}
         style={{ ...cellInput, width: 70 }} />
+      <select value={member.kind} disabled={member.id === 'unassigned'}
+        onChange={e => onChange({ kind: e.target.value as TeamKind })}
+        style={{ ...cellInput, padding: '4px 6px', cursor: member.id === 'unassigned' ? 'not-allowed' : 'pointer' }}>
+        <option value="yoko">Studio Yoko</option>
+        <option value="freelance">Freelance</option>
+        <option value="unassigned">Systeem</option>
+      </select>
       <button onClick={onToggleHidden}
         title={member.hidden ? 'Lid is verborgen — klik om weer zichtbaar te maken' : 'Lid is zichtbaar — klik om te verbergen (blijft bestaan)'}
         style={{

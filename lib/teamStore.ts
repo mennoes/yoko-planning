@@ -7,6 +7,8 @@ import { supabase } from './supabase'
 import teamData from '@/data/team.json'
 import { getCurrentUserId } from './sync'
 
+export type TeamKind = 'yoko' | 'freelance' | 'unassigned'
+
 export type TeamMember = {
   id:              string
   name:            string
@@ -15,6 +17,7 @@ export type TeamMember = {
   weeklyCapacity:  number
   position:        number
   hidden:          boolean
+  kind:            TeamKind
 }
 
 type Row = {
@@ -25,6 +28,12 @@ type Row = {
   weekly_capacity: number | null
   position:        number | null
   hidden:          boolean | null
+  kind:            string | null
+}
+
+function normalizeKind(k: string | null | undefined): TeamKind {
+  if (k === 'freelance' || k === 'unassigned') return k
+  return 'yoko'
 }
 
 function rowToMember(r: Row): TeamMember {
@@ -36,7 +45,15 @@ function rowToMember(r: Row): TeamMember {
     weeklyCapacity: Number(r.weekly_capacity ?? 0),
     position:       Number(r.position ?? 0),
     hidden:         !!r.hidden,
+    kind:           normalizeKind(r.kind),
   }
+}
+
+const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+function defaultKindFor(id: string): TeamKind {
+  if (id === 'unassigned') return 'unassigned'
+  if (YOKO_IDS.has(id))    return 'yoko'
+  return 'freelance'
 }
 
 export async function pullTeam(): Promise<TeamMember[] | null> {
@@ -44,7 +61,7 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
   if (!await getCurrentUserId()) return null
   const { data, error } = await supabase
     .from('team_members')
-    .select('id, name, email, color, weekly_capacity, position, hidden')
+    .select('id, name, email, color, weekly_capacity, position, hidden, kind')
     .order('position', { ascending: true })
   if (error || !data) return null
   return (data as Row[]).map(rowToMember)
@@ -61,6 +78,7 @@ export async function upsertTeamMember(m: TeamMember): Promise<boolean> {
     weekly_capacity: m.weeklyCapacity,
     position:        m.position,
     hidden:          m.hidden,
+    kind:            m.kind,
     updated_at:      new Date().toISOString(),
   }, { onConflict: 'id' })
   return !error
@@ -88,6 +106,7 @@ export async function ensureTeamSeed(): Promise<void> {
     weekly_capacity: m.weeklyCapacity ?? 0,
     position:        i,
     hidden:          false,
+    kind:            defaultKindFor(m.id),
     updated_at:      new Date().toISOString(),
   }))
   if (seedRows.length === 0) return
@@ -114,5 +133,6 @@ export function fallbackTeam(): TeamMember[] {
       weeklyCapacity: m.weeklyCapacity ?? 0,
       position:       i,
       hidden:         false,
+      kind:           defaultKindFor(m.id),
     }))
 }

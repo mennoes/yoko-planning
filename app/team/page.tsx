@@ -2,8 +2,10 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import contactsData from '@/data/contacts.json'
 import teamData     from '@/data/team.json'
+import { useTeam }  from '@/components/TeamContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
 import { IconUsers, IconSearch } from '@/components/Icon'
@@ -463,6 +465,9 @@ const modalInput: React.CSSProperties = {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function TeamPage() {
+  // Live team-leden uit Supabase voor de kind-indeling (yoko/freelance).
+  // Bij ontbreken vallen we terug op YOKO_IDS-set; zie de render hieronder.
+  const { members: liveMembers } = useTeam()
   // Capaciteiten zijn gedeeld met de Planning-pagina via localStorage; we
   // luisteren ook live mee zodat een aanpassing in Planning hier direct
   // doorkomt (en andersom).
@@ -528,14 +533,26 @@ export default function TeamPage() {
             + Lid toevoegen
           </button>
         </div>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          {teamData.members.map(m => (
+        {(() => {
+          // Kind per id ophalen uit Supabase-tabel (team_members.kind). Voor
+          // teamExtras-toegevoegde leden die nog niet in /team-admin gezet
+          // zijn, vallen we terug op de YOKO_IDS-set zodat 'freelance' het
+          // default-bucket wordt.
+          const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+          const kindOf = (id: string): 'yoko' | 'freelance' | 'unassigned' => {
+            const fromDb = liveMembers.find(lm => lm.id === id)?.kind
+            if (fromDb) return fromDb
+            if (id === 'unassigned') return 'unassigned'
+            return YOKO_IDS.has(id) ? 'yoko' : 'freelance'
+          }
+          const yokoCards = teamData.members.filter(m => kindOf(m.id) === 'yoko')
+          const freeCards = teamData.members.filter(m => kindOf(m.id) === 'freelance')
+
+          const renderCard = (m: typeof teamData.members[number]) => (
             <div key={m.id} style={{ position: 'relative' }}>
               <TeamMemberCard member={m}
                 capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
                 onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
-              {/* Door de UI toegevoegde leden mogen verwijderd worden;
-                  seed-leden uit data/team.json blijven onaantastbaar. */}
               {extraIds.has(m.id) && (
                 <button onClick={() => {
                   if (confirm(`'${m.name}' verwijderen?`)) removeExtra(m.id)
@@ -546,10 +563,31 @@ export default function TeamPage() {
                     display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               )}
             </div>
-          ))}
-        </div>
+          )
+
+          return (
+            <>
+              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
+                Studio Yoko · {yokoCards.length}
+              </div>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+                {yokoCards.map(renderCard)}
+              </div>
+              {freeCards.length > 0 && (
+                <>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
+                    Freelance · {freeCards.length}
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    {freeCards.map(renderCard)}
+                  </div>
+                </>
+              )}
+            </>
+          )
+        })()}
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
-          Hover over een foto om te wijzigen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · je eigen profiel beheer je via de sidebar
+          Hover over een foto om te wijzigen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · indeling Yoko/Freelance wijzig je via <Link href="/team-admin" style={{ color: 'var(--accent)' }}>Team beheren</Link>
         </p>
       </div>
 
