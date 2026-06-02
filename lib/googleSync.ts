@@ -439,7 +439,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const self = ev.attendees?.find(a => a.self)
     if (self?.responseStatus === 'declined') return false
     const { start } = eventDates(ev)
-    return !!start
+    if (!start) return false
+    // FILTER: alleen meetings (2+ attendees) en Vrij/vakantie-events
+    // komen in het systeem. Solo blok-events ('Tijd voor mezelf',
+    // 'Focus tijd', etc.) zijn niet zinvol voor team-planning en
+    // maken het overzicht alleen vol. Vrij-events blijven omdat ze
+    // afwezigheid signaleren.
+    const attendeeCount = (ev.attendees ?? []).length
+    if (attendeeCount >= 2) return true
+    if (isVrijTitle(ev.summary ?? '')) return true
+    return false
   })
   const groupedByRec = new Map<string, GoogleEvent[]>()
   for (const ev of validEvents) {
