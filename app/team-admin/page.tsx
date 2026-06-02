@@ -82,9 +82,17 @@ export default function TeamAdminPage() {
       return
     }
     const pos = Math.max(0, ...members.map(m => m.position)) + 1
-    await upsertTeamMember({ ...draft, id, position: pos })
+    const email = draft.email.trim()
+    await upsertTeamMember({ ...draft, id, position: pos, email })
     await refresh()
     setAdding(false)
+    // Direct ook een Supabase auth-invite versturen zodat de nieuwe persoon
+    // meteen kan inloggen, zonder dat de admin nog naar het Supabase
+    // dashboard hoeft. Alleen wanneer er een email staat én 't lid niet
+    // 'systeem' is.
+    if (email && draft.kind !== 'unassigned') {
+      sendInvite(email, draft.name).catch(() => {})
+    }
     setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false, kind: 'yoko' })
   }
 
@@ -144,10 +152,11 @@ export default function TeamAdminPage() {
   return (
     <Shell>
       <div style={{ marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0, maxWidth: 540, lineHeight: 1.5 }}>
-          Hier voeg je nieuwe teamleden toe of werk je gegevens van bestaande leden bij. Wijzigingen syncen
-          direct over alle apparaten. <strong>Een nieuw lid moet daarnaast ook een Supabase auth-account
-          krijgen</strong> (Supabase dashboard → Authentication → Users → Add user) zodat ze kunnen inloggen.
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0, maxWidth: 580, lineHeight: 1.5 }}>
+          Voeg hier nieuwe teamleden toe of werk gegevens van bestaande leden bij. Bij een nieuw lid
+          met email gaat automatisch een invite-mail uit — die persoon klikt de link, kiest een
+          wachtwoord, en kan inloggen. Voor bestaande leden kun je met de <strong>✉ Invite</strong>
+          knop opnieuw een login-link sturen.
         </p>
         <button onClick={() => setAdding(a => !a)}
           style={{

@@ -91,26 +91,33 @@ export async function deleteTeamMember(id: string): Promise<boolean> {
   return !error
 }
 
-// Eerste-run-seed: kopieer data/team.json naar Supabase als de tabel leeg
-// is. Idempotent — bij bestaande rijen doet 'ie niets.
+// Seed-helper: vult team_members aan met leden uit data/team.json die er
+// nog niet in staan. Idempotent — bestaande rijen behouden hun huidige
+// kind/email/foto/kleur; alleen écht ontbrekende ids krijgen een
+// default-rij. Eerdere versie bailde uit zodra de tabel óók maar één
+// rij had (bv. de unassigned-placeholder), waardoor het hele Yoko-crew
+// nooit verscheen. Nu vergelijken we per-id.
 export async function ensureTeamSeed(): Promise<void> {
   if (!supabase) return
   if (!await getCurrentUserId()) return
-  const { data } = await supabase.from('team_members').select('id').limit(1)
-  if (data && data.length > 0) return
-  const seedRows = (teamData.members as Array<{ id: string; name: string; email?: string; color?: string; weeklyCapacity?: number }>).map((m, i) => ({
-    id:              m.id,
-    name:            m.name,
-    email:           m.email ?? '',
-    color:           m.color ?? '#9aadbd',
-    weekly_capacity: m.weeklyCapacity ?? 0,
-    position:        i,
-    hidden:          false,
-    kind:            defaultKindFor(m.id),
-    updated_at:      new Date().toISOString(),
-  }))
-  if (seedRows.length === 0) return
-  await supabase.from('team_members').upsert(seedRows, { onConflict: 'id' })
+  const { data } = await supabase.from('team_members').select('id')
+  const existing = new Set((data as { id: string }[] | null)?.map(r => r.id) ?? [])
+  const seedSource = teamData.members as Array<{ id: string; name: string; email?: string; color?: string; weeklyCapacity?: number }>
+  const missing = seedSource
+    .filter(m => !existing.has(m.id))
+    .map((m, i) => ({
+      id:              m.id,
+      name:            m.name,
+      email:           m.email ?? '',
+      color:           m.color ?? '#9aadbd',
+      weekly_capacity: m.weeklyCapacity ?? 0,
+      position:        existing.size + i,
+      hidden:          false,
+      kind:            defaultKindFor(m.id),
+      updated_at:      new Date().toISOString(),
+    }))
+  if (missing.length === 0) return
+  await supabase.from('team_members').upsert(missing, { onConflict: 'id' })
 }
 
 export function subscribeRemoteTeam(onChange: () => void): () => void {
