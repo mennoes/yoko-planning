@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useTeam } from '@/components/TeamContext'
 import { upsertTeamMember, deleteTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
 import { useProfile } from '@/components/ProfileContext'
@@ -21,10 +21,14 @@ function slugify(name: string): string {
     .replace(/-+/g, '-')
 }
 
+type FilterKind = 'all' | 'yoko' | 'freelance' | 'unassigned' | 'hidden'
+
 export default function TeamAdminPage() {
   const { isAuthenticated, authChecked } = useProfile()
   const { members, refresh } = useTeam()
   const [adding, setAdding] = useState(false)
+  const [filter, setFilter] = useState<FilterKind>('all')
+  const dragFromRef = useRef<string | null>(null)
   const [draft, setDraft] = useState<TeamMember>({
     id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false,
     kind: 'yoko',
@@ -68,6 +72,38 @@ export default function TeamAdminPage() {
     const current = members.find(m => m.id === id)
     if (!current) return
     await upsertTeamMember({ ...current, hidden: !current.hidden })
+    await refresh()
+  }
+
+  // Drop a member onto another: reorder + (eventueel) kind-overgang
+  // wanneer je over een ander team-sectie heen sleept. Resterende leden
+  // krijgen opnieuw oplopende position-indices zodat sortering schoon
+  // blijft. Pusht alle gewijzigde rijen parallel.
+  async function reorderDrop(fromId: string, targetId: string, targetKind: TeamKind) {
+    if (fromId === targetId) return
+    const from = members.find(m => m.id === fromId)
+    const target = members.find(m => m.id === targetId)
+    if (!from || !target) return
+
+    const sorted = [...members].sort((a, b) => a.position - b.position)
+    const without = sorted.filter(m => m.id !== fromId)
+    const targetIdx = without.findIndex(m => m.id === targetId)
+    if (targetIdx < 0) return
+    // Insert het gesleepte item NA de target (klassieke 'drop after' gevoel).
+    const reordered = [
+      ...without.slice(0, targetIdx + 1),
+      { ...from, kind: targetKind },
+      ...without.slice(targetIdx + 1),
+    ]
+    // Verzamel alle leden waarvan position of kind veranderd is, push parallel.
+    const updates = reordered
+      .map((m, i) => ({ ...m, position: i }))
+      .filter((m, i) => {
+        const original = members.find(o => o.id === m.id)
+        if (!original) return true
+        return original.position !== i || original.kind !== m.kind
+      })
+    await Promise.all(updates.map(u => upsertTeamMember(u)))
     await refresh()
   }
 
@@ -156,16 +192,47 @@ export default function TeamAdminPage() {
         </div>
       )}
 
+      {/* Filter-pills: snel switchen tussen team-groepen. Verberg-toggle
+          per lid blijft beschikbaar; deze pills bepalen alleen welke
+          secties in de tabel zichtbaar zijn. */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        {([
+          { id: 'all',         label: 'Alle leden' },
+          { id: 'yoko',        label: 'Studio Yoko' },
+          { id: 'freelance',   label: 'Freelance' },
+          { id: 'unassigned',  label: 'Systeem' },
+          { id: 'hidden',      label: 'Verborgen' },
+        ] as { id: FilterKind; label: string }[]).map(p => {
+          const active = filter === p.id
+          return (
+            <button key={p.id} onClick={() => setFilter(p.id)}
+              style={{
+                padding: '5px 12px', borderRadius: 999,
+                border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+                background: active ? 'var(--accent)' : 'var(--bg-card)',
+                color: active ? '#fff' : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}>{p.label}</button>
+          )
+        })}
+      </div>
+
       {(() => {
         const sorted = [...members].sort((a, b) => a.position - b.position)
-        const yoko       = sorted.filter(m => m.kind === 'yoko' && m.id !== 'unassigned')
-        const freelance  = sorted.filter(m => m.kind === 'freelance' && m.id !== 'unassigned')
+        const yoko       = sorted.filter(m => m.kind === 'yoko' && m.id !== 'unassigned' && (filter === 'hidden' ? m.hidden : !m.hidden))
+        const freelance  = sorted.filter(m => m.kind === 'freelance' && m.id !== 'unassigned' && (filter === 'hidden' ? m.hidden : !m.hidden))
         const unassigned = sorted.filter(m => m.id === 'unassigned' || m.kind === 'unassigned')
-        const renderSection = (label: string, rows: TeamMember[]) => rows.length === 0 ? null : (
+
+        const showYoko       = filter === 'all' || filter === 'yoko'       || filter === 'hidden'
+        const showFreelance  = filter === 'all' || filter === 'freelance'  || filter === 'hidden'
+        const showSysteem    = filter === 'all' || filter === 'unassigned'
+
+        const renderSection = (label: string, rows: TeamMember[], sectionKind: TeamKind) => rows.length === 0 ? null : (
           <div key={label} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, padding: '0 2px' }}>{label} · {rows.length}</div>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '32px 1.3fr 1.5fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+                <span></span>
                 <span></span>
                 <span>Naam</span>
                 <span>Email</span>
@@ -179,16 +246,25 @@ export default function TeamAdminPage() {
                 <Row key={m.id} member={m}
                   onChange={patch => updateField(m.id, patch)}
                   onDelete={() => remove(m.id)}
-                  onToggleHidden={() => toggleHidden(m.id)} />
+                  onToggleHidden={() => toggleHidden(m.id)}
+                  onDragStart={() => { dragFromRef.current = m.id }}
+                  onDropOn={() => {
+                    const from = dragFromRef.current
+                    if (!from) return
+                    dragFromRef.current = null
+                    reorderDrop(from, m.id, sectionKind)
+                  }}
+                  onDragEnd={() => { dragFromRef.current = null }}
+                />
               ))}
             </div>
           </div>
         )
         return (
           <>
-            {renderSection('Studio Yoko', yoko)}
-            {renderSection('Freelance', freelance)}
-            {renderSection('Systeem', unassigned)}
+            {showYoko       && renderSection('Studio Yoko', yoko,      'yoko')}
+            {showFreelance  && renderSection('Freelance',   freelance, 'freelance')}
+            {showSysteem    && renderSection('Systeem',     unassigned,'unassigned')}
           </>
         )
       })()}
@@ -196,12 +272,17 @@ export default function TeamAdminPage() {
   )
 }
 
-function Row({ member, onChange, onDelete, onToggleHidden }: {
+function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn, onDragEnd }: {
   member: TeamMember
   onChange: (patch: Partial<TeamMember>) => void
   onDelete: () => void
   onToggleHidden: () => void
+  onDragStart?: () => void
+  onDropOn?:    () => void
+  onDragEnd?:   () => void
 }) {
+  const [dropHover, setDropHover] = useState(false)
+  const draggable = member.id !== 'unassigned'
   const [name,  setName]  = useState(member.name)
   const [email, setEmail] = useState(member.email)
   const [hours, setHours] = useState(String(member.weeklyCapacity))
@@ -211,7 +292,39 @@ function Row({ member, onChange, onDelete, onToggleHidden }: {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '32px 1.3fr 1.5fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-light)', alignItems: 'center', opacity: member.hidden ? 0.55 : 1 }}>
+    <div
+      draggable={draggable}
+      onDragStart={e => {
+        if (!draggable || !onDragStart) return
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('application/x-yoko-team-member', member.id)
+        onDragStart()
+      }}
+      onDragEnter={e => {
+        if (!onDropOn) return
+        if (!e.dataTransfer.types.includes('application/x-yoko-team-member')) return
+        setDropHover(true)
+      }}
+      onDragOver={e => {
+        if (!onDropOn) return
+        if (!e.dataTransfer.types.includes('application/x-yoko-team-member')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }}
+      onDragLeave={() => setDropHover(false)}
+      onDrop={e => {
+        setDropHover(false)
+        if (!onDropOn) return
+        e.preventDefault()
+        onDropOn()
+      }}
+      onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
+      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
+        borderBottom: dropHover ? '2px solid var(--accent)' : '1px solid var(--border-light)',
+        background: dropHover ? 'var(--accent-light)' : 'transparent',
+        cursor: draggable ? 'grab' : 'default',
+        transition: 'background 0.1s' }}>
+      <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, userSelect: 'none', textAlign: 'center' }}>⋮⋮</span>
       <button title="Kleur wijzigen"
         onClick={() => {
           const c = window.prompt('Hex-kleur (bv #579bfc):', member.color)

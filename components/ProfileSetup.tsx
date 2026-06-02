@@ -3,11 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import teamData from '@/data/team.json'
 import { useProfile } from './ProfileContext'
+import { useTeam } from './TeamContext'
 import { supabase } from '@/lib/supabase'
 import { getCurrentUserId } from '@/lib/sync'
 import type { UserProfile } from '@/lib/profile'
-
-const MEMBERS = teamData.members
 const PREVIEW = 200   // crop-circle diameter px
 const OUTPUT  = 240   // saved avatar px
 
@@ -219,9 +218,16 @@ function InitialsAvatar({ name, color, size = 80 }: { name: string; color: strin
 // ─── Main setup modal ─────────────────────────────────────────────────────────
 export default function ProfileSetup() {
   const { profile, setProfile, needsSetup, editOpen, closeEdit } = useProfile()
+  const { members: liveTeam } = useTeam()
   const isVisible = needsSetup || editOpen
 
-  const [selected, setSelected] = useState<typeof MEMBERS[0] | null>(
+  // Members-list: prefer live Supabase team_members (zo zien admin-toegevoegde
+  // gebruikers zoals 'Manuel' zichzelf óók als optie), met data/team.json
+  // als laatste fallback voor verse installs of offline.
+  type SimpleMember = { id: string; name: string; color?: string; hidden?: boolean }
+  const MEMBERS: SimpleMember[] = (liveTeam.length > 0 ? liveTeam : teamData.members) as SimpleMember[]
+
+  const [selected, setSelected] = useState<SimpleMember | null>(
     profile ? (MEMBERS.find(m => m.id === profile.memberId) ?? null) : null
   )
   const [photoSrc,   setPhotoSrc]   = useState<string | null>(null)   // raw uploaded file
@@ -248,7 +254,9 @@ export default function ProfileSetup() {
     return () => { cancelled = true }
   }, [isVisible])
 
-  const visibleMembers = MEMBERS.filter(m => !takenIds.has(m.id) || m.id === profile?.memberId)
+  const visibleMembers = MEMBERS
+    .filter(m => m.id !== 'unassigned' && !m.hidden)
+    .filter(m => !takenIds.has(m.id) || m.id === profile?.memberId)
 
   // Reset state when reopened in edit mode
   useEffect(() => {
@@ -281,7 +289,7 @@ export default function ProfileSetup() {
     const p: UserProfile = {
       memberId: selected.id,
       name:     selected.name,
-      color:    selected.color,
+      color:    selected.color ?? '#9aadbd',
       photo:    savedPhoto,
     }
     setProfile(p)
