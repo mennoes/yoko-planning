@@ -372,11 +372,14 @@ function slugify(name: string): string {
 }
 
 function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const { members: liveMembers, refresh: refreshTeam } = useTeam()
   const [name, setName]   = useState('')
   const [email, setEmail] = useState('')
   const [cap, setCap]     = useState('40')
   const [color, setColor] = useState(PALETTE[Math.floor(Math.random() * PALETTE.length)])
+  const [kind, setKind]   = useState<'yoko' | 'freelance'>('yoko')
   const [err, setErr]     = useState<string | null>(null)
+  const [busy, setBusy]   = useState(false)
   const nameRef = useRef<HTMLInputElement>(null)
   useEffect(() => { nameRef.current?.focus() }, [])
   useEffect(() => {
@@ -385,17 +388,49 @@ function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  function save() {
+  async function save() {
+    if (busy) return
     if (!name.trim()) { setErr('Naam is verplicht'); return }
     const id = slugify(name)
-    if (teamData.members.some(m => m.id === id)) {
+    const conflict =
+      teamData.members.some(m => m.id === id) ||
+      liveMembers.some(m => m.id === id)
+    if (conflict) {
       setErr(`Er bestaat al een lid met id '${id}'`)
       return
     }
+    setBusy(true)
     const weeklyCapacity = Math.max(0, parseFloat(cap) || 0)
-    const ok = addExtra({ id, name: name.trim(), email: email.trim(), weeklyCapacity, color })
-    if (!ok) { setErr('Kon niet toevoegen — id-conflict?'); return }
+    // Pushen naar Supabase team_members tabel (dezelfde bron als
+    // /team-admin) zodat alles consistent op één plek leeft.
+    const pos = Math.max(0, ...liveMembers.map(m => m.position)) + 1
+    const { upsertTeamMember } = await import('@/lib/teamStore')
+    const ok = await upsertTeamMember({
+      id, name: name.trim(), email: email.trim(),
+      color, weeklyCapacity, position: pos, hidden: false, kind,
+    })
+    if (!ok) { setErr('Opslaan mislukt — probeer opnieuw'); setBusy(false); return }
+    await refreshTeam()
+    // Stuur direct ook een Supabase auth-invite uit zodat de nieuwe
+    // persoon meteen kan inloggen. Faalt stil — admin kan later via
+    // de ✉ Invite knop op /team-admin opnieuw versturen.
+    const inviteEmail = email.trim()
+    if (inviteEmail) {
+      try {
+        const { supabase } = await import('@/lib/supabase')
+        const sess = await supabase?.auth.getSession()
+        const token = sess?.data.session?.access_token
+        if (token) {
+          await fetch('/api/team/invite', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: inviteEmail, name: name.trim() }),
+          })
+        }
+      } catch { /* ignore */ }
+    }
     onAdded()
+    setBusy(false)
     onClose()
   }
 
@@ -417,7 +452,25 @@ function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
               onKeyDown={e => { if (e.key === 'Enter') save() }}
               placeholder="Henk de Vries" style={modalInput} />
           </label>
-          <label style={modalLabel}>E-mail (optioneel)
+          <div>
+            <div style={{ ...modalLabel, marginBottom: 6 }}>Team</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {([
+                { id: 'yoko',      label: 'Studio Yoko' },
+                { id: 'freelance', label: 'Freelance'   },
+              ] as { id: 'yoko' | 'freelance'; label: string }[]).map(opt => (
+                <button key={opt.id} onClick={() => setKind(opt.id)}
+                  style={{
+                    flex: 1, padding: '8px 12px', borderRadius: 7,
+                    border: '1px solid ' + (kind === opt.id ? 'var(--accent)' : 'var(--border)'),
+                    background: kind === opt.id ? 'var(--accent)' : 'transparent',
+                    color: kind === opt.id ? '#fff' : 'var(--text-secondary)',
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}>{opt.label}</button>
+              ))}
+            </div>
+          </div>
+          <label style={modalLabel}>E-mail (verstuurt invite zodat ze kunnen inloggen)
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
               placeholder="henk@studioyoko.nl" style={modalInput} />
           </label>
@@ -442,9 +495,9 @@ function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
             <button onClick={onClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               Annuleer
             </button>
-            <button onClick={save}
-              style={{ flex: 2, padding: '9px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-              Toevoegen
+            <button onClick={save} disabled={busy}
+              style={{ flex: 2, padding: '9px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', fontSize: 13, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1 }}>
+              {busy ? 'Bezig…' : 'Toevoegen'}
             </button>
           </div>
         </div>
@@ -534,21 +587,35 @@ export default function TeamPage() {
           </button>
         </div>
         {(() => {
-          // Kind per id ophalen uit Supabase-tabel (team_members.kind). Voor
-          // teamExtras-toegevoegde leden die nog niet in /team-admin gezet
-          // zijn, vallen we terug op de YOKO_IDS-set zodat 'freelance' het
-          // default-bucket wordt.
+          // Bron-lijst: live team_members uit Supabase aangevuld met
+          // teamData.members die nog niet in de DB staan (legacy/fallback).
+          // Resultaat: alles wat via /team-admin OF de + Lid toevoegen-modal
+          // is aangemaakt verschijnt hier zonder redeploy.
           const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+          type Card = { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }
+          const seen = new Set<string>()
+          const all: Card[] = []
+          for (const m of liveMembers) {
+            if (m.hidden) continue
+            if (m.id === 'unassigned') continue
+            seen.add(m.id)
+            all.push({ id: m.id, name: m.name, color: m.color, email: m.email, weeklyCapacity: m.weeklyCapacity })
+          }
+          for (const m of teamData.members) {
+            if (seen.has(m.id) || m.id === 'unassigned') continue
+            seen.add(m.id)
+            all.push({ id: m.id, name: m.name, color: m.color, email: m.email, weeklyCapacity: m.weeklyCapacity })
+          }
           const kindOf = (id: string): 'yoko' | 'freelance' | 'unassigned' => {
             const fromDb = liveMembers.find(lm => lm.id === id)?.kind
             if (fromDb) return fromDb
             if (id === 'unassigned') return 'unassigned'
             return YOKO_IDS.has(id) ? 'yoko' : 'freelance'
           }
-          const yokoCards = teamData.members.filter(m => kindOf(m.id) === 'yoko')
-          const freeCards = teamData.members.filter(m => kindOf(m.id) === 'freelance')
+          const yokoCards = all.filter(m => kindOf(m.id) === 'yoko')
+          const freeCards = all.filter(m => kindOf(m.id) === 'freelance')
 
-          const renderCard = (m: typeof teamData.members[number]) => (
+          const renderCard = (m: Card) => (
             <div key={m.id} style={{ position: 'relative' }}>
               <TeamMemberCard member={m}
                 capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
