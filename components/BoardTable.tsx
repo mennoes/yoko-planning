@@ -325,7 +325,16 @@ function ShareButton({ boardId, isMobile }: { boardId: string; isMobile: boolean
 function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
   const { profile }    = useProfile()
   const { getPhoto }   = useTeamPhotos()
-  const m = teamData.members.find(t => t.id === id)
+  const { members: liveTeam } = useTeam()
+  // Eerst kijken in live team_members (Supabase), valt terug op
+  // data/team.json voor pre-migratie / legacy ids. Zonder deze
+  // dual-lookup verscheen 'r geen avatar voor leden die alleen via
+  // /team-admin zijn toegevoegd (zoals Manuel).
+  const liveMember = liveTeam.find(t => t.id === id)
+  const seedMember = teamData.members.find(t => t.id === id)
+  const m = liveMember
+    ? { id: liveMember.id, name: liveMember.name, color: liveMember.color }
+    : seedMember
   if (!m) return null
   const isMe    = profile?.memberId === id
   const photo   = isMe ? (profile?.photo ?? getPhoto(id)) : getPhoto(id)
