@@ -149,6 +149,10 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   }))
 
   if (groups.length === 0) return false  // remote is empty — keep local fallback
+  // Stempel de tijd waarop we de remote-staat hebben gezien. pushBoard-
+  // ToRemote gebruikt die als cutoff voor stale-deletes — rijen NA deze
+  // tijd toegevoegd door anderen worden niet stilzwijgend verwijderd.
+  writeLastSync(boardName)
   const serialized = JSON.stringify(groups)
   if (localStorage.getItem(key(boardName)) === serialized) return true  // no change
   localStorage.setItem(key(boardName), serialized)
@@ -193,9 +197,36 @@ function itemToRow(boardName: string, groupId: string, position: number, item: B
   }
 }
 
+function lastSyncKey(board: string): string { return `yoko-board-last-sync:${board}` }
+function readLastSync(board: string): number {
+  if (typeof window === 'undefined') return 0
+  const v = parseInt(window.localStorage.getItem(lastSyncKey(board)) ?? '', 10)
+  return Number.isFinite(v) ? v : 0
+}
+function writeLastSync(board: string): void {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(lastSyncKey(board), String(Date.now())) } catch {}
+}
+
 export async function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
+
+  // SAFETY GUARD #1 — als de lokale state verdacht leeg is (geen groepen
+  // EN geen items) maar de remote NIET, weigeren we de push. Dat is bijna
+  // altijd een stale localStorage van een verse login die anders alle
+  // bestaande data zou wegvegen via de reconcile-deletie hieronder.
+  const totalLocalItems = groups.reduce((s, g) => s + g.items.length, 0)
+  if (groups.length === 0 && totalLocalItems === 0) {
+    const { count: remoteCount } = await supabase
+      .from('board_groups').select('id', { count: 'exact', head: true })
+      .eq('board_id', boardName)
+    if ((remoteCount ?? 0) > 0) {
+      // eslint-disable-next-line no-console
+      console.warn(`[boardStore] Push abort: lokale state leeg voor '${boardName}' maar remote heeft ${remoteCount} groepen. Stale cache?`)
+      return false
+    }
+  }
 
   // Upsert groups
   const groupRows = groups.map((g, gi) => ({
@@ -219,19 +250,37 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
     if (iErr) return false
   }
 
-  // Reconcile deletions: fetch remote IDs, delete those missing locally
+  // SAFETY GUARD #2 — reconcile-deletie alleen voor rijen die OUDER zijn
+  // dan onze laatste succesvolle pull. Een rij die NA dat moment door
+  // iemand anders is toegevoegd, hebben wij nog niet gezien — die mogen
+  // we niet stilzwijgend wegvegen omdat wij 'm toevallig niet in onze
+  // lokale kopie hebben. Dit voorkomt het 'andere user logt in en alle
+  // projecten zijn weg'-scenario.
+  const lastSync = readLastSync(boardName)
+  const SYNC_MARGIN_MS = 5_000   // veiligheidsmarge — clock-skew tolerantie
+  const cutoff = new Date(Math.max(0, lastSync - SYNC_MARGIN_MS)).toISOString()
   const localGroupIds = new Set(groups.map(g => g.id))
+
+  // Items
   const { data: remoteItems } = await supabase
-    .from('board_items').select('id').eq('board_id', boardName)
+    .from('board_items').select('id, updated_at').eq('board_id', boardName)
   if (remoteItems) {
-    const stale = (remoteItems as { id: string }[]).map(r => r.id).filter(id => !localItemIds.has(id))
+    const stale = (remoteItems as { id: string; updated_at: string | null }[])
+      .filter(r => !localItemIds.has(r.id))
+      .filter(r => !lastSync || (r.updated_at && r.updated_at < cutoff))
+      .map(r => r.id)
     if (stale.length > 0) await supabase.from('board_items').delete().in('id', stale)
   }
-  const { data: remoteGroups } = await supabase
-    .from('board_groups').select('id').eq('board_id', boardName)
-  if (remoteGroups) {
-    const stale = (remoteGroups as { id: string }[]).map(r => r.id).filter(id => !localGroupIds.has(id))
-    if (stale.length > 0) await supabase.from('board_groups').delete().in('id', stale)
+  // Groups — geen updated_at-kolom in board_groups schema, dus alleen
+  // strippen wanneer wij überhaupt een vorige succesvolle pull hadden.
+  // Eerste push uit een verse sessie verwijdert NOOIT remote groepen.
+  if (lastSync > 0) {
+    const { data: remoteGroups } = await supabase
+      .from('board_groups').select('id').eq('board_id', boardName)
+    if (remoteGroups) {
+      const stale = (remoteGroups as { id: string }[]).map(r => r.id).filter(id => !localGroupIds.has(id))
+      if (stale.length > 0) await supabase.from('board_groups').delete().in('id', stale)
+    }
   }
 
   return true
