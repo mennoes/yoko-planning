@@ -105,8 +105,38 @@ export default function TeamAdminPage() {
 
   async function remove(id: string) {
     if (id === 'unassigned') { alert('"Unassigned" kun je niet verwijderen — die is een systeem-placeholder.'); return }
-    if (!window.confirm(`'${members.find(m => m.id === id)?.name ?? id}' permanent verwijderen?\n\nLetop: bestaande items waar deze persoon aan toegewezen is verliezen hun owner.`)) return
-    await deleteTeamMember(id)
+    const m = members.find(x => x.id === id)
+    const name = m?.name ?? id
+    if (!window.confirm(`'${name}' permanent verwijderen?\n\nLetop: bestaande items waar deze persoon aan toegewezen is verliezen hun owner.`)) return
+    // Vraag of de Supabase auth-account óók opgeruimd moet worden zodat
+    // een re-invite vers van start gaat. Default: ja als er een email is.
+    let alsoAuth = false
+    if (m?.email) {
+      alsoAuth = window.confirm(
+        `Wil je óók het Supabase auth-account voor ${m.email} verwijderen?\n\n` +
+        `Met JA: schone re-invite mogelijk. Met NEE: account blijft bestaan, ` +
+        `bij een nieuwe invite krijgt deze gebruiker een magic-link i.p.v. een welkomstmail.`,
+      )
+    }
+    if (alsoAuth && m?.email) {
+      try {
+        const sess = await supabase?.auth.getSession()
+        const token = sess?.data.session?.access_token
+        if (token) {
+          await fetch('/api/team/delete', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, email: m.email, deleteAuth: true }),
+          })
+        } else {
+          await deleteTeamMember(id)
+        }
+      } catch {
+        await deleteTeamMember(id)
+      }
+    } else {
+      await deleteTeamMember(id)
+    }
     await refresh()
   }
 
