@@ -31,6 +31,7 @@ import { LinksRow } from '@/components/LinksRow'
 import { ItemHistory } from '@/components/ItemHistory'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
+import { useTeam } from '@/components/TeamContext'
 import { DistributionPie } from '@/components/DistributionPie'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
@@ -2625,6 +2626,18 @@ function Popup({ title, onClose, children }: {
 export default function PlanningPage() {
   const { pushUndo }   = useUndo()
   const { profile }    = useProfile()
+  const { members: liveTeam } = useTeam()
+  // Helper: classificeer een memberId als 'yoko' op basis van de live
+  // team_members tabel; valt terug op de hardcoded YOKO_IDS voor leden
+  // die nog niet in de DB staan (bv. extras of voor migratie 0018 is
+  // gedraaid). Gebruik dit i.p.v. de hardcoded YOKO_IDS-set zodat
+  // verschuivingen via /team-admin meteen in Planning doorkomen.
+  const HARDCODED_YOKO = new Set(['menno','vincent','odette','anne-fleur','kars'])
+  function isYokoCrew(id: string): boolean {
+    const fromDb = liveTeam.find(m => m.id === id)?.kind
+    if (fromDb) return fromDb === 'yoko'
+    return HARDCODED_YOKO.has(id)
+  }
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
   const [vacations,    setVacations]    = useState<Record<string, { from: string | null; until: string | null }>>({})
@@ -3768,10 +3781,12 @@ export default function PlanningPage() {
 
       {/* ── Mensen filter popup ── */}
       {peopleOpen && (() => {
-        const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
-        const yokoTeam    = team.filter(m => YOKO_IDS.has(m.id))
+        // YOKO_IDS-check loopt nu via isYokoCrew (team_members.kind),
+        // met fallback op de hardcoded set voor leden die nog geen kind
+        // hebben in de DB.
+        const yokoTeam    = team.filter(m => isYokoCrew(m.id))
         const unassigned  = team.filter(m => m.id === 'unassigned')
-        const freelancers = team.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned')
+        const freelancers = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned')
         function toggle(id: string) {
           setFilterMembers(prev => {
             const next = new Set(prev)
@@ -3785,7 +3800,7 @@ export default function PlanningPage() {
           })
         }
         const row = (m: TeamMember) => {
-          const checked = filterMembers.size === 0 ? YOKO_IDS.has(m.id) || m.id === 'unassigned' : filterMembers.has(m.id)
+          const checked = filterMembers.size === 0 ? isYokoCrew(m.id) || m.id === 'unassigned' : filterMembers.has(m.id)
           return (
             <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
               <input type="checkbox" checked={checked} onChange={() => toggle(m.id)}
@@ -3938,17 +3953,20 @@ export default function PlanningPage() {
               eigen inklapbaar blok. Iedere persoon-sectie is op zichzelf
               uit/in te klappen. */}
           {zoom === 'dag' ? (() => {
-            const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
-            const DEFAULT_VIS = new Set([...YOKO_IDS, 'unassigned'])
+            // Default-visible set: alle yoko-crew + unassigned. Yoko-crew
+            // is alles wat isYokoCrew() teruggeeft (DB-kind óf hardcoded).
+            const defaultVisibleIds = new Set<string>(['unassigned'])
+            for (const m of team) if (isYokoCrew(m.id)) defaultVisibleIds.add(m.id)
+            const DEFAULT_VIS = defaultVisibleIds
             const isMemberVisible = (id: string) =>
               filterMembers.size === 0 ? DEFAULT_VIS.has(id) : filterMembers.has(id)
 
             const me = profile?.memberId
             const yokoVisible = team
-              .filter(m => YOKO_IDS.has(m.id) && isMemberVisible(m.id))
+              .filter(m => isYokoCrew(m.id) && isMemberVisible(m.id))
               .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
             const unassignedVisible = team.filter(m => m.id === 'unassigned' && isMemberVisible(m.id))
-            const freelancersVisible = team.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id))
+            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id))
 
             // Focus-mode: zelfde gedrag als in Overzicht — wanneer iemand
             // is uitgeklapt dempen we de andere rijen zodat de uitgevouwen
@@ -4025,21 +4043,23 @@ export default function PlanningPage() {
               </>
             )
           })() : (() => {
-            const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+            // YOKO_IDS-check loopt nu via isYokoCrew (team_members.kind),
+        // met fallback op de hardcoded set voor leden die nog geen kind
+        // hebben in de DB.
             const visible = team.filter(m => filterMembers.size === 0 || filterMembers.has(m.id))
             // Eigen rij staat altijd bovenaan in Team Yoko zodat je 'm meteen
             // ziet zonder te scrollen. Verder respecteren we de bestaande
             // team-volgorde (uit localStorage / team.json).
             const me = profile?.memberId
             const yokoTeam = visible
-              .filter(m => YOKO_IDS.has(m.id))
+              .filter(m => isYokoCrew(m.id))
               .sort((a, b) => {
                 if (a.id === me) return -1
                 if (b.id === me) return 1
                 return 0
               })
             const unassigned   = visible.filter(m => m.id === 'unassigned')
-            const freelancers  = visible.filter(m => !YOKO_IDS.has(m.id) && m.id !== 'unassigned')
+            const freelancers  = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned')
 
             const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; isOpen?: boolean }) => (
               <div onClick={opts?.onClick}

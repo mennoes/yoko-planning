@@ -66,14 +66,22 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
     .order('position', { ascending: true })
   if (!error && data) return (data as Row[]).map(rowToMember)
   // Fallback: migratie 0018 niet gedraaid → kolom 'kind' bestaat niet.
-  // Probeer zonder kind zodat de UI alsnog leden toont; kind default
-  // wordt door normalizeKind ('yoko') aangevuld.
+  // Probeer zonder kind zodat de UI alsnog leden toont. Voor de
+  // kind-classificatie vallen we terug op defaultKindFor(id) zodat
+  // freelancers niet allemaal als 'yoko' verschijnen (wat zou gebeuren
+  // als normalizeKind z'n default 'yoko' zou toepassen).
   if (error && /kind/.test(error.message)) {
     const fb = await supabase
       .from('team_members')
       .select('id, name, email, color, weekly_capacity, position, hidden')
       .order('position', { ascending: true })
-    if (!fb.error && fb.data) return (fb.data as Row[]).map(rowToMember)
+    if (!fb.error && fb.data) {
+      return (fb.data as Omit<Row, 'kind'>[]).map(r => {
+        const member = rowToMember({ ...r, kind: null })
+        member.kind = defaultKindFor(member.id)
+        return member
+      })
+    }
   }
   return null
 }
