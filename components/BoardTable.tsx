@@ -974,10 +974,21 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             - subitem.externalLink aanwezig (zelfde)
             - id-prefix 'si_g_' (gegenereerd door de googleSync voor
               recurring instances). Die laatste vangt oude rijen op
-              die nog geen source/externalLink-veld hebben gekregen. */}
-        {(subitem.source === 'google' || subitem.externalLink || subitem.id?.startsWith('si_g_')) && (
-          <GoogleBadge href={subitem.externalLink ?? undefined} size={13} />
-        )}
+              die nog geen source/externalLink-veld hebben gekregen.
+            Fallback wanneer externalLink ontbreekt: bouw een day-jump
+            URL met de startDate zodat de badge altijd klikbaar is — open
+            Google Calendar op de juiste datum, ook al weten we 't
+            specifieke event-id niet. */}
+        {(subitem.source === 'google' || subitem.externalLink || subitem.id?.startsWith('si_g_')) && (() => {
+          const fallback = subitem.startDate
+            ? (() => {
+                const d = new Date(subitem.startDate)
+                if (Number.isNaN(d.getTime())) return undefined
+                return `https://calendar.google.com/calendar/u/0/r/day/${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+              })()
+            : undefined
+          return <GoogleBadge href={subitem.externalLink ?? fallback} size={13} />
+        })()}
         {editName ? (
           <input autoFocus value={nameDraft}
             onChange={e => setNameDraft(e.target.value)}
