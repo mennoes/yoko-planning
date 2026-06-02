@@ -550,7 +550,6 @@ export default function TeamPage() {
   // door de store; deze counter zorgt voor de React re-render).
   const [, bumpRender] = useState(0)
   useEffect(() => onTeamUpdate(() => bumpRender(x => x + 1)), [])
-  const [addOpen, setAddOpen] = useState(false)
   const extraIds = new Set(listExtras().map(e => e.id))
 
   // Contacts leven in localStorage (override op data/contacts.json) en
@@ -584,14 +583,15 @@ export default function TeamPage() {
             Studio Yoko
           </div>
           <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
-          <button onClick={() => setAddOpen(true)}
+          <Link href="/team-admin"
             style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border)',
               background: 'var(--bg-card)', color: 'var(--text-secondary)',
-              fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+              fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 6 }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-card)')}>
-            + Lid toevoegen
-          </button>
+            ⚙ Beheer team
+          </Link>
         </div>
         {(() => {
           // Bron-lijst: live team_members uit Supabase aangevuld met
@@ -665,7 +665,8 @@ export default function TeamPage() {
         </p>
       </div>
 
-      {addOpen && <AddMemberModal onClose={() => setAddOpen(false)} onAdded={() => bumpRender(x => x + 1)} />}
+      {/* AddMemberModal verwijderd — toevoegen / bewerken / verwijderen
+          gaat nu via /team-admin (één bron van waarheid). */}
 
       {/* ── Contacts ── */}
       {groups.length > 0 && (
