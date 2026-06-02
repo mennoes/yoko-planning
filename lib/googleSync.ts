@@ -262,6 +262,49 @@ async function ensureVrijGroup(
   return newId
 }
 
+// Meetings & doorlopend — alle Google meetings (zowel losse als
+// recurring) landen hier per bord, zodat ze niet versnipperd tussen
+// echte projecten staan. Hergebruikt bestaande 'doorlopend' of
+// 'meetings'-achtige groep zodat we geen duplicaten maken; anders
+// aanmaken onderaan het bord met een herkenbare gele tint.
+async function ensureMeetingsGroup(
+  admin:   SupabaseClient,
+  boardId: string,
+): Promise<string> {
+  const { data: rows } = await admin
+    .from('board_groups').select('id, name')
+    .eq('board_id', boardId)
+    .order('position', { ascending: true })
+  const groups = (rows as { id: string; name: string }[] | null) ?? []
+  const norm = (s: string) => s.toLowerCase().trim()
+  const target = groups.find(g => {
+    const n = norm(g.name)
+    return n === 'meetings & doorlopend'
+        || n === 'meetings en doorlopend'
+        || n === 'meetings'
+        || n === 'doorlopend'
+  })
+  if (target) return target.id
+
+  const { data: posRows } = await admin
+    .from('board_groups').select('position')
+    .eq('board_id', boardId)
+    .order('position', { ascending: false })
+    .limit(1)
+  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
+
+  const newId = `g_meetings_${boardId}_${Date.now()}`
+  await admin.from('board_groups').insert({
+    id:        newId,
+    board_id:  boardId,
+    name:      'Meetings & doorlopend',
+    color:     '#D8B62E',
+    collapsed: false,
+    position:  maxPos + 1,
+  })
+  return newId
+}
+
 async function ensureFreshAccessToken(
   admin: SupabaseClient,
   cal:   GoogleCalRow,
@@ -341,6 +384,17 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (cached) return cached
     const gid = await ensureVrijGroup(admin, boardId)
     vrijCache.set(boardId, gid)
+    return gid
+  }
+
+  // Meetings-groep cache: alle Google meetings (single én recurring)
+  // landen hier per bord, zodat ze in één bucket te overzien zijn.
+  const meetingsCache = new Map<string, string>()
+  async function getMeetingsGroupFor(boardId: string): Promise<string> {
+    const cached = meetingsCache.get(boardId)
+    if (cached) return cached
+    const gid = await ensureMeetingsGroup(admin, boardId)
+    meetingsCache.set(boardId, gid)
     return gid
   }
 
@@ -526,7 +580,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       if (!start) continue
       const name        = ev.summary ?? '(geen titel)'
       const targetBoard = routeEvent(name, fallbackBoard, rules)
-      const targetGroup = await getGroupFor(targetBoard)
+      // getGroupFor / getDoorlopendGroupFor zijn nu niet meer nodig als
+      // default — alle nieuwe meetings landen in de Meetings-groep en
+      // bestaande rij-groepen worden gerespecteerd via existingRow.group_id.
       seenExt.add(ev.id)
       const icalUid     = ev.iCalUID ?? null
       const lookup      = findExistingFor(icalUid, ev.id)
@@ -553,11 +609,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // handmatige verplaatsing terug naar de Done-groep (klassiek probleem:
       // 'ik heb het zojuist uit Done gehaald en nu staat het er weer').
       // Voor NIEUWE rijen (zonder existingRow) defaulten we op de juiste
-      // status/Vrij/target-startpositie.
+      // status/Vrij/Meetings-startpositie. Meetings (alle non-Vrij Google
+      // events) gaan naar de 'Meetings & doorlopend'-groep zodat ze niet
+      // versnipperd tussen echte projecten staan.
       const keepGroup = existingRow?.group_id
         ?? (newStatus === 'Done'
               ? await getDoneGroupFor(keepBoard)
-              : (isVrij ? await getVrijGroupFor(keepBoard) : targetGroup))
+              : (isVrij
+                  ? await getVrijGroupFor(keepBoard)
+                  : await getMeetingsGroupFor(keepBoard)))
       const eventOwners = ownersForEvent(ev)
       // Union van bestaande + Google-attendees: bestaande user-toevoegingen
       // blijven staan, en nieuwe Yoko-deelnemers uit Google worden vanzelf
@@ -630,7 +690,8 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     seenExt.add(groupKey)
     const baseName    = sorted[0].summary ?? '(geen titel)'
     const targetBoard = routeEvent(baseName, fallbackBoard, rules)
-    const targetGroup = await getDoorlopendGroupFor(targetBoard)
+    // Doorlopend-group is vervangen door 'Meetings & doorlopend' voor
+    // nieuwe rijen (zie keepGroup hieronder).
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
     // Voor recurring nemen we de owners van de meeste recente instantie —
@@ -711,16 +772,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // (Done-bucket is altijd waar Done's horen). Vrij komt op de tweede plek;
     // pas als 'ie nog niet bestaat (nieuw item) maken we 'm zelf aan.
     // Zelfde regel als bij single-events: bestaande verplaatsing ALTIJD
-    // respecteren, ook bij Done. Default-keuzes (Done-bucket, Vrij-groep,
-    // Doorlopend) gelden alleen voor nieuwe rijen.
+    // respecteren, ook bij Done. Default voor nieuwe recurring rijen is
+    // de gedeelde 'Meetings & doorlopend' bucket — daar landen óók
+    // recurring meetings zodat losse en doorlopende meetings naast elkaar
+    // staan i.p.v. in twee aparte groepen.
     const keepGroup = existingRow?.group_id
       ?? (newStatus === 'Done'
             ? await getDoneGroupFor(keepBoard)
             : (isVrij
                   ? await getVrijGroupFor(keepBoard)
-                  : (keepBoard === targetBoard
-                      ? targetGroup
-                      : await getDoorlopendGroupFor(keepBoard))))
+                  : await getMeetingsGroupFor(keepBoard)))
     upserts.push({
       id,
       group_id:           keepGroup,
