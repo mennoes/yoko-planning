@@ -83,7 +83,23 @@ export default function TeamAdminPage() {
     }
     const pos = Math.max(0, ...members.map(m => m.position)) + 1
     const email = draft.email.trim()
-    await upsertTeamMember({ ...draft, id, position: pos, email })
+    const res = await upsertTeamMember({ ...draft, id, position: pos, email })
+    if (!res.ok) {
+      alert(
+        `Toevoegen mislukt: ${res.error}\n\n` +
+        `Vaakste oorzaak: een Supabase migratie staat nog niet — run\n` +
+        `supabase/0017_team_members.sql + 0018_team_members_kind.sql\n` +
+        `in Supabase → SQL Editor.`,
+      )
+      return
+    }
+    if (res.error === 'kind_column_missing_run_0018') {
+      alert(
+        `Lid toegevoegd, maar de 'kind' kolom mist nog. Run\n` +
+        `supabase/0018_team_members_kind.sql in Supabase SQL Editor\n` +
+        `om de Studio Yoko / Freelance-indeling op te slaan.`,
+      )
+    }
     await refresh()
     setAdding(false)
     // Direct ook een Supabase auth-invite versturen zodat de nieuwe persoon
@@ -99,7 +115,8 @@ export default function TeamAdminPage() {
   async function updateField(id: string, patch: Partial<TeamMember>) {
     const current = members.find(m => m.id === id)
     if (!current) return
-    await upsertTeamMember({ ...current, ...patch })
+    const res = await upsertTeamMember({ ...current, ...patch })
+    if (!res.ok) { alert(`Opslaan mislukt: ${res.error}`); return }
     await refresh()
   }
 
@@ -143,7 +160,8 @@ export default function TeamAdminPage() {
   async function toggleHidden(id: string) {
     const current = members.find(m => m.id === id)
     if (!current) return
-    await upsertTeamMember({ ...current, hidden: !current.hidden })
+    const res = await upsertTeamMember({ ...current, hidden: !current.hidden })
+    if (!res.ok) { alert(`Wijzigen mislukt: ${res.error}`); return }
     await refresh()
   }
 

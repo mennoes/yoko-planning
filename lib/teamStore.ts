@@ -67,10 +67,10 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
   return (data as Row[]).map(rowToMember)
 }
 
-export async function upsertTeamMember(m: TeamMember): Promise<boolean> {
-  if (!supabase) return false
-  if (!await getCurrentUserId()) return false
-  const { error } = await supabase.from('team_members').upsert({
+export async function upsertTeamMember(m: TeamMember): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'supabase_not_configured' }
+  if (!await getCurrentUserId()) return { ok: false, error: 'not_authenticated' }
+  const payload = {
     id:              m.id,
     name:            m.name,
     email:           m.email,
@@ -80,8 +80,23 @@ export async function upsertTeamMember(m: TeamMember): Promise<boolean> {
     hidden:          m.hidden,
     kind:            m.kind,
     updated_at:      new Date().toISOString(),
-  }, { onConflict: 'id' })
-  return !error
+  }
+  const { error } = await supabase.from('team_members').upsert(payload, { onConflict: 'id' })
+  if (error) {
+    // Fallback: migratie 0018 niet gedraaid → 'kind' kolom bestaat niet.
+    // Probeer zonder kind zodat de rij in elk geval gemaakt wordt.
+    if (/kind/.test(error.message)) {
+      const { kind: _drop, ...sansKind } = payload
+      void _drop
+      const second = await supabase.from('team_members').upsert(sansKind, { onConflict: 'id' })
+      if (!second.error) {
+        return { ok: true, error: 'kind_column_missing_run_0018' }
+      }
+      return { ok: false, error: `${error.message} — én fallback faalde: ${second.error.message}` }
+    }
+    return { ok: false, error: error.message }
+  }
+  return { ok: true }
 }
 
 export async function deleteTeamMember(id: string): Promise<boolean> {

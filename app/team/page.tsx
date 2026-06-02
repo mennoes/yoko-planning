@@ -405,11 +405,18 @@ function AddMemberModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
     // /team-admin) zodat alles consistent op één plek leeft.
     const pos = Math.max(0, ...liveMembers.map(m => m.position)) + 1
     const { upsertTeamMember } = await import('@/lib/teamStore')
-    const ok = await upsertTeamMember({
+    const res = await upsertTeamMember({
       id, name: name.trim(), email: email.trim(),
       color, weeklyCapacity, position: pos, hidden: false, kind,
     })
-    if (!ok) { setErr('Opslaan mislukt — probeer opnieuw'); setBusy(false); return }
+    if (!res.ok) {
+      setErr(`Opslaan mislukt: ${res.error}. Mogelijke oorzaak: Supabase-migratie 0017/0018 nog niet gedraaid.`)
+      setBusy(false)
+      return
+    }
+    if (res.error === 'kind_column_missing_run_0018') {
+      setErr('Lid toegevoegd — maar run nog supabase/0018_team_members_kind.sql om de Yoko/Freelance-indeling te bewaren.')
+    }
     await refreshTeam()
     // Stuur direct ook een Supabase auth-invite uit zodat de nieuwe
     // persoon meteen kan inloggen. Faalt stil — admin kan later via
