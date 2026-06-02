@@ -10,6 +10,7 @@ import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
+import { useTeam }        from './TeamContext'
 import { useUndo }        from './UndoContext'
 import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
@@ -360,16 +361,41 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
   const [query, setQuery] = useState('')
   const trigRef = useRef<HTMLDivElement>(null)
   const { profile } = useProfile()
-  const team = teamData.members
+  const { members: liveTeam } = useTeam()
+  // Bron-lijst: live team_members uit Supabase aangevuld met data/team.json
+  // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
+  // via /team-admin toegevoegde leden direct als owner-optie zonder dat
+  // de hardcoded teamData.json hoeft te worden bijgewerkt.
+  const team = (() => {
+    const seen = new Set<string>()
+    const out: Array<{ id: string; name: string; color?: string }> = []
+    for (const m of liveTeam) {
+      if (m.hidden) continue
+      seen.add(m.id)
+      out.push({ id: m.id, name: m.name, color: m.color })
+    }
+    for (const m of teamData.members) {
+      if (seen.has(m.id)) continue
+      seen.add(m.id)
+      out.push({ id: m.id, name: m.name, color: m.color })
+    }
+    return out
+  })()
   const toggle = (id: string) =>
     onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id])
 
   // Yoko-collega's altijd bovenaan met grotere foto's zodat aanwijzen makkelijk
   // is. Freelancers / externe contactpersonen verschijnen pas wanneer je
-  // begint te typen in het zoekveld eronder.
-  const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
-  const yokoMembers   = team.filter(m => YOKO_IDS.has(m.id))
-  const otherMembers  = team.filter(m => !YOKO_IDS.has(m.id))
+  // begint te typen in het zoekveld eronder. Yoko-classificatie loopt nu
+  // via team_members.kind (met fallback op de hardcoded set).
+  const HARDCODED_YOKO = new Set(['menno','vincent','odette','anne-fleur','kars'])
+  function isYokoCrew(id: string): boolean {
+    const fromDb = liveTeam.find(m => m.id === id)?.kind
+    if (fromDb) return fromDb === 'yoko'
+    return HARDCODED_YOKO.has(id)
+  }
+  const yokoMembers   = team.filter(m => isYokoCrew(m.id))
+  const otherMembers  = team.filter(m => !isYokoCrew(m.id))
   const q             = query.trim().toLowerCase()
   const matchedOthers = q
     ? otherMembers.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
