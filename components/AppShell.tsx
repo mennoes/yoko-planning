@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ProfileProvider, useProfile } from './ProfileContext'
 import { TeamPhotosProvider } from './TeamPhotosContext'
+import { TeamProvider } from './TeamContext'
 import { MemberPopupProvider } from './MemberPopup'
 import { UndoProvider } from './UndoContext'
 import Sidebar from './Sidebar'
@@ -371,11 +372,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <UndoProvider>
       <ProfileProvider>
-        <TeamPhotosProvider>
-          <MemberPopupProvider>
-            <Inner>{children}</Inner>
-          </MemberPopupProvider>
-        </TeamPhotosProvider>
+        <TeamProvider>
+          <TeamPhotosProvider>
+            <MemberPopupProvider>
+              <Inner>{children}</Inner>
+            </MemberPopupProvider>
+          </TeamPhotosProvider>
+        </TeamProvider>
       </ProfileProvider>
     </UndoProvider>
   )

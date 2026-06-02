@@ -100,7 +100,7 @@ function PhotoCropper({ src, onDone, onCancel }: {
 
 // ─── Team member card ─────────────────────────────────────────────────────────
 function TeamMemberCard({ member, capacity, onCapacityChange }: {
-  member: typeof teamData.members[number]
+  member: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }
   capacity: number
   onCapacityChange: (cap: number) => void
 }) {

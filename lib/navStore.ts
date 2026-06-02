@@ -18,9 +18,10 @@ const DOCS_KEY     = 'yoko-nav-docs'
 const PROJECTS_KEY = 'yoko-nav-projects'
 
 const DEFAULT_DOCS: NavItem[] = [
-  { id: 'team',     label: 'Team',     href: '/team',     icon: '👥' },
-  { id: 'kantoor',  label: 'Kantoor',  href: '/kantoor',  icon: '🏢' },
-  { id: 'accounts', label: 'Accounts', href: '/accounts', icon: '🔑' },
+  { id: 'team',        label: 'Team',        href: '/team',        icon: '👥' },
+  { id: 'team-admin',  label: 'Team beheren', href: '/team-admin',  icon: '⚙️' },
+  { id: 'kantoor',     label: 'Kantoor',     href: '/kantoor',     icon: '🏢' },
+  { id: 'accounts',    label: 'Accounts',    href: '/accounts',    icon: '🔑' },
 ]
 
 const DEFAULT_PROJECTS: NavItem[] = [
