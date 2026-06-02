@@ -2321,7 +2321,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
               e.stopPropagation()
               e.dataTransfer.effectAllowed = 'move'
               e.dataTransfer.setData('application/x-yoko-group', JSON.stringify({ groupId: group.id, fromBoard: boardId }))
+              // Broadcast: parent dimt de gesleepte groep zodat duidelijk
+              // is welke je vasthoudt.
+              window.dispatchEvent(new CustomEvent('yoko-group-drag-start', { detail: { groupId: group.id } }))
             }}
+            onDragEnd={() => window.dispatchEvent(new CustomEvent('yoko-group-drag-end'))}
             title="Sleep om groep-volgorde te wijzigen"
             style={{ cursor: 'grab',
               color: 'var(--text-secondary)',
@@ -2739,6 +2743,24 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // Klik op een kolom-header overschrijft dit.
   const [sortBy,        setSortBy]       = useState<{ key: string; dir: 'asc' | 'desc' } | null>({ key: 'timeline', dir: 'asc' })
   const [reorderMode,   setReorderMode]  = useState(false)
+  // Visuele feedback bij groep-drag: welke groep wordt nu over-gehoverd,
+  // en aan welke kant (boven/onder) zou de gesleepte groep landen?
+  // Wordt door de drop-handler weer leeggemaakt.
+  const [groupDrop,     setGroupDrop]    = useState<{ groupId: string; side: 'before' | 'after' } | null>(null)
+  const [groupDragging, setGroupDragging] = useState<string | null>(null)
+  useEffect(() => {
+    function onStart(e: Event) {
+      const detail = (e as CustomEvent<{ groupId: string }>).detail
+      setGroupDragging(detail?.groupId ?? null)
+    }
+    function onEnd() { setGroupDragging(null); setGroupDrop(null) }
+    window.addEventListener('yoko-group-drag-start', onStart)
+    window.addEventListener('yoko-group-drag-end',   onEnd)
+    return () => {
+      window.removeEventListener('yoko-group-drag-start', onStart)
+      window.removeEventListener('yoko-group-drag-end',   onEnd)
+    }
+  }, [])
   const [titleDraft,    setTitleDraft]   = useState(title)
   const [dedupOpen,     setDedupOpen]    = useState(false)
 
@@ -3333,16 +3355,40 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       {/* Geen eigen kader meer — elke groep is z'n eigen 'card' met rondingen.
           Dat geeft visueel meer rust dan een dubbele rand. */}
       <div style={{ overflow: 'visible' }}>
-        {filteredGroups.map((group, gIdx) => (
+        {filteredGroups.map((group, gIdx) => {
+          const isDraggingMe = groupDragging === group.id
+          const showLineBefore = groupDrop?.groupId === group.id && groupDrop.side === 'before'
+          const showLineAfter  = groupDrop?.groupId === group.id && groupDrop.side === 'after'
+          return (
           <div key={group.id}
             data-group-id={group.id}
+            style={{ position: 'relative', opacity: isDraggingMe ? 0.45 : 1, transition: 'opacity 0.12s' }}
+            onDragEnter={e => {
+              if (!e.dataTransfer.types.includes('application/x-yoko-group')) return
+              const rect = e.currentTarget.getBoundingClientRect()
+              const side: 'before' | 'after' = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after'
+              setGroupDrop({ groupId: group.id, side })
+            }}
             onDragOver={e => {
               if (!e.dataTransfer.types.includes('application/x-yoko-group')) return
               e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
+              const rect = e.currentTarget.getBoundingClientRect()
+              const side: 'before' | 'after' = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after'
+              if (groupDrop?.groupId !== group.id || groupDrop?.side !== side) {
+                setGroupDrop({ groupId: group.id, side })
+              }
+            }}
+            onDragLeave={e => {
+              // Alleen leegmaken wanneer de cursor de hele wrapper verlaat —
+              // niet bij verschuiving over child-elementen.
+              const related = e.relatedTarget as Node | null
+              if (related && e.currentTarget.contains(related)) return
+              setGroupDrop(prev => prev?.groupId === group.id ? null : prev)
             }}
             onDrop={e => {
               const raw = e.dataTransfer.getData('application/x-yoko-group')
+              setGroupDrop(null)
               if (!raw) return
               e.preventDefault()
               try {
@@ -3350,12 +3396,38 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                 if (!groupId || groupId === group.id) return
                 const fromIdx = groups.findIndex(g => g.id === groupId)
                 if (fromIdx < 0) return
+                // Bepaal target-index op basis van waar de drop landde
+                // (boven- of onderhelft van de target-groep). Compenseer
+                // voor de splice die fromIdx wegtrekt.
+                const rect = e.currentTarget.getBoundingClientRect()
+                const side: 'before' | 'after' = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after'
+                const targetGroup = filteredGroups[gIdx]
+                const targetIdx = groups.findIndex(g => g.id === targetGroup.id)
+                if (targetIdx < 0) return
                 const next = [...groups]
                 const [moved] = next.splice(fromIdx, 1)
-                next.splice(gIdx, 0, moved)
+                let insertAt = targetIdx + (side === 'after' ? 1 : 0)
+                if (fromIdx < targetIdx) insertAt -= 1
+                next.splice(insertAt, 0, moved)
                 onChange(next)
               } catch {}
             }}>
+            {showLineBefore && (
+              <div aria-hidden style={{
+                position: 'absolute', top: -4, left: 8, right: 8, height: 4,
+                background: 'var(--accent)', borderRadius: 2, zIndex: 50,
+                boxShadow: '0 0 0 1px rgba(88,150,255,0.35), 0 4px 12px rgba(88,150,255,0.35)',
+                pointerEvents: 'none',
+              }} />
+            )}
+            {showLineAfter && (
+              <div aria-hidden style={{
+                position: 'absolute', bottom: -4, left: 8, right: 8, height: 4,
+                background: 'var(--accent)', borderRadius: 2, zIndex: 50,
+                boxShadow: '0 0 0 1px rgba(88,150,255,0.35), 0 4px 12px rgba(88,150,255,0.35)',
+                pointerEvents: 'none',
+              }} />
+            )}
             <BoardGroupSection boardId={boardId} group={group} cols={columns}
               colWidths={colWidths} gridTemplate={gridTemplate}
               selectedIds={selectedIds}
@@ -3370,7 +3442,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onUnnestSubitemHere={unnestSubitemHere}
               onDeleteGroup={() => handleDeleteGroup(group.id)} />
           </div>
-        ))}
+          )
+        })}
         {filteredGroups.length === 0 && (
           <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
             Geen resultaten gevonden
