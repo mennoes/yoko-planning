@@ -125,11 +125,13 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
       } catch { return false }
     }
   }
+  // Soft-deleted rijen filteren we out — die staan in de papierbak.
+  // 'is.null'-syntax werkt via .is('deleted_at', null) in supabase-js.
   const { data: groupRows, error: gErr } = await supabase
-    .from('board_groups').select('*').eq('board_id', boardName).order('position')
+    .from('board_groups').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
   if (gErr || !groupRows) return false
   const { data: itemRows, error: iErr } = await supabase
-    .from('board_items').select('*').eq('board_id', boardName).order('position')
+    .from('board_items').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
   if (iErr || !itemRows) return false
 
   const itemsByGroup = new Map<string, BoardItem[]>()
@@ -261,29 +263,97 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   const cutoff = new Date(Math.max(0, lastSync - SYNC_MARGIN_MS)).toISOString()
   const localGroupIds = new Set(groups.map(g => g.id))
 
-  // Items
+  // Items — SOFT-DELETE: in plaats van hard DELETE zetten we deleted_at
+  // zodat de papierbak ze kan tonen en herstellen. Niets gaat écht weg.
+  const stamp = new Date().toISOString()
   const { data: remoteItems } = await supabase
-    .from('board_items').select('id, updated_at').eq('board_id', boardName)
+    .from('board_items').select('id, updated_at').eq('board_id', boardName).is('deleted_at', null)
   if (remoteItems) {
     const stale = (remoteItems as { id: string; updated_at: string | null }[])
       .filter(r => !localItemIds.has(r.id))
       .filter(r => !lastSync || (r.updated_at && r.updated_at < cutoff))
       .map(r => r.id)
-    if (stale.length > 0) await supabase.from('board_items').delete().in('id', stale)
+    if (stale.length > 0) {
+      await supabase.from('board_items')
+        .update({ deleted_at: stamp })
+        .in('id', stale)
+    }
   }
-  // Groups — geen updated_at-kolom in board_groups schema, dus alleen
-  // strippen wanneer wij überhaupt een vorige succesvolle pull hadden.
-  // Eerste push uit een verse sessie verwijdert NOOIT remote groepen.
+  // Groups — eerste push uit een verse sessie verwijdert NOOIT remote
+  // groepen. Ook hier soft-delete via deleted_at-stamp.
   if (lastSync > 0) {
     const { data: remoteGroups } = await supabase
-      .from('board_groups').select('id').eq('board_id', boardName)
+      .from('board_groups').select('id').eq('board_id', boardName).is('deleted_at', null)
     if (remoteGroups) {
       const stale = (remoteGroups as { id: string }[]).map(r => r.id).filter(id => !localGroupIds.has(id))
-      if (stale.length > 0) await supabase.from('board_groups').delete().in('id', stale)
+      if (stale.length > 0) {
+        await supabase.from('board_groups')
+          .update({ deleted_at: stamp })
+          .in('id', stale)
+      }
     }
   }
 
   return true
+}
+
+// ─── Papierbak helpers ────────────────────────────────────────────────────────
+export type TrashItem = {
+  id:         string
+  name:       string
+  boardId:    string
+  groupId:    string | null
+  deletedAt:  string
+  groupName:  string | null
+}
+
+export async function loadTrash(): Promise<TrashItem[]> {
+  if (!supabase) return []
+  if (!await getCurrentUserId()) return []
+  const { data } = await supabase
+    .from('board_items')
+    .select('id, name, board_id, group_id, deleted_at, board_groups(name)')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+    .limit(500)
+  if (!data) return []
+  type Row = { id: string; name: string; board_id: string; group_id: string; deleted_at: string; board_groups: { name: string } | { name: string }[] | null }
+  return (data as Row[]).map(r => ({
+    id:        r.id,
+    name:      r.name ?? '(naamloos)',
+    boardId:   r.board_id,
+    groupId:   r.group_id,
+    deletedAt: r.deleted_at,
+    groupName: Array.isArray(r.board_groups) ? (r.board_groups[0]?.name ?? null) : (r.board_groups?.name ?? null),
+  }))
+}
+
+// Restore = deleted_at op null zetten. Bij groep ook eventueel de groep
+// zelf herstellen (anders is 't item een wees). De groep wordt automatisch
+// hersteld als-ie nog in soft-deleted state staat.
+export async function restoreTrashItem(itemId: string): Promise<boolean> {
+  if (!supabase) return false
+  if (!await getCurrentUserId()) return false
+  const { data: itemData } = await supabase
+    .from('board_items').select('group_id').eq('id', itemId).single()
+  const groupId = (itemData as { group_id: string } | null)?.group_id
+  if (groupId) {
+    await supabase.from('board_groups')
+      .update({ deleted_at: null })
+      .eq('id', groupId)
+      .not('deleted_at', 'is', null)
+  }
+  const { error } = await supabase.from('board_items')
+    .update({ deleted_at: null })
+    .eq('id', itemId)
+  return !error
+}
+
+export async function purgeTrashItem(itemId: string): Promise<boolean> {
+  if (!supabase) return false
+  if (!await getCurrentUserId()) return false
+  const { error } = await supabase.from('board_items').delete().eq('id', itemId)
+  return !error
 }
 
 const channelByBoard: Record<string, ReturnType<NonNullable<typeof supabase>['channel']>> = {}

@@ -22,6 +22,7 @@ const DEFAULT_DOCS: NavItem[] = [
   { id: 'team-admin',  label: 'Team beheren', href: '/team-admin',  icon: '⚙️' },
   { id: 'kantoor',     label: 'Kantoor',     href: '/kantoor',     icon: '🏢' },
   { id: 'accounts',    label: 'Accounts',    href: '/accounts',    icon: '🔑' },
+  { id: 'trash',       label: 'Papierbak',   href: '/trash',       icon: '🗑' },
 ]
 
 const DEFAULT_PROJECTS: NavItem[] = [
