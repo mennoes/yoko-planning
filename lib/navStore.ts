@@ -23,7 +23,7 @@ const DEFAULT_DOCS: NavItem[] = [
   { id: 'kantoor',     label: 'Kantoor',     href: '/kantoor',     icon: '🏢' },
   { id: 'accounts',    label: 'Accounts',    href: '/accounts',    icon: '🔑' },
   { id: 'trash',       label: 'Papierbak',   href: '/trash',       icon: '🗑' },
-  { id: 'snapshots',   label: 'Snapshots',   href: '/snapshots',   icon: '📸' },
+  { id: 'snapshots',   label: 'Geschiedenis', href: '/geschiedenis', icon: '📜' },
 ]
 
 const DEFAULT_PROJECTS: NavItem[] = [

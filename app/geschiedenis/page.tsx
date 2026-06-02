@@ -95,10 +95,10 @@ export default function SnapshotsPage() {
   return (
     <Shell>
       <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 18px', lineHeight: 1.5, maxWidth: 700 }}>
-        Dagelijkse JSON-snapshots per bord. Elke snapshot bevat de complete state (groepen + items + subitems)
+        Dagelijkse archief-versies per bord. Elke versie bevat de complete state (groepen + items + subitems)
         van dat bord op dat moment. Automatisch aangemaakt zodra een gebruiker de app opent op een dag waarop
-        er nog geen snapshot bestaat. <strong>Restore</strong> zet 't bord terug naar de gekozen snapshot —
-        de huidige state wordt eerst als &apos;restore&apos;-snapshot bewaard, dus altijd terug te draaien.
+        er nog geen versie bestaat. <strong>Herstel</strong> zet &apos;t bord terug naar de gekozen versie —
+        de huidige state wordt eerst zelf als versie bewaard, dus altijd terug te draaien.
       </p>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -115,14 +115,14 @@ export default function SnapshotsPage() {
               background: 'var(--bg-card)', color: 'var(--text-secondary)',
               fontSize: 11, fontWeight: 600, cursor: busy === `new:${b}` ? 'wait' : 'pointer',
             }}>
-            📸 Snapshot {b}
+            📸 Versie van {b}
           </button>
         ))}
       </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Laden…</p>}
       {!loading && visible.length === 0 && (
-        <p style={{ color: 'var(--text-muted)' }}>Geen snapshots gevonden. Klik &apos;📸 Snapshot &lt;bord&gt;&apos; om er handmatig één te maken.</p>
+        <p style={{ color: 'var(--text-muted)' }}>Nog geen versies gevonden. Klik &apos;📸 Versie van &lt;bord&gt;&apos; om er handmatig één te maken.</p>
       )}
 
       {visible.length > 0 && (
@@ -179,7 +179,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ maxWidth: 1200, padding: '40px 32px' }}>
       <h1 style={{ fontSize: 30, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
-        📸 Snapshots
+        📜 Geschiedenis
       </h1>
       {children}
     </div>
