@@ -4,7 +4,41 @@ import { useState, useRef } from 'react'
 import { useTeam } from '@/components/TeamContext'
 import { upsertTeamMember, deleteTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
 import { useProfile } from '@/components/ProfileContext'
+import { supabase } from '@/lib/supabase'
 import { IconUsers } from '@/components/Icon'
+
+// Stuur invite naar de geconfigureerde Supabase auth — maakt user aan
+// (of stuurt magic-link als-ie al bestaat) zodat 'ie kan inloggen.
+// Toont feedback via window.alert; voor MVP voldoende, kan later
+// een toast worden.
+async function sendInvite(email: string, name: string): Promise<void> {
+  if (!supabase) { window.alert('Supabase niet geconfigureerd.'); return }
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) { window.alert('Je bent niet ingelogd — log opnieuw in en probeer het dan.'); return }
+  try {
+    const res = await fetch('/api/team/invite', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name }),
+    })
+    const json = await res.json() as { ok: boolean; status?: string; error?: string; actionLink?: string }
+    if (!json.ok) {
+      window.alert(`Invite mislukt: ${json.error ?? 'onbekende fout'}`)
+      return
+    }
+    if (json.status === 'invited') {
+      window.alert(`Invite-mail verstuurd naar ${email}. ${name} krijgt 'm in de inbox met een link om een wachtwoord te zetten.`)
+    } else if (json.status === 'exists') {
+      const link = json.actionLink
+      window.alert(
+        `${email} had al een auth-account. Een nieuwe magic-link is gegenereerd${link ? ' — kopieer en stuur door:\n\n' + link : ' en verstuurd via Supabase SMTP.'}`,
+      )
+    }
+  } catch (e) {
+    window.alert(`Invite-call mislukt: ${e}`)
+  }
+}
 
 // Voorgestelde kleuren-set zodat een nieuwe gebruiker iets te kiezen heeft
 // zonder de hele color-wheel uit te hoeven typen.
@@ -231,7 +265,7 @@ export default function TeamAdminPage() {
           <div key={label} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, padding: '0 2px' }}>{label} · {rows.length}</div>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 88px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
                 <span></span>
                 <span></span>
                 <span>Naam</span>
@@ -240,6 +274,7 @@ export default function TeamAdminPage() {
                 <span>Uren/wk</span>
                 <span>Team</span>
                 <span>Status</span>
+                <span>Login</span>
                 <span></span>
               </div>
               {rows.map(m => (
@@ -319,7 +354,7 @@ function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn
         onDropOn()
       }}
       onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
-      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
+      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 88px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
         borderBottom: dropHover ? '2px solid var(--accent)' : '1px solid var(--border-light)',
         background: dropHover ? 'var(--accent-light)' : 'transparent',
         cursor: draggable ? 'grab' : 'default',
@@ -353,6 +388,23 @@ function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn
           color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
         }}>
         {member.hidden ? '👁 Verborgen' : 'Zichtbaar'}
+      </button>
+      <button
+        onClick={() => {
+          if (!member.email) { window.alert('Geen email-adres voor dit lid — vul eerst de email in.'); return }
+          if (!window.confirm(`Invite versturen naar ${member.email}?\n\n${member.name} krijgt een mail met een link om een wachtwoord te zetten.`)) return
+          sendInvite(member.email, member.name)
+        }}
+        disabled={!member.email || member.id === 'unassigned'}
+        title={!member.email ? 'Vul eerst een email-adres in' : `Stuur login-invite naar ${member.email}`}
+        style={{
+          padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border)',
+          background: member.email ? 'var(--bg-card)' : 'var(--bg-hover)',
+          color: member.email ? 'var(--text-secondary)' : 'var(--text-muted)',
+          fontSize: 11, fontWeight: 600,
+          cursor: member.email && member.id !== 'unassigned' ? 'pointer' : 'not-allowed',
+        }}>
+        ✉ Invite
       </button>
       <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--red, #C9483D)', cursor: 'pointer', fontSize: 14 }}>×</button>
     </div>
