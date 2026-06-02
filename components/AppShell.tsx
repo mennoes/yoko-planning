@@ -249,6 +249,28 @@ function Inner({ children }: { children: ReactNode }) {
       // een 'klaar?'-notificatie aan de eigenaar (de huidige user). Google-
       // items handelen we via auto-Done in de server-sync af.
       try { await notifyOverdueItems(profileRef.current?.memberId) } catch {}
+      // Daily snapshot per bord — server-route is idempotent: maakt geen
+      // tweede snapshot aan op dezelfde dag. Eerste user die de app vandaag
+      // opent triggert effectief de cron. localStorage-flag voorkomt dat
+      // tabs binnen dezelfde sessie 't N keer proberen.
+      try {
+        const todayKey = `yoko-snapshot-attempt:${new Date().toISOString().slice(0,10)}`
+        if (typeof window !== 'undefined' && !window.localStorage.getItem(todayKey)) {
+          window.localStorage.setItem(todayKey, '1')
+          const { supabase: sb } = await import('@/lib/supabase')
+          const sess = await sb?.auth.getSession()
+          const token = sess?.data.session?.access_token
+          if (token) {
+            for (const board of BOARD_NAMES) {
+              fetch('/api/snapshots/create', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ boardId: board }),
+              }).catch(() => {})
+            }
+          }
+        }
+      } catch {}
     }
     tick()
     const id = setInterval(tick, 5 * 60 * 1000)
