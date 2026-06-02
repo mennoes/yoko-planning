@@ -10,12 +10,12 @@ import { autoMoveDoneItems } from './doneAutoMove'
 
 const WORKING = 'Working on...'
 const DONE    = 'Done'
-// Google-events worden agressiever opgeruimd dan zelf-gemaakte items: zodra
-// de dag erna is, mogen ze op Done. Voor handmatige items hanteren we 3
-// dagen zodat een vergeten afvinkje niet meteen weggewerkt wordt — de user
-// krijgt eerst een notificatie via notifyOverdueItems.
+// Google-events worden agressiever opgeruimd dan zelf-gemaakte items:
+// zodra de dag erna is, mogen ze op Done. Handmatige items raken we NIET
+// automatisch op Done — de gebruiker wil zelf bepalen wanneer een eigen
+// project klaar is. Voor overdue manual items krijg je een notificatie
+// via notifyOverdueItems zonder status-mutatie.
 const AUTO_DONE_AFTER_DAYS_GOOGLE = 0
-const AUTO_DONE_AFTER_DAYS_MANUAL = 3
 
 function isLive(start: string | null | undefined, end: string | null | undefined, today: string): boolean {
   if (!start) return false
@@ -29,17 +29,20 @@ function needsAuto(status: string | undefined | null): boolean {
   return s === '' || s === 'Not started'
 }
 
-// Auto-Done — Google-items zodra de dag erna is (>0 dagen voorbij),
-// handmatige items pas na 3 dagen. Handmatige Stuck/Done laten we ongemoeid.
+// Auto-Done — ALLEEN voor Google-events zodra de dag erna is (>0 dagen
+// voorbij). Handmatige items raken we NOOIT automatisch aan: de gebruiker
+// wil zelf bepalen wanneer een eigen project Done is. Voor overdue manual
+// items sturen we een 'klaar?'-notificatie via notifyOverdueItems, zonder
+// status te muteren.
 function shouldAutoDone(status: string | undefined | null, end: string | null | undefined, today: string, source: 'manual' | 'google' | undefined | null): boolean {
   const s = (status ?? '').trim()
   if (s === DONE || s === 'Stuck') return false
+  if (source !== 'google') return false   // manual items: nooit auto-Done
   if (!end) return false
   const endTs   = Date.parse(end)
   const todayTs = Date.parse(today)
   if (Number.isNaN(endTs) || Number.isNaN(todayTs)) return false
-  const threshold = source === 'google' ? AUTO_DONE_AFTER_DAYS_GOOGLE : AUTO_DONE_AFTER_DAYS_MANUAL
-  return (todayTs - endTs) / 86400000 > threshold
+  return (todayTs - endTs) / 86400000 > AUTO_DONE_AFTER_DAYS_GOOGLE
 }
 
 export async function applyAutoStatus(): Promise<{ changed: number }> {
