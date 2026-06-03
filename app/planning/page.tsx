@@ -1456,13 +1456,15 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   // meetings (zodat elke meeting minstens één regel tekst krijgt).
   // Meetings worden bovenop de project-balken gerenderd — overlap is
   // toegestaan, dat is leesbaar genoeg.
-  const MEETING_PX_PER_HOUR = 22
-  const MEETING_LINE_H      = 18
+  const MEETING_PX_PER_HOUR = 14
   function clusterHeight(b: ClusterBar) {
     const totalH = b.meetings.reduce((s, m) => s + (m.estHours || 0), 0)
     const byHours = totalH * MEETING_PX_PER_HOUR
-    const byCount = b.meetings.length * MEETING_LINE_H + 6
-    return Math.min(140, Math.max(MEETING_BAR_H, byHours, byCount))
+    // Multi-meeting clusters krijgen iets meer hoogte zodat we naast '3×'
+    // ook 1–2 namen kunnen tonen, maar niet zo veel dat ze de hele rij
+    // opslokken. Cap rustig op 80px.
+    const minByCount = Math.min(56, 22 + (b.meetings.length - 1) * 8)
+    return Math.min(80, Math.max(MEETING_BAR_H, byHours, minByCount))
   }
 
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
@@ -1606,9 +1608,14 @@ function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project
     }
   }, [open, popoverId])
 
-  // Multi-line layout zodra de pill hoog genoeg is om meerdere meetings
-  // als aparte regels te tonen (24px per regel ruim).
-  const showMultiLine = !isSingle && height >= meetings.length * 18 + 6
+  // Lay-out kiest zich naar pill-breedte:
+  //   • Breed (≥160px): single-line, naam links, uren rechts.
+  //   • Smal: gestapelde mini-rijen — icon + ⌀uren bovenaan, dan
+  //     ellipsis-namen of een telling. Multi-line tekst per meeting was
+  //     onleesbaar bij krappe kolommen (een paar letters per regel),
+  //     dus vervangen door een compactere stapel.
+  const isNarrow = width < 160
+  const showStack = !isSingle && height >= 36
   const phoneSvg = (
     <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
@@ -1621,32 +1628,32 @@ function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project
     <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <button ref={btnRef} onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
-        style={showMultiLine
-          ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch',
-              gap: 2, padding: '4px 6px',
-              width, height, borderRadius: 6,
-              background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
-              fontSize: 11, fontWeight: 600, lineHeight: 1.1,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-              overflow: 'hidden', textAlign: 'left' }
-          : { display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
-              width, height, borderRadius: 6,
-              background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
-              fontSize: 11.5, fontWeight: 700, lineHeight: 1,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-              overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        {showMultiLine ? (
+        style={{
+          display: 'flex',
+          flexDirection: showStack ? 'column' : 'row',
+          alignItems: showStack ? 'stretch' : 'center',
+          justifyContent: showStack ? 'center' : 'flex-start',
+          gap: showStack ? 2 : 6,
+          padding: showStack ? '4px 6px' : '0 8px',
+          width, height, borderRadius: 6,
+          background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
+          fontSize: isNarrow ? 10.5 : 11.5,
+          fontWeight: 700, lineHeight: 1.1,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+          overflow: 'hidden', textAlign: 'left', whiteSpace: showStack ? 'normal' : 'nowrap' }}>
+        {showStack ? (
           <>
-            {meetings.map((m, idx) => (
-              <span key={m.id ?? idx} style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
-                {idx === 0 && phoneSvg}
-                {idx !== 0 && <span style={{ width: 13, flexShrink: 0 }} />}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {m.name}
-                </span>
-                <span style={{ flexShrink: 0, opacity: 0.7, fontWeight: 500, fontSize: 10 }}>
-                  {(m.estHours || 0)}u
-                </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {phoneSvg}
+              <span style={{ flex: 1, fontWeight: 700 }}>{meetings.length}×</span>
+              <span style={{ opacity: 0.75, fontWeight: 600, fontSize: 10 }}>{totalH}u</span>
+            </span>
+            {!isNarrow && meetings.slice(0, Math.max(1, Math.floor((height - 24) / 14))).map((m, idx) => (
+              <span key={m.id ?? idx} style={{
+                display: 'block',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                fontWeight: 500, fontSize: 10.5, opacity: 0.85 }}>
+                {m.name}
               </span>
             ))}
           </>
