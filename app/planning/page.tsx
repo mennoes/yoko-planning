@@ -15,6 +15,24 @@ import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
+
+// Helper voor synchrone off-day-check binnen render. Leest dezelfde
+// localStorage-cache als countWorkdaysMs, plus 'n Vrij-event-check.
+function isOffDayInline(memberId: string, date: Date): boolean {
+  const dow = date.getDay()
+  if (dow === 0 || dow === 6) return true
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('yoko-days-off') : null
+    if (raw) {
+      const map = JSON.parse(raw) as Record<string, number[]>
+      const off = map[memberId] ?? []
+      const iso = dow === 0 ? 7 : dow
+      if (off.includes(iso)) return true
+    }
+  } catch {}
+  if (isVrijDayForMember(memberId, date)) return true
+  return false
+}
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
@@ -1163,11 +1181,17 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
+            const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
+            const bg = col.isCurrent ? 'var(--accent-light)'
+                     : weekend ? 'var(--weekend-bg)'
+                     : isOff ? 'rgba(154,149,144,0.12)'
+                     : 'transparent'
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
                 borderLeft: '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
+                background: bg,
+                backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.04) 6px 7px)' : undefined,
                 pointerEvents: 'none',
               }} />
             )
@@ -1281,11 +1305,17 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
+            const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
+            const bg = col.isCurrent ? 'var(--accent-light)'
+                     : weekend ? 'var(--weekend-bg)'
+                     : isOff ? 'rgba(154,149,144,0.12)'
+                     : 'transparent'
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
                 borderLeft: '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
+                background: bg,
+                backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.05) 6px 7px)' : undefined,
                 pointerEvents: 'none',
               }} />
             )
@@ -4055,6 +4085,16 @@ export default function PlanningPage() {
                   <button onClick={() => anchoredColWZoom(z => Math.min(300, z + 10))}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                  {/* Modus-label naast de slider: laat zien wat de slider doet
+                      in 't huidige perspectief, en welke perspectief je ziet. */}
+                  <span style={{
+                    fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
+                    padding: '3px 8px', borderRadius: 999,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                  }}>
+                    {zoom === 'dag' ? 'Week-planner' : 'Overzicht'}
+                  </span>
                 </div>
               )}
             </div>
@@ -4340,15 +4380,11 @@ export default function PlanningPage() {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
               if (freelancersOpen) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
-              } else {
-                // Ingeklapt: toon alleen freelancers die in de zichtbare
-                // periode daadwerkelijk werk hebben. Voorkomt dat we de hele
-                // lange lijst tonen, maar verbergt ook geen actieve mensen.
-                const active = freelancers.filter(m =>
-                  cols.some(col => memberHoursInCol(effectiveProjects, m.id, col).reduce((s, c) => s + c.hours, 0) > 0)
-                )
-                active.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
+              // Ingeklapt = écht ingeklapt (geen rijen meer). Vroeger lieten
+              // we 'active' freelancers (met uren) staan, maar dan kon de
+              // gebruiker nooit alles verbergen. Klap je 't open via de
+              // chevron, dan kun je iedereen weer zien.
             }
             return out
           })()}
