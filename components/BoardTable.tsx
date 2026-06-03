@@ -2617,20 +2617,15 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
             {renderItems.map((item) => {
               const realIdx = group.items.findIndex(i => i.id === item.id)
               return (
-              <div key={item.id} data-item-id={item.id} draggable={!reorderMode}
-                onDragStart={e => {
-                  dragRowRef.current = realIdx
-                  e.dataTransfer.effectAllowed = 'move'
-                  // Geef ook expliciet door welke groep + item we slepen.
-                  // Als het gesleepte item geselecteerd is én er zijn meerdere
-                  // selecties, nemen we de hele selectie mee — drop op een
-                  // andere groep verplaatst dan álles in één keer.
-                  const isMulti = selectedIds.has(item.id) && selectedIds.size > 1
-                  const itemIds = isMulti ? Array.from(selectedIds) : [item.id]
-                  e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({
-                    itemId: item.id, fromGroupId: group.id, fromBoard: boardId,
-                    itemIds,
-                  }))
+              <div key={item.id} data-item-id={item.id}
+                style={{ position: 'relative' }}
+                onMouseEnter={e => {
+                  const h = e.currentTarget.querySelector<HTMLElement>('.row-grip')
+                  if (h) h.style.opacity = '0.5'
+                }}
+                onMouseLeave={e => {
+                  const h = e.currentTarget.querySelector<HTMLElement>('.row-grip')
+                  if (h) h.style.opacity = '0'
                 }}
                 onDragOver={e => {
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
@@ -2684,6 +2679,39 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   } catch {}
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
+                {/* Drag-handle: alleen via dit puntje kun je een rij verslepen
+                    naar een andere groep. Vroeger was de hele rij draggable —
+                    daardoor sleepte je per ongeluk uit de groep zodra je een
+                    cel wilde aanklikken om te bewerken. */}
+                {!reorderMode && (
+                  <span draggable
+                    className="row-grip"
+                    title="Sleep om te verplaatsen tussen groepen"
+                    onDragStart={e => {
+                      dragRowRef.current = realIdx
+                      e.dataTransfer.effectAllowed = 'move'
+                      const isMulti = selectedIds.has(item.id) && selectedIds.size > 1
+                      const itemIds = isMulti ? Array.from(selectedIds) : [item.id]
+                      e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({
+                        itemId: item.id, fromGroupId: group.id, fromBoard: boardId,
+                        itemIds,
+                      }))
+                      // Drag-image = hele rij ipv alleen 't grip-icoontje,
+                      // anders ziet de gebruiker bij 't slepen alleen een
+                      // puntjes-blok zweven.
+                      const row = e.currentTarget.parentElement
+                      if (row) e.dataTransfer.setDragImage(row, 20, 12)
+                    }}
+                    style={{
+                      position: 'absolute', left: -16, top: '50%', transform: 'translateY(-50%)',
+                      width: 14, height: 22,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'grab', userSelect: 'none',
+                      color: 'var(--text-muted)', fontSize: 14, lineHeight: 1,
+                      opacity: 0, transition: 'opacity 0.12s',
+                      zIndex: 5,
+                    }}>⠿</span>
+                )}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
                   selected={selectedIds.has(item.id)}
                   accentColor={group.color}

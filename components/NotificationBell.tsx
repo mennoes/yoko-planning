@@ -21,15 +21,21 @@ function fmtRelative(iso: string): string {
 }
 
 function actorName(actorId: string | null): string {
-  if (!actorId) return 'Iemand'
+  // null = systeem-melding (bv. auto-overdue waarschuwing). 'Yoko' is
+  // duidelijker dan 'Iemand' — geen verwarring over wie nou wat deed.
+  if (!actorId) return 'Yoko'
   return teamData.members.find(m => m.id === actorId)?.name ?? actorId
 }
 
 function actionLabel(n: Notification): string {
+  // Systeem-meldingen (actor_id = null) gebruiken neutrale taal —
+  // 'reageerde op' suggereert een persoon, wat klopt voor user-comments
+  // maar misleidt voor auto-overdue waarschuwingen.
+  const isSystem = !n.actor_id
   switch (n.kind) {
     case 'mention':  return 'noemde je in'
     case 'assigned': return 'wees je toe aan'
-    case 'comment':  return 'reageerde op'
+    case 'comment':  return isSystem ? 'signaleert:' : 'reageerde op'
   }
 }
 

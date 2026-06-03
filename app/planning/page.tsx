@@ -14,6 +14,7 @@ import dienjaarRaw       from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
+import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
@@ -181,6 +182,33 @@ function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; wi
   return groups
 }
 
+// Werkdag-teller (ma-vr) tussen twee timestamps, beide uiteinden incl.
+// Skipt óók statische vrije dagen + Vrij-events voor `memberId`.
+function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): number {
+  if (endMs < startMs) return 0
+  let count = 0
+  const oneDay = 86400000
+  const start = new Date(startMs); start.setHours(0, 0, 0, 0)
+  const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
+  let daysOffMap: Record<string, number[]> | null = null
+  if (memberId && typeof window !== 'undefined') {
+    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-days-off') ?? '{}') as Record<string, number[]> } catch {}
+  }
+  const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
+  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
+    const d = new Date(t)
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) continue
+    if (memberId) {
+      const iso = dow === 0 ? 7 : dow
+      if (off.includes(iso)) continue
+      if (isVrijDayForMember(memberId, d)) continue
+    }
+    count++
+  }
+  return count
+}
+
 // ─── Hours in arbitrary range ─────────────────────────────────────────────────
 function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): number {
   if (!project.ownerIds.includes(memberId)) return 0
@@ -190,13 +218,15 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   if (re < pS || rs > pE) return 0
   const oS = rs > pS ? rs : pS
   const oE = re < pE ? re : pE
-  const totalMs   = pE.getTime() - pS.getTime()
-  const overlapMs = oE.getTime() - oS.getTime()
-  const fraction  = overlapMs / totalMs
+  // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
+  // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
+  // duwt in de werkdruk-cellen.
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), memberId)
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), memberId)
+  if (totalWork === 0) return 0
+  const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
-  // Zonder deze check viel een pie-chart-aanpassing buiten 't workload-overzicht
-  // en bleef de werkdruk-bol op de oude verdeling staan.
   const myShare = project.ownerHours && memberId in project.ownerHours
     ? Number(project.ownerHours[memberId]) || 0
     : project.estHours / Math.max(project.ownerIds.length, 1)
@@ -901,7 +931,8 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
         ...p,
         startTime: '09:00',
         endTime:   fmt(endH, endM),
-      } as Project)
+        __synthFullDay: true,
+      } as Project & { __synthFullDay: boolean })
       continue
     }
     if (isVrij(p)) {
@@ -970,10 +1001,45 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }
 
   type TimedBar = { p: Project; left: number; width: number; top: number; height: number; iso: string; startMin: number; durMin: number }
+  // Achtergrond-balk regel: synthetische dag-blokken (langlopende projecten
+  // zonder concrete tijd) EN echte events ≥4u krijgen de volle kolombreedte
+  // op een lagere z-index. Korte meetings die overlappen sitten daar
+  // bovenop ipv ernaast in een lane-slot — anders werd een PinkFloyd of
+  // een 8u NL-College opeens half zo breed zodra er een 30-min check-in
+  // op dezelfde dag stond. Drempel: 240 minuten = 4u.
+  const LONG_BG_THRESHOLD_MIN = 240
+  const synthBackgroundBars: TimedBar[] = []
+  const realTimed: Project[] = []
+  for (const p of timed) {
+    const isSynth = (p as Project & { __synthFullDay?: boolean }).__synthFullDay
+    const [shCheck, smCheck] = (p.startTime ?? '00:00').split(':').map(Number)
+    const [ehCheck, emCheck] = (p.endTime ?? p.startTime ?? '00:00').split(':').map(Number)
+    const durMin = (ehCheck * 60 + emCheck) - (shCheck * 60 + smCheck)
+    const isLong = durMin >= LONG_BG_THRESHOLD_MIN
+    if (isSynth || isLong) {
+      const iso = p.startDate; if (!iso) continue
+      const info = colByIso.get(iso); if (!info) continue
+      const [sh, sm] = (p.startTime ?? '09:00').split(':').map(Number)
+      const [eh, em] = (p.endTime ?? '17:00').split(':').map(Number)
+      const startMin = sh * 60 + sm
+      const endMin   = Math.max(startMin + 15, eh * 60 + em)
+      const top = (startMin - HOUR_START * 60) / 60 * HOUR_H
+      const height = Math.max(22, (endMin - startMin) / 60 * HOUR_H)
+      synthBackgroundBars.push({
+        p, iso, startMin, durMin: endMin - startMin,
+        left: info.left + 2,
+        width: Math.max(40, info.col.widthPx - 4),
+        top, height,
+      })
+    } else {
+      realTimed.push(p)
+    }
+  }
+
   // Per dag: groep events bij elkaar zodat overlap z'n eigen kolom-stukje
   // krijgt (events worden naast elkaar zichtbaar i.p.v. boven elkaar).
   const byIso = new Map<string, { p: Project; startMin: number; endMin: number; info: { col: Col; left: number; idx: number } }[]>()
-  for (const p of timed) {
+  for (const p of realTimed) {
     const iso = p.startDate; if (!iso) continue
     const info = colByIso.get(iso); if (!info) continue
     const [sh, sm] = (p.startTime ?? '00:00').split(':').map(Number)
@@ -1267,6 +1333,39 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 background: '#e2445c', pointerEvents: 'none', zIndex: 2 }} />
             )
           })()}
+          {/* Synth-day-blokken: langlopende projecten zonder concrete tijd,
+              renderen we eerst als volledige kolombreedte met lagere z-index
+              en zachtere achtergrond. Korte meetings die op dezelfde dag
+              vallen sitten daar bovenop. */}
+          {synthBackgroundBars.map(b => {
+            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            return (
+              <div key={`synth-${b.p.id}`}
+                onClick={() => onSelect(b.p)}
+                title={`${b.p.name} · ${b.p.estHours}u`}
+                style={{
+                  position: 'absolute',
+                  left: b.left, top: b.top, width: b.width, height: b.height,
+                  background: color + '40',
+                  borderLeft: `3px solid ${color}`,
+                  borderRadius: 6,
+                  padding: '6px 8px',
+                  cursor: 'pointer',
+                  zIndex: 1,
+                  overflow: 'hidden',
+                }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#fff',
+                  whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  {b.p.name}
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', marginTop: 1,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  {b.p.startTime}–{b.p.endTime}
+                </div>
+              </div>
+            )
+          })}
           {timedBars.map(b => {
             const isDragging = drag?.p.id === b.p.id
             const color = BOARD_COLORS[b.p.board] ?? '#888'
@@ -1304,7 +1403,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden',
                   boxShadow: isDragging ? '0 6px 20px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.12)',
                   opacity: isDragging ? 0.92 : 1,
-                  userSelect: 'none', zIndex: isDragging ? 5 : 1,
+                  userSelect: 'none', zIndex: isDragging ? 5 : 3,
                   // Google-events krijgen een gele strip aan de linkerkant +
                   // een diagonale highlight in de hoek — meteen herkenbaar als
                   // 'komt uit Google Calendar'.
@@ -3160,6 +3259,11 @@ export default function PlanningPage() {
     [allGroups]
   )
 
+  // Vrij-events vullen we elk render in de cache zodat countWorkdays (in
+  // hoursInRange / projectHoursInWeek) ze direct kan checken voor
+  // memberId. Vacatures, ziek, verlof tellen zo niet als werkdag.
+  useEffect(() => { setVrijDaysFromProjects(projects) }, [projects])
+
   // Per-item verberg-vlag uit het bron-board uitlezen. Items met
   // hiddenFromPlanning=true verschijnen niet meer in de planning-view
   // maar blijven op het bord staan. Werkt voor Google én handmatig.
@@ -3189,18 +3293,14 @@ export default function PlanningPage() {
     }
     // Per-item filter: het project ZELF (via z'n volledige id) of de PARENT
     // (via baseId zonder __siN-suffix) mag niet in de hidden-set zitten.
-    // Een hidden parent verbergt automatisch al z'n afgeleide subitems;
-    // een hidden subitem verbergt alleen dat ene event.
+    // Verbergen geldt strikt per ID: een verborgen parent verbergt niet
+    // automatisch z'n subitems. Project-subitems (Boekomslag maken,
+    // Femsplainers etc) staan los van de parent-balk; als je alleen die
+    // balk wegklikt, willen de subitem-uren wel gewoon in de planning
+    // verschijnen. Wil je een subitem ook weg? Vink 'verberg' op dát
+    // subitem.
     if (hiddenIds.size > 0) {
-      next = next.filter(p => {
-        if (hiddenIds.has(p.id)) return false
-        const subStart = p.id.indexOf('__si')
-        if (subStart >= 0) {
-          const parentBaseId = p.id.slice(0, subStart)
-          if (hiddenIds.has(parentBaseId)) return false
-        }
-        return true
-      })
+      next = next.filter(p => !hiddenIds.has(p.id))
     }
     return next
   }, [projects, shadowDrag, zoom, hiddenIds])

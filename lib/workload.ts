@@ -176,9 +176,45 @@ export type ProjectContribution = {
   hours: number
 }
 
+// Telt het aantal werkdagen (Ma-Vr) tussen twee datums inclusief beide
+// uiteinden — minus eventuele off-days voor `memberId` (statische vrije
+// weekdagen via daysOffStore + dynamische Vrij-events via vrijDays).
+//   - Weekend altijd uitgesloten.
+//   - memberId optioneel: zonder member checken we alleen Ma-Vr.
+function countWorkdays(startMs: number, endMs: number, memberId?: string): number {
+  if (endMs < startMs) return 0
+  let count = 0
+  const oneDay = 86400000
+  const start = new Date(startMs); start.setHours(0, 0, 0, 0)
+  const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
+  // Lazy-load: alleen importeren als we een member moeten checken.
+  let daysOffMap: Record<string, number[]> | null = null
+  if (memberId && typeof window !== 'undefined') {
+    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-days-off') ?? '{}') as Record<string, number[]> } catch {}
+  }
+  const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
+  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
+    const d = new Date(t)
+    const dow = d.getDay()                       // 0=Sun..6=Sat
+    if (dow === 0 || dow === 6) continue          // weekend altijd uit
+    if (memberId) {
+      const iso = dow === 0 ? 7 : dow             // ISO weekday 1..7
+      if (off.includes(iso)) continue             // statische vrije dag
+      // Dynamische Vrij-event via lazy require om circular imports te
+      // vermijden. vrijDays.ts cached zelf in module-scope.
+      try {
+        const { isVrijDayForMember } = require('./vrijDays') as typeof import('./vrijDays')
+        if (isVrijDayForMember(memberId, d)) continue
+      } catch {}
+    }
+    count++
+  }
+  return count
+}
+
 /**
  * Hours a specific project contributes to `memberId` in the week starting `weekStart`.
- * Hours are distributed evenly across all calendar days of the project timeline,
+ * Hours are distributed evenly across WORKING DAYS (Mon-Fri) of the project timeline,
  * then the overlap with the given week is taken, split equally among owners.
  */
 export function projectHoursInWeek(
@@ -212,10 +248,14 @@ export function projectHoursInWeek(
   const overlapStart = wStart > pStart ? wStart : pStart
   const overlapEnd   = wEnd   < pEnd   ? wEnd   : pEnd
 
-  const totalMs   = pEnd.getTime()   - pStart.getTime()
-  const overlapMs = overlapEnd.getTime() - overlapStart.getTime()
+  // Verdeling alleen over werkdagen — weekenden krijgen 0u uit een
+  // project. Als 't project alleen weekend overspant (zeldzaam) krijgen
+  // we 0u terug, wat klopt: 't werk valt simpelweg niet in werkdagen.
+  const totalWork  = countWorkdays(pStart.getTime(), pEnd.getTime(), memberId)
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), memberId)
+  if (totalWork === 0) return 0
 
-  const fraction        = overlapMs / totalMs
+  const fraction        = overlapWork / totalWork
   const result          = fraction * myShare
 
   return Math.round(result * 10) / 10
