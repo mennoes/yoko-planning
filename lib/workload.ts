@@ -208,12 +208,12 @@ function countWorkdays(startMs: number, endMs: number, memberId?: string): numbe
   const oneDay = 86400000
   const start = new Date(startMs); start.setHours(0, 0, 0, 0)
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
-  // Lazy-load: alleen importeren als we een member moeten checken.
-  let daysOffMap: Record<string, number[]> | null = null
-  if (memberId && typeof window !== 'undefined') {
-    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-profile-days-off') ?? '{}') as Record<string, number[]> } catch {}
-  }
-  const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
+  // Days-off filter UITGESCHAKELD voor uren-distributie. Was bron van
+  // 'maandag toont niks' wanneer de localStorage-cache ergens stale of
+  // verkeerd was. Weekend-skip blijft. Voor de zichtbare dim-stripe op
+  // off-days check ik elders rechtstreeks profilesById.
+  void memberId
+  const off: number[] = []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
     const d = new Date(t)
     const dow = d.getDay()                       // 0=Sun..6=Sat

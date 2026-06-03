@@ -208,11 +208,8 @@ function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): num
   const oneDay = 86400000
   const start = new Date(startMs); start.setHours(0, 0, 0, 0)
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
-  let daysOffMap: Record<string, number[]> | null = null
-  if (memberId && typeof window !== 'undefined') {
-    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-profile-days-off') ?? '{}') as Record<string, number[]> } catch {}
-  }
-  const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
+  void memberId
+  const off: number[] = []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
     const d = new Date(t)
     const dow = d.getDay()
