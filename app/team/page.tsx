@@ -34,19 +34,26 @@ function DaysOffRow({ memberId, memberColor }: { memberId: string; memberColor: 
   const LABELS: [number, string][] = [
     [1, 'M'], [2, 'D'], [3, 'W'], [4, 'D'], [5, 'V'],
   ]
+  // Visueel: een opgelichte (gekleurde) knop = WERKDAG, een grijze knop
+  // = vrij. Standaard zijn alle 5 weekdagen werkdagen, dus alles in
+  // member-kleur. Klik op V om vrijdag te grijzen = vrij.
   return (
-    <div style={{ display: 'flex', gap: 3, marginTop: 4 }} title="Klik op een dag om 'm als vrije dag te markeren">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+      <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: 2 }}>Werk:</span>
       {LABELS.map(([d, lbl]) => {
         const off = days.includes(d)
+        const works = !off
         return (
           <button key={d} onClick={() => toggle(d)}
-            title={off ? `Markeer ${lbl} als werkdag` : `Markeer ${lbl} als vrije dag`}
+            title={off ? `${lbl}: vrij — klik om als werkdag te markeren` : `${lbl}: werkdag — klik om als vrije dag te markeren`}
             style={{
               width: 18, height: 18, padding: 0,
-              borderRadius: 4, border: '1px solid ' + (off ? memberColor : 'var(--border)'),
-              background: off ? memberColor : 'transparent',
-              color: off ? '#fff' : 'var(--text-muted)',
+              borderRadius: 4,
+              border: '1px solid ' + (works ? memberColor : 'var(--border)'),
+              background: works ? memberColor : 'transparent',
+              color:      works ? '#fff' : 'var(--text-muted)',
               fontSize: 9.5, fontWeight: 700, lineHeight: 1, cursor: 'pointer',
+              opacity:    works ? 1 : 0.55,
             }}>{lbl}</button>
         )
       })}
