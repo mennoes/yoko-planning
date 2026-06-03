@@ -963,55 +963,62 @@ export default function TodosPage() {
     saveTodoSections(next)
   }, [hydrated, sections])
 
-  // ── Auto-seed open Monday-projecten in mijn to-do-sectie ────────────────────
-  // ALLE niet-Google, niet-Done, niet-past-due project-items rollen
-  // automatisch als gekoppelde todo in m'n eigen kaart binnen — behalve
-  // de items die ik zelf met 't kruisje weggegooid heb (die zitten in
-  // de 'removed'-cache). Zo zien nieuwe projecten op een bord direct
-  // op /todos op, zonder handmatig koppelen.
+  // ── Auto-seed open Monday-projecten per yoko-crew lid ──────────────────────
+  // Voor ELKE yoko-crew sectie rollen automatisch hun toegewezen niet-
+  // Google, niet-Done, niet-past-due project-items binnen — zo zie je
+  // ook bij Odette/Vincent/etc. hun projecten staan, niet alleen bij
+  // jezelf. De 'removed'-cache blijft per-device (jij verwijdert iets
+  // uit jouw weergave; bij anderen blijft 't staan tot ze 't zelf
+  // kruisjes).
   useEffect(() => {
-    const me = currentProfile?.memberId
-    if (!me || !hydrated || sections.length === 0 || allProjects.length === 0) return
-    const mySection = sections.find(s => s.id === me)
-    if (!mySection) return
+    if (!hydrated || sections.length === 0 || allProjects.length === 0) return
 
-    // ── Migratie van de oude 'seeded'-cache (één-malig). Die hield álles
-    //    vast wat ooit gezien was — daardoor leken projecten weg te blijven.
-    //    We gooien de key gewoon weg: ALLE huidige non-Google projecten
-    //    rollen alsnog binnen. Wat je daarna met 't kruisje weghaalt, gaat
-    //    naar de nieuwe 'removed'-cache en komt niet meer terug.
+    // Legacy-cache één keer schoonmaken (zie vorige iteratie).
     if (typeof window !== 'undefined') {
       try { localStorage.removeItem(LEGACY_SEEDED_KEY) } catch {}
     }
 
     const removed = loadRemovedProjectIds()
-    const mine    = loadMyOpenProjects(me)
-    const existingItemIds = new Set(
-      mySection.items
-        .map(i => i.projectRef?.itemId)
-        .filter((x): x is string => !!x)
-    )
+    let next = sections
+    let changed = false
 
-    const toAdd = mine.filter(p => {
-      const key = `${p.board}:${p.itemId}`
-      if (removed.has(key))              return false
-      if (existingItemIds.has(p.itemId)) return false
-      return true
-    })
-    if (toAdd.length === 0) return
+    for (const section of sections) {
+      // Skip niet-member secties (komend, ideeen, socials, etc.).
+      const isMemberSection =
+        liveTeam.some(m => m.id === section.id && m.kind === 'yoko' && !m.hidden) ||
+        // Fallback: hardcoded YOKO_IDS voor leden die nog niet in de
+        // team_members tabel staan (pre-migratie).
+        ['menno','vincent','odette','anne-fleur','kars'].includes(section.id)
+      if (!isMemberSection) continue
 
-    const newItems: TodoItem[] = toAdd.map((p, idx) => ({
-      id: `auto-${Date.now()}-${idx}`,
-      text: p.name,
-      done: false,
-      projectRef: { board: p.board, itemId: p.itemId, name: p.name },
-    }))
-    const nextSections = sections.map(s =>
-      s.id === me ? { ...s, items: [...s.items, ...newItems] } : s
-    )
-    setSections(nextSections)
-    saveTodoSections(nextSections)
-  }, [currentProfile?.memberId, hydrated, sections, allProjects])
+      const memberProjects = loadMyOpenProjects(section.id)
+      const existingItemIds = new Set(
+        section.items
+          .map(i => i.projectRef?.itemId)
+          .filter((x): x is string => !!x)
+      )
+      const toAdd = memberProjects.filter(p => {
+        const key = `${p.board}:${p.itemId}`
+        if (removed.has(key))              return false
+        if (existingItemIds.has(p.itemId)) return false
+        return true
+      })
+      if (toAdd.length === 0) continue
+
+      const newItems: TodoItem[] = toAdd.map((p, idx) => ({
+        id: `auto-${section.id}-${Date.now()}-${idx}`,
+        text: p.name,
+        done: false,
+        projectRef: { board: p.board, itemId: p.itemId, name: p.name },
+      }))
+      next = next.map(s => s.id === section.id ? { ...s, items: [...s.items, ...newItems] } : s)
+      changed = true
+    }
+
+    if (!changed) return
+    setSections(next)
+    saveTodoSections(next)
+  }, [currentProfile?.memberId, hydrated, sections, allProjects, liveTeam])
 
   function updateSection(updated: Section, prev?: Section) {
     const next = sections.map(s => s.id === updated.id ? updated : s)

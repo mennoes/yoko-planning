@@ -23,6 +23,15 @@ export default function AccountsPage() {
   const [sessionInfo, setSessionInfo] = useState<{ hasSession: boolean; email?: string | null; dbError?: string }>({ hasSession: false })
   const [retrying, setRetrying] = useState(false)
   const [showPasswords, setShowPasswords] = useState(false)
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set())
+  function toggleReveal(id: string) {
+    setRevealedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [editingCell, setEditingCell] = useState<{ id: string; field: keyof Account } | null>(null)
   const [editValue, setEditValue] = useState('')
 
@@ -241,9 +250,18 @@ export default function AccountsPage() {
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'var(--bg-hover)'
+              e.currentTarget.querySelectorAll<HTMLElement>('.acct-eye').forEach(el => {
+                if (el.style.opacity === '0') el.style.opacity = '0.85'
+              })
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = 'transparent'
+              const revealed = showPasswords || revealedIds.has(account.id)
+              if (!revealed) {
+                e.currentTarget.querySelectorAll<HTMLElement>('.acct-eye').forEach(el => {
+                  el.style.opacity = '0'
+                })
+              }
             }}
           >
             {columns.map((col) => {
@@ -295,30 +313,43 @@ export default function AccountsPage() {
                     >
                       {value}
                     </a>
-                  ) : col.key === 'password' && value ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                      <span style={{
-                        fontSize: 15, color: 'var(--text-secondary)',
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
-                      }}>
-                        {showPasswords ? value : '••••••••••'}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigator.clipboard?.writeText(value)
-                          const btn = e.currentTarget
-                          const orig = btn.textContent
-                          btn.textContent = '✓'
-                          setTimeout(() => { btn.textContent = orig }, 1200)
-                        }}
-                        title="Kopieer wachtwoord"
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '2px 5px', borderRadius: 4, flexShrink: 0 }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}>⧉</button>
-                    </div>
-                  ) : (
+                  ) : col.key === 'password' && value ? (() => {
+                    const revealed = showPasswords || revealedIds.has(account.id)
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                        <span style={{
+                          fontSize: 15, color: 'var(--text-secondary)',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+                        }}>
+                          {revealed ? value : '••••••••••'}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleReveal(account.id)
+                          }}
+                          title={revealed ? 'Verbergen' : 'Tonen'}
+                          className="acct-eye"
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: '2px 5px', borderRadius: 4, flexShrink: 0, opacity: revealed ? 1 : 0, transition: 'opacity 0.12s' }}>
+                          {revealed ? '👁' : '👁‍🗨'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigator.clipboard?.writeText(value)
+                            const btn = e.currentTarget
+                            const orig = btn.textContent
+                            btn.textContent = '✓'
+                            setTimeout(() => { btn.textContent = orig }, 1200)
+                          }}
+                          title="Kopieer wachtwoord"
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '2px 5px', borderRadius: 4, flexShrink: 0 }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}>⧉</button>
+                      </div>
+                    )
+                  })() : (
                     <span
                       style={{
                         fontSize: 15,
