@@ -1035,24 +1035,42 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             style={{ ...editInput, flex: 1 }} />
         ) : (
           <>
-            {/* Naam-klik opent altijd de detail-drawer — daar zie je status,
-                owners, comments, etc. De G-knop links opent eventueel het
-                Google-event in een nieuw tabblad. Hernoemen via het potlood-
-                icoon dat op hover verschijnt (alleen voor niet-Google). */}
-            <span onClick={() => onOpenDetail?.()}
-              title={onOpenDetail ? 'Klik om details te openen' : undefined}
-              style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, cursor: onOpenDetail ? 'pointer' : 'default', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-              {subitem.name}
-            </span>
+            {/* Monday-stijl: klik op de naam start direct rename voor
+                handmatige subitems. Google-subitems openen in Google
+                Calendar via dezelfde klik (de instance-link). Detail-
+                drawer blijft bereikbaar via de ↗-knop die op hover
+                rechts verschijnt. */}
             {(() => {
               const isGoogleSub = !!subitem.externalLink || subitem.id?.startsWith('si_g_')
-              if (isGoogleSub || !hover) return null
               return (
-                <button onClick={e => { e.stopPropagation(); setNameDraft(subitem.name); setEditName(true) }}
-                  title="Naam aanpassen"
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: '2px 4px', borderRadius: 3, flexShrink: 0 }}>✎</button>
+                <span
+                  onClick={() => {
+                    if (isGoogleSub) {
+                      if (subitem.externalLink) window.open(subitem.externalLink, '_blank', 'noopener,noreferrer')
+                      return
+                    }
+                    setNameDraft(subitem.name); setEditName(true)
+                  }}
+                  title={isGoogleSub ? 'Open in Google Calendar' : 'Klik om naam aan te passen'}
+                  style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500,
+                    cursor: isGoogleSub ? 'pointer' : 'text',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                  {subitem.name}
+                </span>
               )
             })()}
+            {hover && onOpenDetail && (
+              <button onClick={e => { e.stopPropagation(); onOpenDetail() }}
+                title="Details openen"
+                aria-label="Details openen"
+                style={{ background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', padding: '2px 6px', fontSize: 13, lineHeight: 1,
+                  borderRadius: 4, flexShrink: 0 }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                ↗
+              </button>
+            )}
             {subitem.meetLink && (
               <a href={subitem.meetLink} target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
