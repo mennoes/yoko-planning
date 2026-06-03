@@ -535,7 +535,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   if (wantedICals.length > 0) {
     const { data: sharedRows } = await admin
       .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
       .eq('source', 'google')
       .in('ical_uid', Array.from(new Set(wantedICals)))
     for (const r of (sharedRows as ItemRow[] | null) ?? []) {
@@ -547,10 +547,57 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     }
   }
 
+  // LEGACY DEDUP: oude rijen die nog vóór de iCalUID-migratie zijn aangemaakt
+  // hebben ical_uid = null en worden door de sharedByICal-lookup gemist. Bij
+  // een verse user-sync zou dat een DUBBEL item genereren. We laden hier
+  // alle source='google' rijen ZONDER iCalUID en indexeren op
+  // (board_id, lowercase-name, start_date). Tijdens findExistingFor proberen
+  // we dat als laatste-redmiddel match — en backfillen we meteen de iCalUID
+  // zodat de volgende sync 'm wél via de normale weg vindt.
+  const legacyByKey = new Map<string, ItemRow>()
+  {
+    const { data: legacyRows } = await admin
+      .from('board_items')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
+      .eq('source', 'google')
+      .is('ical_uid', null)
+      .is('deleted_at', null)
+    for (const r of (legacyRows as ItemRow[] | null) ?? []) {
+      const name = String((r as { name?: string }).name ?? '').toLowerCase().trim()
+        .replace(/\s*\(\d+×\)\s*$/, '').trim()    // recurring suffix afstrippen
+      const sd   = String((r as { start_date?: string | null }).start_date ?? '')
+      if (!name || !sd || !r.board_id) continue
+      const key = `${r.board_id}::${name}::${sd}`
+      const prev = legacyByKey.get(key)
+      if (!prev || r.id < prev.id) legacyByKey.set(key, r)
+    }
+  }
+  function legacyLookup(name: string, startDate: string | null): ItemRow | undefined {
+    if (!startDate) return undefined
+    const norm = name.toLowerCase().trim().replace(/\s*\(\d+×\)\s*$/, '').trim()
+    // Probeer per bord — fallbackBoard, plus de routing-rules targets.
+    const boards = new Set<string>([fallbackBoard])
+    for (const r of rules) boards.add(r.board_id)
+    for (const b of boards) {
+      const hit = legacyByKey.get(`${b}::${norm}::${startDate}`)
+      if (hit) return hit
+    }
+    return undefined
+  }
+
   // Helper: vind de bestaande rij voor dit event, bij voorkeur via iCalUID.
-  // Fallback: mijn eigen historische rij via external_id (oude id-vorm met
-  // user-prefix). Dat zorgt dat we naadloos migreren zonder data te verliezen.
-  function findExistingFor(icalUid: string | null, extId: string): { row: ItemRow | undefined; id: string } {
+  // Fallback-chain:
+  //  1. sharedByICal (cross-user dedup via iCalUID — beste match)
+  //  2. byExt (mijn eigen oude id-vorm met user-prefix)
+  //  3. legacyLookup (oude rijen ZONDER iCalUID die door eerdere sync-
+  //     versies gemaakt zijn; match op board+name+startDate)
+  //  4. Nieuw — canonical id op basis van iCalUID
+  function findExistingFor(
+    icalUid: string | null,
+    extId: string,
+    name: string,
+    startDate: string | null,
+  ): { row: ItemRow | undefined; id: string } {
     if (icalUid) {
       const shared = sharedByICal.get(icalUid)
       if (shared) return { row: shared, id: shared.id }
@@ -559,6 +606,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const mineRow = byExtFull.get(extId)
     if (mineRow) return { row: mineRow, id: mineRow.id }
     if (mineId) return { row: undefined, id: mineId }
+    // Legacy: zelfde event-naam+datum op hetzelfde bord, zonder iCalUID.
+    // Backfill van iCalUID gebeurt automatisch via de upsert hieronder.
+    const legacy = legacyLookup(name, startDate)
+    if (legacy) return { row: legacy, id: legacy.id }
     // Nieuwe rij — canonical id-vorm op basis van iCalUID zodat een
     // volgende sync door een ander teamlid op dezelfde rij landt.
     const newId = icalUid ? `it_g_${icalUid}` : `it_g_${extId}_${cal.user_id.slice(0, 8)}`
@@ -585,7 +636,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // bestaande rij-groepen worden gerespecteerd via existingRow.group_id.
       seenExt.add(ev.id)
       const icalUid     = ev.iCalUID ?? null
-      const lookup      = findExistingFor(icalUid, ev.id)
+      const lookup      = findExistingFor(icalUid, ev.id, name, start)
       const existingRow = lookup.row
       const id          = lookup.id
       seenIds.add(id)
@@ -663,7 +714,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         })(),
         // Position bewaren als er al een rij was — anders sprong een
         // handmatig gesleept item bij elke sync terug naar bovenaan.
-        position:            existingRow?.position ?? 0,
+        position:            existingRow?.position ?? 9999,
         source:              'google',
         external_id:         ev.id,
         ical_uid:            icalUid,
@@ -730,7 +781,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // attendee-lijsten zijn meestal hetzelfde over alle herhalingen.
     const groupOwners = ownersForEvent(sorted[sorted.length - 1])
     const icalUid     = iCalKeyForGroup(sorted)
-    const lookup      = findExistingFor(icalUid, groupKey)
+    const lookup      = findExistingFor(icalUid, groupKey, baseName, minStart)
     const existingRow = lookup.row
     const ownerSet = new Set<string>(existingRow?.owner_ids ?? [])
     for (const o of groupOwners.owners) ownerSet.add(o)
@@ -848,7 +899,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       })(),
       // Position bewaren — anders sprong een handmatig gesleept item
       // bij elke sync terug naar bovenaan.
-      position:            existingRow?.position ?? 0,
+      position:            existingRow?.position ?? 9999,
       source:              'google',
       external_id:         groupKey,
       ical_uid:            icalUid,
