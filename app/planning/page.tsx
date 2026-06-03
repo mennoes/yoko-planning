@@ -879,7 +879,8 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
         ...p,
         startTime: '09:00',
         endTime:   fmt(endH, endM),
-      } as Project)
+        __synthFullDay: true,
+      } as Project & { __synthFullDay: boolean })
       continue
     }
     if (isVrij(p)) {
@@ -942,10 +943,40 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }
 
   type TimedBar = { p: Project; left: number; width: number; top: number; height: number; iso: string; startMin: number; durMin: number }
+  // Synthetische dag-blokken (langlopende projecten zonder tijd, die we 09:00→…
+  // hebben gegeven om hun werkdruk visueel te tonen) renderen we als
+  // achtergrond-balk over de volle kolombreedte. Korte meetings die overlappen
+  // sitten daar dan bovenop i.p.v. er een lane-slot mee te delen — anders
+  // werd PinkFloyd of Teamdag opeens dunner zodra je een 30-minuten meeting
+  // op dezelfde dag had.
+  const synthBackgroundBars: TimedBar[] = []
+  const realTimed: Project[] = []
+  for (const p of timed) {
+    const isSynth = (p as Project & { __synthFullDay?: boolean }).__synthFullDay
+    if (isSynth) {
+      const iso = p.startDate; if (!iso) continue
+      const info = colByIso.get(iso); if (!info) continue
+      const [sh, sm] = (p.startTime ?? '09:00').split(':').map(Number)
+      const [eh, em] = (p.endTime ?? '17:00').split(':').map(Number)
+      const startMin = sh * 60 + sm
+      const endMin   = Math.max(startMin + 15, eh * 60 + em)
+      const top = (startMin - HOUR_START * 60) / 60 * HOUR_H
+      const height = Math.max(22, (endMin - startMin) / 60 * HOUR_H)
+      synthBackgroundBars.push({
+        p, iso, startMin, durMin: endMin - startMin,
+        left: info.left + 2,
+        width: Math.max(40, info.col.widthPx - 4),
+        top, height,
+      })
+    } else {
+      realTimed.push(p)
+    }
+  }
+
   // Per dag: groep events bij elkaar zodat overlap z'n eigen kolom-stukje
   // krijgt (events worden naast elkaar zichtbaar i.p.v. boven elkaar).
   const byIso = new Map<string, { p: Project; startMin: number; endMin: number; info: { col: Col; left: number; idx: number } }[]>()
-  for (const p of timed) {
+  for (const p of realTimed) {
     const iso = p.startDate; if (!iso) continue
     const info = colByIso.get(iso); if (!info) continue
     const [sh, sm] = (p.startTime ?? '00:00').split(':').map(Number)
@@ -1237,6 +1268,39 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 background: '#e2445c', pointerEvents: 'none', zIndex: 2 }} />
             )
           })()}
+          {/* Synth-day-blokken: langlopende projecten zonder concrete tijd,
+              renderen we eerst als volledige kolombreedte met lagere z-index
+              en zachtere achtergrond. Korte meetings die op dezelfde dag
+              vallen sitten daar bovenop. */}
+          {synthBackgroundBars.map(b => {
+            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            return (
+              <div key={`synth-${b.p.id}`}
+                onClick={() => onSelect(b.p)}
+                title={`${b.p.name} · ${b.p.estHours}u`}
+                style={{
+                  position: 'absolute',
+                  left: b.left, top: b.top, width: b.width, height: b.height,
+                  background: color + '40',
+                  borderLeft: `3px solid ${color}`,
+                  borderRadius: 6,
+                  padding: '6px 8px',
+                  cursor: 'pointer',
+                  zIndex: 1,
+                  overflow: 'hidden',
+                }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#fff',
+                  whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  {b.p.name}
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', marginTop: 1,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  {b.p.startTime}–{b.p.endTime}
+                </div>
+              </div>
+            )
+          })}
           {timedBars.map(b => {
             const isDragging = drag?.p.id === b.p.id
             const color = BOARD_COLORS[b.p.board] ?? '#888'
@@ -1274,7 +1338,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden',
                   boxShadow: isDragging ? '0 6px 20px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.12)',
                   opacity: isDragging ? 0.92 : 1,
-                  userSelect: 'none', zIndex: isDragging ? 5 : 1,
+                  userSelect: 'none', zIndex: isDragging ? 5 : 3,
                   // Google-events krijgen een gele strip aan de linkerkant +
                   // een diagonale highlight in de hoek — meteen herkenbaar als
                   // 'komt uit Google Calendar'.
