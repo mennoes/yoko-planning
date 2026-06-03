@@ -528,15 +528,30 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const u = iCalKeyForGroup(instances)
     if (u) wantedICals.push(u)
   }
-  // PER-USER ROWS: cross-user sharing via sharedByICal is uit (te
-  // foutgevoelig — Vincent's sync overschreef Menno's row z'n
-  // external_id/calendar_id waardoor Menno's volgende sync 'm niet
-  // terugvond en een nieuwe rij maakte). Elke user heeft voortaan z'n
-  // eigen rij per event. Visueel kan een gedeeld event 2x verschijnen
-  // (één per teamlid dat z'n agenda heeft gekoppeld); dat lossen we
-  // eventueel later op met UI-dedup. Liever zichtbaar dubbel dan
-  // onzichtbaar weg.
+  // CANONICAL ROW per iCalUID. Eén rij per Google-event in de DB,
+  // gedeeld door alle teamleden. Onder eerdere implementatie kon
+  // Vincent's sync Menno's external_id/calendar_id overschrijven →
+  // Menno's volgende sync vond zijn row niet terug → nieuwe row →
+  // duplicaat. Fix: in de upsert preserven we external_id /
+  // calendar_id / external_user_id van existingRow zodat alleen de
+  // EERSTE sync die velden zet en daarna niemand ze overschrijft.
   const sharedByICal = new Map<string, ItemRow>()
+  if (wantedICals.length > 0) {
+    const { data: sharedRows } = await admin
+      .from('board_items')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
+      .eq('source', 'google')
+      .is('deleted_at', null)
+      .in('ical_uid', Array.from(new Set(wantedICals)))
+    for (const r of (sharedRows as ItemRow[] | null) ?? []) {
+      if (!r.ical_uid) continue
+      const prev = sharedByICal.get(r.ical_uid)
+      // Canonical = laagste id alfabetisch (deterministisch over alle
+      // teamleden heen). Wie de eerste sync deed bepaalt zo permanent
+      // de canonical id-vorm 'it_g_<icalUid>'.
+      if (!prev || r.id < prev.id) sharedByICal.set(r.ical_uid, r)
+    }
+  }
 
   // Legacy dedup BINNEN mijn eigen rijen: oude rijen zonder iCalUID
   // krijgen via findExistingFor een match op naam+datum zodat ze niet
@@ -596,17 +611,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (mineRow) return { row: mineRow, id: mineRow.id }
     if (mineId) return { row: undefined, id: mineId }
     // Legacy: zelfde event-naam+datum op hetzelfde bord (alleen mijn
-    // eigen rows). Backfill van iCalUID gebeurt automatisch via de
-    // upsert hieronder.
+    // eigen rows). Backfill van iCalUID gebeurt via de upsert.
     const legacy = legacyLookup(name, startDate)
     if (legacy) return { row: legacy, id: legacy.id }
-    // Nieuwe rij — PER-USER id-vorm (icaluid + user-prefix). Zo blijven
-    // rijen van verschillende teamleden gescheiden en kan een sync
-    // van de één nooit een rij van de ander overschrijven.
-    const userSlug = cal.user_id.replace(/-/g, '').slice(0, 8)
-    const newId = icalUid
-      ? `it_g_${icalUid}_${userSlug}`
-      : `it_g_${extId}_${userSlug}`
+    // Nieuwe rij — CANONICAL id-vorm op basis van iCalUID. Eén rij
+    // per event, gedeeld door alle teamleden.
+    const newId = icalUid ? `it_g_${icalUid}` : `it_g_${extId}_${cal.user_id.slice(0, 8)}`
     return { row: undefined, id: newId }
   }
 
@@ -710,15 +720,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         // handmatig gesleept item bij elke sync terug naar bovenaan.
         position:            existingRow?.position ?? 9999,
         source:              'google',
-        external_id:         ev.id,
+        // external_id/calendar_id NIET overschrijven als er al een rij
+        // bestaat. Die behoren bij de gebruiker die als EERSTE deze rij
+        // aanmaakte — overschrijven zou hun lookup-via-ev.id breken en
+        // race-condities veroorzaken. Bij een nieuwe rij vullen we ze in.
+        external_id:         existingRow?.external_id ?? ev.id,
         ical_uid:            icalUid,
-        external_link:       ev.htmlLink ?? null,
+        external_link:       (existingRow as { external_link?: string | null } | undefined)?.external_link ?? ev.htmlLink ?? null,
         external_synced_at:  new Date().toISOString(),
-        // Niet overschrijven als een ander teamlid deze rij eerst heeft
-        // aangemaakt — anders verliezen we hun ownership-spoor en kapt de
-        // cleanup straks van een andere user de rij weg.
         external_user_id:    existingRow?.external_user_id ?? cal.user_id,
-        calendar_id:         cal.calendar_id,
+        calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
         updated_at:          new Date().toISOString(),
       })
       continue
@@ -878,12 +889,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // bij elke sync terug naar bovenaan.
       position:            existingRow?.position ?? 9999,
       source:              'google',
-      external_id:         groupKey,
+      // Per-user velden NIET overschrijven (zie single-event-branch).
+      external_id:         existingRow?.external_id ?? groupKey,
       ical_uid:            icalUid,
-      external_link:       sorted[0].htmlLink ?? null,
+      external_link:       (existingRow as { external_link?: string | null } | undefined)?.external_link ?? sorted[0].htmlLink ?? null,
       external_synced_at:  new Date().toISOString(),
       external_user_id:    existingRow?.external_user_id ?? cal.user_id,
-      calendar_id:         cal.calendar_id,
+      calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
       updated_at:          new Date().toISOString(),
     })
   }

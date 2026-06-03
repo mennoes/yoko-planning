@@ -134,38 +134,10 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     .from('board_items').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
   if (iErr || !itemRows) return false
 
-  // PER-USER FILTER voor Google-meetings: in de DB hebben teamleden
-  // hun eigen rij per event (stabiel, geen sync-race). Hier laten we
-  // alleen MIJN eigen rijen door — Vincent's Google-rijen verschijnen
-  // niet in mijn weergave en omgekeerd. Geen merging, geen velden door
-  // elkaar halen, geen verlies van source/externalLink/Meet-link.
-  // Manual items en Google-rijen zonder external_user_id blijven
-  // gewoon zichtbaar voor iedereen.
-  const myUid = await getCurrentUserId()
-  type AnyRow = Record<string, unknown>
-  const visibleRows: AnyRow[] = []
-  for (const r of itemRows as AnyRow[]) {
-    const src = String(r.source ?? '')
-    if (src !== 'google') {
-      visibleRows.push(r)
-      continue
-    }
-    const rowUid = (r.external_user_id as string | null) ?? null
-    if (!rowUid) {
-      // Legacy Google-rij zonder external_user_id (van vóór per-user
-      // sync). Toon 'm gewoon — beter dan onzichtbaar.
-      visibleRows.push(r)
-      continue
-    }
-    if (!myUid || rowUid === myUid) {
-      // 't is van mij. Toon.
-      visibleRows.push(r)
-    }
-    // anders: rij van iemand anders, niet tonen.
-  }
-
+  // Iedereen ziet dezelfde rijen — geen per-user filtering. Sync zorgt
+  // dat er één row per Google-event bestaat (canonical via iCalUID).
   const itemsByGroup = new Map<string, BoardItem[]>()
-  for (const r of visibleRows) {
+  for (const r of itemRows) {
     const it = rowToItem(r as Record<string, unknown>)
     const gid = String((r as { group_id: string }).group_id)
     const arr = itemsByGroup.get(gid) ?? []
