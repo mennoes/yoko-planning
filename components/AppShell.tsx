@@ -331,9 +331,17 @@ function Inner({ children }: { children: ReactNode }) {
               <IconHome size={20} />
             </Link>
           </div>
-          {/* Notificaties + zoeken rechtsboven. */}
+          {/* Notificaties + papierbak + zoeken rechtsboven. */}
           <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
             <NotificationBell />
+            <Link href="/trash" aria-label="Papierbak"
+              title="Papierbak — verwijderde items herstellen"
+              style={{
+                width: 38, height: 38, borderRadius: 9,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, textDecoration: 'none',
+              }}>🗑</Link>
             <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
               style={{
                 width: 38, height: 38, borderRadius: 9,

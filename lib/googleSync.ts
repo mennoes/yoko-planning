@@ -830,11 +830,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       //   3. Fallback: het dag-datum-label ('ma 26 mei').
       const evTitle = (ev.summary ?? '').trim()
       const instanceRenamedInGoogle = evTitle.length > 0 && evTitle !== baseName.trim()
+      // Naam-fallback: was 'wo 3 jun' / 'ma 26 mei' (date-label) — gebruiker
+      // ervaart 't als "verkeerde naam". Recurring instances erven nu de
+      // master-naam (parent.name). De datum-kolom toont 't moment al, dus
+      // dubbele info in de naam is niet nodig.
       const subitemName = instanceRenamedInGoogle
         ? evTitle
         : (prev?.name && prev.name !== '—' && !/^[a-z]{2,3}\s+\d/i.test(prev.name)
             ? prev.name
-            : dateLabel)
+            : (baseName || dateLabel))
       return {
         id:        sid,
         name:      subitemName,
