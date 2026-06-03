@@ -81,7 +81,13 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               // Subitem". User vond 't dubbel: "het hoofditem staat er nu
               // ook". Subitem-naam is meestal duidelijk genoeg op zichzelf
               // ('Boekomslag v2'); voor extra context kun je 'm openklikken.
-              name:      si.name || (i.name as string),
+              // Bestaande subitems hebben mogelijk nog 'wo 3 jun' (date-
+              // label) als naam uit een vorige sync. Detecteer dat patroon
+              // en val terug op parent-naam zodat we niet wachten op de
+              // volgende sync-write.
+              name:      (si.name && !/^[a-z]{2,3}\s+\d{1,2}(\s+[a-z.]+)?$/i.test(si.name.trim()))
+                           ? si.name
+                           : (i.name as string),
               board:     boardName,
               group:     g.name,
               ownerIds:  owners,
