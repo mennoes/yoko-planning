@@ -899,32 +899,61 @@ export default function HomePage() {
         </div>
       </div>
     ),
-    team: (
-      <div style={card}>
-        <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconUsers size={isMobile ? 17 : 15} />Team vandaag</h2>
+    team: (() => {
+      // Splits Yoko-team (vaste medewerkers) en freelancers. Freelancers
+      // tellen alleen mee als ze in team.json staan (incl. extras), 'unassigned'
+      // valt eruit. Counts achter het kopje + sub-secties.
+      const freelancers = teamData.members.filter(m =>
+        !YOKO_IDS.includes(m.id) && m.id !== 'unassigned'
+      )
+      const yokoAvail = yokoMembers.filter(m => statusFor(m.id).kind === 'available').length
+      const flAvail   = freelancers.filter(m => statusFor(m.id).kind === 'available').length
+      const totalCount = yokoMembers.length + freelancers.length
+      const totalAvail = yokoAvail + flAvail
+      const renderRow = (m: typeof teamData.members[number]) => {
+        const s = statusFor(m.id)
+        const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
+                   : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
+                   :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
+        return (
+          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
+            <UserAvatar memberId={m.id} size={22} />
+            <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {m.name}
+            </Link>
+            <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+              {tone.label}
+            </span>
+          </div>
+        )
+      }
+      const subHeader = (label: string, count: number, avail: number) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 18px 2px', marginTop: 2 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {avail}/{count}</span>
         </div>
-        <div style={{ padding: '6px 0 10px' }}>
-          {yokoMembers.map(m => {
-            const s = statusFor(m.id)
-            const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
-                       : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
-                       :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
-            return (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
-                <UserAvatar memberId={m.id} size={22} />
-                <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {m.name}
-                </Link>
-                <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
-                  {tone.label}
-                </span>
-              </div>
-            )
-          })}
+      )
+      return (
+        <div style={card}>
+          <div style={cardHeader}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <IconUsers size={isMobile ? 17 : 15} />Team vandaag
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
+            </h2>
+          </div>
+          <div style={{ padding: '6px 0 10px' }}>
+            {subHeader('Studio Yoko', yokoMembers.length, yokoAvail)}
+            {yokoMembers.map(renderRow)}
+            {freelancers.length > 0 && (
+              <>
+                {subHeader('Freelancers', freelancers.length, flAvail)}
+                {freelancers.map(renderRow)}
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    ),
+      )
+    })(),
     deadlines: (
       <div style={card}>
         <div style={cardHeader}>

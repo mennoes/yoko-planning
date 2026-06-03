@@ -110,8 +110,8 @@ const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 
 // Column counts per zoom
 // Week-zoom: 21 dagen = 7 dagen historie + vandaag + 13 dagen vooruit (zie
 // HISTORY_BACK). Overzicht (week-zoom) en maand-fallback hun bredere range.
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 21, week: 56, maand: 18 }
-const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 7, week: 4, maand: 2 }
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 56, week: 70, maand: 24 }
+const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 28, week: 14, maand: 6 }
 const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
