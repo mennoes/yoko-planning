@@ -134,8 +134,44 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     .from('board_items').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
   if (iErr || !itemRows) return false
 
+  // UI-LEVEL DEDUP voor Google-meetings: in de DB hebben verschillende
+  // teamleden hun eigen rij per event (per-user sync model, voorkomt
+  // race-conditions). Hier groeperen we per iCalUID en tonen we slechts
+  // ÉÉN rij — met de owners samengevoegd over alle duplicaten. Visueel
+  // dus 1 Weekstart-item, ook al hebben Menno en Vincent allebei een
+  // rij in de DB.
+  type AnyRow = Record<string, unknown>
+  const seenIcal = new Map<string, AnyRow>()   // canonical row per iCalUID
+  const mergedOwners = new Map<string, Set<string>>()  // iCalUID → unie van owner_ids
+  const dedupedRows: AnyRow[] = []
+  for (const r of itemRows as AnyRow[]) {
+    const src   = String(r.source ?? '')
+    const ical  = (r.ical_uid as string | null) ?? null
+    if (src !== 'google' || !ical) {
+      dedupedRows.push(r)
+      continue
+    }
+    const prev = seenIcal.get(ical)
+    if (!prev) {
+      // Eerste rij voor dit event — wordt voorlopig canonical.
+      seenIcal.set(ical, r)
+      const owners = new Set<string>(((r.owner_ids as string[] | null) ?? []))
+      mergedOwners.set(ical, owners)
+      dedupedRows.push(r)
+    } else {
+      // Owners van deze duplicaat-rij samenvoegen in de canonical.
+      const owners = mergedOwners.get(ical)!
+      for (const o of ((r.owner_ids as string[] | null) ?? [])) owners.add(o)
+    }
+  }
+  // Schrijf de gemergede owners terug op de canonical row-objecten.
+  for (const [ical, owners] of mergedOwners) {
+    const row = seenIcal.get(ical)
+    if (row) row.owner_ids = Array.from(owners)
+  }
+
   const itemsByGroup = new Map<string, BoardItem[]>()
-  for (const r of itemRows) {
+  for (const r of dedupedRows) {
     const it = rowToItem(r as Record<string, unknown>)
     const gid = String((r as { group_id: string }).group_id)
     const arr = itemsByGroup.get(gid) ?? []
