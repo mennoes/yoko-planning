@@ -2892,22 +2892,34 @@ export default function PlanningPage() {
     // Pas capaciteiten uit de gedeelde store toe op de team-lijst — met
     // localStorage als snelle cache en Supabase als bron van waarheid.
     function applyCapacities(capByMember: Record<string, number>) {
+      // Merge seed (team.json) + liveTeam (Supabase team_members) zodat
+      // ook later toegevoegde leden (bv. Manuel) zichtbaar zijn — niet
+      // alleen wie in de hard-coded JSON staat.
+      const seedById = new Map<string, TeamMember>(teamData.members.map(m => [m.id, m]))
+      for (const lm of liveTeam) {
+        if (lm.id === 'unassigned') continue
+        if (lm.hidden) continue
+        const existing = seedById.get(lm.id)
+        const merged: TeamMember = existing
+          ? { ...existing, name: lm.name || existing.name, color: lm.color || existing.color }
+          : { id: lm.id, name: lm.name || lm.id, color: lm.color || '#9aa3ad', weeklyCapacity: lm.weeklyCapacity || 40 }
+        seedById.set(lm.id, merged)
+      }
+      const allMembers = Array.from(seedById.values())
       // Restore team order from localStorage
       try {
         const saved = localStorage.getItem('planning-team-order')
         if (saved) {
           const order = JSON.parse(saved) as string[]
-          const byId  = new Map(teamData.members.map(m => [m.id, m]))
+          const byId  = new Map(allMembers.map(m => [m.id, m]))
           const ordered: TeamMember[] = []
           for (const id of order) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
           for (const m of byId.values()) ordered.push(m)
-          if (ordered.length === teamData.members.length) {
-            setTeam(ordered.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
-            return
-          }
+          setTeam(ordered.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+          return
         }
       } catch {}
-      setTeam(teamData.members.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+      setTeam(allMembers.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
     }
 
     // Stap 1: lokale cache meteen toepassen voor instant-render
@@ -2920,7 +2932,9 @@ export default function PlanningPage() {
     // Stap 3: blijven luisteren naar wijzigingen (realtime + eigen edits)
     const off = onCapacitiesChange(() => applyCapacities(loadCapacities()))
     return () => off()
-  }, [])
+    // liveTeam in deps: zodra nieuwe leden uit de DB binnenkomen (bv.
+    // Manuel) wordt het team opnieuw samengesteld zodat ze verschijnen.
+  }, [liveTeam])
 
   function applyShift() {
     if (shiftPicked.size === 0 || shiftDays === 0) { setShiftOpen(false); return }
@@ -3711,10 +3725,15 @@ export default function PlanningPage() {
       {/* ── Agenda's popup ── */}
       {agendasOpen && (
         <Popup title="Agenda's" onClose={() => setAgendasOpen(false)}>
-          {Object.entries(BOARD_COLORS).map(([b, c]) => (
+          {/* BOARD_COLORS is een Proxy zonder enumeratie — gebruik
+              BOARD_NAMES (registry-driven lijst) zodat alle borden
+              daadwerkelijk zichtbaar zijn. */}
+          {BOARD_NAMES.map(b => (
             <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-              <span style={{ width: 14, height: 14, borderRadius: 3, background: c, flexShrink: 0 }} />
-              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>{b}</span>
+              <span style={{ width: 14, height: 14, borderRadius: 3, background: BOARD_COLORS[b], flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>
+                {BOARD_CONFIGS[b]?.name ?? b}
+              </span>
             </div>
           ))}
         </Popup>
