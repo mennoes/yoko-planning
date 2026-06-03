@@ -1443,9 +1443,9 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   const MEETING_LANE_H = BAR_H + BAR_GAP
 
   function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
-  function meetingLaneTop(lane: number) {
-    return BAR_GAP + projectLanes * PROJECT_LANE_H + lane * MEETING_LANE_H
-  }
+  // Meetings worden bovenop project-balken gerenderd — mogen overlappen
+  // omdat ze toch een eigen hover-popover hebben met details.
+  function meetingLaneTop(lane: number) { return BAR_GAP + lane * MEETING_LANE_H }
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
   const bars: Single[] = [
@@ -1454,10 +1454,12 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   ]
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  const baseHeight = BAR_GAP
-    + projectLanes * PROJECT_LANE_H
-    + meetingLanes * MEETING_LANE_H
-    + 6
+  // Meetings overlappen project-balken, dus tellen ze niet apart mee
+  // voor de container-hoogte (tenzij ze hoger uitkomen dan de project-
+  // stack — dan extenden we zodat scrollen klopt).
+  const projectStack = projectLanes * PROJECT_LANE_H
+  const meetingStack = meetingLanes * MEETING_LANE_H
+  const baseHeight = BAR_GAP + Math.max(projectStack, meetingStack) + 6
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
   return (
@@ -1496,9 +1498,9 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         void i
         if (b.track === 'meeting') {
           return (
-            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: 0, right: 0, height: MEETING_LANE_H, pointerEvents: 'none' }}>
-              <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
-                laneH={MEETING_LANE_H} scaleByHours={false}
+            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: 0, right: 0, height: MEETING_LANE_H, pointerEvents: 'none', zIndex: 5 }}>
+              <MeetingHoverBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW}
+                laneH={MEETING_LANE_H}
                 onDragMove={(s, e) => onDragMove(b.p, s, e)}
                 onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
                 onClick={() => onBarClick(b.p)}
@@ -1526,6 +1528,85 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 // label. Click opens a popover with the full list — and the popover is
 // exclusive (opening this one closes any other open popover on the page).
 const MEETING_BAR_H = 18
+
+// Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
+// gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
+// met naam, tijd, uren en link naar Google Calendar.
+function MeetingHoverBar({ project, memberId, left, width, colW, laneH, onDragMove, onDragEnd, onClick, onReassign }: {
+  project: Project
+  memberId: string
+  left: number
+  width: number
+  colW: number
+  laneH: number
+  onDragMove: (s: string | null, e: string | null) => void
+  onDragEnd:  (s: string | null, e: string | null) => void
+  onClick: () => void
+  onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const hoverTimer = useRef<number | null>(null)
+  const cancel = () => { if (hoverTimer.current != null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null } }
+  const schedule = () => { cancel(); hoverTimer.current = window.setTimeout(() => setHovered(false), 120) }
+
+  function openPopover() {
+    cancel()
+    if (wrapRef.current) {
+      const r = wrapRef.current.getBoundingClientRect()
+      const popW = 280
+      const lx = Math.min(r.left, window.innerWidth - popW - 8)
+      setPopPos({ top: r.bottom + 4, left: Math.max(8, lx) })
+    }
+    setHovered(true)
+  }
+
+  const hours = project.estHours || 0
+  const startTime = project.startTime
+  const endTime   = project.endTime
+  const timeStr = startTime
+    ? (endTime ? `${startTime}–${endTime}` : startTime)
+    : null
+
+  return (
+    <div ref={wrapRef}
+      onMouseEnter={openPopover}
+      onMouseLeave={schedule}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: laneH, pointerEvents: 'none' }}>
+      <DraggableBar project={project} memberId={memberId} left={left} width={width} colW={colW} small={false}
+        laneH={laneH} scaleByHours={false}
+        onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
+      {hovered && popPos && typeof document !== 'undefined' && createPortal(
+        <div onMouseEnter={cancel} onMouseLeave={schedule}
+          style={{ position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9000,
+            width: 280,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: '10px 12px',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.12)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
+            marginBottom: 4, lineHeight: 1.25 }}>
+            {project.name}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--text-secondary)' }}>
+            {timeStr && <span>{timeStr}</span>}
+            {timeStr && <span style={{ opacity: 0.4 }}>·</span>}
+            <span>{hours}u</span>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <span style={{ textTransform: 'capitalize' }}>{project.board}</span>
+          </div>
+          {project.externalLink && (
+            <a href={project.externalLink} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'inline-block', marginTop: 8, fontSize: 11, color: 'var(--accent)',
+                textDecoration: 'none', fontWeight: 600 }}>
+              Open in Google Calendar ↗
+            </a>
+          )}
+        </div>,
+        document.body)}
+    </div>
+  )
+}
 
 function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project[]; width: number; height: number; onPick: (p: Project) => void }) {
   const [open, setOpen] = useState(false)
