@@ -574,8 +574,13 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
   const FULL_DAY_HOURS = 8
   const availH = (laneH ?? BAR_H + BAR_GAP) - BAR_GAP
   const baseH  = small ? 10 : BAR_H
+  // Bar-hoogte schalen op uren met sqrt + 50% baseline, zodat 't verschil
+  // tussen korte (1u) en lange (8u) bars visueel kleiner is. Voorheen was
+  // 't lineair: 1u = 12% hoogte, 8u = 100% — vond user te groot contrast.
+  // Nu: 1u ≈ 50% + sqrt(1/8)*50% = 67%; 8u = 100%.
+  const ratio = Math.min(1, Math.max(0, (project.estHours || 0) / FULL_DAY_HOURS))
   const scaledH = scaleByHours
-    ? Math.max(6, Math.min(availH, Math.round(((project.estHours || 0) / FULL_DAY_HOURS) * availH)))
+    ? Math.max(6, Math.round(availH * (0.5 + Math.sqrt(ratio) * 0.5)))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
