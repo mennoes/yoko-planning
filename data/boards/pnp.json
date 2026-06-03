@@ -26,9 +26,20 @@
                 "odette"
               ],
               "status": "",
-              "startDate": "2026-05-21",
-              "endDate": "2026-05-26",
-              "estHours": 12
+              "startDate": "2026-05-12",
+              "endDate": "2026-05-20",
+              "estHours": 24
+            },
+            {
+              "id": "si_pnp_1_0_f12fb",
+              "name": "Femsplainers 1&2 Feedback verwerken",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2026-05-26",
+              "endDate": "2026-05-27",
+              "estHours": 6
             },
             {
               "id": "si_pnp_1_1_i0o2",
@@ -37,9 +48,20 @@
                 "unassigned"
               ],
               "status": "",
-              "startDate": "2026-06-05",
-              "endDate": "2026-06-08",
-              "estHours": 12
+              "startDate": "2026-05-27",
+              "endDate": "2026-05-29",
+              "estHours": 24
+            },
+            {
+              "id": "si_pnp_1_1_f34fb",
+              "name": "Femsplainers 3&4 Feedback verwerken",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
+              "startDate": "2026-06-08",
+              "endDate": "2026-06-09",
+              "estHours": 6
             },
             {
               "id": "si_pnp_1_2_i1n3",
@@ -48,9 +70,20 @@
                 "unassigned"
               ],
               "status": "",
+              "startDate": "2026-06-08",
+              "endDate": "2026-06-10",
+              "estHours": 24
+            },
+            {
+              "id": "si_pnp_1_2_f56fb",
+              "name": "Femsplainers 5&6 Feedback verwerken",
+              "ownerIds": [
+                "unassigned"
+              ],
+              "status": "",
               "startDate": "2026-06-18",
               "endDate": "2026-06-22",
-              "estHours": 12
+              "estHours": 6
             }
           ]
         },
