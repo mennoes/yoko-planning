@@ -108,10 +108,13 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
           const subOwners = (sub.ownerIds ?? []).filter(o => o && o !== 'unassigned')
           const subMine = subOwners.includes(memberId) || (subOwners.length === 0 && parentOwns)
           if (!subMine) continue
+          // Skip subitem-name als 't 'n date-label is ('wo 3 jun') —
+          // gebruik dan alleen parent-naam. User vond dubbele info storend.
+          const isDateLabel = /^[a-z]{2,3}\s+\d{1,2}(\s+[a-z.]+)?$/i.test(sub.name.trim())
           out.push({
             board,
             itemId: `${item.id}__si__${sub.id ?? sub.name}`,
-            name:   `${item.name} · ${sub.name}`,
+            name:   isDateLabel ? item.name : `${item.name} · ${sub.name}`,
           })
         }
       }
