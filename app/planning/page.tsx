@@ -1432,15 +1432,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   // meetings (zodat elke meeting minstens één regel tekst krijgt).
   // Meetings worden bovenop de project-balken gerenderd — overlap is
   // toegestaan, dat is leesbaar genoeg.
-  const MEETING_PX_PER_HOUR = 14
+  const MEETING_PX_PER_HOUR = 12
   function clusterHeight(b: ClusterBar) {
     const totalH = b.meetings.reduce((s, m) => s + (m.estHours || 0), 0)
-    const byHours = totalH * MEETING_PX_PER_HOUR
-    // Multi-meeting clusters krijgen iets meer hoogte zodat we naast '3×'
-    // ook 1–2 namen kunnen tonen, maar niet zo veel dat ze de hele rij
-    // opslokken. Cap rustig op 80px.
-    const minByCount = Math.min(56, 22 + (b.meetings.length - 1) * 8)
-    return Math.min(80, Math.max(MEETING_BAR_H, byHours, minByCount))
+    return Math.min(56, Math.max(MEETING_BAR_H, totalH * MEETING_PX_PER_HOUR))
   }
 
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
@@ -1584,14 +1579,11 @@ function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project
     }
   }, [open, popoverId])
 
-  // Lay-out kiest zich naar pill-breedte:
-  //   • Breed (≥160px): single-line, naam links, uren rechts.
-  //   • Smal: gestapelde mini-rijen — icon + ⌀uren bovenaan, dan
-  //     ellipsis-namen of een telling. Multi-line tekst per meeting was
-  //     onleesbaar bij krappe kolommen (een paar letters per regel),
-  //     dus vervangen door een compactere stapel.
-  const isNarrow = width < 160
-  const showStack = !isSingle && height >= 36
+  // Eén compacte single-line pill, ongeacht pill-breedte. Multi-line
+  // stacking met meeting-namen erin werkte niet bij smalle Overzicht-
+  // kolommen (dayCellW = colW/5 ≈ 40px → letters per regel). De
+  // hoogte van de pill geeft duur weer; klikken opent de popover met
+  // de volledige lijst.
   const phoneSvg = (
     <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
@@ -1599,46 +1591,30 @@ function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
     </svg>
   )
+  const isVeryNarrow = width < 70
+  // Voor smalle pills laten we de naam vallen — alleen icon + Nx + uren.
+  const compactLabel = isSingle
+    ? (isVeryNarrow ? `${totalH}u` : meetings[0].name)
+    : (isVeryNarrow ? `${meetings.length}×` : `${meetings.length}× · ${totalH}u`)
 
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <button ref={btnRef} onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
         style={{
-          display: 'flex',
-          flexDirection: showStack ? 'column' : 'row',
-          alignItems: showStack ? 'stretch' : 'center',
-          justifyContent: showStack ? 'center' : 'flex-start',
-          gap: showStack ? 2 : 6,
-          padding: showStack ? '4px 6px' : '0 8px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 6, padding: '0 6px',
           width, height, borderRadius: 6,
           background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
-          fontSize: isNarrow ? 10.5 : 11.5,
-          fontWeight: 700, lineHeight: 1.1,
+          fontSize: 11, fontWeight: 700, lineHeight: 1.1,
           boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-          overflow: 'hidden', textAlign: 'left', whiteSpace: showStack ? 'normal' : 'nowrap' }}>
-        {showStack ? (
-          <>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {phoneSvg}
-              <span style={{ flex: 1, fontWeight: 700 }}>{meetings.length}×</span>
-              <span style={{ opacity: 0.75, fontWeight: 600, fontSize: 10 }}>{totalH}u</span>
-            </span>
-            {!isNarrow && meetings.slice(0, Math.max(1, Math.floor((height - 24) / 14))).map((m, idx) => (
-              <span key={m.id ?? idx} style={{
-                display: 'block',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                fontWeight: 500, fontSize: 10.5, opacity: 0.85 }}>
-                {m.name}
-              </span>
-            ))}
-          </>
-        ) : (
-          <>
-            {phoneSvg}
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{label}</span>
-            <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
-          </>
+          overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'left' }}>
+        {phoneSvg}
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {compactLabel}
+        </span>
+        {isSingle && !isVeryNarrow && (
+          <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
         )}
       </button>
       {open && popPos && typeof document !== 'undefined' && createPortal(
