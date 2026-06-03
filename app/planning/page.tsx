@@ -1273,7 +1273,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                   marginLeft: titleShift,
-                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
+                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
+                  {b.p.name}
+                </span>
                 <OwnerCircle owners={owners} size={20} />
               </div>
             )
@@ -1361,6 +1364,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: '#fff',
                   whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
                   textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
                   {b.p.name}
                 </div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', marginTop: 1,
@@ -1429,7 +1433,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                     eindigen. Volgorde van weglaten: owner → tijd → titel. */}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   textShadow: '0 1px 2px rgba(0,0,0,0.55)', fontWeight: 700, fontSize: 12,
-                  paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
+                  paddingRight: isGoogle ? 18 : 0 }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
+                  {b.p.name}
+                </span>
                 {height >= 30 && (
                   <span style={{ fontSize: 9.5, opacity: 0.92, fontWeight: 600,
                     textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
