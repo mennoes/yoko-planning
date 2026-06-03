@@ -403,8 +403,7 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
       }}>
         <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
         {total > 0 && (
-          <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1,
-            position: 'relative', zIndex: 15 }}>
+          <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
             {total}u
           </span>
         )}
