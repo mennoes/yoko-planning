@@ -3847,10 +3847,30 @@ export default function PlanningPage() {
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   padding: '6px 8px', lineHeight: 1 }}>−</button>
-              <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
-                value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                style={{ width: 96, accentColor: 'var(--accent)' }} />
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                  value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                  title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                  style={{ width: 96, accentColor: 'var(--accent)' }} />
+                {/* Tick op de cross-over zodat de gebruiker ziet waar 't
+                    omslaat van Overzicht naar Week-view. */}
+                <span aria-hidden style={{
+                  position: 'absolute',
+                  left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 96}px`,
+                  top: '50%', transform: 'translate(-50%, -50%)',
+                  width: 2, height: 14, background: 'var(--accent)', borderRadius: 1,
+                  pointerEvents: 'none', opacity: 0.7,
+                }} />
+              </div>
+              <span style={{
+                fontSize: 9.5, fontWeight: 700, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+                padding: '2px 6px', borderRadius: 999,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                marginLeft: 4,
+              }}>
+                {zoom === 'dag' ? 'Week' : 'Overz.'}
+              </span>
               <button onClick={() => anchoredColWZoom(z => z + 10)}
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
@@ -4276,10 +4296,19 @@ export default function PlanningPage() {
                   <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                  <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
-                    value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                    title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
-                    style={{ width: 120, accentColor: 'var(--accent)' }} />
+                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                    <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                      value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                      title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
+                      style={{ width: 120, accentColor: 'var(--accent)' }} />
+                    <span aria-hidden style={{
+                      position: 'absolute',
+                      left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 120}px`,
+                      top: '50%', transform: 'translate(-50%, -50%)',
+                      width: 2, height: 14, background: 'var(--accent)', borderRadius: 1,
+                      pointerEvents: 'none', opacity: 0.7,
+                    }} />
+                  </div>
                   <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>

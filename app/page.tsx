@@ -437,6 +437,18 @@ export default function HomePage() {
         if (memberId in map) cap = map[memberId]
       }
     } catch {}
+    // Eigen capaciteit ook schalen op vrije dagen. Anders zegt 't widget
+    // bv. '40u cap' terwijl Menno feitelijk 32u kan werken (vrijdag vrij).
+    try {
+      const offRaw = localStorage.getItem('yoko-profile-days-off')
+      if (offRaw) {
+        const offMap = JSON.parse(offRaw) as Record<string, number[]>
+        const off = offMap[memberId] ?? []
+        const offWorkdays = off.filter(n => n >= 1 && n <= 5).length
+        const workdays = Math.max(0, 5 - offWorkdays)
+        cap = Math.round((cap * (workdays / 5)) * 10) / 10
+      }
+    } catch {}
     setWeekCapacity(cap)
 
     // Restore mobile section order
@@ -647,9 +659,23 @@ export default function HomePage() {
     const contribs = memberContributions(allProjects, m.id, weekStartTeam)
     memberHoursThisWeek[m.id] = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
   }
+  // Capaciteit per persoon schalen op aantal werkdagen. 'days_off' uit
+  // 't profiel telt elke off-dag (1=Ma..7=Zo) als 1/5 van de week,
+  // weekenddagen tellen niet mee (capaciteit is altijd Ma-Vr basis).
+  // Menno met 40u/week en vrij op vrijdag → 32u effectieve cap.
+  function effectiveWeeklyCap(memberId: string, rawCap: number): number {
+    const profOff = profilesById[memberId]?.days_off ?? []
+    const dayToIso: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
+    const offWorkdays = profOff
+      .map(d => dayToIso[d.toLowerCase()])
+      .filter((n): n is number => !!n && n >= 1 && n <= 5).length
+    const workdays = Math.max(0, 5 - offWorkdays)
+    return Math.round((rawCap * (workdays / 5)) * 10) / 10
+  }
   const overloaded = yokoMembers
     .map(m => {
-      const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const rawCap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const cap = effectiveWeeklyCap(m.id, rawCap)
       const hrs = memberHoursThisWeek[m.id] ?? 0
       return { member: m, hours: hrs, cap, pct: cap > 0 ? Math.round((hrs / cap) * 100) : 0 }
     })
