@@ -1233,8 +1233,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
       {active.map((sub, idx) => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
-          selected={selectedIds?.has(sub.id) ?? false}
-          onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+          selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
+          onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
@@ -1269,8 +1269,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           {doneOpen && done.map((sub, idx) => (
             <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
               rail={rail}
-              selected={selectedIds?.has(sub.id) ?? false}
-              onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+              selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
+              onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
               isLast={idx === lastDoneIdx}
               parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
               onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
