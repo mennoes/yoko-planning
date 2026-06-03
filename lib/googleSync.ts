@@ -528,43 +528,33 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const u = iCalKeyForGroup(instances)
     if (u) wantedICals.push(u)
   }
-  // Lookup gedeelde rijen die ANDERE users al hebben aangemaakt voor deze
-  // events. Bij een match hergebruiken we hun id (i.p.v. eigen kopie maken)
-  // zodat comments/journal/workload-overrides behouden blijven.
+  // PER-USER ROWS: cross-user sharing via sharedByICal is uit (te
+  // foutgevoelig — Vincent's sync overschreef Menno's row z'n
+  // external_id/calendar_id waardoor Menno's volgende sync 'm niet
+  // terugvond en een nieuwe rij maakte). Elke user heeft voortaan z'n
+  // eigen rij per event. Visueel kan een gedeeld event 2x verschijnen
+  // (één per teamlid dat z'n agenda heeft gekoppeld); dat lossen we
+  // eventueel later op met UI-dedup. Liever zichtbaar dubbel dan
+  // onzichtbaar weg.
   const sharedByICal = new Map<string, ItemRow>()
-  if (wantedICals.length > 0) {
-    const { data: sharedRows } = await admin
-      .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
-      .eq('source', 'google')
-      .in('ical_uid', Array.from(new Set(wantedICals)))
-    for (const r of (sharedRows as ItemRow[] | null) ?? []) {
-      if (!r.ical_uid) continue
-      const prev = sharedByICal.get(r.ical_uid)
-      // Kies deterministisch dezelfde "canonical" rij over concurrent syncs heen:
-      // de rij met de laagste id wint (alfabetisch).
-      if (!prev || r.id < prev.id) sharedByICal.set(r.ical_uid, r)
-    }
-  }
 
-  // LEGACY DEDUP: oude rijen die nog vóór de iCalUID-migratie zijn aangemaakt
-  // hebben ical_uid = null en worden door de sharedByICal-lookup gemist. Bij
-  // een verse user-sync zou dat een DUBBEL item genereren. We laden hier
-  // alle source='google' rijen ZONDER iCalUID en indexeren op
-  // (board_id, lowercase-name, start_date). Tijdens findExistingFor proberen
-  // we dat als laatste-redmiddel match — en backfillen we meteen de iCalUID
-  // zodat de volgende sync 'm wél via de normale weg vindt.
+  // Legacy dedup BINNEN mijn eigen rijen: oude rijen zonder iCalUID
+  // krijgen via findExistingFor een match op naam+datum zodat ze niet
+  // dubbel ontstaan bij de eerstvolgende sync. Filtert nu strikt op
+  // external_user_id = cal.user_id, zodat we andermans data nooit
+  // aanraken.
   const legacyByKey = new Map<string, ItemRow>()
   {
     const { data: legacyRows } = await admin
       .from('board_items')
       .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
       .eq('source', 'google')
+      .eq('external_user_id', cal.user_id)
       .is('ical_uid', null)
       .is('deleted_at', null)
     for (const r of (legacyRows as ItemRow[] | null) ?? []) {
       const name = String((r as { name?: string }).name ?? '').toLowerCase().trim()
-        .replace(/\s*\(\d+×\)\s*$/, '').trim()    // recurring suffix afstrippen
+        .replace(/\s*\(\d+×\)\s*$/, '').trim()
       const sd   = String((r as { start_date?: string | null }).start_date ?? '')
       if (!name || !sd || !r.board_id) continue
       const key = `${r.board_id}::${name}::${sd}`
@@ -575,7 +565,6 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   function legacyLookup(name: string, startDate: string | null): ItemRow | undefined {
     if (!startDate) return undefined
     const norm = name.toLowerCase().trim().replace(/\s*\(\d+×\)\s*$/, '').trim()
-    // Probeer per bord — fallbackBoard, plus de routing-rules targets.
     const boards = new Set<string>([fallbackBoard])
     for (const r of rules) boards.add(r.board_id)
     for (const b of boards) {
@@ -606,13 +595,18 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const mineRow = byExtFull.get(extId)
     if (mineRow) return { row: mineRow, id: mineRow.id }
     if (mineId) return { row: undefined, id: mineId }
-    // Legacy: zelfde event-naam+datum op hetzelfde bord, zonder iCalUID.
-    // Backfill van iCalUID gebeurt automatisch via de upsert hieronder.
+    // Legacy: zelfde event-naam+datum op hetzelfde bord (alleen mijn
+    // eigen rows). Backfill van iCalUID gebeurt automatisch via de
+    // upsert hieronder.
     const legacy = legacyLookup(name, startDate)
     if (legacy) return { row: legacy, id: legacy.id }
-    // Nieuwe rij — canonical id-vorm op basis van iCalUID zodat een
-    // volgende sync door een ander teamlid op dezelfde rij landt.
-    const newId = icalUid ? `it_g_${icalUid}` : `it_g_${extId}_${cal.user_id.slice(0, 8)}`
+    // Nieuwe rij — PER-USER id-vorm (icaluid + user-prefix). Zo blijven
+    // rijen van verschillende teamleden gescheiden en kan een sync
+    // van de één nooit een rij van de ander overschrijven.
+    const userSlug = cal.user_id.replace(/-/g, '').slice(0, 8)
+    const newId = icalUid
+      ? `it_g_${icalUid}_${userSlug}`
+      : `it_g_${extId}_${userSlug}`
     return { row: undefined, id: newId }
   }
 
@@ -976,82 +970,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // op het yoko-bord). Te agressief; we vertrouwen voortaan op de
   // expliciete dedup-SQL en /trash voor opruimen.
 
-  // Globale dedup: oude per-user rijen (van vóór deze migratie) hadden geen
-  // ical_uid; nu we die net hebben geschreven kunnen we matches uit andere
-  // users hun kalenders herkennen en ineen schuiven. Per iCalUID houden we
-  // de canonical rij (lage id wint — zelfde regel als sharedByICal), mergen
-  // owner_ids erin en verwijderen de duplicaten.
-  const upsertedICals = Array.from(new Set(
-    upserts.map(u => u.ical_uid).filter((x): x is string => !!x)
-  ))
-  if (upsertedICals.length > 0) {
-    const { data: dupRows } = await admin
-      .from('board_items')
-      .select('id, ical_uid, owner_ids, journal, subitems')
-      .eq('source', 'google')
-      .in('ical_uid', upsertedICals)
-    type Dup = { id: string; ical_uid: string | null; owner_ids: string[] | null; journal: unknown; subitems: SubItemSnapshot[] | null }
-    const byUid = new Map<string, Dup[]>()
-    for (const r of (dupRows as Dup[] | null) ?? []) {
-      if (!r.ical_uid) continue
-      const arr = byUid.get(r.ical_uid) ?? []
-      arr.push(r)
-      byUid.set(r.ical_uid, arr)
-    }
-    for (const [, group] of byUid) {
-      if (group.length <= 1) continue
-      group.sort((a, b) => a.id.localeCompare(b.id))
-      const canonical = group[0]
-      const dupes     = group.slice(1)
-      // Merge owner_ids zodat we geen teamleden verliezen.
-      const merged = new Set<string>(canonical.owner_ids ?? [])
-      for (const d of dupes) for (const o of (d.owner_ids ?? [])) merged.add(o)
-      if (merged.size !== (canonical.owner_ids ?? []).length) {
-        await admin.from('board_items')
-          .update({ owner_ids: Array.from(merged) })
-          .eq('id', canonical.id)
-      }
-      await admin.from('board_items')
-        .update({ deleted_at: new Date().toISOString() })
-        .in('id', dupes.map(d => d.id))
-      removed += dupes.length
-    }
-  }
-
-  // Migratie-cleanup voor pre-iCalUID duplicaten: rijen van teamleden die
-  // sinds de fix nog niet hebben gesynct hebben ical_uid IS NULL. We
-  // matchen ze met de canonical rij via name + start_date (combinatie is
-  // praktisch uniek per event) en mergen ze in. Idempotent: na een paar
-  // syncs heeft elke rij ical_uid en doet de query niets meer.
-  for (const u of upserts) {
-    const icalUid   = u.ical_uid as string | null
-    if (!icalUid) continue
-    const name      = String(u.name ?? '')
-    const startDate = u.start_date as string | null
-    const canonical = String(u.id)
-    if (!name || !startDate) continue
-    const { data: legacyRows } = await admin
-      .from('board_items')
-      .select('id, owner_ids, journal')
-      .eq('source', 'google')
-      .is('ical_uid', null)
-      .eq('name', name)
-      .eq('start_date', startDate)
-      .neq('id', canonical)
-    const legacies = (legacyRows as { id: string; owner_ids: string[] | null; journal: unknown }[] | null) ?? []
-    if (legacies.length === 0) continue
-    const merged = new Set<string>((u.owner_ids as string[]) ?? [])
-    for (const r of legacies) for (const o of (r.owner_ids ?? [])) merged.add(o)
-    if (merged.size !== ((u.owner_ids as string[]) ?? []).length) {
-      await admin.from('board_items')
-        .update({ owner_ids: Array.from(merged) })
-        .eq('id', canonical)
-    }
-    await admin.from('board_items')
-      .update({ deleted_at: new Date().toISOString() })
-      .in('id', legacies.map(r => r.id))
-    removed += legacies.length
-  }
+  // VERWIJDERD: cross-user dedup-loops. Eerder mergden we rijen van
+  // verschillende teamleden met dezelfde iCalUID/naam-datum in één,
+  // maar dat veroorzaakte race-condities (Vincent's sync overschreef
+  // Menno's row z'n external_id → Menno's sync vond 'm niet meer →
+  // miste meetings + duplicaten). Per-user rows zijn nu het model:
+  // visueel kan een gedeeld event 2x verschijnen, maar geen data-
+  // verlies meer.
 
   await admin.from('google_calendars').update({ last_sync_at: new Date().toISOString() }).eq('id', cal.id)
   return { added, updated, removed }
