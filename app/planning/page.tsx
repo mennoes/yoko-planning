@@ -316,30 +316,10 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
     />
   )
 
-  // Day zoom: full-cell tinted block, click → popover with the day's items.
-  if (zoom === 'dag') {
-    const baseColor = pct > 1 ? '#e2445c' : pct > 0.85 ? '#ff7b24' : '#579bfc'
-    const alpha = pct > 0 ? Math.min(0.15 + Math.min(pct, 1) * 0.45, 0.65) : 0
-    return (
-      <div ref={wrapRef} style={{ position: 'relative', height: '100%' }}>
-        <button onClick={() => total > 0 && setOpenExclusive(!open)} disabled={total === 0}
-          style={{ width: '100%', height: '100%', padding: 0, border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: pct > 0 ? `${baseColor}${Math.round(alpha * 255).toString(16).padStart(2, '0')}` : 'transparent',
-            borderRadius: 4,
-            cursor: total > 0 ? 'pointer' : 'default' }}>
-          {total > 0 && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: pct > 1 ? '#fff' : 'var(--text-primary)', textShadow: pct > 1 ? '0 0 2px rgba(0,0,0,0.4)' : 'none' }}>
-              {total >= 1 ? Math.round(total) : total.toFixed(1)}
-            </span>
-          )}
-        </button>
-        {popover}
-      </div>
-    )
-  }
-
-  // Week / month zoom: circle + total label
+  // Eén visualisatie voor alle zoom-niveaus: workload-cirkel met uren-
+  // label. Vroeger had dag-zoom een eigen volle-cel tint, maar dat brak
+  // de continuïteit met Overzicht — nu zie je per dag dezelfde bol als
+  // per week, alleen kleiner.
   return (
     <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}>
       <button onClick={() => total > 0 && setOpenExclusive(!open)} style={{
