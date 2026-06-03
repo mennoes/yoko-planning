@@ -230,8 +230,16 @@ function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
 function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; or: number }) {
   const cx    = cs / 2, cy = cs / 2
   const color = pct > 1 ? '#e2445c' : '#579bfc'
-  const fillR = pct > 0 ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * Math.sqrt(Math.min(pct, 1)))) : 0
-  const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.06) : fillR
+  // Hoogte-variantie comprimeren: vroeger gebruikten we sqrt(pct) wat
+  // tussen 1.9u en 35u nog steeds een 5× verschil in straal gaf. We hebben
+  // nu een minimum-straal (35% van outerR) plus een vlakkere curve
+  // (pct^0.4) — kleine cap-loads blijven goed leesbaar, drukke weken
+  // springen niet meer 4× zo groot uit de bocht.
+  const MIN_FRAC = 0.35
+  const fillR = pct > 0
+    ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * (MIN_FRAC + (1 - MIN_FRAC) * Math.pow(Math.min(pct, 1), 0.4))))
+    : 0
+  const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.04) : fillR
   return (
     <svg width={cs} height={cs} viewBox={`0 0 ${cs} ${cs}`} style={{ display: 'block' }}>
       <circle cx={cx} cy={cy} r={outerR} fill={color + '25'} />
@@ -2748,8 +2756,8 @@ export default function PlanningPage() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => Math.min(300, z + 10)) }
-      else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => Math.max(50, z - 10)) }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => z + 10) }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => z - 10) }
       else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setNewItemOpen(true) }
     }
     window.addEventListener('keydown', onKey)
@@ -2788,7 +2796,30 @@ export default function PlanningPage() {
         pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
       }
     }
-    setColWZoom(updater)
+    // Cross-zoom transitie: Overzicht (week) en Week-view (dag) zijn samen-
+    // gesmolten tot één continue zoom. Wanneer de slider voorbij de grens
+    // van de huidige zoom gaat, springen we naar de andere zoom en zetten
+    // de slider aan de overkant zodat het visueel vloeiend doorloopt.
+    const raw = updater(colWZoom)
+    if (zoom === 'week' && raw > 300) {
+      // Verder inzoomen dan week-300% → wissel naar dag-zoom op 50%.
+      const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
+      const currentDays = colOffset * daysPerCol.week
+      setZoom('dag')
+      setColOffset(Math.round(currentDays / daysPerCol.dag))
+      setColWZoom(50)
+      return
+    }
+    if (zoom === 'dag' && raw < 50) {
+      // Verder uitzoomen dan dag-50% → wissel naar week-zoom op 300%.
+      const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
+      const currentDays = colOffset * daysPerCol.dag
+      setZoom('week')
+      setColOffset(Math.round(currentDays / daysPerCol.week))
+      setColWZoom(300)
+      return
+    }
+    setColWZoom(Math.max(50, Math.min(300, raw)))
   }
 
   useEffect(() => {
@@ -3468,34 +3499,11 @@ export default function PlanningPage() {
 
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap', marginBottom: isMobile ? 10 : 16 }}>
-          {/* Zoom */}
-          <div style={segGroup}>
-            {/* 'maand' is uit het keuzemenu gehaald — gebruik de week-zoom
-                (overzicht) voor een groter tijdsbereik. De interne ZoomLevel
-                blijft hetzelfde zodat opgeslagen localStorage-waardes geen
-                regressie geven. */}
-            {(['dag', 'week'] as ZoomLevel[]).map(z => (
-              <button key={z} onClick={() => {
-                  if (z === zoom) return
-                  // Capture huidige screen-X van de today-line zodat we 'm
-                  // na de zoom-wissel weer op dezelfde plek kunnen anker'en.
-                  const el = gridRef.current
-                  if (el && nowOffset !== null) {
-                    pendingAnchorRef.current = { screenX: nowOffset - el.scrollLeft }
-                  }
-                  // Reken colOffset om in dagen-eenheden zodat het nieuwe
-                  // tijdvenster ongeveer dezelfde periode dekt.
-                  const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-                  const currentDays = colOffset * daysPerCol[zoom]
-                  const newOffset = Math.round(currentDays / daysPerCol[z])
-                  setZoom(z)
-                  setColOffset(newOffset)
-                }}
-                style={segBtn(zoom === z)}>
-                {z === 'dag' ? 'Week' : 'Overzicht'}
-              </button>
-            ))}
-          </div>
+          {/* Overzicht en Week zijn samengesmolten in één continue zoom:
+              de kolom-breedte-slider stuurt zowel kolommen als zoom-niveau.
+              Voorbij de bovengrens van de week-zoom-slider klapt 'ie auto-
+              matisch om naar dag-zoom (Week-view), en andersom. Geen
+              segmented buttons meer voor 'Overzicht'/'Week'. */}
 
           {/* Mobile: kolombreedte-slider naast de zoom-knoppen. Op desktop
               zit deze nog in de name-kolom-header. */}
@@ -3503,7 +3511,7 @@ export default function PlanningPage() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
               background: 'var(--bg-card)', border: '1px solid var(--border-light)',
               borderRadius: 8, paddingLeft: 2, paddingRight: 2 }}>
-              <button onClick={() => anchoredColWZoom(z => Math.max(50, z - 10))}
+              <button onClick={() => anchoredColWZoom(z => z - 10)}
                 title="Smaller" aria-label="Smaller"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
@@ -3512,7 +3520,7 @@ export default function PlanningPage() {
                 value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                 title={`Kolombreedte ${colWZoom}%`}
                 style={{ width: 64, accentColor: 'var(--accent)' }} />
-              <button onClick={() => anchoredColWZoom(z => Math.min(300, z + 10))}
+              <button onClick={() => anchoredColWZoom(z => z + 10)}
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
@@ -3929,14 +3937,14 @@ export default function PlanningPage() {
               </button>
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                  <button onClick={() => anchoredColWZoom(z => Math.max(50, z - 10))}
+                  <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                   <input type="range" min={50} max={300} step={5}
                     value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                     title={`Kolom-breedte ${colWZoom}%   ·   sneltoetsen +/−`}
                     style={{ width: 80, accentColor: 'var(--accent)' }} />
-                  <button onClick={() => anchoredColWZoom(z => Math.min(300, z + 10))}
+                  <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
                 </div>
