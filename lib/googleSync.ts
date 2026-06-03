@@ -6,9 +6,11 @@ import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
 
-// Map @studioyoko.nl emails → member-id, opgebouwd uit team.json. Bij
-// shared meetings (Teamdag, weekstart, etc.) trekken we hieruit alle
-// Yoko-deelnemers als mede-eigenaar van het item.
+// Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
+// team.json (statische seed) ÉN public.team_members (live tabel) zodat
+// admin-toegevoegde leden als Manuel ook als Yoko-attendee herkend
+// worden. De seed-set kan op import al gebouwd worden; de DB-set
+// wordt per sync-pass opgehaald via buildMemberKeys().
 //
 // Lookup is fuzzy: we normaliseren de local-part van een email (lowercase,
 // strippen streepjes/punten) en vergelijken met member.id én een naam-
@@ -17,20 +19,39 @@ import { isVrijTitle } from './workloadCategory'
 function normEmailLocal(s: string): string {
   return s.toLowerCase().replace(/[.\-_]/g, '')
 }
-const MEMBER_KEYS: Array<{ id: string; keys: Set<string> }> = (teamData.members as Array<{ id: string; name: string; email?: string }>)
-  .map(m => {
-    const keys = new Set<string>()
-    keys.add(normEmailLocal(m.id))
-    if (m.email) keys.add(normEmailLocal(m.email.split('@')[0] ?? ''))
-    if (m.name) keys.add(normEmailLocal(m.name.split(' ')[0] ?? ''))
-    return { id: m.id, keys }
-  })
-function resolveAttendeeEmail(email: string): string | null {
+type MemberKey = { id: string; keys: Set<string> }
+function memberToKey(m: { id: string; name: string; email?: string | null }): MemberKey {
+  const keys = new Set<string>()
+  keys.add(normEmailLocal(m.id))
+  if (m.email) keys.add(normEmailLocal(m.email.split('@')[0] ?? ''))
+  if (m.name) keys.add(normEmailLocal(m.name.split(' ')[0] ?? ''))
+  return { id: m.id, keys }
+}
+const SEED_MEMBER_KEYS: MemberKey[] = (teamData.members as Array<{ id: string; name: string; email?: string }>)
+  .map(memberToKey)
+
+async function buildMemberKeys(admin: SupabaseClient): Promise<MemberKey[]> {
+  const merged = new Map<string, MemberKey>()
+  for (const k of SEED_MEMBER_KEYS) merged.set(k.id, k)
+  try {
+    const { data } = await admin
+      .from('team_members')
+      .select('id, name, email')
+    type Row = { id: string; name: string; email: string | null }
+    for (const r of (data as Row[] | null) ?? []) {
+      // Live-row vervangt of vult de seed aan (DB-data is autoritatief).
+      merged.set(r.id, memberToKey(r))
+    }
+  } catch { /* ignore — fallback op seed */ }
+  return Array.from(merged.values())
+}
+
+function resolveAttendeeEmailWith(memberKeys: MemberKey[], email: string): string | null {
   const e = email.toLowerCase().trim()
   if (!e.endsWith('@studioyoko.nl')) return null
   const local = normEmailLocal(e.split('@')[0] ?? '')
   if (!local) return null
-  for (const { id, keys } of MEMBER_KEYS) {
+  for (const { id, keys } of memberKeys) {
     if (keys.has(local)) return id
   }
   return null
@@ -322,6 +343,13 @@ async function ensureFreshAccessToken(
 }
 
 async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promise<{ added: number; updated: number; removed: number }> {
+  // Member-keys voor attendee-resolutie: combineert team.json (seed) +
+  // live team_members tabel. Daardoor herkent de sync ook 'manuel@
+  // studioyoko.nl' als Yoko-attendee zodra Manuel via /team-admin is
+  // toegevoegd, zonder dat we de hardcoded JSON hoeven te updaten.
+  const memberKeys = await buildMemberKeys(admin)
+  const resolveAttendeeEmail = (email: string) => resolveAttendeeEmailWith(memberKeys, email)
+
   // Fallback-bord: vroeger was cal.board_id verplicht en sloegen we kalenders
   // zonder selectie over. Dat dwong de user om per kalender een bord te
   // kiezen. Nu: routing-regels per event bepalen het juiste bord; events
