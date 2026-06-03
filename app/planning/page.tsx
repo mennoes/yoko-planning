@@ -960,17 +960,22 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }
 
   type TimedBar = { p: Project; left: number; width: number; top: number; height: number; iso: string; startMin: number; durMin: number }
-  // Synthetische dag-blokken (langlopende projecten zonder tijd, die we 09:00→…
-  // hebben gegeven om hun werkdruk visueel te tonen) renderen we als
-  // achtergrond-balk over de volle kolombreedte. Korte meetings die overlappen
-  // sitten daar dan bovenop i.p.v. er een lane-slot mee te delen — anders
-  // werd PinkFloyd of Teamdag opeens dunner zodra je een 30-minuten meeting
-  // op dezelfde dag had.
+  // Achtergrond-balk regel: synthetische dag-blokken (langlopende projecten
+  // zonder concrete tijd) EN echte events ≥4u krijgen de volle kolombreedte
+  // op een lagere z-index. Korte meetings die overlappen sitten daar
+  // bovenop ipv ernaast in een lane-slot — anders werd een PinkFloyd of
+  // een 8u NL-College opeens half zo breed zodra er een 30-min check-in
+  // op dezelfde dag stond. Drempel: 240 minuten = 4u.
+  const LONG_BG_THRESHOLD_MIN = 240
   const synthBackgroundBars: TimedBar[] = []
   const realTimed: Project[] = []
   for (const p of timed) {
     const isSynth = (p as Project & { __synthFullDay?: boolean }).__synthFullDay
-    if (isSynth) {
+    const [shCheck, smCheck] = (p.startTime ?? '00:00').split(':').map(Number)
+    const [ehCheck, emCheck] = (p.endTime ?? p.startTime ?? '00:00').split(':').map(Number)
+    const durMin = (ehCheck * 60 + emCheck) - (shCheck * 60 + smCheck)
+    const isLong = durMin >= LONG_BG_THRESHOLD_MIN
+    if (isSynth || isLong) {
       const iso = p.startDate; if (!iso) continue
       const info = colByIso.get(iso); if (!info) continue
       const [sh, sm] = (p.startTime ?? '09:00').split(':').map(Number)
