@@ -21,15 +21,9 @@ import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
 function isOffDayInline(memberId: string, date: Date): boolean {
   const dow = date.getDay()
   if (dow === 0 || dow === 6) return true
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('yoko-profile-days-off') : null
-    if (raw) {
-      const map = JSON.parse(raw) as Record<string, number[]>
-      const off = map[memberId] ?? []
-      const iso = dow === 0 ? 7 : dow
-      if (off.includes(iso)) return true
-    }
-  } catch {}
+  // Days-off uit profile UITGESCHAKELD — was bron van 'maandag toont
+  // niks' bug doordat de localStorage cache stale/foutief kon zijn.
+  // Vrij-events blijven gerespecteerd (dynamische detectie via boards).
   if (isVrijDayForMember(memberId, date)) return true
   return false
 }
