@@ -982,13 +982,41 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   type AllDayBar = { p: Project; left: number; width: number; lane: number }
   const rawAllDay: { p: Project; left: number; width: number }[] = []
   for (const p of allDay) {
-    const s = new Date(p.startDate ?? p.endDate!).getTime()
-    const e = (p.endDate ? new Date(p.endDate).getTime() : s) + 86400000
-    if (e < gridStartMs || s > gridEndMs) continue
-    const cs = Math.max(s, gridStartMs); const ce = Math.min(e, gridEndMs)
-    const left = (cs - gridStartMs) / msPerPx
-    const width = Math.max((ce - cs) / msPerPx - 4, 80)
-    rawAllDay.push({ p, left, width })
+    const sFull = new Date(p.startDate ?? p.endDate!); sFull.setHours(0,0,0,0)
+    const eFull = p.endDate ? new Date(p.endDate) : new Date(sFull); eFull.setHours(0,0,0,0)
+    const fullEndMs = eFull.getTime() + 86400000
+    if (fullEndMs < gridStartMs || sFull.getTime() > gridEndMs) continue
+    // Fragmenteer op werkdagen voor deze member. Een ma-vr project waarvan
+    // de owner vrijdag vrij is renderen we als twee bars: ma-do én niets
+    // op vrijdag (cell daar laat 'm dim staan, geen bar). Zo zie je dat
+    // er op vrije dagen niet daadwerkelijk gewerkt wordt.
+    const oneDay = 86400000
+    type Seg = { s: number; e: number }
+    const segments: Seg[] = []
+    let cur: number | null = null
+    for (let t = sFull.getTime(); t <= eFull.getTime(); t += oneDay) {
+      const d = new Date(t)
+      const isOff = memberId
+        ? isOffDayInline(memberId, d)
+        : (d.getDay() === 0 || d.getDay() === 6)
+      if (!isOff) {
+        if (cur === null) cur = t
+      } else if (cur !== null) {
+        segments.push({ s: cur, e: t })
+        cur = null
+      }
+    }
+    if (cur !== null) segments.push({ s: cur, e: fullEndMs })
+    if (segments.length === 0) continue   // alles is off → geen bar
+    for (const seg of segments) {
+      const cs = Math.max(seg.s, gridStartMs)
+      const ce = Math.min(seg.e, gridEndMs)
+      if (ce <= cs) continue
+      const left  = (cs - gridStartMs) / msPerPx
+      const width = Math.max((ce - cs) / msPerPx - 4, 30)
+      rawAllDay.push({ p, left, width })
+    }
+    continue
   }
   const laneEnds: number[] = []
   const allDayBars: AllDayBar[] = [...rawAllDay].sort((a, b) => a.left - b.left).map(b => {
