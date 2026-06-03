@@ -143,7 +143,7 @@ function helpHint({ slack, others }: { slack: number; others: { member: { name: 
   return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
 }
 
-type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string; done: boolean }
+type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }
 
 type Category = WorkloadCategory
 
@@ -223,11 +223,29 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
   const rowContent = (
     <>
       <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+      {item.startTime && (
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+          fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 36 }}>
+          {item.startTime.slice(0,5)}
+        </span>
+      )}
       <span style={{ fontSize: 13,
         color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)',
         fontWeight: cat === 'maken' ? 500 : 400, flex: 1,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         textDecoration: item.done ? 'line-through' : 'none' }}>{item.name}</span>
+      {item.meetLink && (
+        <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
+          title="Open Google Meet"
+          onClick={e => e.stopPropagation()}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '1px 6px 1px 5px', borderRadius: 4,
+            background: '#00ac47', color: '#fff',
+            fontSize: 9.5, fontWeight: 700, lineHeight: 1.3, flexShrink: 0,
+            textDecoration: 'none' }}>
+          Meet<span style={{ fontSize: 8, opacity: 0.85 }}>↗</span>
+        </a>
+      )}
       {item.source === 'google' && (
         <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
           title="Open in Google Calendar"
@@ -339,7 +357,7 @@ export default function HomePage() {
   const [newTodoText,  setNewTodoText]  = useState('')
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
-  const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string; done: boolean }[]>([])
+  const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }[]>([])
   const [weekOffset,   setWeekOffset]   = useState(0)
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
@@ -432,13 +450,25 @@ export default function HomePage() {
     const week = new Date(base); week.setDate(week.getDate() + weekOffset * 7)
     const contribs = memberContributions(allProjects, memberId, week)
     setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
+    // Vandaag-aware day-toewijzing. Voor multi-day items die NU lopen
+    // schuift 't item mee naar de dag-rij van vandaag — anders bleef
+    // een ma-do-project alleen op maandag staan en zag je op woensdag
+    // niet meer dat je er aan moest werken. Buiten de huidige week
+    // (weekOffset != 0) of buiten 't project-bereik vallen we terug op
+    // de start-dag.
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const weekEnd = new Date(week); weekEnd.setDate(weekEnd.getDate() + 7)
     setWeekItems(contribs.map(c => {
       const sd = c.project.startDate ? new Date(c.project.startDate) : null
-      const dayJs = sd ? sd.getDay() : 1
-      const day   = (dayJs + 6) % 7
-      // c.project.id is geprefixt met '{board}__'; voor het mutator-pad
-      // hebben we de oorspronkelijke item-id nodig om de juiste row in
-      // board_items aan te raken.
+      const ed = c.project.endDate   ? new Date(c.project.endDate)   : sd
+      const startDay = sd ? (sd.getDay() + 6) % 7 : 0
+      let day = startDay
+      const todayIsInWeek = weekOffset === 0
+      const todayD = new Date(todayIso)
+      const todayInProject = sd && ed && todayD >= sd && todayD <= ed
+      if (todayIsInWeek && todayInProject && todayD < weekEnd) {
+        day = (todayD.getDay() + 6) % 7
+      }
       const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
         ? c.project.id.slice(c.project.board.length + 2)
         : c.project.id
@@ -447,7 +477,9 @@ export default function HomePage() {
         rawItemId,
         name: c.project.name, board: c.project.board, hours: c.hours, day,
         startDate: c.project.startDate, endDate: c.project.endDate,
+        startTime: c.project.startTime, endTime: c.project.endTime,
         source: c.project.source, externalLink: c.project.externalLink,
+        meetLink: c.project.meetLink,
         done: c.project.status === 'done',
       }
     }))
@@ -827,7 +859,17 @@ export default function HomePage() {
                     </div>
                   </div>
                   {(['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'] as const).map((dayLabel, dayIdx) => {
-                    const dayItems = weekItems.filter(i => i.day === dayIdx)
+                    const dayItems = weekItems.filter(i => i.day === dayIdx).slice().sort((a, b) => {
+                      // Sorteren op startTime — items met tijd staan voor
+                      // items zonder. Bij gelijke tijd alfabetisch fallback
+                      // zodat de volgorde voorspelbaar is.
+                      const aT = a.startTime ?? null
+                      const bT = b.startTime ?? null
+                      if (aT && !bT) return -1
+                      if (!aT && bT) return 1
+                      if (aT && bT) return aT.localeCompare(bT)
+                      return a.name.localeCompare(b.name)
+                    })
                     if (dayItems.length === 0) return null
                     const dayTotal = Math.round(dayItems.reduce((s, i) => s + i.hours, 0) * 10) / 10
                     return (

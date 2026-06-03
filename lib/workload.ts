@@ -23,6 +23,7 @@ export type Project = {
   status: 'active' | 'done'
   source?: 'manual' | 'google'
   externalLink?: string
+  meetLink?: string
   // Set on virtual projects produced by merging same-name Google items in
   // the planner. The detail panel uses it to render a sub-event list.
   mergedFrom?: Project[]
@@ -52,7 +53,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
     g.items
       .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string }> | undefined) ?? []
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string }> | undefined) ?? []
         const subsWithDates = subs.filter(si => (si.status ?? '') !== 'Done' && (si.startDate || si.endDate))
         if (subsWithDates.length > 0) {
           return subsWithDates.map((si, idx): Project => {
@@ -80,6 +81,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               status:    (i.status as string) === 'Done' ? 'done' : 'active',
               source:    (i.source as 'manual' | 'google' | undefined),
               externalLink: (i.externalLink as string | undefined),
+              meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
             }
           })
         }
@@ -102,6 +104,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           status:    (i.status as string) === 'Done' ? 'done' : 'active',
           source:        (i.source as 'manual' | 'google' | undefined),
           externalLink:  (i.externalLink as string | undefined),
+          meetLink:      (i.meetLink as string | undefined),
         }]
       })
   )
