@@ -1231,7 +1231,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10,
           background: stickyBg, borderRight: '1px solid var(--border-light)',
           display: 'flex', alignItems: 'center', padding: leftHeader ? '0' : '0 12px',
           fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -1345,7 +1345,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           ziet de gebruiker enkel de all-day banner hierboven. */}
       {expanded !== false && (
       <div style={{ display: 'flex' }}>
-        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10,
           background: stickyBg, borderRight: '1px solid var(--border-light)' }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => {
             const hour = HOUR_START + i
