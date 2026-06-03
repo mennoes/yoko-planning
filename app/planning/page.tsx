@@ -2735,13 +2735,12 @@ export default function PlanningPage() {
     return localStorage.getItem('planning-hide-meetings') === '1'
   })
   useEffect(() => { localStorage.setItem('planning-hide-meetings', hideMeetings ? '1' : '0') }, [hideMeetings])
-  // Toggle om álle Google-items te verbergen in Overzicht (week-zoom).
-  // Per-device in localStorage; reset niet bij refresh.
-  const [hideGoogle, setHideGoogle] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('planning-hide-google') === '1'
-  })
-  useEffect(() => { localStorage.setItem('planning-hide-google', hideGoogle ? '1' : '0') }, [hideGoogle])
+  // Verberg-Google toggle is verwijderd: Google-meetings horen altijd zichtbaar
+  // te zijn in de planning. Eventuele oude localStorage-vlag wordt opgeruimd.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try { localStorage.removeItem('planning-hide-google') } catch {}
+  }, [])
 
   // Keyboard shortcuts: +/= zooms in, - zooms out, N opent nieuw-item-popup
   useEffect(() => {
@@ -2982,13 +2981,8 @@ export default function PlanningPage() {
         return true
       })
     }
-    // Global: alle Google-items wanneer 'Verberg Google' actief is en de
-    // gebruiker in Overzicht (week-zoom) staat.
-    if (hideGoogle && zoom === 'week') {
-      next = next.filter(p => p.source !== 'google')
-    }
     return next
-  }, [projects, shadowDrag, hideGoogle, zoom, hiddenIds])
+  }, [projects, shadowDrag, zoom, hiddenIds])
 
   // Compute view constants
   const { cs, or, hh, av } = vc(viewSize)
@@ -3557,16 +3551,6 @@ export default function PlanningPage() {
                 style={ghostBtn(hideMeetings)}>
                 {hideMeetings ? '👁 Meetings' : '🚫 Meetings'}
               </button>
-              {/* Alleen in Overzicht (week-zoom) een knop die álle Google-
-                  items verbergt — handig voor 'wat staat er nog aan
-                  eigen werk' zonder agenda-ruis. */}
-              {zoom === 'week' && (
-                <button onClick={() => setHideGoogle(v => !v)}
-                  title={hideGoogle ? 'Google-items tonen' : 'Alle Google-items verbergen'}
-                  style={ghostBtn(hideGoogle)}>
-                  {hideGoogle ? '👁 Google' : '🚫 Google'}
-                </button>
-              )}
               <span style={separator} />
               <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
                 + Nieuw item
