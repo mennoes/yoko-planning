@@ -1056,7 +1056,7 @@ export default function TodosPage() {
   // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
   // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
   // (Odette, Vincent, Menno, Anne-Fleur, Kars, …) ipv de json-volgorde.
-  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'kars', 'take-lijzenga']
+  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'marcus-driessen', 'kars', 'take-lijzenga']
   const orderIdx = (id: string) => {
     const i = PERSONAL_ORDER.indexOf(id)
     return i >= 0 ? i : 999
