@@ -5,7 +5,7 @@ import { getCurrentUserId } from './sync'
 
 export type ProjectLink = { board: string; itemId: string; name: string }
 export type TodoItem    = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
-export type Section     = { id: string; title: string; emoji: string; items: TodoItem[] }
+export type Section     = { id: string; title: string; emoji: string; items: TodoItem[]; kind?: 'personal' | 'general' }
 
 const STORAGE_KEY = 'yoko-todos'
 const EVENT       = 'yoko-todos-update'

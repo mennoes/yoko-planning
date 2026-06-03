@@ -43,7 +43,11 @@ const RAW: Record<string, { groups: unknown[] }> = {
   vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
 }
 
-const MEMBER_IDS = new Set(teamData.members.map(m => m.id))
+// Member-id-set wordt op render uit teamData getrokken — extras (Manuel,
+// freelancers etc) worden bij boot in teamData.members gemerged, dus een
+// statische Set bij module-load mist die. Functie + Set in elke compute,
+// goedkoop genoeg.
+const memberIdSet = () => new Set(teamData.members.map(m => m.id))
 
 function loadAllProjects(): ProjectLink[] {
   if (typeof window === 'undefined') return []
@@ -998,10 +1002,10 @@ export default function TodosPage() {
     const idx = sections.findIndex(s => s.id === sectionId)
     if (idx < 0) return
     const target = sections[idx]
-    const isMember = MEMBER_IDS.has(target.id)
+    const isMember = memberIdSet().has(target.id)
     // Find neighbour within the same group (general vs personal)
     const groupIndices = sections
-      .map((s, i) => ({ i, member: MEMBER_IDS.has(s.id) }))
+      .map((s, i) => ({ i, member: memberIdSet().has(s.id) }))
       .filter(x => x.member === isMember)
       .map(x => x.i)
     const posInGroup = groupIndices.indexOf(idx)
@@ -1026,7 +1030,20 @@ export default function TodosPage() {
     const toIdx   = next.findIndex(s => s.id === targetId)
     if (fromIdx < 0 || toIdx < 0) return
     const [moved] = next.splice(fromIdx, 1)
-    next.splice(toIdx, 0, moved)
+    // Cross-block detectie: sleep je een algemene sectie OP een persoonlijke
+    // (of andersom), dan stempelen we 't kind-flag zodat de getroffen
+    // sectie in 't andere blok terechtkomt. memberIdSet().has(s.id) blijft
+    // de impliciete fallback voor teamleden zonder expliciete kind-flag.
+    const target = sections[toIdx]
+    const movedIsPersonal  = isPersonalSection(moved)
+    const targetIsPersonal = isPersonalSection(target)
+    let adjusted = moved
+    if (movedIsPersonal && !targetIsPersonal) {
+      adjusted = { ...moved, kind: 'general' as const }
+    } else if (!movedIsPersonal && targetIsPersonal) {
+      adjusted = { ...moved, kind: 'personal' as const }
+    }
+    next.splice(toIdx, 0, adjusted)
     setSections(next)
     saveSections(next)
   }
@@ -1038,7 +1055,7 @@ export default function TodosPage() {
     const fresh: Section = { id, title, emoji: '📋', items: [] }
     // Plaats 'm tussen general en personal — net na de laatste niet-member
     // sectie zodat-ie meteen bovenaan staat in 't 'algemeen' blok.
-    const lastGeneralIdx = sections.map((s, i) => MEMBER_IDS.has(s.id) ? -1 : i).reduce((m, i) => i > m ? i : m, -1)
+    const lastGeneralIdx = sections.map((s, i) => memberIdSet().has(s.id) ? -1 : i).reduce((m, i) => i > m ? i : m, -1)
     const insertAt = lastGeneralIdx + 1
     const next = [...sections.slice(0, insertAt), fresh, ...sections.slice(insertAt)]
     setSections(next)
@@ -1046,13 +1063,19 @@ export default function TodosPage() {
   }
 
   function deleteSection(id: string) {
-    if (MEMBER_IDS.has(id)) return  // member-secties beschermen
+    if (memberIdSet().has(id)) return  // member-secties beschermen
     const next = sections.filter(s => s.id !== id)
     setSections(next)
     saveSections(next)
   }
 
-  const general  = sections.filter(s => !MEMBER_IDS.has(s.id))
+  // 'Persoonlijk' = sectie hoort bij een teamlid (id matched) ÓF de
+  // gebruiker heeft 'm expliciet als personal gemarkeerd via een drag
+  // naar de persoonlijk-rij. Section.kind='general' kan een member-
+  // sectie omgekeerd weer naar algemeen schuiven.
+  const isPersonalSection = (s: Section) =>
+    s.kind === 'personal' || (s.kind !== 'general' && memberIdSet().has(s.id))
+  const general  = sections.filter(s => !isPersonalSection(s))
   // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
   // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
   // (Odette, Vincent, Menno, Anne-Fleur, Kars, …) ipv de json-volgorde.
@@ -1061,7 +1084,7 @@ export default function TodosPage() {
     const i = PERSONAL_ORDER.indexOf(id)
     return i >= 0 ? i : 999
   }
-  const personal = sections.filter(s => MEMBER_IDS.has(s.id))
+  const personal = sections.filter(isPersonalSection)
     .sort((a, b) => {
       const me = currentProfile?.memberId
       if (a.id === me) return -1

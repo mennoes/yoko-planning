@@ -64,10 +64,26 @@ export async function loadItemActivity(itemId: string): Promise<ItemActivity[]> 
  *  Gebruikt door de board-activity-drawer. */
 export async function loadBoardActivity(boardId?: string, limit = 100): Promise<ItemActivity[]> {
   if (!supabase) return []
-  let q = supabase.from('activity').select('*').like('target', TARGET_PREFIX + '%').order('ts', { ascending: false }).limit(limit)
-  if (boardId) q = q.eq('meta->>boardId', boardId)
-  const { data } = await q
-  return (data as ItemActivity[] | null) ?? []
+  // Server-side filter op meta.boardId zou oude entries (zonder meta)
+  // wegfilteren — die zaten er nog in vanuit een tijd dat we de meta-
+  // kolom nog niet hadden. We trekken nu ALLE board-item-entries op en
+  // laten de drawer client-side filteren op item-id-set van 't huidige
+  // bord. Dat houdt het logboek gevuld zelfs als migratie 0020 nog
+  // niet gedraaid is.
+  const { data } = await supabase
+    .from('activity')
+    .select('*')
+    .like('target', TARGET_PREFIX + '%')
+    .order('ts', { ascending: false })
+    .limit(limit)
+  const all = (data as ItemActivity[] | null) ?? []
+  if (!boardId) return all
+  // Eerst zoeken naar meta.boardId === boardId; entries zonder meta gaan
+  // door 'n itemId-check in de drawer-component zelf (die heeft de groups).
+  return all.filter(e => {
+    const metaBoard = (e.meta as { boardId?: string } | null)?.boardId
+    return !metaBoard || metaBoard === boardId
+  })
 }
 
 export function itemIdFromTarget(target: string | null): string | null {
