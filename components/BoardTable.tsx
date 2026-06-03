@@ -2688,13 +2688,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                       if (row) e.dataTransfer.setDragImage(row, 20, 12)
                     }}
                     style={{
-                      position: 'absolute', left: -16, top: '50%', transform: 'translateY(-50%)',
-                      width: 14, height: 22,
+                      position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+                      width: 14, height: 28,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'grab', userSelect: 'none',
                       color: 'var(--text-muted)', fontSize: 14, lineHeight: 1,
                       opacity: 0, transition: 'opacity 0.12s',
                       zIndex: 5,
+                      background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
                     }}>⠿</span>
                 )}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}

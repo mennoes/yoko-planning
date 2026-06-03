@@ -26,7 +26,7 @@ import teamData from '@/data/team.json'
 import { ensureRewindItems } from '@/lib/rewindScheduler'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
 import { pullCapacities, subscribeRemoteCapacities } from '@/lib/capacitiesStore'
-import { pullDaysOff, subscribeRemoteDaysOff } from '@/lib/daysOffStore'
+import { pullProfileDaysOff, subscribeRemoteProfileDaysOff } from '@/lib/profileDaysOff'
 import { pullFeedback, subscribeRemoteFeedback } from '@/lib/feedbackStore'
 import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
@@ -192,8 +192,8 @@ function Inner({ children }: { children: ReactNode }) {
       pullCapacities()
       unsubs.push(subscribeRemoteCapacities())
       // Vrije dagen per persoon (Ma=1..Zo=7)
-      pullDaysOff()
-      unsubs.push(subscribeRemoteDaysOff())
+      pullProfileDaysOff()
+      unsubs.push(subscribeRemoteProfileDaysOff())
       // Runtime-toegevoegde teamleden (via /team UI). Trekt 't merge-werk
       // op localStorage-niveau zelf, deze pull haalt cross-device additions.
       pullExtrasFromRemote()

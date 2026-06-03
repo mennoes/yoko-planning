@@ -51,7 +51,15 @@ export const BOARD_COLORS = new Proxy({} as Record<string, string>, {
 export function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
   return groups.flatMap(g =>
     g.items
-      .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
+      .filter(i => {
+        // Toon óók als de parent zelf geen owners heeft maar er subitems met
+        // owners onder hangen — anders verdwijnt een net-genest project uit
+        // de planning omdat de zojuist-aangemaakte parent leeg is.
+        const ownOwners = Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0
+        if (ownOwners) return true
+        const subs = (i.subitems as Array<{ ownerIds?: string[] }> | undefined)
+        return !!(subs && subs.some(s => Array.isArray(s.ownerIds) && s.ownerIds.length > 0))
+      })
       .flatMap((i): Project[] => {
         const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string }> | undefined) ?? []
         const subsWithDates = subs.filter(si => (si.status ?? '') !== 'Done' && (si.startDate || si.endDate))
@@ -193,7 +201,7 @@ function countWorkdays(startMs: number, endMs: number, memberId?: string): numbe
   // Lazy-load: alleen importeren als we een member moeten checken.
   let daysOffMap: Record<string, number[]> | null = null
   if (memberId && typeof window !== 'undefined') {
-    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-days-off') ?? '{}') as Record<string, number[]> } catch {}
+    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-profile-days-off') ?? '{}') as Record<string, number[]> } catch {}
   }
   const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {

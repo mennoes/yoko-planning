@@ -22,7 +22,7 @@ function isOffDayInline(memberId: string, date: Date): boolean {
   const dow = date.getDay()
   if (dow === 0 || dow === 6) return true
   try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('yoko-days-off') : null
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('yoko-profile-days-off') : null
     if (raw) {
       const map = JSON.parse(raw) as Record<string, number[]>
       const off = map[memberId] ?? []
@@ -186,7 +186,7 @@ function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): num
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
   let daysOffMap: Record<string, number[]> | null = null
   if (memberId && typeof window !== 'undefined') {
-    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-days-off') ?? '{}') as Record<string, number[]> } catch {}
+    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-profile-days-off') ?? '{}') as Record<string, number[]> } catch {}
   }
   const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
@@ -975,9 +975,13 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     laneEnds[lane] = b.left + b.width
     return { ...b, lane }
   })
-  const allDayLaneCount = Math.max(1, laneEnds.length)
-  const allDayLaneH = 32
-  const allDayH = allDayLaneCount * (allDayLaneH + 4) + 8
+  // Max 5 lanes voor de all-day-banner; bij meer overlap gaan extra
+  // events naar 'n verborgen overflow zodat de banner nooit een tien-rijen-
+  // hoge muur wordt. Lane-hoogte iets kleiner zodat 't compacter oogt.
+  const ALL_DAY_MAX_LANES = 5
+  const allDayLaneCount = Math.min(Math.max(1, laneEnds.length), ALL_DAY_MAX_LANES)
+  const allDayLaneH = 26
+  const allDayH = allDayLaneCount * (allDayLaneH + 3) + 6
 
   // Col-index voor het positioneren van getimede events per dag
   const colByIso = new Map<string, { col: Col; left: number; idx: number }>()
