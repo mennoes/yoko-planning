@@ -537,18 +537,19 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // EERSTE sync die velden zet en daarna niemand ze overschrijft.
   const sharedByICal = new Map<string, ItemRow>()
   if (wantedICals.length > 0) {
+    // BELANGRIJK: WEL soft-deleted rijen meenemen. Een eerdere bug-cyclus
+    // of de push-safety-guard kan de canonical Weekstart-row hebben
+    // soft-deleted; we willen die kunnen 'revive' ipv een tweede rij
+    // ernaast aanmaken. De upsert hieronder zet deleted_at expliciet op
+    // null om de row weer zichtbaar te maken.
     const { data: sharedRows } = await admin
       .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date, deleted_at')
       .eq('source', 'google')
-      .is('deleted_at', null)
       .in('ical_uid', Array.from(new Set(wantedICals)))
     for (const r of (sharedRows as ItemRow[] | null) ?? []) {
       if (!r.ical_uid) continue
       const prev = sharedByICal.get(r.ical_uid)
-      // Canonical = laagste id alfabetisch (deterministisch over alle
-      // teamleden heen). Wie de eerste sync deed bepaalt zo permanent
-      // de canonical id-vorm 'it_g_<icalUid>'.
       if (!prev || r.id < prev.id) sharedByICal.set(r.ical_uid, r)
     }
   }
@@ -730,6 +731,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         external_synced_at:  new Date().toISOString(),
         external_user_id:    existingRow?.external_user_id ?? cal.user_id,
         calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
+        // Revive soft-deleted rijen — als een eerdere bug 'm verstopt heeft,
+        // moet 'ie weer terugkomen zodra Google z'n update binnenpakt.
+        deleted_at:          null,
         updated_at:          new Date().toISOString(),
       })
       continue
@@ -896,6 +900,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       external_synced_at:  new Date().toISOString(),
       external_user_id:    existingRow?.external_user_id ?? cal.user_id,
       calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
+      deleted_at:          null,
       updated_at:          new Date().toISOString(),
     })
   }
