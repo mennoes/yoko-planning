@@ -157,6 +157,21 @@ function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; wi
   return groups
 }
 
+// Werkdag-teller (ma-vr) tussen twee timestamps, beide uiteinden incl.
+// Werk-items vallen NOOIT in 't weekend voor de werkdruk-distributie.
+function countWorkdaysMs(startMs: number, endMs: number): number {
+  if (endMs < startMs) return 0
+  let count = 0
+  const oneDay = 86400000
+  const start = new Date(startMs); start.setHours(0, 0, 0, 0)
+  const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
+  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
+    const dow = new Date(t).getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
 // ─── Hours in arbitrary range ─────────────────────────────────────────────────
 function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): number {
   if (!project.ownerIds.includes(memberId)) return 0
@@ -166,13 +181,15 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   if (re < pS || rs > pE) return 0
   const oS = rs > pS ? rs : pS
   const oE = re < pE ? re : pE
-  const totalMs   = pE.getTime() - pS.getTime()
-  const overlapMs = oE.getTime() - oS.getTime()
-  const fraction  = overlapMs / totalMs
+  // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
+  // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
+  // duwt in de werkdruk-cellen.
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime())
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime())
+  if (totalWork === 0) return 0
+  const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
-  // Zonder deze check viel een pie-chart-aanpassing buiten 't workload-overzicht
-  // en bleef de werkdruk-bol op de oude verdeling staan.
   const myShare = project.ownerHours && memberId in project.ownerHours
     ? Number(project.ownerHours[memberId]) || 0
     : project.estHours / Math.max(project.ownerIds.length, 1)

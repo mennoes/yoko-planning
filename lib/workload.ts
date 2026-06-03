@@ -176,9 +176,31 @@ export type ProjectContribution = {
   hours: number
 }
 
+// Telt het aantal werkdagen (Ma-Vr) tussen twee datums inclusief beide
+// uiteinden. Werk-items vallen NOOIT in 't weekend bij de werkdruk-
+// distributie — anders zou een vrijdag-pizzasessie de helft van z'n uren
+// naar zaterdag schuiven. Gebruikt door zowel projectHoursInWeek als
+// hoursInRange.
+function countWorkdays(startMs: number, endMs: number): number {
+  if (endMs < startMs) return 0
+  let count = 0
+  const oneDay = 86400000
+  // Loop dag-voor-dag op middernacht zodat een Saturday partial range niet
+  // halfgeteld wordt.
+  const start = new Date(startMs)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(endMs)
+  end.setHours(0, 0, 0, 0)
+  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
+    const dow = new Date(t).getDay()  // 0=Sun, 6=Sat
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
 /**
  * Hours a specific project contributes to `memberId` in the week starting `weekStart`.
- * Hours are distributed evenly across all calendar days of the project timeline,
+ * Hours are distributed evenly across WORKING DAYS (Mon-Fri) of the project timeline,
  * then the overlap with the given week is taken, split equally among owners.
  */
 export function projectHoursInWeek(
@@ -212,10 +234,14 @@ export function projectHoursInWeek(
   const overlapStart = wStart > pStart ? wStart : pStart
   const overlapEnd   = wEnd   < pEnd   ? wEnd   : pEnd
 
-  const totalMs   = pEnd.getTime()   - pStart.getTime()
-  const overlapMs = overlapEnd.getTime() - overlapStart.getTime()
+  // Verdeling alleen over werkdagen — weekenden krijgen 0u uit een
+  // project. Als 't project alleen weekend overspant (zeldzaam) krijgen
+  // we 0u terug, wat klopt: 't werk valt simpelweg niet in werkdagen.
+  const totalWork  = countWorkdays(pStart.getTime(), pEnd.getTime())
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime())
+  if (totalWork === 0) return 0
 
-  const fraction        = overlapMs / totalMs
+  const fraction        = overlapWork / totalWork
   const result          = fraction * myShare
 
   return Math.round(result * 10) / 10
