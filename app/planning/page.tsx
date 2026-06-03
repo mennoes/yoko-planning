@@ -3073,18 +3073,14 @@ export default function PlanningPage() {
     }
     // Per-item filter: het project ZELF (via z'n volledige id) of de PARENT
     // (via baseId zonder __siN-suffix) mag niet in de hidden-set zitten.
-    // Een hidden parent verbergt automatisch al z'n afgeleide subitems;
-    // een hidden subitem verbergt alleen dat ene event.
+    // Verbergen geldt strikt per ID: een verborgen parent verbergt niet
+    // automatisch z'n subitems. Project-subitems (Boekomslag maken,
+    // Femsplainers etc) staan los van de parent-balk; als je alleen die
+    // balk wegklikt, willen de subitem-uren wel gewoon in de planning
+    // verschijnen. Wil je een subitem ook weg? Vink 'verberg' op dát
+    // subitem.
     if (hiddenIds.size > 0) {
-      next = next.filter(p => {
-        if (hiddenIds.has(p.id)) return false
-        const subStart = p.id.indexOf('__si')
-        if (subStart >= 0) {
-          const parentBaseId = p.id.slice(0, subStart)
-          if (hiddenIds.has(parentBaseId)) return false
-        }
-        return true
-      })
+      next = next.filter(p => !hiddenIds.has(p.id))
     }
     // Global: alle Google-items wanneer 'Verberg Google' actief is en de
     // gebruiker in Overzicht (week-zoom) staat.
