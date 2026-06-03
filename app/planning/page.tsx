@@ -3400,7 +3400,25 @@ export default function PlanningPage() {
       const end   = col.rangeEnd.getTime() + 1
       if (ms < start) return null
       if (ms <= end) {
-        const frac = (ms - start) / (end - start)
+        // Een week-kolom (Overzicht) toont alleen ma-vr (5 dagcellen), niet
+        // 7. Naieve `(ms-start)/(end-start)` zou woensdag op 2/7 ≈ 0.29
+        // plaatsen, terwijl visueel 2/5 = 0.40 de juiste plek is — daardoor
+        // stond de VANDAAG-streep een dag te vroeg. We detecteren een
+        // weekkolom op de duur (>5 dagen) en mappen Mon-Fri lineair over de
+        // hele kolombreedte. Sat/Sun snappen we naar de rechter-rand zodat
+        // 't markertje in 't weekend nog ergens zinvol staat.
+        const dur = end - start
+        const isWeekCol = dur > 5 * 86400000
+        let frac: number
+        if (isWeekCol) {
+          const dayIdx   = Math.floor((ms - start) / 86400000)        // 0=ma..6=zo
+          const inDay    = ((ms - start) % 86400000) / 86400000
+          const visible  = Math.min(dayIdx, 4)                          // ma..vr → 0..4
+          const inVis    = dayIdx >= 5 ? 1 : inDay                      // weekend snapt naar einde
+          frac           = (visible + inVis) / 5
+        } else {
+          frac = (ms - start) / dur
+        }
         return acc + col.widthPx * frac
       }
       acc += col.widthPx
