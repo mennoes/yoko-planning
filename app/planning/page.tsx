@@ -123,17 +123,32 @@ function getMonthCols(from: Date, count: number, colW: number): Col[] {
 }
 
 function getDayCols(from: Date, count: number, colW: number): Col[] {
-  // Week-view toont alleen werkdagen (ma t/m vr). Weekend overslaan we
-  // omdat er zelden gepland werk staat — scheelt 2/7e horizontale ruimte
-  // en houdt de week-grenzen schoon.
+  // Week-view toont werkdagen (ma–vr) als volle kolommen en za+zo
+  // samengevoegd in één smalle 'we'-kolom — zo blijft de week-grens
+  // visueel intact maar slokt weekendwerk niet onnodig veel ruimte op.
+  // Smalle weekend-kolom = 35% van een normale dag-kolom.
+  const WEEKEND_W = Math.max(28, Math.round(colW * 0.35))
   const cols: Col[] = []
   const today = new Date(); today.setHours(0,0,0,0)
   let added = 0, offset = 0
   while (added < count) {
     const ds = new Date(from); ds.setDate(from.getDate() + offset); ds.setHours(0,0,0,0)
-    offset++
     const dow = ds.getDay() // 0=zo, 6=za
-    if (dow === 0 || dow === 6) continue
+    if (dow === 6) {
+      // Zaterdag: één combo-kolom voor za + zo. Range loopt t/m
+      // zondag 23:59 zodat hours-in-range beide dagen capteert.
+      const zo = new Date(ds); zo.setDate(ds.getDate() + 1); zo.setHours(23,59,59,999)
+      const isCurrent = today >= ds && today <= zo
+      cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: zo,
+        label1: 'we',
+        label2: `${ds.getDate()}/${zo.getDate()}`,
+        widthPx: WEEKEND_W,
+        isCurrent })
+      offset += 2
+      added++
+      continue
+    }
+    if (dow === 0) { offset++; continue } // zondag los: skip (al gecoverd door za)
     const de = new Date(ds); de.setHours(23,59,59,999)
     cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: de,
       label1: NL_DAY[ds.getDay()],          // 'ma', 'di', ...
@@ -141,6 +156,7 @@ function getDayCols(from: Date, count: number, colW: number): Col[] {
       widthPx: colW,
       isCurrent: ds.getTime() === today.getTime() })
     added++
+    offset++
   }
   return cols
 }
@@ -941,8 +957,14 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   {
     let acc = 0
     cols.forEach((col, i) => {
-      const iso = localIso(col.rangeStart)
-      colByIso.set(iso, { col, left: acc, idx: i })
+      const isoStart = localIso(col.rangeStart)
+      colByIso.set(isoStart, { col, left: acc, idx: i })
+      // Voor de samengevoegde weekend-kolom mappen we ook zondag op
+      // dezelfde col-info zodat een Sunday-event nog gevonden wordt.
+      if (col.rangeStart.getDay() === 6) {
+        const zo = new Date(col.rangeStart); zo.setDate(zo.getDate() + 1)
+        colByIso.set(localIso(zo), { col, left: acc, idx: i })
+      }
       acc += col.widthPx
     })
   }
