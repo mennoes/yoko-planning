@@ -55,21 +55,33 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string }> | undefined) ?? []
         const subsWithDates = subs.filter(si => (si.status ?? '') !== 'Done' && (si.startDate || si.endDate))
         if (subsWithDates.length > 0) {
-          return subsWithDates.map((si, idx): Project => ({
-            id:        `${boardName}__${i.id}__si${idx}`,
-            name:      `${i.name}${si.name ? ' · ' + si.name : ''}`,
-            board:     boardName,
-            group:     g.name,
-            ownerIds:  (si.ownerIds && si.ownerIds.length ? si.ownerIds : (i.ownerIds as string[])),
-            startDate: si.startDate ?? null,
-            endDate:   si.endDate ?? si.startDate ?? null,
-            startTime: si.startTime ?? null,
-            endTime:   si.endTime ?? null,
-            estHours:  Number(si.estHours) || 0,
-            status:    (i.status as string) === 'Done' ? 'done' : 'active',
-            source:    (i.source as 'manual' | 'google' | undefined),
-            externalLink: (i.externalLink as string | undefined),
-          }))
+          return subsWithDates.map((si, idx): Project => {
+            // Subitem-ownerIds gebruiken we alleen als 't ECHT toegewezen is
+            // (niet leeg en niet alleen 'unassigned'). Anders valt-ie terug
+            // op de parent-owners — anders telt een 'unassigned'-subitem 0u
+            // voor de parent-owner in de werkdruk, terwijl de parent zelf
+            // wel iemand als verantwoordelijke heeft staan. Bug die zorgde
+            // dat items met onbenoemde subitems uit Home/Werkdruk vielen.
+            const subOwners = (si.ownerIds ?? []).filter(o => o && o !== 'unassigned')
+            const owners = subOwners.length > 0
+              ? (si.ownerIds as string[])
+              : (i.ownerIds as string[])
+            return {
+              id:        `${boardName}__${i.id}__si${idx}`,
+              name:      `${i.name}${si.name ? ' · ' + si.name : ''}`,
+              board:     boardName,
+              group:     g.name,
+              ownerIds:  owners,
+              startDate: si.startDate ?? null,
+              endDate:   si.endDate ?? si.startDate ?? null,
+              startTime: si.startTime ?? null,
+              endTime:   si.endTime ?? null,
+              estHours:  Number(si.estHours) || 0,
+              status:    (i.status as string) === 'Done' ? 'done' : 'active',
+              source:    (i.source as 'manual' | 'google' | undefined),
+              externalLink: (i.externalLink as string | undefined),
+            }
+          })
         }
         const activeSubs = subs.filter(si => (si.status ?? '') !== 'Done')
         const hours = activeSubs.length > 0
