@@ -2866,15 +2866,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     return mutated ? out : next
   }
   const onChange = (next: BoardGroup[]) => rawOnChange(dedupSubitemTopLevels(autoMoveDoneItems(next)))
-  // Eénmalig bij eerste render checken of de huidige state al duplicaten
-  // bevat (typisch wanneer een eerdere nest-actie de bron niet opruimde).
-  // Schrijven we dan opnieuw via rawOnChange zodat 't gefixt naar Supabase
-  // gaat. Idempotent dus geen-loop-risico.
+  // Trigger dedupe ook wanneer groups VANUIT Supabase later binnenkomt
+  // (eerste render kan op een lege/seed-state staan en de echte data
+  // arriveert pas een tik later). De helper retourneert exact dezelfde
+  // referentie als er niks te dedupen valt, dus geen render-loop.
   useEffect(() => {
     const cleaned = dedupSubitemTopLevels(groups)
     if (cleaned !== groups) rawOnChange(cleaned)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [groups])
   const { profile } = useProfile()
   const { pushUndo } = useUndo()
   useEffect(() => { setCurrentActor(profile?.memberId ?? null) }, [profile?.memberId])
