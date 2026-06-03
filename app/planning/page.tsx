@@ -3462,8 +3462,20 @@ export default function PlanningPage() {
   const cols = useMemo(() => buildCols(zoom, baseFrom, colW), [zoom, baseFrom, colW])
 
   // Capacity in the right unit per zoom
-  function colCapacity(weeklyCapacity: number): number {
-    if (zoom === 'dag')   return Math.round((weeklyCapacity / 5) * 10) / 10
+  function colCapacity(weeklyCapacity: number, memberId?: string): number {
+    if (zoom === 'dag') {
+      // Per-dag cap = weeklyCap / aantal werkdagen (Mon-Fri minus eigen
+      // vrije dagen). Voor 32u/4-dag-week → 8u/dag i.p.v. 6.4u/dag.
+      let workdays = 5
+      if (memberId && typeof window !== 'undefined') {
+        try {
+          const offMap = JSON.parse(localStorage.getItem('yoko-profile-days-off') ?? '{}') as Record<string, number[]>
+          const off = (offMap[memberId] ?? []).filter(n => n >= 1 && n <= 5)
+          workdays = Math.max(1, 5 - off.length)
+        } catch {}
+      }
+      return Math.round((weeklyCapacity / workdays) * 10) / 10
+    }
     if (zoom === 'maand') return Math.round((weeklyCapacity * 4.33) * 10) / 10
     return weeklyCapacity
   }
@@ -4417,7 +4429,7 @@ export default function PlanningPage() {
               // Workload-bollen per dag, bovenop het Google-Cal raster.
               // Zelfde bol-stijl als Overzicht zodat de visuele continuïteit
               // bewaard blijft tussen beide zoom-niveaus.
-              const cap = colCapacity(m.weeklyCapacity)
+              const cap = colCapacity(m.weeklyCapacity, m.id)
               return (
                 <div key={m.id} data-member-id={m.id} style={{
                   borderBottom: '1px solid var(--border)', background: 'transparent',
@@ -4530,7 +4542,7 @@ export default function PlanningPage() {
 
             const renderMember = (member: TeamMember, mIdx: number) => {
             const isExp = expanded.has(member.id)
-            const cap   = colCapacity(member.weeklyCapacity)
+            const cap   = colCapacity(member.weeklyCapacity, member.id)
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
 
             return (
