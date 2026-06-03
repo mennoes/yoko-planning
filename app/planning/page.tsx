@@ -1335,6 +1335,14 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   onBarClick: (p: Project) => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
+  // Overrides voor workload-categorieën meedoen: items die de gebruiker
+  // expliciet als 'meeting' heeft gemarkeerd moeten zich ook gedragen als
+  // meeting (cluster + verbergbaar via 'Verberg Meetings'-toggle).
+  const [overrides, setOverrides] = useState<Record<string, WorkloadCategory>>({})
+  useEffect(() => {
+    setOverrides(loadCategoryOverrides())
+    return onCategoryOverridesChange(() => setOverrides(loadCategoryOverrides()))
+  }, [])
   const gridStart   = cols[0].rangeStart
   const gridStartMs = gridStart.getTime()
   const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
@@ -1370,8 +1378,17 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         left  = (cs - gridStartMs) / msPerPx
         width = Math.max((ce - cs) / msPerPx - 2, MIN_BAR_W)
       }
-      // Meetings: short Google events render at reduced height
-      const isMeeting = p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
+      // Meetings: zowel korte Google-events als alles wat door de gebruiker
+      // (of de classifier) op categorie 'meeting' is gezet. Daardoor komen
+      // handmatig-gemarkeerde meetings ook netjes onder de Meetings-toggle
+      // en in de cluster-pill terecht in plaats van als project-bar te
+      // blijven hangen.
+      const cat = effectiveCategory(
+        { name: p.name, hours: p.estHours || 0, source: p.source },
+        overrides[p.id],
+      )
+      const isMeeting = cat === 'meeting'
+        || (p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2)
       if (hideMeetings && isMeeting) return null
       return { p, left, width, isMeeting }
     })
@@ -1589,7 +1606,11 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
           fontSize: 11.5, fontWeight: 700, lineHeight: 1,
           boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
           overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        <span style={{ flexShrink: 0, opacity: 0.85 }}>📅</span>
+        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          style={{ flexShrink: 0, opacity: 0.9 }} aria-hidden="true">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+        </svg>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{label}</span>
         <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
       </button>
