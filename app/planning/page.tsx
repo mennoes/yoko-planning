@@ -1579,11 +1579,26 @@ function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project
     }
   }, [open, popoverId])
 
+  // Hover-popup met korte vertraging zodat de muis naar de popover-
+  // inhoud kan bewegen zonder dat 'ie meteen sluit. Klik blijft werken
+  // voor touch + voor het 'pinnen' tot een outside-click.
+  const hoverTimerRef = useRef<number | null>(null)
+  function cancelHoverClose() {
+    if (hoverTimerRef.current != null) {
+      window.clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+  }
+  function scheduleHoverClose() {
+    cancelHoverClose()
+    hoverTimerRef.current = window.setTimeout(() => setOpenExclusive(false), 150)
+  }
+
   // Eén compacte single-line pill, ongeacht pill-breedte. Multi-line
   // stacking met meeting-namen erin werkte niet bij smalle Overzicht-
   // kolommen (dayCellW = colW/5 ≈ 40px → letters per regel). De
-  // hoogte van de pill geeft duur weer; klikken opent de popover met
-  // de volledige lijst.
+  // hoogte van de pill geeft duur weer; hover toont meteen de lijst,
+  // klik 'pint' 'em open.
   const phoneSvg = (
     <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
@@ -1598,27 +1613,35 @@ function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project
     : (isVeryNarrow ? `${meetings.length}×` : `${meetings.length}× · ${totalH}u`)
 
   return (
-    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+    <span ref={wrapRef}
+      onMouseEnter={() => { cancelHoverClose(); setOpenExclusive(true) }}
+      onMouseLeave={scheduleHoverClose}
+      style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <button ref={btnRef} onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: 6, padding: '0 6px',
           width, height, borderRadius: 6,
-          background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
-          fontSize: 11, fontWeight: 700, lineHeight: 1.1,
-          boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+          // Zachtere blend met de overige planning-balken: warme amber-tint
+          // i.p.v. fel #D8B62E. Donkergrijze tekst houdt contrast vast.
+          background: 'rgba(216, 182, 46, 0.55)',
+          color: '#2a2410', border: '1px solid rgba(216, 182, 46, 0.85)', cursor: 'pointer',
+          fontSize: 11, fontWeight: 600, lineHeight: 1.1,
+          boxShadow: 'none',
           overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'left' }}>
         {phoneSvg}
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {compactLabel}
         </span>
         {isSingle && !isVeryNarrow && (
-          <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
+          <span style={{ flexShrink: 0, opacity: 0.7, fontWeight: 500 }}>{totalH}u</span>
         )}
       </button>
       {open && popPos && typeof document !== 'undefined' && createPortal(
         <div data-mc-popover={popoverId}
+          onMouseEnter={cancelHoverClose}
+          onMouseLeave={scheduleHoverClose}
           style={{ position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9000,
             width: 320, maxHeight: 360, overflowY: 'auto',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 4,
@@ -4282,11 +4305,13 @@ export default function PlanningPage() {
               if (freelancersOpen) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               } else {
-                // Ingeklapt: toon alleen freelancers die in de zichtbare
-                // periode daadwerkelijk werk hebben. Voorkomt dat we de hele
-                // lange lijst tonen, maar verbergt ook geen actieve mensen.
+                // Ingeklapt: toon freelancers die OWNERSHIP hebben op een
+                // project, ongeacht of dat project een datum heeft. Eerder
+                // checkten we alleen op uren-in-zichtbare-kolommen, waardoor
+                // toegewezen freelancers zónder concrete planning (bv. Fokke
+                // met alleen uren, nog geen datums) onzichtbaar bleven.
                 const active = freelancers.filter(m =>
-                  cols.some(col => memberHoursInCol(effectiveProjects, m.id, col).reduce((s, c) => s + c.hours, 0) > 0)
+                  effectiveProjects.some(p => p.ownerIds.includes(m.id))
                 )
                 active.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
