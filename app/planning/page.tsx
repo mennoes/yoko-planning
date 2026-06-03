@@ -123,16 +123,24 @@ function getMonthCols(from: Date, count: number, colW: number): Col[] {
 }
 
 function getDayCols(from: Date, count: number, colW: number): Col[] {
+  // Week-view toont alleen werkdagen (ma t/m vr). Weekend overslaan we
+  // omdat er zelden gepland werk staat — scheelt 2/7e horizontale ruimte
+  // en houdt de week-grenzen schoon.
   const cols: Col[] = []
   const today = new Date(); today.setHours(0,0,0,0)
-  for (let i = 0; i < count; i++) {
-    const ds = new Date(from); ds.setDate(from.getDate() + i); ds.setHours(0,0,0,0)
+  let added = 0, offset = 0
+  while (added < count) {
+    const ds = new Date(from); ds.setDate(from.getDate() + offset); ds.setHours(0,0,0,0)
+    offset++
+    const dow = ds.getDay() // 0=zo, 6=za
+    if (dow === 0 || dow === 6) continue
     const de = new Date(ds); de.setHours(23,59,59,999)
     cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: de,
       label1: NL_DAY[ds.getDay()],          // 'ma', 'di', ...
       label2: String(ds.getDate()),         // '6', '7', ...
       widthPx: colW,
       isCurrent: ds.getTime() === today.getTime() })
+    added++
   }
   return cols
 }
@@ -1081,10 +1089,11 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
+            const isWeekStart = dow === 1
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
-                borderLeft: '1px solid var(--border-strong)',
+                borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
                 pointerEvents: 'none',
               }} />
@@ -1370,40 +1379,16 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     })
     .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
 
-  // Collapse all meetings on the same start day into ONE wide bar that fills
-  // the day cell — so we get the full width to spell out the meeting names
-  // instead of N tiny stacked pills no one can click.
-  type ClusterBar = { kind: 'cluster'; left: number; width: number; meetings: Project[]; isMeeting: true }
+  // Geen clustering meer in Overzicht: elke meeting krijgt zijn eigen
+  // bar in zijn eigen lane, gesorteerd op starttijd (vroegste bovenaan).
+  // Project-balken blijven horizontaal gepackt.
   type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; isMeeting: boolean }
-  type Bar = ClusterBar | SingleBar
+  type Bar = SingleBar
 
-  const dayCellW = isWeek ? colW / 5 : (zoom === 'maand' ? Math.max(colW / 6, 40) : colW)
-  const meetingByDay = new Map<string, typeof rawBars>()
-  const finalBars: Bar[] = []
-  for (const b of rawBars) {
-    if (b.isMeeting) {
-      const key = `${b.p.startDate ?? '?'}@${Math.round(b.left)}`
-      const arr = meetingByDay.get(key) ?? []
-      arr.push(b); meetingByDay.set(key, arr)
-    } else {
-      finalBars.push({ kind: 'single', ...b })
-    }
-  }
-  for (const arr of meetingByDay.values()) {
-    const left = arr[0].left
-    finalBars.push({
-      kind: 'cluster',
-      left,
-      width: Math.max(dayCellW - 4, 60),
-      meetings: arr.map(b => b.p),
-      isMeeting: true,
-    })
-  }
+  const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
 
-  // Lane-pack meetings and projects SEPARATELY so meetings get their own
-  // dedicated track at the top — they never compete for vertical space with
-  // real project bars. Within each track we still pack horizontally so
-  // adjacent days don't stack unnecessarily.
+  // Project-balken packen we horizontaal — meetings krijgen elke een
+  // eigen lane, gesorteerd op start-tijd (vroegste bovenaan).
   function packLanes<T extends { left: number; width: number }>(items: T[]) {
     const sorted   = [...items].sort((a, b) => a.left - b.left)
     const laneEnds: number[] = []
@@ -1416,51 +1401,62 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     return { items: packed, numLanes: laneEnds.length }
   }
 
-  const meetingItems = finalBars.filter((b): b is ClusterBar => b.kind === 'cluster')
   // Vrij-events trekken we uit de lane-pack zodat ze geen rij vergroten —
   // ze worden los gerenderd over de volle hoogte van de container, achter
-  // de andere events. Zo zie je een 'Vakantie'-blok over de hele dag
-  // heen i.p.v. een smalle balk in een eigen lane onderaan.
-  const projectAllSingles = finalBars.filter((b): b is SingleBar => b.kind === 'single')
+  // de andere events.
+  const projectAllSingles = finalBars
   const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
   const vrijBars     = projectAllSingles.filter(isVrijBar)
-  const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
+  const meetingBars  = projectAllSingles.filter(b => !isVrijBar(b) && b.isMeeting)
+  const projectItems = projectAllSingles.filter(b => !isVrijBar(b) && !b.isMeeting)
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // Hoogte van een meeting-cluster schaalt met totaal-uren én aantal
-  // meetings (zodat elke meeting minstens één regel tekst krijgt).
-  // Meetings worden bovenop de project-balken gerenderd — overlap is
-  // toegestaan, dat is leesbaar genoeg.
-  const MEETING_PX_PER_HOUR = 12
-  function clusterHeight(b: ClusterBar) {
-    const totalH = b.meetings.reduce((s, m) => s + (m.estHours || 0), 0)
-    return Math.min(56, Math.max(MEETING_BAR_H, totalH * MEETING_PX_PER_HOUR))
+  // Meetings: per dag-positie sorteren op start-tijd, dan eigen lane
+  // toewijzen — vroegste in de bovenste lane.
+  function startMin(p: Project): number {
+    const t = p.startTime
+    if (!t) return 9 * 60
+    const [hh, mm] = t.split(':').map(Number)
+    return (hh || 0) * 60 + (mm || 0)
   }
+  const meetingsSorted = [...meetingBars].sort((a, b) => {
+    if (a.left !== b.left) return a.left - b.left
+    return startMin(a.p) - startMin(b.p)
+  })
+  // Per dag (gegroepeerd op afgerond left) een eigen lane-index opbouwen
+  // op basis van start-tijd: lane 0 = vroegste.
+  const meetingLaneByDay = new Map<number, number>()
+  const meetingsPacked = meetingsSorted.map(b => {
+    const key = Math.round(b.left)
+    const lane = meetingLaneByDay.get(key) ?? 0
+    meetingLaneByDay.set(key, lane + 1)
+    return { ...b, lane }
+  })
+  const meetingLanes = meetingLaneByDay.size > 0
+    ? Math.max(...meetingLaneByDay.values())
+    : 0
 
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
-  // events als mini-staafdiagram per dag kunnen renderen (8u = volledige
-  // hoogte, 4u = half, 1u = klein staafje). DraggableBar krijgt dan
-  // scaleByHours=true en anker'd bottom-up.
+  // events als mini-staafdiagram per dag kunnen renderen.
   const PROJECT_LANE_H = zoom === 'week' ? 64 : (BAR_H + BAR_GAP)
+  const MEETING_LANE_H = BAR_H + BAR_GAP
 
   function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
+  function meetingLaneTop(lane: number) {
+    return BAR_GAP + projectLanes * PROJECT_LANE_H + lane * MEETING_LANE_H
+  }
 
-  type Cluster = ClusterBar & { track: 'meeting'; barH: number }
-  type Single  = SingleBar  & { lane: number; track: 'project' }
-  const bars: (Cluster | Single)[] = [
-    ...meetingItems.map(b => ({ ...b, track: 'meeting' as const, barH: clusterHeight(b) })),
+  type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
+  const bars: Single[] = [
     ...projectPacked.items.map(b => ({ ...b, track: 'project' as const })),
+    ...meetingsPacked.map(b => ({ ...b, track: 'meeting' as const })),
   ]
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  // Minimaal de project-lanes hoog. Meetings hangen er bovenop dus tellen
-  // niet mee voor de container-hoogte; ze mogen door-bloeden indien langer
-  // dan de project-lane-stack. We breiden de container alleen uit als een
-  // meeting daadwerkelijk hoger is dan de projects, zodat scrollen klopt.
-  const tallestMeeting = meetingItems.reduce((m, b) => Math.max(m, clusterHeight(b)), 0)
   const baseHeight = BAR_GAP
-    + Math.max(projectLanes * PROJECT_LANE_H, tallestMeeting + 4)
+    + projectLanes * PROJECT_LANE_H
+    + meetingLanes * MEETING_LANE_H
     + 6
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
@@ -1495,20 +1491,25 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         </div>
       ))}
       {bars.map((b, i) => {
-        if (b.kind === 'cluster') {
-          // Meetings worden bovenop project-balken gerenderd (z-index 3)
-          // met hoogte naar uren — kleine 30min-meeting blijft compact,
-          // lange of meerdere stacken verticaal in de pill.
+        // Meetings: aparte lane onder projecten, gesorteerd op start-
+        // tijd, met de oorspronkelijke project-kleur (geen geel meer).
+        void i
+        if (b.track === 'meeting') {
           return (
-            <div key={`cl_${i}`} style={{ position: 'absolute', top: BAR_GAP, left: b.left + 2, width: b.width, height: b.barH, zIndex: 3 }}>
-              <MeetingCluster meetings={b.meetings} width={b.width} height={b.barH} onPick={onBarClick} />
+            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: 0, right: 0, height: MEETING_LANE_H, pointerEvents: 'none' }}>
+              <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
+                laneH={MEETING_LANE_H} scaleByHours={false}
+                onDragMove={(s, e) => onDragMove(b.p, s, e)}
+                onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
+                onClick={() => onBarClick(b.p)}
+                onReassign={onReassign} />
             </div>
           )
         }
         return (
           <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H, pointerEvents: 'none' }}>
-            <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
-              laneH={PROJECT_LANE_H} scaleByHours={zoom === 'week' && !b.isMeeting}
+            <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
+              laneH={PROJECT_LANE_H} scaleByHours={zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
@@ -4026,9 +4027,10 @@ export default function PlanningPage() {
               const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
               const weekend = dow === 0 || dow === 6
               const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
+              const isWeekStart = zoom === 'dag' && dow === 1
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
-                borderLeft: '1px solid var(--border-strong)',
+                borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
                 <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
@@ -4081,6 +4083,10 @@ export default function PlanningPage() {
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
                 </button>
               )
+              // Workload-bollen per dag, bovenop het Google-Cal raster.
+              // Zelfde bol-stijl als Overzicht zodat de visuele continuïteit
+              // bewaard blijft tussen beide zoom-niveaus.
+              const cap = colCapacity(m.weeklyCapacity)
               return (
                 <div key={m.id} data-member-id={m.id} style={{
                   borderBottom: '1px solid var(--border)', background: 'transparent',
@@ -4088,6 +4094,23 @@ export default function PlanningPage() {
                   filter:  dim ? 'saturate(0.85)' : 'none',
                   transition: 'opacity 0.18s, filter 0.18s',
                 }}>
+                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 4,
+                      background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
+                    {cols.map(col => {
+                      const contribs = memberHoursInCol(effectiveProjects, m.id, col)
+                      const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+                      const isWeekStart = col.rangeStart.getDay() === 1
+                      return (
+                        <div key={col.key} style={{ width: col.widthPx, height: Math.round(hh * 0.7), flexShrink: 0,
+                          borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
+                          padding: 2,
+                          background: col.isCurrent ? 'var(--accent-light)' : 'transparent', position: 'relative' }}>
+                          <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={Math.round(cs * 0.7)} or={Math.round(or * 0.7)} zoom={zoom} onOpenDetails={p => openDetail(p)} />
+                        </div>
+                      )
+                    })}
+                  </div>
                   <WeekTimeGrid
                     cols={cols}
                     projects={effectiveProjects}
@@ -4244,8 +4267,16 @@ export default function PlanningPage() {
                     // In Overzicht-zoom is een 'kolom' een hele week, dus
                     // weekend-highlighting is hier niet relevant.
                     const weekend  = false
+                    // Week-grens visualiseren in week-view: maandag krijgt
+                    // een dikkere linker-border zodat je in één oogopslag
+                    // ziet waar de week begint.
+                    // Dit pad rendert week-/maand-zoom; geen day-of-week
+                    // separators nodig — borderLeft blijft standaard.
+                    const isWeekStart = false
                     return (
-                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-strong)', padding: 2,
+                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0,
+                        borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
+                        padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent', position: 'relative' }}>
                         <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => openDetail(p)} />
                       </div>
