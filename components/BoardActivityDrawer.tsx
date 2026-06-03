@@ -116,9 +116,22 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
     let cancelled = false
     async function refresh() {
       setLoading(true)
-      const list = await loadBoardActivity(boardId, 150)
+      const list = await loadBoardActivity(boardId, 300)
       if (cancelled) return
-      setEntries(list)
+      // Extra client-side filter: entries zonder meta.boardId (van vóór
+      // migratie 0020) zijn niet boardspecifiek bekend op de server. We
+      // halen de actuele item-id-set van dit bord uit boardStore en
+      // matchen daar tegenaan zodat alleen relevante events tonen.
+      const groups = loadGroups(boardId, [])
+      const boardItemIds = new Set<string>()
+      for (const g of groups) for (const i of g.items) boardItemIds.add(i.id)
+      const filtered = list.filter(e => {
+        const itemId = itemIdFromTarget(e.target)
+        const metaBoard = (e.meta as { boardId?: string } | null)?.boardId
+        if (metaBoard === boardId) return true
+        return !!itemId && boardItemIds.has(itemId)
+      })
+      setEntries(filtered)
       setLoading(false)
     }
     refresh()

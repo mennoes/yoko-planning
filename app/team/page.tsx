@@ -15,45 +15,6 @@ import {
   type ContactGroup as StoredGroup,
 } from '@/lib/teamPageStore'
 import { addExtra, removeExtra, listExtras, onTeamUpdate } from '@/lib/teamExtras'
-import { loadDaysOff, setDaysOff, onDaysOffChange } from '@/lib/daysOffStore'
-
-// ─── Vrije dagen rij — Ma t/m Vr toggle-knoppen onder elke kaart ──────────────
-function DaysOffRow({ memberId, memberColor }: { memberId: string; memberColor: string }) {
-  const [days, setDays] = useState<number[]>(() => loadDaysOff()[memberId] ?? [])
-  useEffect(() => {
-    const refresh = () => setDays(loadDaysOff()[memberId] ?? [])
-    refresh()
-    return onDaysOffChange(refresh)
-  }, [memberId])
-
-  function toggle(d: number) {
-    const next = days.includes(d) ? days.filter(x => x !== d) : [...days, d]
-    setDaysOff(memberId, next)  // emit-event triggert refresh hierboven
-  }
-
-  const LABELS: [number, string][] = [
-    [1, 'M'], [2, 'D'], [3, 'W'], [4, 'D'], [5, 'V'],
-  ]
-  return (
-    <div style={{ display: 'flex', gap: 3, marginTop: 4 }} title="Klik op een dag om 'm als vrije dag te markeren">
-      {LABELS.map(([d, lbl]) => {
-        const off = days.includes(d)
-        return (
-          <button key={d} onClick={() => toggle(d)}
-            title={off ? `Markeer ${lbl} als werkdag` : `Markeer ${lbl} als vrije dag`}
-            style={{
-              width: 18, height: 18, padding: 0,
-              borderRadius: 4, border: '1px solid ' + (off ? memberColor : 'var(--border)'),
-              background: off ? memberColor : 'transparent',
-              color: off ? '#fff' : 'var(--text-muted)',
-              fontSize: 9.5, fontWeight: 700, lineHeight: 1, cursor: 'pointer',
-            }}>{lbl}</button>
-        )
-      })}
-    </div>
-  )
-}
-
 // ─── Contacts types ───────────────────────────────────────────────────────────
 type Contact = { id: string; name: string; role: string; email: string; phone: string }
 type Group   = { id: string; name: string; color: string; contacts: Contact[] }
@@ -241,14 +202,10 @@ function TeamMemberCard({ member, capacity, onCapacityChange }: {
               </button>
             )}
           </div>
-
-          {/* Vrije dagen toggles — Ma t/m Vr. Klik om aan/uit te zetten;
-              dat gaat naar daysOffStore (+ Supabase) en de werkdruk-
-              distributie skipt deze weekdagen voor dit teamlid. */}
-          <DaysOffRow memberId={member.id} memberColor={member.color ?? '#888'} />
-
-          {/* Color dot */}
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: member.color, flexShrink: 0 }} />
+          {/* Vrije dagen / kleur-dot: deze zaten dubbelop met profile-page
+              waar je veel rijker werkdagen + vakantie kunt instellen.
+              Verwijderd om verwarring weg te halen — workload-calc leest
+              voortaan rechtstreeks uit profiles.days_off. */}
         </>
       )}
     </div>

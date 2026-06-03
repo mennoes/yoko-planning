@@ -15,6 +15,24 @@ import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
+
+// Helper voor synchrone off-day-check binnen render. Leest dezelfde
+// localStorage-cache als countWorkdaysMs, plus 'n Vrij-event-check.
+function isOffDayInline(memberId: string, date: Date): boolean {
+  const dow = date.getDay()
+  if (dow === 0 || dow === 6) return true
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('yoko-profile-days-off') : null
+    if (raw) {
+      const map = JSON.parse(raw) as Record<string, number[]>
+      const off = map[memberId] ?? []
+      const iso = dow === 0 ? 7 : dow
+      if (off.includes(iso)) return true
+    }
+  } catch {}
+  if (isVrijDayForMember(memberId, date)) return true
+  return false
+}
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
@@ -92,8 +110,8 @@ const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 
 // Column counts per zoom
 // Week-zoom: 21 dagen = 7 dagen historie + vandaag + 13 dagen vooruit (zie
 // HISTORY_BACK). Overzicht (week-zoom) en maand-fallback hun bredere range.
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 21, week: 56, maand: 18 }
-const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 7, week: 4, maand: 2 }
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 56, week: 70, maand: 24 }
+const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 28, week: 14, maand: 6 }
 const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
@@ -192,7 +210,7 @@ function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): num
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
   let daysOffMap: Record<string, number[]> | null = null
   if (memberId && typeof window !== 'undefined') {
-    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-days-off') ?? '{}') as Record<string, number[]> } catch {}
+    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-profile-days-off') ?? '{}') as Record<string, number[]> } catch {}
   }
   const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
@@ -979,9 +997,13 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     laneEnds[lane] = b.left + b.width
     return { ...b, lane }
   })
-  const allDayLaneCount = Math.max(1, laneEnds.length)
-  const allDayLaneH = 32
-  const allDayH = allDayLaneCount * (allDayLaneH + 4) + 8
+  // Max 5 lanes voor de all-day-banner; bij meer overlap gaan extra
+  // events naar 'n verborgen overflow zodat de banner nooit een tien-rijen-
+  // hoge muur wordt. Lane-hoogte iets kleiner zodat 't compacter oogt.
+  const ALL_DAY_MAX_LANES = 5
+  const allDayLaneCount = Math.min(Math.max(1, laneEnds.length), ALL_DAY_MAX_LANES)
+  const allDayLaneH = 26
+  const allDayH = allDayLaneCount * (allDayLaneH + 3) + 6
 
   // Col-index voor het positioneren van getimede events per dag
   const colByIso = new Map<string, { col: Col; left: number; idx: number }>()
@@ -1192,11 +1214,17 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
             const isWeekStart = dow === 1
+            const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
+            const bg = col.isCurrent ? 'var(--accent-light)'
+                     : weekend ? 'var(--weekend-bg)'
+                     : isOff ? 'rgba(154,149,144,0.12)'
+                     : 'transparent'
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
+                background: bg,
+                backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.04) 6px 7px)' : undefined,
                 pointerEvents: 'none',
               }} />
             )
@@ -1274,7 +1302,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                   marginLeft: titleShift,
-                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
+                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
+                  {b.p.name}
+                </span>
                 <OwnerCircle owners={owners} size={20} />
               </div>
             )
@@ -1311,11 +1342,17 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
             const isWeekStart = dow === 1
+            const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
+            const bg = col.isCurrent ? 'var(--accent-light)'
+                     : weekend ? 'var(--weekend-bg)'
+                     : isOff ? 'rgba(154,149,144,0.12)'
+                     : 'transparent'
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
+                background: bg,
+                backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.05) 6px 7px)' : undefined,
                 pointerEvents: 'none',
               }} />
             )
@@ -1357,6 +1394,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: '#fff',
                   whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
                   textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
                   {b.p.name}
                 </div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', marginTop: 1,
@@ -1425,7 +1463,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                     eindigen. Volgorde van weglaten: owner → tijd → titel. */}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   textShadow: '0 1px 2px rgba(0,0,0,0.55)', fontWeight: 700, fontSize: 12,
-                  paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
+                  paddingRight: isGoogle ? 18 : 0 }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
+                  {b.p.name}
+                </span>
                 {height >= 30 && (
                   <span style={{ fontSize: 9.5, opacity: 0.92, fontWeight: 600,
                     textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
@@ -4242,6 +4283,16 @@ export default function PlanningPage() {
                   <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                  {/* Modus-label naast de slider: laat zien wat de slider doet
+                      in 't huidige perspectief, en welke perspectief je ziet. */}
+                  <span style={{
+                    fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
+                    padding: '3px 8px', borderRadius: 999,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                  }}>
+                    {zoom === 'dag' ? 'Week-planner' : 'Overzicht'}
+                  </span>
                 </div>
               )}
             </div>
@@ -4557,17 +4608,11 @@ export default function PlanningPage() {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
               if (freelancersOpen) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
-              } else {
-                // Ingeklapt: toon freelancers die OWNERSHIP hebben op een
-                // project, ongeacht of dat project een datum heeft. Eerder
-                // checkten we alleen op uren-in-zichtbare-kolommen, waardoor
-                // toegewezen freelancers zónder concrete planning (bv. Fokke
-                // met alleen uren, nog geen datums) onzichtbaar bleven.
-                const active = freelancers.filter(m =>
-                  effectiveProjects.some(p => p.ownerIds.includes(m.id))
-                )
-                active.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
+              // Ingeklapt = écht ingeklapt (geen rijen meer). Vroeger lieten
+              // we 'active' freelancers (met uren) staan, maar dan kon de
+              // gebruiker nooit alles verbergen. Klap je 't open via de
+              // chevron, dan kun je iedereen weer zien.
             }
             return out
           })()}

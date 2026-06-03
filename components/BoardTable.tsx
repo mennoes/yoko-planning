@@ -392,8 +392,19 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
     }
     return out
   })()
-  const toggle = (id: string) =>
-    onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id])
+  const toggle = (id: string) => {
+    if (value.includes(id)) {
+      onChange(value.filter(x => x !== id))
+      return
+    }
+    // Bij assignen automatisch 'unassigned' eruit gooien — anders blijft een
+    // item zowel een echte owner als 'niemand toegewezen' tegelijk dragen,
+    // wat de werkdruk-distributie en filter-chips door de war stuurt.
+    const next = id === 'unassigned'
+      ? [...value, id]
+      : [...value.filter(x => x !== 'unassigned'), id]
+    onChange(next)
+  }
 
   // Yoko-collega's altijd bovenaan met grotere foto's zodat aanwijzen makkelijk
   // is. Freelancers / externe contactpersonen verschijnen pas wanneer je
@@ -2703,13 +2714,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                       if (row) e.dataTransfer.setDragImage(row, 20, 12)
                     }}
                     style={{
-                      position: 'absolute', left: -16, top: '50%', transform: 'translateY(-50%)',
-                      width: 14, height: 22,
+                      position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+                      width: 14, height: 28,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'grab', userSelect: 'none',
                       color: 'var(--text-muted)', fontSize: 14, lineHeight: 1,
                       opacity: 0, transition: 'opacity 0.12s',
                       zIndex: 5,
+                      background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
                     }}>⠿</span>
                 )}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
