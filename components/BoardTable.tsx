@@ -2832,7 +2832,39 @@ type BoardTableProps = {
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const storageKey = `board-col-widths-${title}`
-  const onChange = (next: BoardGroup[]) => rawOnChange(autoMoveDoneItems(next))
+  // Dedup-helper: als 'n subitem-id ergens in 't bord óók als top-level
+  // item voorkomt, gooien we 't top-level eruit. Komt voor wanneer 'n
+  // nest-actie z'n bron niet opruimde (oude state, sync-glitch) —
+  // selectievinkjes synchroniseerden dan tussen beide rijen omdat ze
+  // dezelfde id deelden.
+  function dedupSubitemTopLevels(next: BoardGroup[]): BoardGroup[] {
+    const subitemIds = new Set<string>()
+    for (const g of next) for (const i of g.items) {
+      for (const s of (i.subitems ?? [])) {
+        if (s?.id) subitemIds.add(s.id)
+      }
+    }
+    if (subitemIds.size === 0) return next
+    let mutated = false
+    const out = next.map(g => {
+      const items = g.items.filter(i => {
+        if (subitemIds.has(i.id)) { mutated = true; return false }
+        return true
+      })
+      return mutated ? { ...g, items } : g
+    })
+    return mutated ? out : next
+  }
+  const onChange = (next: BoardGroup[]) => rawOnChange(dedupSubitemTopLevels(autoMoveDoneItems(next)))
+  // Eénmalig bij eerste render checken of de huidige state al duplicaten
+  // bevat (typisch wanneer een eerdere nest-actie de bron niet opruimde).
+  // Schrijven we dan opnieuw via rawOnChange zodat 't gefixt naar Supabase
+  // gaat. Idempotent dus geen-loop-risico.
+  useEffect(() => {
+    const cleaned = dedupSubitemTopLevels(groups)
+    if (cleaned !== groups) rawOnChange(cleaned)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const { profile } = useProfile()
   const { pushUndo } = useUndo()
   useEffect(() => { setCurrentActor(profile?.memberId ?? null) }, [profile?.memberId])
