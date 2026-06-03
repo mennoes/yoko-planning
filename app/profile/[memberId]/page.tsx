@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import teamData from '@/data/team.json'
 import { useProfile } from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
+import { useTeam } from '@/components/TeamContext'
 import { supabase } from '@/lib/supabase'
 import { getCurrentUserId } from '@/lib/sync'
 import { useIsMobile } from '@/lib/useIsMobile'
@@ -55,7 +56,14 @@ export default function PublicProfilePage() {
 
   const [data, setData] = useState<ExtendedProfile | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const baseMember = teamData.members.find(m => m.id === memberId)
+  const { members: liveTeam } = useTeam()
+  // Eerst kijken in live team_members (Supabase), valt terug op team.json
+  // voor pre-DB / legacy ids. Anders krijgt Manuel (alleen in team_members)
+  // 'Onbekend teamlid'-fallback.
+  const liveMember = liveTeam.find(m => m.id === memberId)
+  const baseMember = liveMember
+    ? { id: liveMember.id, name: liveMember.name, color: liveMember.color, email: liveMember.email, weeklyCapacity: liveMember.weeklyCapacity }
+    : teamData.members.find(m => m.id === memberId)
   const isMe = myProfile?.memberId === memberId
 
   useEffect(() => {

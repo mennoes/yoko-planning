@@ -142,16 +142,40 @@ function getMonthCols(from: Date, count: number, colW: number): Col[] {
 }
 
 function getDayCols(from: Date, count: number, colW: number): Col[] {
+  // Week-view toont werkdagen (ma–vr) als volle kolommen en za+zo
+  // samengevoegd in één smalle 'we'-kolom — zo blijft de week-grens
+  // visueel intact maar slokt weekendwerk niet onnodig veel ruimte op.
+  // Smalle weekend-kolom = 35% van een normale dag-kolom.
+  const WEEKEND_W = Math.max(28, Math.round(colW * 0.35))
   const cols: Col[] = []
   const today = new Date(); today.setHours(0,0,0,0)
-  for (let i = 0; i < count; i++) {
-    const ds = new Date(from); ds.setDate(from.getDate() + i); ds.setHours(0,0,0,0)
+  let added = 0, offset = 0
+  while (added < count) {
+    const ds = new Date(from); ds.setDate(from.getDate() + offset); ds.setHours(0,0,0,0)
+    const dow = ds.getDay() // 0=zo, 6=za
+    if (dow === 6) {
+      // Zaterdag: één combo-kolom voor za + zo. Range loopt t/m
+      // zondag 23:59 zodat hours-in-range beide dagen capteert.
+      const zo = new Date(ds); zo.setDate(ds.getDate() + 1); zo.setHours(23,59,59,999)
+      const isCurrent = today >= ds && today <= zo
+      cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: zo,
+        label1: 'we',
+        label2: `${ds.getDate()}/${zo.getDate()}`,
+        widthPx: WEEKEND_W,
+        isCurrent })
+      offset += 2
+      added++
+      continue
+    }
+    if (dow === 0) { offset++; continue } // zondag los: skip (al gecoverd door za)
     const de = new Date(ds); de.setHours(23,59,59,999)
     cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: de,
       label1: NL_DAY[ds.getDay()],          // 'ma', 'di', ...
       label2: String(ds.getDate()),         // '6', '7', ...
       widthPx: colW,
       isCurrent: ds.getTime() === today.getTime() })
+    added++
+    offset++
   }
   return cols
 }
@@ -278,8 +302,16 @@ function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
 function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; or: number }) {
   const cx    = cs / 2, cy = cs / 2
   const color = pct > 1 ? '#e2445c' : '#579bfc'
-  const fillR = pct > 0 ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * Math.sqrt(Math.min(pct, 1)))) : 0
-  const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.06) : fillR
+  // Hoogte-variantie comprimeren: vroeger gebruikten we sqrt(pct) wat
+  // tussen 1.9u en 35u nog steeds een 5× verschil in straal gaf. We hebben
+  // nu een minimum-straal (35% van outerR) plus een vlakkere curve
+  // (pct^0.4) — kleine cap-loads blijven goed leesbaar, drukke weken
+  // springen niet meer 4× zo groot uit de bocht.
+  const MIN_FRAC = 0.35
+  const fillR = pct > 0
+    ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * (MIN_FRAC + (1 - MIN_FRAC) * Math.pow(Math.min(pct, 1), 0.4))))
+    : 0
+  const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.04) : fillR
   return (
     <svg width={cs} height={cs} viewBox={`0 0 ${cs} ${cs}`} style={{ display: 'block' }}>
       <circle cx={cx} cy={cy} r={outerR} fill={color + '25'} />
@@ -356,30 +388,10 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
     />
   )
 
-  // Day zoom: full-cell tinted block, click → popover with the day's items.
-  if (zoom === 'dag') {
-    const baseColor = pct > 1 ? '#e2445c' : pct > 0.85 ? '#ff7b24' : '#579bfc'
-    const alpha = pct > 0 ? Math.min(0.15 + Math.min(pct, 1) * 0.45, 0.65) : 0
-    return (
-      <div ref={wrapRef} style={{ position: 'relative', height: '100%' }}>
-        <button onClick={() => total > 0 && setOpenExclusive(!open)} disabled={total === 0}
-          style={{ width: '100%', height: '100%', padding: 0, border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: pct > 0 ? `${baseColor}${Math.round(alpha * 255).toString(16).padStart(2, '0')}` : 'transparent',
-            borderRadius: 4,
-            cursor: total > 0 ? 'pointer' : 'default' }}>
-          {total > 0 && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: pct > 1 ? '#fff' : 'var(--text-primary)', textShadow: pct > 1 ? '0 0 2px rgba(0,0,0,0.4)' : 'none' }}>
-              {total >= 1 ? Math.round(total) : total.toFixed(1)}
-            </span>
-          )}
-        </button>
-        {popover}
-      </div>
-    )
-  }
-
-  // Week / month zoom: circle + total label
+  // Eén visualisatie voor alle zoom-niveaus: workload-cirkel met uren-
+  // label. Vroeger had dag-zoom een eigen volle-cel tint, maar dat brak
+  // de continuïteit met Overzicht — nu zie je per dag dezelfde bol als
+  // per week, alleen kleiner.
   return (
     <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}>
       <button onClick={() => total > 0 && setOpenExclusive(!open)} style={{
@@ -830,16 +842,12 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // Sleep een pill naar een ander persoon-row → reassign owner.
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
-  // Werkdag-venster: 09:00 – 18:00. Events buiten dit bereik (vroege Google-
-  // afspraken, avond-syncs) worden netjes geclipt zodat 't overzicht
-  // compact blijft.
-  // Werkdag-raster: 09:00 → 22:00. Eerder eindigde 't grid op 18:00,
-  // waardoor avond-events (kroeg, premières, late shoots) buiten beeld
-  // vielen. Tot 22:00 dekt de meeste avondprogrammering; late-late
-  // events worden gecapped op 22:00 zodat ze nog wel zichtbaar zijn
-  // onderaan het raster i.p.v. eraf gelopen.
+  // Werkdag-raster: 09:00 → 18:00. Korter raster = overzichtelijker bij
+  // het scrollen door de week. Avond-events (kroeg, premières, late
+  // shoots) worden gecapped op 18:00 zodat ze nog onderaan het raster
+  // verschijnen i.p.v. eraf te lopen.
   const HOUR_START = 9
-  const HOUR_END   = 22
+  const HOUR_END   = 18
   const HOUR_H     = 44
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -903,7 +911,21 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     return g === 'vrij' || g.includes('vakantie')
   }
   for (const p of visible) {
-    if (p.startTime) { timed.push(p); continue }
+    if (p.startTime) {
+      // Multi-dag projecten met een tijdvenster fanen we uit naar één
+      // timed-event per dag in de range. Anders zou een 06/01 → 06/03
+      // 14:00–22:00 project alleen op 06/01 verschijnen en de andere
+      // dagen mist het block — uren-verdeling klopt dan visueel niet.
+      if (p.endDate && p.startDate && p.endDate !== p.startDate) {
+        const s = new Date(p.startDate); const e = new Date(p.endDate)
+        for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+          const iso = localIso(d)
+          timed.push({ ...p, id: `${p.id}__day_${iso}`, startDate: iso, endDate: iso } as Project)
+        }
+        continue
+      }
+      timed.push(p); continue
+    }
     // Items zonder concrete tijd-info maar mét uren krijgen een
     // synthetisch tijdblok zodat ze de visuele ruimte in het uur-grid
     // pakken die ze in een werkdag innemen — niet alleen een dun
@@ -988,8 +1010,14 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   {
     let acc = 0
     cols.forEach((col, i) => {
-      const iso = localIso(col.rangeStart)
-      colByIso.set(iso, { col, left: acc, idx: i })
+      const isoStart = localIso(col.rangeStart)
+      colByIso.set(isoStart, { col, left: acc, idx: i })
+      // Voor de samengevoegde weekend-kolom mappen we ook zondag op
+      // dezelfde col-info zodat een Sunday-event nog gevonden wordt.
+      if (col.rangeStart.getDay() === 6) {
+        const zo = new Date(col.rangeStart); zo.setDate(zo.getDate() + 1)
+        colByIso.set(localIso(zo), { col, left: acc, idx: i })
+      }
       acc += col.widthPx
     })
   }
@@ -1185,6 +1213,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
+            const isWeekStart = dow === 1
             const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
             const bg = col.isCurrent ? 'var(--accent-light)'
                      : weekend ? 'var(--weekend-bg)'
@@ -1193,7 +1222,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
-                borderLeft: '1px solid var(--border-strong)',
+                borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: bg,
                 backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.04) 6px 7px)' : undefined,
                 pointerEvents: 'none',
@@ -1312,6 +1341,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
+            const isWeekStart = dow === 1
             const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
             const bg = col.isCurrent ? 'var(--accent-light)'
                      : weekend ? 'var(--weekend-bg)'
@@ -1320,7 +1350,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
-                borderLeft: '1px solid var(--border-strong)',
+                borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: bg,
                 backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.05) 6px 7px)' : undefined,
                 pointerEvents: 'none',
@@ -1467,6 +1497,14 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   onBarClick: (p: Project) => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
+  // Overrides voor workload-categorieën meedoen: items die de gebruiker
+  // expliciet als 'meeting' heeft gemarkeerd moeten zich ook gedragen als
+  // meeting (cluster + verbergbaar via 'Verberg Meetings'-toggle).
+  const [overrides, setOverrides] = useState<Record<string, WorkloadCategory>>({})
+  useEffect(() => {
+    setOverrides(loadCategoryOverrides())
+    return onCategoryOverridesChange(() => setOverrides(loadCategoryOverrides()))
+  }, [])
   const gridStart   = cols[0].rangeStart
   const gridStartMs = gridStart.getTime()
   const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
@@ -1502,47 +1540,32 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         left  = (cs - gridStartMs) / msPerPx
         width = Math.max((ce - cs) / msPerPx - 2, MIN_BAR_W)
       }
-      // Meetings: short Google events render at reduced height
-      const isMeeting = p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2
+      // Meetings: zowel korte Google-events als alles wat door de gebruiker
+      // (of de classifier) op categorie 'meeting' is gezet. Daardoor komen
+      // handmatig-gemarkeerde meetings ook netjes onder de Meetings-toggle
+      // en in de cluster-pill terecht in plaats van als project-bar te
+      // blijven hangen.
+      const cat = effectiveCategory(
+        { name: p.name, hours: p.estHours || 0, source: p.source },
+        overrides[p.id],
+      )
+      const isMeeting = cat === 'meeting'
+        || (p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2)
       if (hideMeetings && isMeeting) return null
       return { p, left, width, isMeeting }
     })
     .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
 
-  // Collapse all meetings on the same start day into ONE wide bar that fills
-  // the day cell — so we get the full width to spell out the meeting names
-  // instead of N tiny stacked pills no one can click.
-  type ClusterBar = { kind: 'cluster'; left: number; width: number; meetings: Project[]; isMeeting: true }
+  // Geen clustering meer in Overzicht: elke meeting krijgt zijn eigen
+  // bar in zijn eigen lane, gesorteerd op starttijd (vroegste bovenaan).
+  // Project-balken blijven horizontaal gepackt.
   type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; isMeeting: boolean }
-  type Bar = ClusterBar | SingleBar
+  type Bar = SingleBar
 
-  const dayCellW = isWeek ? colW / 5 : (zoom === 'maand' ? Math.max(colW / 6, 40) : colW)
-  const meetingByDay = new Map<string, typeof rawBars>()
-  const finalBars: Bar[] = []
-  for (const b of rawBars) {
-    if (b.isMeeting) {
-      const key = `${b.p.startDate ?? '?'}@${Math.round(b.left)}`
-      const arr = meetingByDay.get(key) ?? []
-      arr.push(b); meetingByDay.set(key, arr)
-    } else {
-      finalBars.push({ kind: 'single', ...b })
-    }
-  }
-  for (const arr of meetingByDay.values()) {
-    const left = arr[0].left
-    finalBars.push({
-      kind: 'cluster',
-      left,
-      width: Math.max(dayCellW - 4, 60),
-      meetings: arr.map(b => b.p),
-      isMeeting: true,
-    })
-  }
+  const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
 
-  // Lane-pack meetings and projects SEPARATELY so meetings get their own
-  // dedicated track at the top — they never compete for vertical space with
-  // real project bars. Within each track we still pack horizontally so
-  // adjacent days don't stack unnecessarily.
+  // Project-balken packen we horizontaal — meetings krijgen elke een
+  // eigen lane, gesorteerd op start-tijd (vroegste bovenaan).
   function packLanes<T extends { left: number; width: number }>(items: T[]) {
     const sorted   = [...items].sort((a, b) => a.left - b.left)
     const laneEnds: number[] = []
@@ -1555,45 +1578,65 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     return { items: packed, numLanes: laneEnds.length }
   }
 
-  const meetingItems = finalBars.filter((b): b is ClusterBar => b.kind === 'cluster')
   // Vrij-events trekken we uit de lane-pack zodat ze geen rij vergroten —
   // ze worden los gerenderd over de volle hoogte van de container, achter
-  // de andere events. Zo zie je een 'Vakantie'-blok over de hele dag
-  // heen i.p.v. een smalle balk in een eigen lane onderaan.
-  const projectAllSingles = finalBars.filter((b): b is SingleBar => b.kind === 'single')
+  // de andere events.
+  const projectAllSingles = finalBars
   const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
   const vrijBars     = projectAllSingles.filter(isVrijBar)
-  const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
-  const meetingPacked = packLanes(meetingItems)
+  const meetingBars  = projectAllSingles.filter(b => !isVrijBar(b) && b.isMeeting)
+  const projectItems = projectAllSingles.filter(b => !isVrijBar(b) && !b.isMeeting)
   const projectPacked = packLanes(projectItems)
-  const meetingLanes  = meetingPacked.numLanes
   const projectLanes  = projectPacked.numLanes
 
-  const MEETING_LANE_H = MEETING_BAR_H + 4   // tighter than project lanes
+  // Meetings: per dag-positie sorteren op start-tijd, dan eigen lane
+  // toewijzen — vroegste in de bovenste lane.
+  function startMin(p: Project): number {
+    const t = p.startTime
+    if (!t) return 9 * 60
+    const [hh, mm] = t.split(':').map(Number)
+    return (hh || 0) * 60 + (mm || 0)
+  }
+  const meetingsSorted = [...meetingBars].sort((a, b) => {
+    if (a.left !== b.left) return a.left - b.left
+    return startMin(a.p) - startMin(b.p)
+  })
+  // Per dag (gegroepeerd op afgerond left) een eigen lane-index opbouwen
+  // op basis van start-tijd: lane 0 = vroegste.
+  const meetingLaneByDay = new Map<number, number>()
+  const meetingsPacked = meetingsSorted.map(b => {
+    const key = Math.round(b.left)
+    const lane = meetingLaneByDay.get(key) ?? 0
+    meetingLaneByDay.set(key, lane + 1)
+    return { ...b, lane }
+  })
+  const meetingLanes = meetingLaneByDay.size > 0
+    ? Math.max(...meetingLaneByDay.values())
+    : 0
+
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
-  // events als mini-staafdiagram per dag kunnen renderen (8u = volledige
-  // hoogte, 4u = half, 1u = klein staafje). DraggableBar krijgt dan
-  // scaleByHours=true en anker'd bottom-up.
+  // events als mini-staafdiagram per dag kunnen renderen.
   const PROJECT_LANE_H = zoom === 'week' ? 64 : (BAR_H + BAR_GAP)
+  const MEETING_LANE_H = BAR_H + BAR_GAP
 
+  function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
+  // Meetings worden bovenop project-balken gerenderd — mogen overlappen
+  // omdat ze toch een eigen hover-popover hebben met details.
   function meetingLaneTop(lane: number) { return BAR_GAP + lane * MEETING_LANE_H }
-  function projectLaneTop(lane: number) { return BAR_GAP + meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 6 : 0) + lane * PROJECT_LANE_H }
 
-  type Cluster = ClusterBar & { lane: number; track: 'meeting' }
-  type Single  = SingleBar  & { lane: number; track: 'project' }
-  const bars: (Cluster | Single)[] = [
-    ...meetingPacked.items.map(b => ({ ...b, track: 'meeting' as const })),
+  type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
+  const bars: Single[] = [
     ...projectPacked.items.map(b => ({ ...b, track: 'project' as const })),
+    ...meetingsPacked.map(b => ({ ...b, track: 'meeting' as const })),
   ]
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  // Bij alleen vrij-events nog steeds een redelijke hoogte zodat de
-  // vol-hoogte achtergrond zichtbaar wordt (anders height=0).
-  const baseHeight = BAR_GAP
-    + meetingLanes * MEETING_LANE_H
-    + (meetingLanes > 0 ? 6 : 0)
-    + projectLanes * PROJECT_LANE_H
-    + 6
+  // Meetings overlappen project-balken, dus tellen ze niet apart mee
+  // voor de container-hoogte (tenzij ze hoger uitkomen dan de project-
+  // stack — dan extenden we zodat scrollen klopt).
+  const projectStack = projectLanes * PROJECT_LANE_H
+  const meetingStack = meetingLanes * MEETING_LANE_H
+  const baseHeight = BAR_GAP + Math.max(projectStack, meetingStack) + 6
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
   return (
@@ -1601,11 +1644,8 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
-      {/* Subtle divider between meetings and project bars when both exist. */}
-      {meetingLanes > 0 && projectLanes > 0 && (
-        <div style={{ position: 'absolute', top: BAR_GAP + meetingLanes * MEETING_LANE_H + 2, left: 0, right: 0,
-          height: 1, background: 'var(--border-light)', pointerEvents: 'none', zIndex: 0 }} />
-      )}
+      {/* Meetings hangen nu bovenop project-balken — geen aparte divider
+          meer nodig. */}
       {/* Vrij-balken renderen we als volledige-hoogte achtergrond per
           dag(en), met lage z-index zodat andere events er bovenop staan.
           Klikken werkt nog steeds — geeft door aan onBarClick. */}
@@ -1630,17 +1670,25 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         </div>
       ))}
       {bars.map((b, i) => {
-        if (b.kind === 'cluster') {
+        // Meetings: aparte lane onder projecten, gesorteerd op start-
+        // tijd, met de oorspronkelijke project-kleur (geen geel meer).
+        void i
+        if (b.track === 'meeting') {
           return (
-            <div key={`cl_${i}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: b.left + 2, width: b.width, height: MEETING_BAR_H, zIndex: 1 }}>
-              <MeetingCluster meetings={b.meetings} width={b.width} onPick={onBarClick} />
+            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: 0, right: 0, height: MEETING_LANE_H, pointerEvents: 'none', zIndex: 5 }}>
+              <MeetingHoverBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW}
+                laneH={MEETING_LANE_H}
+                onDragMove={(s, e) => onDragMove(b.p, s, e)}
+                onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
+                onClick={() => onBarClick(b.p)}
+                onReassign={onReassign} />
             </div>
           )
         }
         return (
           <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H, pointerEvents: 'none' }}>
-            <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={b.isMeeting}
-              laneH={PROJECT_LANE_H} scaleByHours={zoom === 'week' && !b.isMeeting}
+            <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
+              laneH={PROJECT_LANE_H} scaleByHours={zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
@@ -1658,7 +1706,90 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 // exclusive (opening this one closes any other open popover on the page).
 const MEETING_BAR_H = 18
 
-function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; width: number; onPick: (p: Project) => void }) {
+// Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
+// gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
+// met naam, tijd, uren en link naar Google Calendar.
+function MeetingHoverBar({ project, memberId, left, width, colW, laneH, onDragMove, onDragEnd, onClick, onReassign }: {
+  project: Project
+  memberId: string
+  left: number
+  width: number
+  colW: number
+  laneH: number
+  onDragMove: (s: string | null, e: string | null) => void
+  onDragEnd:  (s: string | null, e: string | null) => void
+  onClick: () => void
+  onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const hoverTimer = useRef<number | null>(null)
+  const cancel = () => { if (hoverTimer.current != null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null } }
+  const schedule = () => { cancel(); hoverTimer.current = window.setTimeout(() => setHovered(false), 120) }
+
+  function openPopover() {
+    cancel()
+    if (wrapRef.current) {
+      // wrapRef spant de hele row-breedte (left:0, right:0), dus
+      // getBoundingClientRect().left geeft de row-rand. De daadwerkelijke
+      // bar zit op +`left` binnen die row — daar willen we de popover.
+      const r = wrapRef.current.getBoundingClientRect()
+      const popW = 280
+      const barScreenX = r.left + left
+      const lx = Math.min(barScreenX, window.innerWidth - popW - 8)
+      setPopPos({ top: r.top + laneH + 4, left: Math.max(8, lx) })
+    }
+    setHovered(true)
+  }
+
+  const hours = project.estHours || 0
+  const startTime = project.startTime
+  const endTime   = project.endTime
+  const timeStr = startTime
+    ? (endTime ? `${startTime}–${endTime}` : startTime)
+    : null
+
+  return (
+    <div ref={wrapRef}
+      onMouseEnter={openPopover}
+      onMouseLeave={schedule}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: laneH, pointerEvents: 'none' }}>
+      <DraggableBar project={project} memberId={memberId} left={left} width={width} colW={colW} small={false}
+        laneH={laneH} scaleByHours={false}
+        onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
+      {hovered && popPos && typeof document !== 'undefined' && createPortal(
+        <div onMouseEnter={cancel} onMouseLeave={schedule}
+          style={{ position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9000,
+            width: 280,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: '10px 12px',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.12)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
+            marginBottom: 4, lineHeight: 1.25 }}>
+            {project.name}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--text-secondary)' }}>
+            {timeStr && <span>{timeStr}</span>}
+            {timeStr && <span style={{ opacity: 0.4 }}>·</span>}
+            <span>{hours}u</span>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <span style={{ textTransform: 'capitalize' }}>{project.board}</span>
+          </div>
+          {project.externalLink && (
+            <a href={project.externalLink} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'inline-block', marginTop: 8, fontSize: 11, color: 'var(--accent)',
+                textDecoration: 'none', fontWeight: 600 }}>
+              Open in Google Calendar ↗
+            </a>
+          )}
+        </div>,
+        document.body)}
+    </div>
+  )
+}
+
+function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project[]; width: number; height: number; onPick: (p: Project) => void }) {
   const [open, setOpen] = useState(false)
   const wrapRef   = useRef<HTMLSpanElement>(null)
   const btnRef    = useRef<HTMLButtonElement>(null)
@@ -1711,22 +1842,69 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
     }
   }, [open, popoverId])
 
+  // Hover-popup met korte vertraging zodat de muis naar de popover-
+  // inhoud kan bewegen zonder dat 'ie meteen sluit. Klik blijft werken
+  // voor touch + voor het 'pinnen' tot een outside-click.
+  const hoverTimerRef = useRef<number | null>(null)
+  function cancelHoverClose() {
+    if (hoverTimerRef.current != null) {
+      window.clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+  }
+  function scheduleHoverClose() {
+    cancelHoverClose()
+    hoverTimerRef.current = window.setTimeout(() => setOpenExclusive(false), 150)
+  }
+
+  // Eén compacte single-line pill, ongeacht pill-breedte. Multi-line
+  // stacking met meeting-namen erin werkte niet bij smalle Overzicht-
+  // kolommen (dayCellW = colW/5 ≈ 40px → letters per regel). De
+  // hoogte van de pill geeft duur weer; hover toont meteen de lijst,
+  // klik 'pint' 'em open.
+  const phoneSvg = (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, opacity: 0.9 }} aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+    </svg>
+  )
+  const isVeryNarrow = width < 70
+  // Voor smalle pills laten we de naam vallen — alleen icon + Nx + uren.
+  const compactLabel = isSingle
+    ? (isVeryNarrow ? `${totalH}u` : meetings[0].name)
+    : (isVeryNarrow ? `${meetings.length}×` : `${meetings.length}× · ${totalH}u`)
+
   return (
-    <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+    <span ref={wrapRef}
+      onMouseEnter={() => { cancelHoverClose(); setOpenExclusive(true) }}
+      onMouseLeave={scheduleHoverClose}
+      style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <button ref={btnRef} onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
-          width, height: MEETING_BAR_H, borderRadius: 6,
-          background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
-          fontSize: 11.5, fontWeight: 700, lineHeight: 1,
-          boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-          overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        <span style={{ flexShrink: 0, opacity: 0.85 }}>📅</span>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{label}</span>
-        <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: 6, padding: '0 6px',
+          width, height, borderRadius: 6,
+          // Zachtere blend met de overige planning-balken: warme amber-tint
+          // i.p.v. fel #D8B62E. Donkergrijze tekst houdt contrast vast.
+          background: 'rgba(216, 182, 46, 0.55)',
+          color: '#2a2410', border: '1px solid rgba(216, 182, 46, 0.85)', cursor: 'pointer',
+          fontSize: 11, fontWeight: 600, lineHeight: 1.1,
+          boxShadow: 'none',
+          overflow: 'hidden', whiteSpace: 'nowrap', textAlign: 'left' }}>
+        {phoneSvg}
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {compactLabel}
+        </span>
+        {isSingle && !isVeryNarrow && (
+          <span style={{ flexShrink: 0, opacity: 0.7, fontWeight: 500 }}>{totalH}u</span>
+        )}
       </button>
       {open && popPos && typeof document !== 'undefined' && createPortal(
         <div data-mc-popover={popoverId}
+          onMouseEnter={cancelHoverClose}
+          onMouseLeave={scheduleHoverClose}
           style={{ position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9000,
             width: 320, maxHeight: 360, overflowY: 'auto',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 4,
@@ -2875,13 +3053,12 @@ export default function PlanningPage() {
     return localStorage.getItem('planning-hide-meetings') === '1'
   })
   useEffect(() => { localStorage.setItem('planning-hide-meetings', hideMeetings ? '1' : '0') }, [hideMeetings])
-  // Toggle om álle Google-items te verbergen in Overzicht (week-zoom).
-  // Per-device in localStorage; reset niet bij refresh.
-  const [hideGoogle, setHideGoogle] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('planning-hide-google') === '1'
-  })
-  useEffect(() => { localStorage.setItem('planning-hide-google', hideGoogle ? '1' : '0') }, [hideGoogle])
+  // Verberg-Google toggle is verwijderd: Google-meetings horen altijd zichtbaar
+  // te zijn in de planning. Eventuele oude localStorage-vlag wordt opgeruimd.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try { localStorage.removeItem('planning-hide-google') } catch {}
+  }, [])
 
   // Keyboard shortcuts: +/= zooms in, - zooms out, N opent nieuw-item-popup
   useEffect(() => {
@@ -2889,8 +3066,8 @@ export default function PlanningPage() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => Math.min(300, z + 10)) }
-      else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => Math.max(50, z - 10)) }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => z + 10) }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => z - 10) }
       else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setNewItemOpen(true) }
     }
     window.addEventListener('keydown', onKey)
@@ -2921,6 +3098,16 @@ export default function PlanningPage() {
   // Setter-wrapper voor col-width-zoom die eerst de today-line z'n screenX
   // vastlegt zodat we daar na de re-render weer op anker'en — voorkomt
   // dat een zoom vanuit linker-rand werkt i.p.v. vanuit de today-line.
+  // Eén virtuele zoom-slider over twee zoom-modes:
+  //   50–300  → week-zoom (Overzicht), colWZoom = waarde
+  //   300–550 → dag-zoom (Week-view),  colWZoom = waarde − 250
+  // Crossover bij 300 is naadloos: week@300% en dag@50% zijn de twee
+  // kanten van dezelfde overgang.
+  const VIRTUAL_MIN = 50
+  const VIRTUAL_MAX = 550
+  const VIRTUAL_CROSS = 300
+  const virtualZoom = zoom === 'week' ? colWZoom : VIRTUAL_CROSS + (colWZoom - 50)
+
   function anchoredColWZoom(updater: (z: number) => number) {
     const el = gridRef.current
     if (el && typeof window !== 'undefined') {
@@ -2929,7 +3116,26 @@ export default function PlanningPage() {
         pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
       }
     }
-    setColWZoom(updater)
+    const raw = updater(virtualZoom)
+    const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_MAX, raw))
+    const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
+    if (clamped <= VIRTUAL_CROSS) {
+      // Week-zoom helft
+      if (zoom !== 'week') {
+        const currentDays = colOffset * daysPerCol[zoom]
+        setZoom('week')
+        setColOffset(Math.round(currentDays / daysPerCol.week))
+      }
+      setColWZoom(Math.max(50, Math.min(300, clamped)))
+    } else {
+      // Dag-zoom helft
+      if (zoom !== 'dag') {
+        const currentDays = colOffset * daysPerCol[zoom]
+        setZoom('dag')
+        setColOffset(Math.round(currentDays / daysPerCol.dag))
+      }
+      setColWZoom(Math.max(50, Math.min(300, clamped - 250)))
+    }
   }
 
   useEffect(() => {
@@ -2972,22 +3178,34 @@ export default function PlanningPage() {
     // Pas capaciteiten uit de gedeelde store toe op de team-lijst — met
     // localStorage als snelle cache en Supabase als bron van waarheid.
     function applyCapacities(capByMember: Record<string, number>) {
+      // Merge seed (team.json) + liveTeam (Supabase team_members) zodat
+      // ook later toegevoegde leden (bv. Manuel) zichtbaar zijn — niet
+      // alleen wie in de hard-coded JSON staat.
+      const seedById = new Map<string, TeamMember>(teamData.members.map(m => [m.id, m]))
+      for (const lm of liveTeam) {
+        if (lm.id === 'unassigned') continue
+        if (lm.hidden) continue
+        const existing = seedById.get(lm.id)
+        const merged: TeamMember = existing
+          ? { ...existing, name: lm.name || existing.name, color: lm.color || existing.color }
+          : { id: lm.id, name: lm.name || lm.id, color: lm.color || '#9aa3ad', weeklyCapacity: lm.weeklyCapacity || 40 }
+        seedById.set(lm.id, merged)
+      }
+      const allMembers = Array.from(seedById.values())
       // Restore team order from localStorage
       try {
         const saved = localStorage.getItem('planning-team-order')
         if (saved) {
           const order = JSON.parse(saved) as string[]
-          const byId  = new Map(teamData.members.map(m => [m.id, m]))
+          const byId  = new Map(allMembers.map(m => [m.id, m]))
           const ordered: TeamMember[] = []
           for (const id of order) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
           for (const m of byId.values()) ordered.push(m)
-          if (ordered.length === teamData.members.length) {
-            setTeam(ordered.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
-            return
-          }
+          setTeam(ordered.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+          return
         }
       } catch {}
-      setTeam(teamData.members.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
+      setTeam(allMembers.map(m => m.id in capByMember ? { ...m, weeklyCapacity: capByMember[m.id] } : m))
     }
 
     // Stap 1: lokale cache meteen toepassen voor instant-render
@@ -3000,7 +3218,9 @@ export default function PlanningPage() {
     // Stap 3: blijven luisteren naar wijzigingen (realtime + eigen edits)
     const off = onCapacitiesChange(() => applyCapacities(loadCapacities()))
     return () => off()
-  }, [])
+    // liveTeam in deps: zodra nieuwe leden uit de DB binnenkomen (bv.
+    // Manuel) wordt het team opnieuw samengesteld zodat ze verschijnen.
+  }, [liveTeam])
 
   function applyShift() {
     if (shiftPicked.size === 0 || shiftDays === 0) { setShiftOpen(false); return }
@@ -3123,13 +3343,8 @@ export default function PlanningPage() {
     if (hiddenIds.size > 0) {
       next = next.filter(p => !hiddenIds.has(p.id))
     }
-    // Global: alle Google-items wanneer 'Verberg Google' actief is en de
-    // gebruiker in Overzicht (week-zoom) staat.
-    if (hideGoogle && zoom === 'week') {
-      next = next.filter(p => p.source !== 'google')
-    }
     return next
-  }, [projects, shadowDrag, hideGoogle, zoom, hiddenIds])
+  }, [projects, shadowDrag, zoom, hiddenIds])
 
   // Compute view constants
   const { cs, or, hh, av } = vc(viewSize)
@@ -3615,34 +3830,11 @@ export default function PlanningPage() {
 
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap', marginBottom: isMobile ? 10 : 16 }}>
-          {/* Zoom */}
-          <div style={segGroup}>
-            {/* 'maand' is uit het keuzemenu gehaald — gebruik de week-zoom
-                (overzicht) voor een groter tijdsbereik. De interne ZoomLevel
-                blijft hetzelfde zodat opgeslagen localStorage-waardes geen
-                regressie geven. */}
-            {(['dag', 'week'] as ZoomLevel[]).map(z => (
-              <button key={z} onClick={() => {
-                  if (z === zoom) return
-                  // Capture huidige screen-X van de today-line zodat we 'm
-                  // na de zoom-wissel weer op dezelfde plek kunnen anker'en.
-                  const el = gridRef.current
-                  if (el && nowOffset !== null) {
-                    pendingAnchorRef.current = { screenX: nowOffset - el.scrollLeft }
-                  }
-                  // Reken colOffset om in dagen-eenheden zodat het nieuwe
-                  // tijdvenster ongeveer dezelfde periode dekt.
-                  const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-                  const currentDays = colOffset * daysPerCol[zoom]
-                  const newOffset = Math.round(currentDays / daysPerCol[z])
-                  setZoom(z)
-                  setColOffset(newOffset)
-                }}
-                style={segBtn(zoom === z)}>
-                {z === 'dag' ? 'Week' : 'Overzicht'}
-              </button>
-            ))}
-          </div>
+          {/* Overzicht en Week zijn samengesmolten in één continue zoom:
+              de kolom-breedte-slider stuurt zowel kolommen als zoom-niveau.
+              Voorbij de bovengrens van de week-zoom-slider klapt 'ie auto-
+              matisch om naar dag-zoom (Week-view), en andersom. Geen
+              segmented buttons meer voor 'Overzicht'/'Week'. */}
 
           {/* Mobile: kolombreedte-slider naast de zoom-knoppen. Op desktop
               zit deze nog in de name-kolom-header. */}
@@ -3650,16 +3842,16 @@ export default function PlanningPage() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
               background: 'var(--bg-card)', border: '1px solid var(--border-light)',
               borderRadius: 8, paddingLeft: 2, paddingRight: 2 }}>
-              <button onClick={() => anchoredColWZoom(z => Math.max(50, z - 10))}
+              <button onClick={() => anchoredColWZoom(z => z - 10)}
                 title="Smaller" aria-label="Smaller"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   padding: '6px 8px', lineHeight: 1 }}>−</button>
-              <input type="range" min={50} max={300} step={5}
-                value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                title={`Kolombreedte ${colWZoom}%`}
-                style={{ width: 64, accentColor: 'var(--accent)' }} />
-              <button onClick={() => anchoredColWZoom(z => Math.min(300, z + 10))}
+              <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                style={{ width: 96, accentColor: 'var(--accent)' }} />
+              <button onClick={() => anchoredColWZoom(z => z + 10)}
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
@@ -3698,16 +3890,6 @@ export default function PlanningPage() {
                 style={ghostBtn(hideMeetings)}>
                 {hideMeetings ? '👁 Meetings' : '🚫 Meetings'}
               </button>
-              {/* Alleen in Overzicht (week-zoom) een knop die álle Google-
-                  items verbergt — handig voor 'wat staat er nog aan
-                  eigen werk' zonder agenda-ruis. */}
-              {zoom === 'week' && (
-                <button onClick={() => setHideGoogle(v => !v)}
-                  title={hideGoogle ? 'Google-items tonen' : 'Alle Google-items verbergen'}
-                  style={ghostBtn(hideGoogle)}>
-                  {hideGoogle ? '👁 Google' : '🚫 Google'}
-                </button>
-              )}
               <span style={separator} />
               <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
                 + Nieuw item
@@ -3830,10 +4012,15 @@ export default function PlanningPage() {
       {/* ── Agenda's popup ── */}
       {agendasOpen && (
         <Popup title="Agenda's" onClose={() => setAgendasOpen(false)}>
-          {Object.entries(BOARD_COLORS).map(([b, c]) => (
+          {/* BOARD_COLORS is een Proxy zonder enumeratie — gebruik
+              BOARD_NAMES (registry-driven lijst) zodat alle borden
+              daadwerkelijk zichtbaar zijn. */}
+          {BOARD_NAMES.map(b => (
             <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-              <span style={{ width: 14, height: 14, borderRadius: 3, background: c, flexShrink: 0 }} />
-              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>{b}</span>
+              <span style={{ width: 14, height: 14, borderRadius: 3, background: BOARD_COLORS[b], flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>
+                {BOARD_CONFIGS[b]?.name ?? b}
+              </span>
             </div>
           ))}
         </Popup>
@@ -4086,14 +4273,14 @@ export default function PlanningPage() {
               </button>
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                  <button onClick={() => anchoredColWZoom(z => Math.max(50, z - 10))}
+                  <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                  <input type="range" min={50} max={300} step={5}
-                    value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                    title={`Kolom-breedte ${colWZoom}%   ·   sneltoetsen +/−`}
-                    style={{ width: 80, accentColor: 'var(--accent)' }} />
-                  <button onClick={() => anchoredColWZoom(z => Math.min(300, z + 10))}
+                  <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                    value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                    title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
+                    style={{ width: 120, accentColor: 'var(--accent)' }} />
+                  <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
                   {/* Modus-label naast de slider: laat zien wat de slider doet
@@ -4113,9 +4300,10 @@ export default function PlanningPage() {
               const dow = zoom === 'dag' ? col.rangeStart.getDay() : -1
               const weekend = dow === 0 || dow === 6
               const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
+              const isWeekStart = zoom === 'dag' && dow === 1
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
-                borderLeft: '1px solid var(--border-strong)',
+                borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
                 <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
@@ -4168,6 +4356,10 @@ export default function PlanningPage() {
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
                 </button>
               )
+              // Workload-bollen per dag, bovenop het Google-Cal raster.
+              // Zelfde bol-stijl als Overzicht zodat de visuele continuïteit
+              // bewaard blijft tussen beide zoom-niveaus.
+              const cap = colCapacity(m.weeklyCapacity)
               return (
                 <div key={m.id} data-member-id={m.id} style={{
                   borderBottom: '1px solid var(--border)', background: 'transparent',
@@ -4175,6 +4367,23 @@ export default function PlanningPage() {
                   filter:  dim ? 'saturate(0.85)' : 'none',
                   transition: 'opacity 0.18s, filter 0.18s',
                 }}>
+                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 4,
+                      background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
+                    {cols.map(col => {
+                      const contribs = memberHoursInCol(effectiveProjects, m.id, col)
+                      const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+                      const isWeekStart = col.rangeStart.getDay() === 1
+                      return (
+                        <div key={col.key} style={{ width: col.widthPx, height: Math.round(hh * 0.7), flexShrink: 0,
+                          borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
+                          padding: 2,
+                          background: col.isCurrent ? 'var(--accent-light)' : 'transparent', position: 'relative' }}>
+                          <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={Math.round(cs * 0.7)} or={Math.round(or * 0.7)} zoom={zoom} onOpenDetails={p => openDetail(p)} />
+                        </div>
+                      )
+                    })}
+                  </div>
                   <WeekTimeGrid
                     cols={cols}
                     projects={effectiveProjects}
@@ -4331,8 +4540,16 @@ export default function PlanningPage() {
                     // In Overzicht-zoom is een 'kolom' een hele week, dus
                     // weekend-highlighting is hier niet relevant.
                     const weekend  = false
+                    // Week-grens visualiseren in week-view: maandag krijgt
+                    // een dikkere linker-border zodat je in één oogopslag
+                    // ziet waar de week begint.
+                    // Dit pad rendert week-/maand-zoom; geen day-of-week
+                    // separators nodig — borderLeft blijft standaard.
+                    const isWeekStart = false
                     return (
-                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0, borderLeft: '1px solid var(--border-strong)', padding: 2,
+                      <div key={col.key} style={{ width: col.widthPx, height: hh, flexShrink: 0,
+                        borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
+                        padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent', position: 'relative' }}>
                         <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => openDetail(p)} />
                       </div>

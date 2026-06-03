@@ -134,6 +134,8 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     .from('board_items').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
   if (iErr || !itemRows) return false
 
+  // Iedereen ziet dezelfde rijen — geen per-user filtering. Sync zorgt
+  // dat er één row per Google-event bestaat (canonical via iCalUID).
   const itemsByGroup = new Map<string, BoardItem[]>()
   for (const r of itemRows) {
     const it = rowToItem(r as Record<string, unknown>)

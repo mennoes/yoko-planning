@@ -6,9 +6,11 @@ import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
 
-// Map @studioyoko.nl emails → member-id, opgebouwd uit team.json. Bij
-// shared meetings (Teamdag, weekstart, etc.) trekken we hieruit alle
-// Yoko-deelnemers als mede-eigenaar van het item.
+// Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
+// team.json (statische seed) ÉN public.team_members (live tabel) zodat
+// admin-toegevoegde leden als Manuel ook als Yoko-attendee herkend
+// worden. De seed-set kan op import al gebouwd worden; de DB-set
+// wordt per sync-pass opgehaald via buildMemberKeys().
 //
 // Lookup is fuzzy: we normaliseren de local-part van een email (lowercase,
 // strippen streepjes/punten) en vergelijken met member.id én een naam-
@@ -17,20 +19,39 @@ import { isVrijTitle } from './workloadCategory'
 function normEmailLocal(s: string): string {
   return s.toLowerCase().replace(/[.\-_]/g, '')
 }
-const MEMBER_KEYS: Array<{ id: string; keys: Set<string> }> = (teamData.members as Array<{ id: string; name: string; email?: string }>)
-  .map(m => {
-    const keys = new Set<string>()
-    keys.add(normEmailLocal(m.id))
-    if (m.email) keys.add(normEmailLocal(m.email.split('@')[0] ?? ''))
-    if (m.name) keys.add(normEmailLocal(m.name.split(' ')[0] ?? ''))
-    return { id: m.id, keys }
-  })
-function resolveAttendeeEmail(email: string): string | null {
+type MemberKey = { id: string; keys: Set<string> }
+function memberToKey(m: { id: string; name: string; email?: string | null }): MemberKey {
+  const keys = new Set<string>()
+  keys.add(normEmailLocal(m.id))
+  if (m.email) keys.add(normEmailLocal(m.email.split('@')[0] ?? ''))
+  if (m.name) keys.add(normEmailLocal(m.name.split(' ')[0] ?? ''))
+  return { id: m.id, keys }
+}
+const SEED_MEMBER_KEYS: MemberKey[] = (teamData.members as Array<{ id: string; name: string; email?: string }>)
+  .map(memberToKey)
+
+async function buildMemberKeys(admin: SupabaseClient): Promise<MemberKey[]> {
+  const merged = new Map<string, MemberKey>()
+  for (const k of SEED_MEMBER_KEYS) merged.set(k.id, k)
+  try {
+    const { data } = await admin
+      .from('team_members')
+      .select('id, name, email')
+    type Row = { id: string; name: string; email: string | null }
+    for (const r of (data as Row[] | null) ?? []) {
+      // Live-row vervangt of vult de seed aan (DB-data is autoritatief).
+      merged.set(r.id, memberToKey(r))
+    }
+  } catch { /* ignore — fallback op seed */ }
+  return Array.from(merged.values())
+}
+
+function resolveAttendeeEmailWith(memberKeys: MemberKey[], email: string): string | null {
   const e = email.toLowerCase().trim()
   if (!e.endsWith('@studioyoko.nl')) return null
   const local = normEmailLocal(e.split('@')[0] ?? '')
   if (!local) return null
-  for (const { id, keys } of MEMBER_KEYS) {
+  for (const { id, keys } of memberKeys) {
     if (keys.has(local)) return id
   }
   return null
@@ -322,6 +343,13 @@ async function ensureFreshAccessToken(
 }
 
 async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promise<{ added: number; updated: number; removed: number }> {
+  // Member-keys voor attendee-resolutie: combineert team.json (seed) +
+  // live team_members tabel. Daardoor herkent de sync ook 'manuel@
+  // studioyoko.nl' als Yoko-attendee zodra Manuel via /team-admin is
+  // toegevoegd, zonder dat we de hardcoded JSON hoeven te updaten.
+  const memberKeys = await buildMemberKeys(admin)
+  const resolveAttendeeEmail = (email: string) => resolveAttendeeEmailWith(memberKeys, email)
+
   // Fallback-bord: vroeger was cal.board_id verplicht en sloegen we kalenders
   // zonder selectie over. Dat dwong de user om per kalender een bord te
   // kiezen. Nu: routing-regels per event bepalen het juiste bord; events
@@ -528,29 +556,81 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const u = iCalKeyForGroup(instances)
     if (u) wantedICals.push(u)
   }
-  // Lookup gedeelde rijen die ANDERE users al hebben aangemaakt voor deze
-  // events. Bij een match hergebruiken we hun id (i.p.v. eigen kopie maken)
-  // zodat comments/journal/workload-overrides behouden blijven.
+  // CANONICAL ROW per iCalUID. Eén rij per Google-event in de DB,
+  // gedeeld door alle teamleden. Onder eerdere implementatie kon
+  // Vincent's sync Menno's external_id/calendar_id overschrijven →
+  // Menno's volgende sync vond zijn row niet terug → nieuwe row →
+  // duplicaat. Fix: in de upsert preserven we external_id /
+  // calendar_id / external_user_id van existingRow zodat alleen de
+  // EERSTE sync die velden zet en daarna niemand ze overschrijft.
   const sharedByICal = new Map<string, ItemRow>()
   if (wantedICals.length > 0) {
+    // BELANGRIJK: WEL soft-deleted rijen meenemen. Een eerdere bug-cyclus
+    // of de push-safety-guard kan de canonical Weekstart-row hebben
+    // soft-deleted; we willen die kunnen 'revive' ipv een tweede rij
+    // ernaast aanmaken. De upsert hieronder zet deleted_at expliciet op
+    // null om de row weer zichtbaar te maken.
     const { data: sharedRows } = await admin
       .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date, deleted_at')
       .eq('source', 'google')
       .in('ical_uid', Array.from(new Set(wantedICals)))
     for (const r of (sharedRows as ItemRow[] | null) ?? []) {
       if (!r.ical_uid) continue
       const prev = sharedByICal.get(r.ical_uid)
-      // Kies deterministisch dezelfde "canonical" rij over concurrent syncs heen:
-      // de rij met de laagste id wint (alfabetisch).
       if (!prev || r.id < prev.id) sharedByICal.set(r.ical_uid, r)
     }
   }
 
+  // Legacy dedup BINNEN mijn eigen rijen: oude rijen zonder iCalUID
+  // krijgen via findExistingFor een match op naam+datum zodat ze niet
+  // dubbel ontstaan bij de eerstvolgende sync. Filtert nu strikt op
+  // external_user_id = cal.user_id, zodat we andermans data nooit
+  // aanraken.
+  const legacyByKey = new Map<string, ItemRow>()
+  {
+    const { data: legacyRows } = await admin
+      .from('board_items')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
+      .eq('source', 'google')
+      .eq('external_user_id', cal.user_id)
+      .is('ical_uid', null)
+      .is('deleted_at', null)
+    for (const r of (legacyRows as ItemRow[] | null) ?? []) {
+      const name = String((r as { name?: string }).name ?? '').toLowerCase().trim()
+        .replace(/\s*\(\d+×\)\s*$/, '').trim()
+      const sd   = String((r as { start_date?: string | null }).start_date ?? '')
+      if (!name || !sd || !r.board_id) continue
+      const key = `${r.board_id}::${name}::${sd}`
+      const prev = legacyByKey.get(key)
+      if (!prev || r.id < prev.id) legacyByKey.set(key, r)
+    }
+  }
+  function legacyLookup(name: string, startDate: string | null): ItemRow | undefined {
+    if (!startDate) return undefined
+    const norm = name.toLowerCase().trim().replace(/\s*\(\d+×\)\s*$/, '').trim()
+    const boards = new Set<string>([fallbackBoard])
+    for (const r of rules) boards.add(r.board_id)
+    for (const b of boards) {
+      const hit = legacyByKey.get(`${b}::${norm}::${startDate}`)
+      if (hit) return hit
+    }
+    return undefined
+  }
+
   // Helper: vind de bestaande rij voor dit event, bij voorkeur via iCalUID.
-  // Fallback: mijn eigen historische rij via external_id (oude id-vorm met
-  // user-prefix). Dat zorgt dat we naadloos migreren zonder data te verliezen.
-  function findExistingFor(icalUid: string | null, extId: string): { row: ItemRow | undefined; id: string } {
+  // Fallback-chain:
+  //  1. sharedByICal (cross-user dedup via iCalUID — beste match)
+  //  2. byExt (mijn eigen oude id-vorm met user-prefix)
+  //  3. legacyLookup (oude rijen ZONDER iCalUID die door eerdere sync-
+  //     versies gemaakt zijn; match op board+name+startDate)
+  //  4. Nieuw — canonical id op basis van iCalUID
+  function findExistingFor(
+    icalUid: string | null,
+    extId: string,
+    name: string,
+    startDate: string | null,
+  ): { row: ItemRow | undefined; id: string } {
     if (icalUid) {
       const shared = sharedByICal.get(icalUid)
       if (shared) return { row: shared, id: shared.id }
@@ -559,8 +639,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const mineRow = byExtFull.get(extId)
     if (mineRow) return { row: mineRow, id: mineRow.id }
     if (mineId) return { row: undefined, id: mineId }
-    // Nieuwe rij — canonical id-vorm op basis van iCalUID zodat een
-    // volgende sync door een ander teamlid op dezelfde rij landt.
+    // Legacy: zelfde event-naam+datum op hetzelfde bord (alleen mijn
+    // eigen rows). Backfill van iCalUID gebeurt via de upsert.
+    const legacy = legacyLookup(name, startDate)
+    if (legacy) return { row: legacy, id: legacy.id }
+    // Nieuwe rij — CANONICAL id-vorm op basis van iCalUID. Eén rij
+    // per event, gedeeld door alle teamleden.
     const newId = icalUid ? `it_g_${icalUid}` : `it_g_${extId}_${cal.user_id.slice(0, 8)}`
     return { row: undefined, id: newId }
   }
@@ -585,7 +669,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // bestaande rij-groepen worden gerespecteerd via existingRow.group_id.
       seenExt.add(ev.id)
       const icalUid     = ev.iCalUID ?? null
-      const lookup      = findExistingFor(icalUid, ev.id)
+      const lookup      = findExistingFor(icalUid, ev.id, name, start)
       const existingRow = lookup.row
       const id          = lookup.id
       seenIds.add(id)
@@ -663,17 +747,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         })(),
         // Position bewaren als er al een rij was — anders sprong een
         // handmatig gesleept item bij elke sync terug naar bovenaan.
-        position:            existingRow?.position ?? 0,
+        position:            existingRow?.position ?? 9999,
         source:              'google',
-        external_id:         ev.id,
+        // external_id/calendar_id NIET overschrijven als er al een rij
+        // bestaat. Die behoren bij de gebruiker die als EERSTE deze rij
+        // aanmaakte — overschrijven zou hun lookup-via-ev.id breken en
+        // race-condities veroorzaken. Bij een nieuwe rij vullen we ze in.
+        external_id:         existingRow?.external_id ?? ev.id,
         ical_uid:            icalUid,
-        external_link:       ev.htmlLink ?? null,
+        external_link:       (existingRow as { external_link?: string | null } | undefined)?.external_link ?? ev.htmlLink ?? null,
         external_synced_at:  new Date().toISOString(),
-        // Niet overschrijven als een ander teamlid deze rij eerst heeft
-        // aangemaakt — anders verliezen we hun ownership-spoor en kapt de
-        // cleanup straks van een andere user de rij weg.
         external_user_id:    existingRow?.external_user_id ?? cal.user_id,
-        calendar_id:         cal.calendar_id,
+        calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
+        // Revive soft-deleted rijen — als een eerdere bug 'm verstopt heeft,
+        // moet 'ie weer terugkomen zodra Google z'n update binnenpakt.
+        deleted_at:          null,
         updated_at:          new Date().toISOString(),
       })
       continue
@@ -688,38 +776,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // separate rows. If older syncs created per-instance rows, they'll
     // be missing from seenExt and get cleaned up below.
     seenExt.add(groupKey)
-    // Recurring rename-detect: Google geeft per instance een eigen summary,
-    // en bij 'rename this and following events' verschilt de oude voorkant
-    // van de nieuwe achterkant. Pak de summary die het VAAKST voorkomt
-    // (modus) — bij gelijke stand wint de meest recente instance. Zo
-    // volgt de bord-naam vanzelf wanneer de gebruiker in Google de hele
-    // reeks een nieuwe titel geeft.
+    // Recurring rename-detect: pak de naam van de MEEST RECENTE instance
+    // (de laatste in tijds-volgorde). Bij 'rename this and following
+    // events' in Google houden alle toekomst-instances de nieuwe naam;
+    // dat is wat de gebruiker bedoelt. Eerdere modus-aanpak verloor 't
+    // bij 180 dagen historie + 14 dagen toekomst — de oude naam was
+    // numeriek vaker dan de nieuwe en wonnen daardoor. Niet meer.
+    // Edge-case 'rename one instance' (één outlier) accepteren we als
+    // misser; dat is zeldzaam en de user kan handmatig de naam zetten.
     const baseName = (() => {
-      const counts = new Map<string, number>()
-      for (const ev of sorted) {
-        const s = (ev.summary ?? '').trim()
-        if (!s) continue
-        counts.set(s, (counts.get(s) ?? 0) + 1)
+      // sorted is op start-datum; pak de laatste met een niet-lege summary.
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const s = (sorted[i].summary ?? '').trim()
+        if (s) return s
       }
-      if (counts.size === 0) return '(geen titel)'
-      // Sort: most-frequent first; tie-breaker = laatste instance met die naam.
-      let best: string | null = null
-      let bestCount = 0
-      let bestRecency = -1
-      for (const [name, count] of counts) {
-        const lastIdx = (() => {
-          for (let i = sorted.length - 1; i >= 0; i--) {
-            if ((sorted[i].summary ?? '').trim() === name) return i
-          }
-          return 0
-        })()
-        if (count > bestCount || (count === bestCount && lastIdx > bestRecency)) {
-          best = name
-          bestCount = count
-          bestRecency = lastIdx
-        }
-      }
-      return best ?? '(geen titel)'
+      return '(geen titel)'
     })()
     const targetBoard = routeEvent(baseName, fallbackBoard, rules)
     // Doorlopend-group is vervangen door 'Meetings & doorlopend' voor
@@ -730,7 +801,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // attendee-lijsten zijn meestal hetzelfde over alle herhalingen.
     const groupOwners = ownersForEvent(sorted[sorted.length - 1])
     const icalUid     = iCalKeyForGroup(sorted)
-    const lookup      = findExistingFor(icalUid, groupKey)
+    const lookup      = findExistingFor(icalUid, groupKey, baseName, minStart)
     const existingRow = lookup.row
     const ownerSet = new Set<string>(existingRow?.owner_ids ?? [])
     for (const o of groupOwners.owners) ownerSet.add(o)
@@ -848,14 +919,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       })(),
       // Position bewaren — anders sprong een handmatig gesleept item
       // bij elke sync terug naar bovenaan.
-      position:            existingRow?.position ?? 0,
+      position:            existingRow?.position ?? 9999,
       source:              'google',
-      external_id:         groupKey,
+      // Per-user velden NIET overschrijven (zie single-event-branch).
+      external_id:         existingRow?.external_id ?? groupKey,
       ical_uid:            icalUid,
-      external_link:       sorted[0].htmlLink ?? null,
+      external_link:       (existingRow as { external_link?: string | null } | undefined)?.external_link ?? sorted[0].htmlLink ?? null,
       external_synced_at:  new Date().toISOString(),
       external_user_id:    existingRow?.external_user_id ?? cal.user_id,
-      calendar_id:         cal.calendar_id,
+      calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
+      deleted_at:          null,
       updated_at:          new Date().toISOString(),
     })
   }
@@ -909,113 +982,29 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     .map(r => r.id)
   let removed = 0
   if (toRemove.length > 0) {
-    await admin.from('board_items').delete().in('id', toRemove)
+    // SOFT-delete — items gaan naar /trash en kunnen hersteld worden.
+    // Eerder hard DELETE'd dat hier; bij sync-bugs verdween dan ALLES
+    // zonder pardon en onomkeerbaar.
+    await admin.from('board_items')
+      .update({ deleted_at: new Date().toISOString() })
+      .in('id', toRemove)
     removed = toRemove.length
   }
 
-  // Auto-cleanup: delete any non-google rows on this board whose name matches
-  // a synced Google item (catches XLSX import duplicates and stale per-instance
-  // rows from older sync versions). Strip the "(N×)" recurring suffix so the
-  // base title also matches.
-  const upsertedNames = new Set<string>()
-  for (const u of upserts) {
-    const name = String(u.name ?? '').trim()
-    if (!name) continue
-    upsertedNames.add(name)
-    upsertedNames.add(name.replace(/\s*\(\d+×\)\s*$/, '').trim())
-  }
-  // Dedup zoekt op ALLE boards die we via routing geraakt hebben, niet
-  // alleen het default-bord. Een UvVL-event landt nu op Vlaanderen, dus
-  // de XLSX-duplicaat staat ook dáár.
-  const boardsTouched = new Set<string>([fallbackBoard])
-  for (const u of upserts) boardsTouched.add(String(u.board_id))
-  if (upsertedNames.size > 0) {
-    const { data: dupRows } = await admin
-      .from('board_items')
-      .select('id, source')
-      .in('board_id', Array.from(boardsTouched))
-      .in('name', Array.from(upsertedNames))
-    const dupIds = ((dupRows as { id: string; source: string | null }[] | null) ?? [])
-      .filter(r => r.source !== 'google')
-      .map(r => r.id)
-    if (dupIds.length > 0) {
-      await admin.from('board_items').delete().in('id', dupIds)
-      removed += dupIds.length
-    }
-  }
+  // VERWIJDERD: de oude 'auto-cleanup non-google rows met dezelfde naam
+  // als een synced Google item' veegde handmatige projecten weg zodra
+  // Vincent een meeting met dezelfde titel synced (bv. een sponsor-
+  // meeting 'Gerolsteiner' wiste het handmatige Gerolsteiner-project
+  // op het yoko-bord). Te agressief; we vertrouwen voortaan op de
+  // expliciete dedup-SQL en /trash voor opruimen.
 
-  // Globale dedup: oude per-user rijen (van vóór deze migratie) hadden geen
-  // ical_uid; nu we die net hebben geschreven kunnen we matches uit andere
-  // users hun kalenders herkennen en ineen schuiven. Per iCalUID houden we
-  // de canonical rij (lage id wint — zelfde regel als sharedByICal), mergen
-  // owner_ids erin en verwijderen de duplicaten.
-  const upsertedICals = Array.from(new Set(
-    upserts.map(u => u.ical_uid).filter((x): x is string => !!x)
-  ))
-  if (upsertedICals.length > 0) {
-    const { data: dupRows } = await admin
-      .from('board_items')
-      .select('id, ical_uid, owner_ids, journal, subitems')
-      .eq('source', 'google')
-      .in('ical_uid', upsertedICals)
-    type Dup = { id: string; ical_uid: string | null; owner_ids: string[] | null; journal: unknown; subitems: SubItemSnapshot[] | null }
-    const byUid = new Map<string, Dup[]>()
-    for (const r of (dupRows as Dup[] | null) ?? []) {
-      if (!r.ical_uid) continue
-      const arr = byUid.get(r.ical_uid) ?? []
-      arr.push(r)
-      byUid.set(r.ical_uid, arr)
-    }
-    for (const [, group] of byUid) {
-      if (group.length <= 1) continue
-      group.sort((a, b) => a.id.localeCompare(b.id))
-      const canonical = group[0]
-      const dupes     = group.slice(1)
-      // Merge owner_ids zodat we geen teamleden verliezen.
-      const merged = new Set<string>(canonical.owner_ids ?? [])
-      for (const d of dupes) for (const o of (d.owner_ids ?? [])) merged.add(o)
-      if (merged.size !== (canonical.owner_ids ?? []).length) {
-        await admin.from('board_items')
-          .update({ owner_ids: Array.from(merged) })
-          .eq('id', canonical.id)
-      }
-      await admin.from('board_items').delete().in('id', dupes.map(d => d.id))
-      removed += dupes.length
-    }
-  }
-
-  // Migratie-cleanup voor pre-iCalUID duplicaten: rijen van teamleden die
-  // sinds de fix nog niet hebben gesynct hebben ical_uid IS NULL. We
-  // matchen ze met de canonical rij via name + start_date (combinatie is
-  // praktisch uniek per event) en mergen ze in. Idempotent: na een paar
-  // syncs heeft elke rij ical_uid en doet de query niets meer.
-  for (const u of upserts) {
-    const icalUid   = u.ical_uid as string | null
-    if (!icalUid) continue
-    const name      = String(u.name ?? '')
-    const startDate = u.start_date as string | null
-    const canonical = String(u.id)
-    if (!name || !startDate) continue
-    const { data: legacyRows } = await admin
-      .from('board_items')
-      .select('id, owner_ids, journal')
-      .eq('source', 'google')
-      .is('ical_uid', null)
-      .eq('name', name)
-      .eq('start_date', startDate)
-      .neq('id', canonical)
-    const legacies = (legacyRows as { id: string; owner_ids: string[] | null; journal: unknown }[] | null) ?? []
-    if (legacies.length === 0) continue
-    const merged = new Set<string>((u.owner_ids as string[]) ?? [])
-    for (const r of legacies) for (const o of (r.owner_ids ?? [])) merged.add(o)
-    if (merged.size !== ((u.owner_ids as string[]) ?? []).length) {
-      await admin.from('board_items')
-        .update({ owner_ids: Array.from(merged) })
-        .eq('id', canonical)
-    }
-    await admin.from('board_items').delete().in('id', legacies.map(r => r.id))
-    removed += legacies.length
-  }
+  // VERWIJDERD: cross-user dedup-loops. Eerder mergden we rijen van
+  // verschillende teamleden met dezelfde iCalUID/naam-datum in één,
+  // maar dat veroorzaakte race-condities (Vincent's sync overschreef
+  // Menno's row z'n external_id → Menno's sync vond 'm niet meer →
+  // miste meetings + duplicaten). Per-user rows zijn nu het model:
+  // visueel kan een gedeeld event 2x verschijnen, maar geen data-
+  // verlies meer.
 
   await admin.from('google_calendars').update({ last_sync_at: new Date().toISOString() }).eq('id', cal.id)
   return { added, updated, removed }

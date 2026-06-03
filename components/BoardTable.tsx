@@ -1087,7 +1087,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             {subitem.meetLink && (
               <a href={subitem.meetLink} target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
-                title="Open Google Meet voor deze meeting"
+                title={subitem.startTime ? `Open Google Meet (${subitem.startTime})` : 'Open Google Meet voor deze meeting'}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 3,
                   padding: '2px 7px 2px 6px', borderRadius: 5,
@@ -1097,6 +1097,11 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
                   boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
                 }}>
                 Meet
+                {subitem.startTime && (
+                  <span style={{ fontSize: 10.5, opacity: 0.9, fontWeight: 600 }}>
+                    @ {subitem.startTime}
+                  </span>
+                )}
                 <span style={{ fontSize: 10, opacity: 0.85 }}>↗</span>
               </a>
             )}
@@ -1350,6 +1355,22 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
     return next?.externalLink ?? item.externalLink ?? undefined
   })()
 
+  // Tijdstip naast de Meet-knop. Voor recurring meetings: tijd van de
+  // EERSTVOLGENDE instance (of de laatste als alles voorbij is). Voor
+  // single-events: het eigen item.startTime. Format: HH:MM zonder seconden.
+  const nextMeetingTime: string | null = (() => {
+    if (item.source !== 'google') return null
+    const today = new Date().toISOString().slice(0, 10)
+    const subs = (item.subitems ?? [])
+      .filter(s => s.startTime)
+      .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
+    if (subs.length > 0) {
+      const next = subs.find(s => (s.startDate ?? '') >= today) ?? subs[subs.length - 1]
+      return next?.startTime ?? null
+    }
+    return (item as { startTime?: string | null }).startTime ?? null
+  })()
+
   // Comments per board-item — leeft naast 'journal' in de DetailPanel,
   // maar bereikbaar via een knop direct op de rij.
   const [commentCount, setCommentCount] = useState(0)
@@ -1466,7 +1487,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           {typeof item.meetLink === 'string' && item.meetLink && (
             <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
-              title="Open Google Meet"
+              title={nextMeetingTime ? `Open Google Meet (${nextMeetingTime})` : 'Open Google Meet'}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: '2px 8px 2px 6px', borderRadius: 5,
@@ -1476,6 +1497,11 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
                 boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
               }}>
               Meet
+              {nextMeetingTime && (
+                <span style={{ fontSize: 10.5, opacity: 0.9, fontWeight: 600 }}>
+                  @ {nextMeetingTime}
+                </span>
+              )}
               <span style={{ fontSize: 10, opacity: 0.85 }}>↗</span>
             </a>
           )}
