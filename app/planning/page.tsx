@@ -790,16 +790,12 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // Sleep een pill naar een ander persoon-row → reassign owner.
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
-  // Werkdag-venster: 09:00 – 18:00. Events buiten dit bereik (vroege Google-
-  // afspraken, avond-syncs) worden netjes geclipt zodat 't overzicht
-  // compact blijft.
-  // Werkdag-raster: 09:00 → 22:00. Eerder eindigde 't grid op 18:00,
-  // waardoor avond-events (kroeg, premières, late shoots) buiten beeld
-  // vielen. Tot 22:00 dekt de meeste avondprogrammering; late-late
-  // events worden gecapped op 22:00 zodat ze nog wel zichtbaar zijn
-  // onderaan het raster i.p.v. eraf gelopen.
+  // Werkdag-raster: 09:00 → 18:00. Korter raster = overzichtelijker bij
+  // het scrollen door de week. Avond-events (kroeg, premières, late
+  // shoots) worden gecapped op 18:00 zodat ze nog onderaan het raster
+  // verschijnen i.p.v. eraf te lopen.
   const HOUR_START = 9
-  const HOUR_END   = 22
+  const HOUR_END   = 18
   const HOUR_H     = 44
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
