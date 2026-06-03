@@ -266,11 +266,15 @@ export function projectHoursInWeek(
   // Verdeling alleen over werkdagen — weekenden krijgen 0u uit een
   // project. Als 't project alleen weekend overspant (zeldzaam) krijgen
   // we 0u terug, wat klopt: 't werk valt simpelweg niet in werkdagen.
-  const totalWork  = countWorkdays(pStart.getTime(), pEnd.getTime(), memberId)
+  // Verdeling per KALENDER-dag (incl. weekend), niet per werkdag. User-
+  // mental-model: 10u over 10 dagen = 1u/dag. Weekend-/vrije-dag-cellen
+  // tonen geen werk (countWorkdays skipt ze in de noemer), maar de
+  // hours-per-day rate blijft op total/calDays.
+  const totalCalDays = Math.max(1, Math.floor((pEnd.getTime() - pStart.getTime()) / 86400000) + 1)
   const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), memberId)
-  if (totalWork === 0) return 0
+  if (overlapWork === 0) return 0
 
-  const fraction        = overlapWork / totalWork
+  const fraction        = overlapWork / totalCalDays
   const result          = fraction * myShare
 
   return Math.round(result * 10) / 10
