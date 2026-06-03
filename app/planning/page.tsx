@@ -1591,10 +1591,14 @@ function MeetingHoverBar({ project, memberId, left, width, colW, laneH, onDragMo
   function openPopover() {
     cancel()
     if (wrapRef.current) {
+      // wrapRef spant de hele row-breedte (left:0, right:0), dus
+      // getBoundingClientRect().left geeft de row-rand. De daadwerkelijke
+      // bar zit op +`left` binnen die row — daar willen we de popover.
       const r = wrapRef.current.getBoundingClientRect()
       const popW = 280
-      const lx = Math.min(r.left, window.innerWidth - popW - 8)
-      setPopPos({ top: r.bottom + 4, left: Math.max(8, lx) })
+      const barScreenX = r.left + left
+      const lx = Math.min(barScreenX, window.innerWidth - popW - 8)
+      setPopPos({ top: r.top + laneH + 4, left: Math.max(8, lx) })
     }
     setHovered(true)
   }
