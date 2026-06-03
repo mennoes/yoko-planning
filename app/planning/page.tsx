@@ -1758,20 +1758,31 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 
     // Geschiedenis + notificaties per soort wijziging (alleen wat écht veranderde).
     const rawItemId = project.id.slice(project.board.length + 2)
+    const baseMeta = { boardId: project.board, itemName: project.name }
     if (patch.startDate !== undefined || patch.endDate !== undefined) {
       const oldStart = project.startDate ?? '—'
       const oldEnd   = project.endDate   ?? '—'
       logItemActivity(rawItemId, 'wijzigde de timeline',
-        `${oldStart} – ${oldEnd}  →  ${nextStart ?? '—'} – ${nextEnd ?? '—'}`).catch(() => {})
+        `${oldStart} – ${oldEnd}  →  ${nextStart ?? '—'} – ${nextEnd ?? '—'}`,
+        { ...baseMeta, field: 'startDate', before: { startDate: project.startDate, endDate: project.endDate }, after: { startDate: nextStart, endDate: nextEnd } }).catch(() => {})
     }
     if (patch.estHours !== undefined && !hasSubitems) {
       const oldEst = project.estHours ?? 0
       if (oldEst !== nextEst) {
-        logItemActivity(rawItemId, 'zette uren', `${oldEst}u → ${nextEst}u`).catch(() => {})
+        logItemActivity(rawItemId, 'zette uren', `${oldEst}u → ${nextEst}u`,
+          { ...baseMeta, field: 'estHours', before: oldEst, after: nextEst }).catch(() => {})
+      }
+    }
+    if (patch.status !== undefined) {
+      const oldStatus = project.status ?? ''
+      if (oldStatus !== patch.status) {
+        logItemActivity(rawItemId, 'zette status', `${oldStatus || '—'} → ${patch.status || '—'}`,
+          { ...baseMeta, field: 'status', before: oldStatus, after: patch.status }).catch(() => {})
       }
     }
     if (patch.ownerIds !== undefined) {
       const prevOwners = new Set(((rawItem?.ownerIds as string[] | undefined) ?? project.ownerIds) ?? [])
+      const beforeOwners = [...prevOwners]
       for (const newId of finalOwners) {
         if (newId === 'unassigned' || prevOwners.has(newId)) continue
         createNotification({
@@ -1784,7 +1795,8 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           body:        project.name,
         }).catch(() => {})
         const memberName = teamData.members.find(m => m.id === newId)?.name
-        logItemActivity(rawItemId, 'wees iemand toe', memberName ?? newId).catch(() => {})
+        logItemActivity(rawItemId, 'wees iemand toe', memberName ?? newId,
+          { ...baseMeta, field: 'ownerIds', before: beforeOwners, after: finalOwners }).catch(() => {})
       }
     }
   }

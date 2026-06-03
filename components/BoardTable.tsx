@@ -27,6 +27,7 @@ import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
+import { BoardActivityDrawer } from './BoardActivityDrawer'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -37,7 +38,8 @@ function setCurrentActor(id: string | null) { currentActorId = id }
 // een item verandert + log in de item-geschiedenis.
 function notifyOwnersOfStatusChange(item: BoardItem, fromStatus: string, toStatus: string, boardOverride?: string) {
   if (fromStatus === toStatus) return
-  logItemActivity(item.id, 'zette status', `${fromStatus || '—'} → ${toStatus || '—'}`).catch(() => {})
+  logItemActivity(item.id, 'zette status', `${fromStatus || '—'} → ${toStatus || '—'}`,
+    { field: 'status', before: fromStatus, after: toStatus, boardId: boardOverride, itemName: item.name }).catch(() => {})
   const owners = (item.ownerIds ?? []).filter(id => id && id !== 'unassigned')
   for (const rid of owners) {
     if (rid === currentActorId) continue
@@ -2847,6 +2849,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }, [])
   const [titleDraft,    setTitleDraft]   = useState(title)
   const [dedupOpen,     setDedupOpen]    = useState(false)
+  const [activityOpen,  setActivityOpen] = useState(false)
 
   function resizeCol(key: string, newWidth: number) {
     const updated = { ...colWidths, [key]: Math.max(60, newWidth) }
@@ -3221,14 +3224,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           )}
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Link href={`/activity?board=${encodeURIComponent(boardId)}`}
+          <button onClick={() => setActivityOpen(true)}
             title={`Activiteit van bord '${title}'`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
               background: 'var(--bg-card)', border: '1px solid var(--border)',
-              color: 'var(--text-secondary)', cursor: 'pointer', textDecoration: 'none',
+              color: 'var(--text-secondary)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <IconActivity size={13} /> {isMobile ? '' : 'Activiteit'}
-          </Link>
+          </button>
           {/* Share-knop: alleen voor borden in de SHAREABLE_BOARDS-whitelist
               op de server (zelfde lijst). Geeft een copy-able URL die
               externen zonder login kunnen openen. Gevoelige velden
@@ -3425,6 +3428,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           🧹 Schoonmaken
         </button>
       </div>
+
+      <BoardActivityDrawer
+        boardId={boardId}
+        boardTitle={title}
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)} />
 
       {dedupOpen && (
         <DedupModal groups={groups} onClose={() => setDedupOpen(false)}
