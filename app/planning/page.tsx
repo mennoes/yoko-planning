@@ -14,6 +14,7 @@ import dienjaarRaw       from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
+import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
@@ -158,16 +159,28 @@ function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; wi
 }
 
 // Werkdag-teller (ma-vr) tussen twee timestamps, beide uiteinden incl.
-// Werk-items vallen NOOIT in 't weekend voor de werkdruk-distributie.
-function countWorkdaysMs(startMs: number, endMs: number): number {
+// Skipt óók statische vrije dagen + Vrij-events voor `memberId`.
+function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): number {
   if (endMs < startMs) return 0
   let count = 0
   const oneDay = 86400000
   const start = new Date(startMs); start.setHours(0, 0, 0, 0)
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
+  let daysOffMap: Record<string, number[]> | null = null
+  if (memberId && typeof window !== 'undefined') {
+    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-days-off') ?? '{}') as Record<string, number[]> } catch {}
+  }
+  const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
-    const dow = new Date(t).getDay()
-    if (dow !== 0 && dow !== 6) count++
+    const d = new Date(t)
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) continue
+    if (memberId) {
+      const iso = dow === 0 ? 7 : dow
+      if (off.includes(iso)) continue
+      if (isVrijDayForMember(memberId, d)) continue
+    }
+    count++
   }
   return count
 }
@@ -184,8 +197,8 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
   // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
   // duwt in de werkdruk-cellen.
-  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime())
-  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime())
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), memberId)
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), memberId)
   if (totalWork === 0) return 0
   const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
@@ -3025,6 +3038,11 @@ export default function PlanningPage() {
     () => Object.entries(allGroups).flatMap(([n, g]) => groupsToProjects(n, g)),
     [allGroups]
   )
+
+  // Vrij-events vullen we elk render in de cache zodat countWorkdays (in
+  // hoursInRange / projectHoursInWeek) ze direct kan checken voor
+  // memberId. Vacatures, ziek, verlof tellen zo niet als werkdag.
+  useEffect(() => { setVrijDaysFromProjects(projects) }, [projects])
 
   // Per-item verberg-vlag uit het bron-board uitlezen. Items met
   // hiddenFromPlanning=true verschijnen niet meer in de planning-view

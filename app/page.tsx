@@ -29,6 +29,7 @@ import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
 import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, pushBoardToRemote } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
+import { setVrijDaysFromProjects } from '@/lib/vrijDays'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
   effectiveCategory,
@@ -388,6 +389,9 @@ export default function HomePage() {
       }
     }
     setAllProjects(projectList)
+    // Vrij-events cachen voor de countWorkdays-checks zodat memberContributions
+    // ze direct kan overslaan in de werkdruk-berekening.
+    setVrijDaysFromProjects(projectList)
     allDeadlines.sort((a, b) => new Date(a.item.deadline as string).getTime() - new Date(b.item.deadline as string).getTime())
     setDeadlineItems(allDeadlines)
 

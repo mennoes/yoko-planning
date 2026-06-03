@@ -177,23 +177,37 @@ export type ProjectContribution = {
 }
 
 // Telt het aantal werkdagen (Ma-Vr) tussen twee datums inclusief beide
-// uiteinden. Werk-items vallen NOOIT in 't weekend bij de werkdruk-
-// distributie — anders zou een vrijdag-pizzasessie de helft van z'n uren
-// naar zaterdag schuiven. Gebruikt door zowel projectHoursInWeek als
-// hoursInRange.
-function countWorkdays(startMs: number, endMs: number): number {
+// uiteinden — minus eventuele off-days voor `memberId` (statische vrije
+// weekdagen via daysOffStore + dynamische Vrij-events via vrijDays).
+//   - Weekend altijd uitgesloten.
+//   - memberId optioneel: zonder member checken we alleen Ma-Vr.
+function countWorkdays(startMs: number, endMs: number, memberId?: string): number {
   if (endMs < startMs) return 0
   let count = 0
   const oneDay = 86400000
-  // Loop dag-voor-dag op middernacht zodat een Saturday partial range niet
-  // halfgeteld wordt.
-  const start = new Date(startMs)
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(endMs)
-  end.setHours(0, 0, 0, 0)
+  const start = new Date(startMs); start.setHours(0, 0, 0, 0)
+  const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
+  // Lazy-load: alleen importeren als we een member moeten checken.
+  let daysOffMap: Record<string, number[]> | null = null
+  if (memberId && typeof window !== 'undefined') {
+    try { daysOffMap = JSON.parse(localStorage.getItem('yoko-days-off') ?? '{}') as Record<string, number[]> } catch {}
+  }
+  const off = memberId && daysOffMap ? (daysOffMap[memberId] ?? []) : []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
-    const dow = new Date(t).getDay()  // 0=Sun, 6=Sat
-    if (dow !== 0 && dow !== 6) count++
+    const d = new Date(t)
+    const dow = d.getDay()                       // 0=Sun..6=Sat
+    if (dow === 0 || dow === 6) continue          // weekend altijd uit
+    if (memberId) {
+      const iso = dow === 0 ? 7 : dow             // ISO weekday 1..7
+      if (off.includes(iso)) continue             // statische vrije dag
+      // Dynamische Vrij-event via lazy require om circular imports te
+      // vermijden. vrijDays.ts cached zelf in module-scope.
+      try {
+        const { isVrijDayForMember } = require('./vrijDays') as typeof import('./vrijDays')
+        if (isVrijDayForMember(memberId, d)) continue
+      } catch {}
+    }
+    count++
   }
   return count
 }
@@ -237,8 +251,8 @@ export function projectHoursInWeek(
   // Verdeling alleen over werkdagen — weekenden krijgen 0u uit een
   // project. Als 't project alleen weekend overspant (zeldzaam) krijgen
   // we 0u terug, wat klopt: 't werk valt simpelweg niet in werkdagen.
-  const totalWork  = countWorkdays(pStart.getTime(), pEnd.getTime())
-  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime())
+  const totalWork  = countWorkdays(pStart.getTime(), pEnd.getTime(), memberId)
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), memberId)
   if (totalWork === 0) return 0
 
   const fraction        = overlapWork / totalWork
