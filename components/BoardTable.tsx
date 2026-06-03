@@ -2632,11 +2632,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 style={{ position: 'relative' }}
                 onMouseEnter={e => {
                   const h = e.currentTarget.querySelector<HTMLElement>('.row-grip')
-                  if (h) h.style.opacity = '0.5'
+                  if (h) h.style.opacity = '1'
                 }}
                 onMouseLeave={e => {
                   const h = e.currentTarget.querySelector<HTMLElement>('.row-grip')
-                  if (h) h.style.opacity = '0'
+                  if (h) h.style.opacity = '0.35'
                 }}
                 onDragOver={e => {
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
@@ -2715,11 +2715,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                     }}
                     style={{
                       position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                      width: 14, height: 28,
+                      width: 18, height: 32,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'grab', userSelect: 'none',
-                      color: 'var(--text-muted)', fontSize: 14, lineHeight: 1,
-                      opacity: 0, transition: 'opacity 0.12s',
+                      color: 'var(--text-secondary)', fontSize: 18, fontWeight: 700, lineHeight: 1,
+                      opacity: 0.35, transition: 'opacity 0.12s',
                       zIndex: 5,
                       background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
                     }}>⠿</span>
