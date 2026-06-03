@@ -77,7 +77,11 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               : (i.ownerIds as string[])
             return {
               id:        `${boardName}__${i.id}__si${idx}`,
-              name:      `${i.name}${si.name ? ' · ' + si.name : ''}`,
+              // Subitem-bar toont alleen de subitem-naam — niet "Parent ·
+              // Subitem". User vond 't dubbel: "het hoofditem staat er nu
+              // ook". Subitem-naam is meestal duidelijk genoeg op zichzelf
+              // ('Boekomslag v2'); voor extra context kun je 'm openklikken.
+              name:      si.name || (i.name as string),
               board:     boardName,
               group:     g.name,
               ownerIds:  owners,

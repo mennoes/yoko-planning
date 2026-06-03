@@ -982,13 +982,41 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   type AllDayBar = { p: Project; left: number; width: number; lane: number }
   const rawAllDay: { p: Project; left: number; width: number }[] = []
   for (const p of allDay) {
-    const s = new Date(p.startDate ?? p.endDate!).getTime()
-    const e = (p.endDate ? new Date(p.endDate).getTime() : s) + 86400000
-    if (e < gridStartMs || s > gridEndMs) continue
-    const cs = Math.max(s, gridStartMs); const ce = Math.min(e, gridEndMs)
-    const left = (cs - gridStartMs) / msPerPx
-    const width = Math.max((ce - cs) / msPerPx - 4, 80)
-    rawAllDay.push({ p, left, width })
+    const sFull = new Date(p.startDate ?? p.endDate!); sFull.setHours(0,0,0,0)
+    const eFull = p.endDate ? new Date(p.endDate) : new Date(sFull); eFull.setHours(0,0,0,0)
+    const fullEndMs = eFull.getTime() + 86400000
+    if (fullEndMs < gridStartMs || sFull.getTime() > gridEndMs) continue
+    // Fragmenteer op werkdagen voor deze member. Een ma-vr project waarvan
+    // de owner vrijdag vrij is renderen we als twee bars: ma-do én niets
+    // op vrijdag (cell daar laat 'm dim staan, geen bar). Zo zie je dat
+    // er op vrije dagen niet daadwerkelijk gewerkt wordt.
+    const oneDay = 86400000
+    type Seg = { s: number; e: number }
+    const segments: Seg[] = []
+    let cur: number | null = null
+    for (let t = sFull.getTime(); t <= eFull.getTime(); t += oneDay) {
+      const d = new Date(t)
+      const isOff = memberId
+        ? isOffDayInline(memberId, d)
+        : (d.getDay() === 0 || d.getDay() === 6)
+      if (!isOff) {
+        if (cur === null) cur = t
+      } else if (cur !== null) {
+        segments.push({ s: cur, e: t })
+        cur = null
+      }
+    }
+    if (cur !== null) segments.push({ s: cur, e: fullEndMs })
+    if (segments.length === 0) continue   // alles is off → geen bar
+    for (const seg of segments) {
+      const cs = Math.max(seg.s, gridStartMs)
+      const ce = Math.min(seg.e, gridEndMs)
+      if (ce <= cs) continue
+      const left  = (cs - gridStartMs) / msPerPx
+      const width = Math.max((ce - cs) / msPerPx - 4, 30)
+      rawAllDay.push({ p, left, width })
+    }
+    continue
   }
   const laneEnds: number[] = []
   const allDayBars: AllDayBar[] = [...rawAllDay].sort((a, b) => a.left - b.left).map(b => {
@@ -1383,22 +1411,21 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 style={{
                   position: 'absolute',
                   left: b.left, top: b.top, width: b.width, height: b.height,
-                  background: color + '40',
-                  borderLeft: `3px solid ${color}`,
+                  background: color + '22',
+                  borderLeft: `2px solid ${color}88`,
                   borderRadius: 6,
                   padding: '6px 8px',
                   cursor: 'pointer',
                   zIndex: 1,
                   overflow: 'hidden',
                 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#fff',
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-primary)',
                   whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  opacity: 0.78 }}>
                   {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
                   {b.p.name}
                 </div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', marginTop: 1,
-                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
                   {b.p.startTime}–{b.p.endTime}
                 </div>
               </div>
@@ -3847,10 +3874,30 @@ export default function PlanningPage() {
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   padding: '6px 8px', lineHeight: 1 }}>−</button>
-              <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
-                value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                style={{ width: 96, accentColor: 'var(--accent)' }} />
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                  value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                  title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                  style={{ width: 96, accentColor: 'var(--accent)' }} />
+                {/* Tick op de cross-over zodat de gebruiker ziet waar 't
+                    omslaat van Overzicht naar Week-view. */}
+                <span aria-hidden style={{
+                  position: 'absolute',
+                  left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 96}px`,
+                  top: '50%', transform: 'translate(-50%, -50%)',
+                  width: 2, height: 14, background: 'var(--accent)', borderRadius: 1,
+                  pointerEvents: 'none', opacity: 0.7,
+                }} />
+              </div>
+              <span style={{
+                fontSize: 9.5, fontWeight: 700, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+                padding: '2px 6px', borderRadius: 999,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                marginLeft: 4,
+              }}>
+                {zoom === 'dag' ? 'Week' : 'Overz.'}
+              </span>
               <button onClick={() => anchoredColWZoom(z => z + 10)}
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
@@ -4276,10 +4323,19 @@ export default function PlanningPage() {
                   <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                  <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
-                    value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                    title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
-                    style={{ width: 120, accentColor: 'var(--accent)' }} />
+                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                    <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                      value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                      title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
+                      style={{ width: 120, accentColor: 'var(--accent)' }} />
+                    <span aria-hidden style={{
+                      position: 'absolute',
+                      left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 120}px`,
+                      top: '50%', transform: 'translate(-50%, -50%)',
+                      width: 2, height: 14, background: 'var(--accent)', borderRadius: 1,
+                      pointerEvents: 'none', opacity: 0.7,
+                    }} />
+                  </div>
                   <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>

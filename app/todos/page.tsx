@@ -57,7 +57,9 @@ function loadAllProjects(): ProjectLink[] {
     const groups = loadGroups(board, raw.groups as BoardGroup[])
     for (const g of groups) for (const item of g.items) {
       if (!item.name) continue
-      out.push({ board, itemId: item.id, name: item.name })
+      out.push({ board, itemId: item.id, name: item.name,
+        startDate: (item.startDate as string | null) ?? null,
+        endDate:   (item.endDate   as string | null) ?? null })
     }
   }
   return out
@@ -85,10 +87,33 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
-        if (!Array.isArray(item.ownerIds) || !item.ownerIds.includes(memberId)) continue
+        const parentOwns = Array.isArray(item.ownerIds) && item.ownerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
-        if (end && end < today) continue
-        out.push({ board, itemId: item.id, name: item.name })
+        const parentExpired = end && end < today
+        // Parent zelf als todo wanneer ik eigenaar ben én 'm nog niet voorbij is.
+        if (parentOwns && !parentExpired) {
+          out.push({ board, itemId: item.id, name: item.name })
+        }
+        // Subitems óók als losse todo's. Een subitem telt voor mij als:
+        //  - status niet 'Done'
+        //  - eind-datum (of start) niet in 't verleden
+        //  - ofwel ik staat in subitem.ownerIds, OF subitem is unassigned/
+        //    leeg en parent heeft mij als owner (parent-fallback).
+        const subs = item.subitems ?? []
+        for (const sub of subs) {
+          if (!sub?.name) continue
+          if ((sub.status ?? '').toLowerCase() === 'done') continue
+          const subEnd = sub.endDate ?? sub.startDate
+          if (subEnd && subEnd < today) continue
+          const subOwners = (sub.ownerIds ?? []).filter(o => o && o !== 'unassigned')
+          const subMine = subOwners.includes(memberId) || (subOwners.length === 0 && parentOwns)
+          if (!subMine) continue
+          out.push({
+            board,
+            itemId: `${item.id}__si__${sub.id ?? sub.name}`,
+            name:   `${item.name} · ${sub.name}`,
+          })
+        }
       }
     }
   }
@@ -338,6 +363,33 @@ function TodoCard({
   const open    = visible.filter(i => !i.done)
   const done    = visible.filter(i =>  i.done)
 
+  // Splits open-items in 'Deze week' (project loopt overlap met de
+  // komende 7 dagen) vs 'Daarna'. Voor losse todo's zonder projectRef
+  // landen ze op 'Deze week' (= prioritair). Alleen voor member-secties
+  // tonen we de kopjes — een algemene Ideeën-sectie hoeft geen
+  // tijds-indeling, daar zou 't visueel ruis worden.
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const inSevenDaysIso = (() => {
+    const d = new Date(); d.setDate(d.getDate() + 7)
+    return d.toISOString().slice(0, 10)
+  })()
+  const projectDates = new Map<string, { start: string | null; end: string | null }>()
+  for (const p of allProjects) {
+    projectDates.set(`${p.board}:${p.itemId}`, { start: p.startDate ?? null, end: p.endDate ?? null })
+  }
+  const isThisWeek = (i: TodoItem): boolean => {
+    if (!i.projectRef) return true
+    const d = projectDates.get(`${i.projectRef.board}:${i.projectRef.itemId}`)
+    if (!d) return true
+    const s = d.start; const e = d.end ?? s
+    if (!s) return true
+    // Overlap [s..e] met [today..today+7d]?
+    return s <= inSevenDaysIso && (e ?? s) >= todayIso
+  }
+  const showWeekSplit = isMember
+  const openThisWeek = showWeekSplit ? open.filter(isThisWeek)  : open
+  const openLater    = showWeekSplit ? open.filter(i => !isThisWeek(i)) : []
+
   // Editable header — handmatige (niet-member) secties: klik op emoji of
   // titel om te bewerken. Member-secties tonen avatar + member-naam zoals
   // voorheen.
@@ -452,10 +504,15 @@ function TodoCard({
         )}
       </div>
 
-      {/* Open items */}
+      {/* Open items — optional 'Deze week' / 'Daarna' split voor persoonlijke
+          secties zodat de huidige werkdruk altijd bovenaan staat. */}
       <ul style={{ listStyle: 'none', padding: '6px 0 0', margin: 0 }}>
-        {open.map((item, openIdx) => {
+        {showWeekSplit && openLater.length > 0 && openThisWeek.length > 0 && (
+          <li style={weekHeaderStyle}>Deze week</li>
+        )}
+        {(showWeekSplit ? openThisWeek : open).map(item => {
           const itemIdx = section.items.findIndex(i => i.id === item.id)
+          const openIdx = open.findIndex(i => i.id === item.id)
           return (
             <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
               editing={editId === item.id} editTxt={editTxt}
@@ -482,6 +539,40 @@ function TodoCard({
             />
           )
         })}
+        {showWeekSplit && openLater.length > 0 && (
+          <>
+            <li style={weekHeaderStyle}>Daarna</li>
+            {openLater.map(item => {
+              const itemIdx = section.items.findIndex(i => i.id === item.id)
+              const openIdx = open.findIndex(i => i.id === item.id)
+              return (
+                <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
+                  editing={editId === item.id} editTxt={editTxt}
+                  editOrder={editOrder}
+                  isFirstItem={openIdx === 0}
+                  isLastItem={openIdx === open.length - 1}
+                  onMoveUp={() => moveItem(itemIdx, -1)}
+                  onMoveDown={() => moveItem(itemIdx, 1)}
+                  onToggle={() => toggle(item.id)}
+                  onRemove={() => remove(item.id)}
+                  onEditStart={() => { setEditId(item.id); setEditTxt(item.text) }}
+                  onEditChange={setEditTxt}
+                  onEditSave={() => saveEdit(item.id)}
+                  onEditCancel={() => setEditId(null)}
+                  dragIdx={itemIdx}
+                  onDragStart={(from) => { dragFromRef.current = from }}
+                  onDropOnIdx={(target) => {
+                    const from = dragFromRef.current
+                    if (from == null) return
+                    dragFromRef.current = null
+                    moveItemTo(from, target)
+                  }}
+                  onDragEnd={() => { dragFromRef.current = null }}
+                />
+              )
+            })}
+          </>
+        )}
       </ul>
 
       {/* Done items (collapsed) */}
@@ -556,6 +647,12 @@ function TodoCard({
       </div>
     </div>
   )
+}
+
+const weekHeaderStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
+  textTransform: 'uppercase', letterSpacing: '0.07em',
+  padding: '6px 14px 2px', listStyle: 'none',
 }
 
 function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirstItem, isLastItem, onMoveUp, onMoveDown, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel, dragIdx, onDragStart, onDropOnIdx, onDragEnd }: {

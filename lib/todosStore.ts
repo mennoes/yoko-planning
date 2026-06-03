@@ -3,7 +3,7 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 
-export type ProjectLink = { board: string; itemId: string; name: string }
+export type ProjectLink = { board: string; itemId: string; name: string; startDate?: string | null; endDate?: string | null }
 export type TodoItem    = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
 export type Section     = { id: string; title: string; emoji: string; items: TodoItem[]; kind?: 'personal' | 'general' }
 
