@@ -2788,6 +2788,16 @@ export default function PlanningPage() {
   // Setter-wrapper voor col-width-zoom die eerst de today-line z'n screenX
   // vastlegt zodat we daar na de re-render weer op anker'en — voorkomt
   // dat een zoom vanuit linker-rand werkt i.p.v. vanuit de today-line.
+  // Eén virtuele zoom-slider over twee zoom-modes:
+  //   50–300  → week-zoom (Overzicht), colWZoom = waarde
+  //   300–550 → dag-zoom (Week-view),  colWZoom = waarde − 250
+  // Crossover bij 300 is naadloos: week@300% en dag@50% zijn de twee
+  // kanten van dezelfde overgang.
+  const VIRTUAL_MIN = 50
+  const VIRTUAL_MAX = 550
+  const VIRTUAL_CROSS = 300
+  const virtualZoom = zoom === 'week' ? colWZoom : VIRTUAL_CROSS + (colWZoom - 50)
+
   function anchoredColWZoom(updater: (z: number) => number) {
     const el = gridRef.current
     if (el && typeof window !== 'undefined') {
@@ -2796,30 +2806,26 @@ export default function PlanningPage() {
         pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
       }
     }
-    // Cross-zoom transitie: Overzicht (week) en Week-view (dag) zijn samen-
-    // gesmolten tot één continue zoom. Wanneer de slider voorbij de grens
-    // van de huidige zoom gaat, springen we naar de andere zoom en zetten
-    // de slider aan de overkant zodat het visueel vloeiend doorloopt.
-    const raw = updater(colWZoom)
-    if (zoom === 'week' && raw > 300) {
-      // Verder inzoomen dan week-300% → wissel naar dag-zoom op 50%.
-      const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-      const currentDays = colOffset * daysPerCol.week
-      setZoom('dag')
-      setColOffset(Math.round(currentDays / daysPerCol.dag))
-      setColWZoom(50)
-      return
+    const raw = updater(virtualZoom)
+    const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_MAX, raw))
+    const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
+    if (clamped <= VIRTUAL_CROSS) {
+      // Week-zoom helft
+      if (zoom !== 'week') {
+        const currentDays = colOffset * daysPerCol[zoom]
+        setZoom('week')
+        setColOffset(Math.round(currentDays / daysPerCol.week))
+      }
+      setColWZoom(Math.max(50, Math.min(300, clamped)))
+    } else {
+      // Dag-zoom helft
+      if (zoom !== 'dag') {
+        const currentDays = colOffset * daysPerCol[zoom]
+        setZoom('dag')
+        setColOffset(Math.round(currentDays / daysPerCol.dag))
+      }
+      setColWZoom(Math.max(50, Math.min(300, clamped - 250)))
     }
-    if (zoom === 'dag' && raw < 50) {
-      // Verder uitzoomen dan dag-50% → wissel naar week-zoom op 300%.
-      const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-      const currentDays = colOffset * daysPerCol.dag
-      setZoom('week')
-      setColOffset(Math.round(currentDays / daysPerCol.week))
-      setColWZoom(300)
-      return
-    }
-    setColWZoom(Math.max(50, Math.min(300, raw)))
   }
 
   useEffect(() => {
@@ -3516,10 +3522,10 @@ export default function PlanningPage() {
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   padding: '6px 8px', lineHeight: 1 }}>−</button>
-              <input type="range" min={50} max={300} step={5}
-                value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                title={`Kolombreedte ${colWZoom}%`}
-                style={{ width: 64, accentColor: 'var(--accent)' }} />
+              <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                style={{ width: 96, accentColor: 'var(--accent)' }} />
               <button onClick={() => anchoredColWZoom(z => z + 10)}
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
@@ -3940,10 +3946,10 @@ export default function PlanningPage() {
                   <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                  <input type="range" min={50} max={300} step={5}
-                    value={colWZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                    title={`Kolom-breedte ${colWZoom}%   ·   sneltoetsen +/−`}
-                    style={{ width: 80, accentColor: 'var(--accent)' }} />
+                  <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                    value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                    title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
+                    style={{ width: 120, accentColor: 'var(--accent)' }} />
                   <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
