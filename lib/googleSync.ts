@@ -960,40 +960,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     .map(r => r.id)
   let removed = 0
   if (toRemove.length > 0) {
-    await admin.from('board_items').delete().in('id', toRemove)
+    // SOFT-delete — items gaan naar /trash en kunnen hersteld worden.
+    // Eerder hard DELETE'd dat hier; bij sync-bugs verdween dan ALLES
+    // zonder pardon en onomkeerbaar.
+    await admin.from('board_items')
+      .update({ deleted_at: new Date().toISOString() })
+      .in('id', toRemove)
     removed = toRemove.length
   }
 
-  // Auto-cleanup: delete any non-google rows on this board whose name matches
-  // a synced Google item (catches XLSX import duplicates and stale per-instance
-  // rows from older sync versions). Strip the "(N×)" recurring suffix so the
-  // base title also matches.
-  const upsertedNames = new Set<string>()
-  for (const u of upserts) {
-    const name = String(u.name ?? '').trim()
-    if (!name) continue
-    upsertedNames.add(name)
-    upsertedNames.add(name.replace(/\s*\(\d+×\)\s*$/, '').trim())
-  }
-  // Dedup zoekt op ALLE boards die we via routing geraakt hebben, niet
-  // alleen het default-bord. Een UvVL-event landt nu op Vlaanderen, dus
-  // de XLSX-duplicaat staat ook dáár.
-  const boardsTouched = new Set<string>([fallbackBoard])
-  for (const u of upserts) boardsTouched.add(String(u.board_id))
-  if (upsertedNames.size > 0) {
-    const { data: dupRows } = await admin
-      .from('board_items')
-      .select('id, source')
-      .in('board_id', Array.from(boardsTouched))
-      .in('name', Array.from(upsertedNames))
-    const dupIds = ((dupRows as { id: string; source: string | null }[] | null) ?? [])
-      .filter(r => r.source !== 'google')
-      .map(r => r.id)
-    if (dupIds.length > 0) {
-      await admin.from('board_items').delete().in('id', dupIds)
-      removed += dupIds.length
-    }
-  }
+  // VERWIJDERD: de oude 'auto-cleanup non-google rows met dezelfde naam
+  // als een synced Google item' veegde handmatige projecten weg zodra
+  // Vincent een meeting met dezelfde titel synced (bv. een sponsor-
+  // meeting 'Gerolsteiner' wiste het handmatige Gerolsteiner-project
+  // op het yoko-bord). Te agressief; we vertrouwen voortaan op de
+  // expliciete dedup-SQL en /trash voor opruimen.
 
   // Globale dedup: oude per-user rijen (van vóór deze migratie) hadden geen
   // ical_uid; nu we die net hebben geschreven kunnen we matches uit andere
@@ -1030,7 +1011,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
           .update({ owner_ids: Array.from(merged) })
           .eq('id', canonical.id)
       }
-      await admin.from('board_items').delete().in('id', dupes.map(d => d.id))
+      await admin.from('board_items')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', dupes.map(d => d.id))
       removed += dupes.length
     }
   }
@@ -1064,7 +1047,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         .update({ owner_ids: Array.from(merged) })
         .eq('id', canonical)
     }
-    await admin.from('board_items').delete().in('id', legacies.map(r => r.id))
+    await admin.from('board_items')
+      .update({ deleted_at: new Date().toISOString() })
+      .in('id', legacies.map(r => r.id))
     removed += legacies.length
   }
 
