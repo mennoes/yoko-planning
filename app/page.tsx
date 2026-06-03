@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/components/ProfileContext'
+import { useTeam } from '@/components/TeamContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconAlert } from '@/components/Icon'
@@ -329,9 +330,18 @@ const cardLink: React.CSSProperties = {
 
 export default function HomePage() {
   const { profile }    = useProfile()
+  const { members: liveTeam } = useTeam()
   const { showMember } = useMemberPopup()
   const router         = useRouter()
   const isMobile       = useIsMobile()
+  // Helper: classificeer als yoko-crew op basis van team_members.kind,
+  // fallback hardcoded set. Wordt gebruikt voor 'Team vandaag'.
+  const HARDCODED_YOKO = new Set(['menno','vincent','odette','anne-fleur','kars'])
+  const isYokoCrew = (id: string): boolean => {
+    const fromDb = liveTeam.find(m => m.id === id)?.kind
+    if (fromDb) return fromDb === 'yoko'
+    return HARDCODED_YOKO.has(id)
+  }
 
   const [recentPages,  setRecentPages]  = useState<PageDoc[]>([])
   const [myTodos,      setMyTodos]      = useState<TodoStoreItem[]>([])
@@ -394,7 +404,10 @@ export default function HomePage() {
     // Workload data per week is recomputed in a separate effect on weekOffset
     // Capacity: prefer the override the user set in the planning tool
     // (localStorage 'yoko-capacities'), fall back to teamData default.
-    let cap = teamData.members.find(m => m.id === memberId)?.weeklyCapacity ?? 40
+    let cap =
+      liveTeam.find(m => m.id === memberId)?.weeklyCapacity
+      ?? teamData.members.find(m => m.id === memberId)?.weeklyCapacity
+      ?? 40
     try {
       const raw = localStorage.getItem('yoko-capacities')
       if (raw) {
@@ -573,9 +586,25 @@ export default function HomePage() {
     return { kind: 'available' }
   }
 
-  // Hours per member this week
-  const YOKO_IDS = ['menno','vincent','odette','anne-fleur','kars']
-  const yokoMembers = teamData.members.filter(m => YOKO_IDS.includes(m.id))
+  // Hours per member this week — list = alle leden waarvan
+  // team_members.kind = 'yoko'; fallback op hardcoded set voor
+  // pre-DB / extras. Zo verschijnt Manuel direct in 'Team vandaag'
+  // zodra-ie via /team-admin is toegevoegd.
+  const allMembersForHome: Array<{ id: string; name: string; color?: string; weeklyCapacity?: number }> = (() => {
+    const seen = new Set<string>()
+    const out: Array<{ id: string; name: string; color?: string; weeklyCapacity?: number }> = []
+    for (const m of liveTeam) {
+      if (m.hidden || m.id === 'unassigned') continue
+      seen.add(m.id)
+      out.push({ id: m.id, name: m.name, color: m.color, weeklyCapacity: m.weeklyCapacity })
+    }
+    for (const m of teamData.members) {
+      if (seen.has(m.id) || m.id === 'unassigned') continue
+      out.push(m)
+    }
+    return out
+  })()
+  const yokoMembers = allMembersForHome.filter(m => isYokoCrew(m.id))
   const weekStartTeam = getWeekStart(new Date())
   const memberHoursThisWeek: Record<string, number> = {}
   for (const m of yokoMembers) {
@@ -604,7 +633,10 @@ export default function HomePage() {
     : 0
   const myThisHours = Math.round(myThisContribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
 
-  const firstNameOf = (id: string) => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? null
+  const firstNameOf = (id: string) =>
+    liveTeam.find(m => m.id === id)?.name?.split(' ')[0]
+    ?? teamData.members.find(m => m.id === id)?.name?.split(' ')[0]
+    ?? null
   const r1 = (n: number) => Math.round(n * 10) / 10
   const cat = (c: typeof myThisContribs[number]) => effectiveCategory(
     { name: c.project.name, hours: c.hours, source: c.project.source },

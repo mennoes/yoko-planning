@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile } from '@/components/ProfileContext'
+import { useTeam } from '@/components/TeamContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 import { useIsMobile } from '@/lib/useIsMobile'
@@ -161,8 +162,12 @@ const saveSections = (s: Section[]) => saveTodoSections(s)
 function MemberAvatar({ memberId, size = 28 }: { memberId: string; size?: number }) {
   const { getPhoto }  = useTeamPhotos()
   const { profile }   = useProfile()
+  const { members: liveTeamForAvatar } = useTeam()
   const { showMember } = useMemberPopup()
-  const member        = teamData.members.find(m => m.id === memberId)
+  // Eerst kijken in live team_members (Supabase), valt terug op team.json
+  // voor pre-DB / legacy leden. Anders krijgen nieuwe leden zoals Manuel
+  // geen naam/kleur en valt de avatar lelijk uit ('?' met grijs).
+  const member        = liveTeamForAvatar.find(m => m.id === memberId) ?? teamData.members.find(m => m.id === memberId)
   const isMe          = profile?.memberId === memberId
   const photo         = isMe ? (profile?.photo ?? getPhoto(memberId)) : getPhoto(memberId)
   const [staticFailed, setStaticFailed] = useState(false)
@@ -235,7 +240,8 @@ function TodoCard({
   // payload nog niet leesbaar maakt; een ref blijft binnen 't tabblad.
   const dragFromRef = useRef<number | null>(null)
   const [popPos, setPopPos] = useState<{ top: number; left: number; width: number } | null>(null)
-  const member = teamData.members.find(m => m.id === section.id)
+  const { members: liveForSection } = useTeam()
+  const member = liveForSection.find(m => m.id === section.id) ?? teamData.members.find(m => m.id === section.id)
   const { showMember } = useMemberPopup()
 
   // Slash-picker: when the user types "/", the input becomes a project search.
@@ -564,7 +570,8 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
   onDropOnIdx?: (targetIdx: number) => void
   onDragEnd?:   () => void
 }) {
-  const member = teamData.members.find(m => m.id === memberId)
+  const { members: liveForRow } = useTeam()
+  const member = liveForRow.find(m => m.id === memberId) ?? teamData.members.find(m => m.id === memberId)
   const color  = member?.color ?? 'var(--accent)'
   // Drop-positie wordt afgeleid uit de cursor-Y t.o.v. het midden van de
   // rij: boven 't midden → invoegen ervóór, eronder → invoegen erna. Zo
@@ -850,6 +857,7 @@ export default function TodosPage() {
   const { pushUndo } = useUndo()
   const isMobile     = useIsMobile()
   const { profile: currentProfile } = useProfile()
+  const { members: liveTeam } = useTeam()
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [editOrder, setEditOrder] = useState(false)
@@ -888,6 +896,30 @@ export default function TodosPage() {
       window.removeEventListener('yoko-board-update', onBoardUpdate)
     }
   }, [])
+
+  // ── Per-member secties auto-seeden voor yoko-crew leden ───────────────────
+  // Wanneer een nieuw lid via /team-admin als 'yoko' wordt toegevoegd
+  // (bv. Manuel), willen we automatisch een eigen sectie in de To do's
+  // zonder dat er handmatig iets gedaan hoeft te worden. Loopt na de
+  // initiële sections-load zodat we de live state aanvullen i.p.v.
+  // overschrijven.
+  useEffect(() => {
+    if (!hydrated || sections.length === 0) return
+    if (liveTeam.length === 0) return
+    const existing = new Set(sections.map(s => s.id))
+    const toAdd: Section[] = []
+    for (const m of liveTeam) {
+      if (m.hidden) continue
+      if (m.kind !== 'yoko') continue
+      if (existing.has(m.id)) continue
+      toAdd.push({ id: m.id, title: m.name, emoji: '👤', items: [] })
+    }
+    if (toAdd.length === 0) return
+    const next = [...sections, ...toAdd]
+    setSections(next)
+    saveTodoSections(next)
+    pushTodos(next).catch(() => {})
+  }, [hydrated, liveTeam, sections])
 
   // ── Seed Socials/Reminders/Kansen secties + missende items ────────────────
   // Twee stappen in één migratie:
