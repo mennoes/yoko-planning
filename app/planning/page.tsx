@@ -847,7 +847,21 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     return g === 'vrij' || g.includes('vakantie')
   }
   for (const p of visible) {
-    if (p.startTime) { timed.push(p); continue }
+    if (p.startTime) {
+      // Multi-dag projecten met een tijdvenster fanen we uit naar één
+      // timed-event per dag in de range. Anders zou een 06/01 → 06/03
+      // 14:00–22:00 project alleen op 06/01 verschijnen en de andere
+      // dagen mist het block — uren-verdeling klopt dan visueel niet.
+      if (p.endDate && p.startDate && p.endDate !== p.startDate) {
+        const s = new Date(p.startDate); const e = new Date(p.endDate)
+        for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+          const iso = localIso(d)
+          timed.push({ ...p, id: `${p.id}__day_${iso}`, startDate: iso, endDate: iso } as Project)
+        }
+        continue
+      }
+      timed.push(p); continue
+    }
     // Items zonder concrete tijd-info maar mét uren krijgen een
     // synthetisch tijdblok zodat ze de visuele ruimte in het uur-grid
     // pakken die ze in een werkdag innemen — niet alleen een dun
