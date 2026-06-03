@@ -13,7 +13,7 @@ import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
 import Link from 'next/link'
-import { IconMenu, IconSearch, IconHome } from './Icon'
+import { IconMenu, IconSearch, IconHome, IconHistory } from './Icon'
 import { NotificationBell } from './NotificationBell'
 import { FeedbackBubble } from './FeedbackBubble'
 import { requiresAuth } from '@/lib/supabase'
@@ -334,14 +334,15 @@ function Inner({ children }: { children: ReactNode }) {
           {/* Notificaties + papierbak + zoeken rechtsboven. */}
           <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
             <NotificationBell />
-            <Link href="/trash" aria-label="Papierbak"
+            <Link href="/papierbak" aria-label="Papierbak"
               title="Papierbak — verwijderde items herstellen"
               style={{
                 width: 38, height: 38, borderRadius: 9,
                 background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                color: 'var(--text-secondary)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, textDecoration: 'none',
-              }}>🗑</Link>
+                textDecoration: 'none',
+              }}><IconHistory size={18} /></Link>
             <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
               style={{
                 width: 38, height: 38, borderRadius: 9,
