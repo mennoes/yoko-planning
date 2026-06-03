@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useProfile } from '@/components/ProfileContext'
 import {
-  loadTrash, restoreTrashItem, purgeTrashItem, pullBoardFromRemote, type TrashItem,
+  loadTrash, restoreTrashItem, purgeTrashItem, pullBoardFromRemote, restoreRecentTrash, type TrashItem,
 } from '@/lib/boardStore'
 
 export default function TrashPage() {
@@ -51,13 +51,31 @@ export default function TrashPage() {
 
   return (
     <Shell>
-      <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 18px', lineHeight: 1.5, maxWidth: 640 }}>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 12px', lineHeight: 1.5, maxWidth: 640 }}>
         Hier staan items die uit de borden verwijderd zijn. Verwijderingen via de
         UI of via een sync zijn <strong>soft-delete</strong>: de rij blijft in de
         database staan met een tijdstempel. Herstel zet 'm terug op het oorspronkelijke
-        bord/groep. Definitief verwijderen is daarna alleen nog via Supabase PITR
-        (de Pro-plan houdt 7 dagen aan back-ups).
+        bord/groep.
       </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+        <button onClick={async () => {
+          if (!confirm('Herstel ALLES dat in het laatste uur in de prullenbak is beland?')) return
+          const n = await restoreRecentTrash(60)
+          alert(`${n} item(s) hersteld. Open je bord om ze weer te zien.`)
+          refresh()
+        }}
+          style={{ padding: '8px 14px', borderRadius: 7, border: '1px solid var(--accent)', background: 'var(--accent-light)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          ⚡ Herstel alles van het laatste uur
+        </button>
+        <button onClick={async () => {
+          const n = await restoreRecentTrash(24 * 60)
+          alert(`${n} item(s) hersteld.`)
+          refresh()
+        }}
+          style={{ padding: '8px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          Laatste 24u
+        </button>
+      </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Laden…</p>}
       {!loading && items.length === 0 && (

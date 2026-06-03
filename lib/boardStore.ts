@@ -333,6 +333,31 @@ export async function loadTrash(): Promise<TrashItem[]> {
 // Restore = deleted_at op null zetten. Bij groep ook eventueel de groep
 // zelf herstellen (anders is 't item een wees). De groep wordt automatisch
 // hersteld als-ie nog in soft-deleted state staat.
+// Bulk-restore voor alle items die binnen 'sinceMinutes' minuten zijn
+// soft-deleted. Voor noodherstel wanneer 'n batch-actie te veel weghaalde.
+export async function restoreRecentTrash(sinceMinutes: number): Promise<number> {
+  if (!supabase) return 0
+  if (!await getCurrentUserId()) return 0
+  const cutoff = new Date(Date.now() - sinceMinutes * 60_000).toISOString()
+  const { data: items } = await supabase
+    .from('board_items')
+    .select('id, board_id, group_id')
+    .not('deleted_at', 'is', null)
+    .gte('deleted_at', cutoff)
+  if (!items || items.length === 0) return 0
+  const groupIds = Array.from(new Set((items as { group_id: string }[]).map(r => r.group_id)))
+  if (groupIds.length > 0) {
+    await supabase.from('board_groups').update({ deleted_at: null }).in('id', groupIds).not('deleted_at', 'is', null)
+  }
+  const itemIds = (items as { id: string }[]).map(r => r.id)
+  const { error } = await supabase.from('board_items').update({ deleted_at: null }).in('id', itemIds)
+  if (error) return 0
+  // Triggert reload op de relevante borden
+  const boardIds = Array.from(new Set((items as { board_id: string }[]).map(r => r.board_id)))
+  for (const b of boardIds) await pullBoardFromRemote(b).catch(() => {})
+  return itemIds.length
+}
+
 export async function restoreTrashItem(itemId: string): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
