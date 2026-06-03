@@ -994,9 +994,11 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     let cur: number | null = null
     for (let t = sFull.getTime(); t <= eFull.getTime(); t += oneDay) {
       const d = new Date(t)
-      const isOff = memberId
-        ? isOffDayInline(memberId, d)
-        : (d.getDay() === 0 || d.getDay() === 6)
+      // Fragmenter alleen op WEEKEND, niet meer op days_off/Vrij. Was bron
+      // van 'bar verschijnt niet op maandag' bug. Off-day striping op cellen
+      // blijft maar bars renderen door hun hele werkdag-bereik.
+      void memberId
+      const isOff = (d.getDay() === 0 || d.getDay() === 6)
       if (!isOff) {
         if (cur === null) cur = t
       } else if (cur !== null) {
