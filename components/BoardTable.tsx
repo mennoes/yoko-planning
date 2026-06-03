@@ -2832,23 +2832,33 @@ type BoardTableProps = {
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const storageKey = `board-col-widths-${title}`
-  // Dedup-helper: als 'n subitem-id ergens in 't bord óók als top-level
-  // item voorkomt, gooien we 't top-level eruit. Komt voor wanneer 'n
-  // nest-actie z'n bron niet opruimde (oude state, sync-glitch) —
-  // selectievinkjes synchroniseerden dan tussen beide rijen omdat ze
-  // dezelfde id deelden.
+  // Dedup-helper: top-level items die identiek matchen met een bestaand
+  // subitem worden weggegooid. Twee criteria voor 'identiek':
+  //  1. Zelfde id — komt voor wanneer 'n nest-actie z'n bron niet
+  //     opruimde, selectievinkjes spiegelen daardoor.
+  //  2. Zelfde naam + zelfde start/end date + zelfde estHours —
+  //     wanneer 'n gebruiker per ongeluk een tweede top-level item maakt
+  //     terwijl er al 'n subitem met dezelfde data bestaat. Strikte match
+  //     (alle drie kloppen) houdt onbedoeld weggooien van losse items
+  //     met toevallig dezelfde naam tegen.
   function dedupSubitemTopLevels(next: BoardGroup[]): BoardGroup[] {
     const subitemIds = new Set<string>()
+    const subitemKeys = new Set<string>()
+    const k = (name: string | undefined, s: string | null | undefined, e: string | null | undefined, h: number | undefined) =>
+      `${(name ?? '').trim().toLowerCase()}|${s ?? ''}|${e ?? ''}|${h ?? 0}`
     for (const g of next) for (const i of g.items) {
       for (const s of (i.subitems ?? [])) {
         if (s?.id) subitemIds.add(s.id)
+        if (s?.name) subitemKeys.add(k(s.name, s.startDate, s.endDate, Number(s.estHours) || 0))
       }
     }
-    if (subitemIds.size === 0) return next
+    if (subitemIds.size === 0 && subitemKeys.size === 0) return next
     let mutated = false
     const out = next.map(g => {
       const items = g.items.filter(i => {
         if (subitemIds.has(i.id)) { mutated = true; return false }
+        const key = k(i.name, i.startDate, i.endDate, Number(i.estHours) || 0)
+        if (subitemKeys.has(key)) { mutated = true; return false }
         return true
       })
       return mutated ? { ...g, items } : g
