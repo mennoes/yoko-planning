@@ -1222,10 +1222,11 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
+            const isWeekStart = dow === 1
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
-                borderLeft: '1px solid var(--border-strong)',
+                borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
                 pointerEvents: 'none',
               }} />
