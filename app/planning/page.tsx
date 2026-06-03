@@ -1383,22 +1383,21 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 style={{
                   position: 'absolute',
                   left: b.left, top: b.top, width: b.width, height: b.height,
-                  background: color + '40',
-                  borderLeft: `3px solid ${color}`,
+                  background: color + '22',
+                  borderLeft: `2px solid ${color}88`,
                   borderRadius: 6,
                   padding: '6px 8px',
                   cursor: 'pointer',
                   zIndex: 1,
                   overflow: 'hidden',
                 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#fff',
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-primary)',
                   whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                  opacity: 0.78 }}>
                   {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
                   {b.p.name}
                 </div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', marginTop: 1,
-                  textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
                   {b.p.startTime}–{b.p.endTime}
                 </div>
               </div>
