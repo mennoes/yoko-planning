@@ -2917,14 +2917,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     return Array.from(ids)
   }, [groups])
 
-  // Quick-filter chips & dropdown tonen alleen Yoko-collega's (de mensen
-  // die echt aan de planning werken). Externe contactpersonen die soms in
-  // owner_ids belanden via gcal-sync zijn voor filteren niet relevant en
-  // maken de chip-rij op mobiel veel te druk.
+  // Quick-filter chips & dropdown tonen iedereen die in team.json zit —
+  // niet alleen @studioyoko.nl-medewerkers. Freelancers (Fokke, Marcus,
+  // Marieke etc.) horen er ook bij als ze owner van een item zijn. Wat
+  // we wél uitsluiten: 'unassigned' en gcal-contactpersonen die niet in
+  // team.json staan (die zouden de chip-rij vol-pollutten).
   const yokoOwners = useMemo(() => {
     return allOwners.filter(id => {
-      const m = teamData.members.find(t => t.id === id)
-      return !!m?.email && m.email.toLowerCase().endsWith('@studioyoko.nl')
+      if (!id || id === 'unassigned') return false
+      return teamData.members.some(t => t.id === id)
     })
   }, [allOwners])
 
