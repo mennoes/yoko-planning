@@ -1449,35 +1449,45 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
   const vrijBars     = projectAllSingles.filter(isVrijBar)
   const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
-  const meetingPacked = packLanes(meetingItems)
   const projectPacked = packLanes(projectItems)
-  const meetingLanes  = meetingPacked.numLanes
   const projectLanes  = projectPacked.numLanes
 
-  const MEETING_LANE_H = MEETING_BAR_H + 4   // tighter than project lanes
+  // Hoogte van een meeting-cluster schaalt met totaal-uren én aantal
+  // meetings (zodat elke meeting minstens één regel tekst krijgt).
+  // Meetings worden bovenop de project-balken gerenderd — overlap is
+  // toegestaan, dat is leesbaar genoeg.
+  const MEETING_PX_PER_HOUR = 22
+  const MEETING_LINE_H      = 18
+  function clusterHeight(b: ClusterBar) {
+    const totalH = b.meetings.reduce((s, m) => s + (m.estHours || 0), 0)
+    const byHours = totalH * MEETING_PX_PER_HOUR
+    const byCount = b.meetings.length * MEETING_LINE_H + 6
+    return Math.min(140, Math.max(MEETING_BAR_H, byHours, byCount))
+  }
+
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
   // events als mini-staafdiagram per dag kunnen renderen (8u = volledige
   // hoogte, 4u = half, 1u = klein staafje). DraggableBar krijgt dan
   // scaleByHours=true en anker'd bottom-up.
   const PROJECT_LANE_H = zoom === 'week' ? 64 : (BAR_H + BAR_GAP)
 
-  function meetingLaneTop(lane: number) { return BAR_GAP + lane * MEETING_LANE_H }
-  function projectLaneTop(lane: number) { return BAR_GAP + meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 6 : 0) + lane * PROJECT_LANE_H }
+  function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
 
-  type Cluster = ClusterBar & { lane: number; track: 'meeting' }
+  type Cluster = ClusterBar & { track: 'meeting'; barH: number }
   type Single  = SingleBar  & { lane: number; track: 'project' }
   const bars: (Cluster | Single)[] = [
-    ...meetingPacked.items.map(b => ({ ...b, track: 'meeting' as const })),
+    ...meetingItems.map(b => ({ ...b, track: 'meeting' as const, barH: clusterHeight(b) })),
     ...projectPacked.items.map(b => ({ ...b, track: 'project' as const })),
   ]
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  // Bij alleen vrij-events nog steeds een redelijke hoogte zodat de
-  // vol-hoogte achtergrond zichtbaar wordt (anders height=0).
+  // Minimaal de project-lanes hoog. Meetings hangen er bovenop dus tellen
+  // niet mee voor de container-hoogte; ze mogen door-bloeden indien langer
+  // dan de project-lane-stack. We breiden de container alleen uit als een
+  // meeting daadwerkelijk hoger is dan de projects, zodat scrollen klopt.
+  const tallestMeeting = meetingItems.reduce((m, b) => Math.max(m, clusterHeight(b)), 0)
   const baseHeight = BAR_GAP
-    + meetingLanes * MEETING_LANE_H
-    + (meetingLanes > 0 ? 6 : 0)
-    + projectLanes * PROJECT_LANE_H
+    + Math.max(projectLanes * PROJECT_LANE_H, tallestMeeting + 4)
     + 6
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
@@ -1486,11 +1496,8 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
-      {/* Subtle divider between meetings and project bars when both exist. */}
-      {meetingLanes > 0 && projectLanes > 0 && (
-        <div style={{ position: 'absolute', top: BAR_GAP + meetingLanes * MEETING_LANE_H + 2, left: 0, right: 0,
-          height: 1, background: 'var(--border-light)', pointerEvents: 'none', zIndex: 0 }} />
-      )}
+      {/* Meetings hangen nu bovenop project-balken — geen aparte divider
+          meer nodig. */}
       {/* Vrij-balken renderen we als volledige-hoogte achtergrond per
           dag(en), met lage z-index zodat andere events er bovenop staan.
           Klikken werkt nog steeds — geeft door aan onBarClick. */}
@@ -1516,9 +1523,12 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       ))}
       {bars.map((b, i) => {
         if (b.kind === 'cluster') {
+          // Meetings worden bovenop project-balken gerenderd (z-index 3)
+          // met hoogte naar uren — kleine 30min-meeting blijft compact,
+          // lange of meerdere stacken verticaal in de pill.
           return (
-            <div key={`cl_${i}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: b.left + 2, width: b.width, height: MEETING_BAR_H, zIndex: 1 }}>
-              <MeetingCluster meetings={b.meetings} width={b.width} onPick={onBarClick} />
+            <div key={`cl_${i}`} style={{ position: 'absolute', top: BAR_GAP, left: b.left + 2, width: b.width, height: b.barH, zIndex: 3 }}>
+              <MeetingCluster meetings={b.meetings} width={b.width} height={b.barH} onPick={onBarClick} />
             </div>
           )
         }
@@ -1543,7 +1553,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 // exclusive (opening this one closes any other open popover on the page).
 const MEETING_BAR_H = 18
 
-function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; width: number; onPick: (p: Project) => void }) {
+function MeetingCluster({ meetings, width, height, onPick }: { meetings: Project[]; width: number; height: number; onPick: (p: Project) => void }) {
   const [open, setOpen] = useState(false)
   const wrapRef   = useRef<HTMLSpanElement>(null)
   const btnRef    = useRef<HTMLButtonElement>(null)
@@ -1596,23 +1606,57 @@ function MeetingCluster({ meetings, width, onPick }: { meetings: Project[]; widt
     }
   }, [open, popoverId])
 
+  // Multi-line layout zodra de pill hoog genoeg is om meerdere meetings
+  // als aparte regels te tonen (24px per regel ruim).
+  const showMultiLine = !isSingle && height >= meetings.length * 18 + 6
+  const phoneSvg = (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, opacity: 0.9 }} aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+    </svg>
+  )
+
   return (
     <span ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <button ref={btnRef} onClick={e => { e.stopPropagation(); setOpenExclusive(!open) }}
         title={meetings.map(m => `${m.name} · ${m.estHours}u`).join('\n')}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
-          width, height: MEETING_BAR_H, borderRadius: 6,
-          background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
-          fontSize: 11.5, fontWeight: 700, lineHeight: 1,
-          boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-          overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-          style={{ flexShrink: 0, opacity: 0.9 }} aria-hidden="true">
-          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
-        </svg>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{label}</span>
-        <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
+        style={showMultiLine
+          ? { display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+              gap: 2, padding: '4px 6px',
+              width, height, borderRadius: 6,
+              background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
+              fontSize: 11, fontWeight: 600, lineHeight: 1.1,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+              overflow: 'hidden', textAlign: 'left' }
+          : { display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
+              width, height, borderRadius: 6,
+              background: '#D8B62E', color: '#1a1a1a', border: 'none', cursor: 'pointer',
+              fontSize: 11.5, fontWeight: 700, lineHeight: 1,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+              overflow: 'hidden', whiteSpace: 'nowrap' }}>
+        {showMultiLine ? (
+          <>
+            {meetings.map((m, idx) => (
+              <span key={m.id ?? idx} style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                {idx === 0 && phoneSvg}
+                {idx !== 0 && <span style={{ width: 13, flexShrink: 0 }} />}
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {m.name}
+                </span>
+                <span style={{ flexShrink: 0, opacity: 0.7, fontWeight: 500, fontSize: 10 }}>
+                  {(m.estHours || 0)}u
+                </span>
+              </span>
+            ))}
+          </>
+        ) : (
+          <>
+            {phoneSvg}
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }}>{label}</span>
+            <span style={{ flexShrink: 0, opacity: 0.75, fontWeight: 600 }}>{totalH}u</span>
+          </>
+        )}
       </button>
       {open && popPos && typeof document !== 'undefined' && createPortal(
         <div data-mc-popover={popoverId}
