@@ -8,6 +8,7 @@ import Link from 'next/link'
 import teamData from '@/data/team.json'
 import { useTeamPhotos } from './TeamPhotosContext'
 import { useProfile } from './ProfileContext'
+import { useTeam } from './TeamContext'
 
 type Member = typeof teamData.members[number]
 
@@ -50,6 +51,7 @@ export function MemberPopupProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [pos,      setPos]      = useState<PopupPos>({ top: 0, left: 0 })
   const popupRef  = useRef<HTMLDivElement>(null)
+  const { members: liveTeam } = useTeam()
 
   function showMember(id: string, e: MouseEvent) {
     e.stopPropagation()
@@ -85,7 +87,12 @@ export function MemberPopupProvider({ children }: { children: ReactNode }) {
     }
   }, [activeId])
 
-  const member = activeId ? teamData.members.find(m => m.id === activeId) ?? null : null
+  const member = (() => {
+    if (!activeId) return null
+    const live = liveTeam.find(m => m.id === activeId)
+    if (live) return { id: live.id, name: live.name, color: live.color, email: live.email, weeklyCapacity: live.weeklyCapacity }
+    return teamData.members.find(m => m.id === activeId) ?? null
+  })()
 
   return (
     <Ctx.Provider value={{ showMember }}>
