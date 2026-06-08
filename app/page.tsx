@@ -144,7 +144,7 @@ function helpHint({ slack, others }: { slack: number; others: { member: { name: 
   return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
 }
 
-type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }
+type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean; parentName?: string }
 
 type Category = WorkloadCategory
 
@@ -232,9 +232,16 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
       )}
       <span style={{ fontSize: 13,
         color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)',
-        fontWeight: cat === 'maken' ? 500 : 400, flex: 1,
+        fontWeight: cat === 'maken' ? 500 : 400, flex: 1, minWidth: 0,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        textDecoration: item.done ? 'line-through' : 'none' }}>{item.name}</span>
+        textDecoration: item.done ? 'line-through' : 'none' }}>
+        {item.name}
+        {item.parentName && item.parentName !== item.name && (
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6, fontSize: 11.5 }}>
+            ↳ {item.parentName}
+          </span>
+        )}
+      </span>
       {item.meetLink && (
         <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
           title="Open Google Meet"
@@ -284,6 +291,12 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{catLabel}</span>
             <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{item.board}</span>
           </div>
+          {item.parentName && item.parentName !== item.name && (
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+              ↳ in {item.parentName}
+            </div>
+          )}
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{item.name}</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span>{range}</span>
@@ -497,6 +510,7 @@ export default function HomePage() {
         source: c.project.source, externalLink: c.project.externalLink,
         meetLink: c.project.meetLink,
         done: c.project.status === 'done',
+        parentName: c.project.parentName,
       }
     }))
   }, [memberId, weekOffset, allProjects])
