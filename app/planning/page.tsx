@@ -4778,7 +4778,7 @@ export default function PlanningPage() {
                 {/* Timeline bars (expanded) */}
                 {isExp && memberProjects.length > 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
@@ -4788,7 +4788,7 @@ export default function PlanningPage() {
                 )}
                 {isExp && memberProjects.length === 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 5, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
                 )}
