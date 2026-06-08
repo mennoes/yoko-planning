@@ -2030,6 +2030,25 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const [startDate, setStartDate] = useState(project.startDate ?? '')
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
   const [estHours,  setEstHours]  = useState(String(project.estHours ?? 0))
+  // Suggesteer estHours = werkdagen × 8 wanneer de gebruiker een
+  // timeline kiest en estHours nog op 0 staat (nog niet zelf ingevuld).
+  // Zo hoef je niet steeds handmatig "3 dagen × 8 = 24" te rekenen voor
+  // een nieuw project. Eenmaal je 't aanpast naar een eigen waarde
+  // raakt de auto-fill 'm niet meer aan.
+  function autofillEstFromDates(s: string, e: string, currentEst: string): { estHours?: number } {
+    if (!s || !e) return {}
+    const sd = new Date(s); const ed = new Date(e)
+    if (isNaN(sd.getTime()) || isNaN(ed.getTime()) || ed < sd) return {}
+    let workdays = 0
+    for (const d = new Date(sd); d <= ed; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay()
+      if (dow !== 0 && dow !== 6) workdays++
+    }
+    const auto = workdays * 8
+    const cur = parseFloat(currentEst) || 0
+    if (cur > 0) return {}
+    return { estHours: auto }
+  }
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
   const [links,     setLinks]     = useState<import('@/lib/boards').ItemLink[]>((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
@@ -2526,11 +2545,23 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <input type="date" value={startDate} disabled={isGoogle}
-              onChange={e => { setStartDate(e.target.value); commit({ startDate: e.target.value || null }) }}
+              onChange={e => {
+                const v = e.target.value
+                setStartDate(v)
+                const patch = autofillEstFromDates(v, endDate, estHours)
+                commit({ startDate: v || null, ...patch })
+                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
+              }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
             <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
             <input type="date" value={endDate} disabled={isGoogle}
-              onChange={e => { setEndDate(e.target.value); commit({ endDate: e.target.value || null }) }}
+              onChange={e => {
+                const v = e.target.value
+                setEndDate(v)
+                const patch = autofillEstFromDates(startDate, v, estHours)
+                commit({ endDate: v || null, ...patch })
+                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
+              }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
           </div>
           {/* Tijd-of-dag inputs (HH:MM): nodig om 't event in 't uur-grid van
