@@ -787,7 +787,28 @@ export default function HomePage() {
             ) : openTodos.slice(0, 5).map(t => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 20px' }}>
                 <div style={{ width: 14, height: 14, borderRadius: 4, border: '2px solid var(--border)', flexShrink: 0, marginTop: 3 }} />
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{t.text}</span>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{t.text}</span>
+                {/* Bron-agenda badge: zelfde stijl als op /todos zodat in
+                    één oogopslag duidelijk is uit welk bord deze todo
+                    komt (Yoko / PNP / Nederland / etc.). */}
+                {t.projectRef && (
+                  <Link href={`/projects/${t.projectRef.board}`}
+                    title={`Open ${t.projectRef.board}-agenda`}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      flexShrink: 0, fontSize: 9.5, fontWeight: 700,
+                      letterSpacing: '0.05em', textTransform: 'uppercase',
+                      padding: '2px 6px', borderRadius: 10,
+                      background: (BOARD_COLORS[t.projectRef.board] ?? '#888') + '22',
+                      border: `1px solid ${BOARD_COLORS[t.projectRef.board] ?? '#888'}55`,
+                      color: BOARD_COLORS[t.projectRef.board] ?? 'var(--text-muted)',
+                      textDecoration: 'none', marginTop: 1,
+                    }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: BOARD_COLORS[t.projectRef.board] ?? '#888' }} />
+                    {t.projectRef.board}
+                  </Link>
+                )}
               </div>
             ))}
             {doneTodos.length > 0 && <div style={{ padding: '4px 20px', fontSize: 12, color: 'var(--text-muted)' }}>✓ {doneTodos.length} afgerond</div>}
