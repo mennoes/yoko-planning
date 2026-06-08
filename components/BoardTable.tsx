@@ -844,25 +844,6 @@ function overlapDays(
   if (hi < lo) return 0
   return Math.round((hi - lo) / 86400000) + 1
 }
-function hoursInRange(item: BoardItem, fromTs: number | null, untilTs: number | null): number {
-  if (fromTs == null && untilTs == null) return effectiveHours(item)
-  const subs = item.subitems ?? []
-  if (subs.length > 0) {
-    return subs.reduce((s, si) => {
-      const hours = Number(si.estHours) || 0
-      const span  = daysInclusive(si.startDate, si.endDate)
-      if (span === 0) return s + hours
-      const overlap = overlapDays(si.startDate, si.endDate, fromTs, untilTs)
-      return s + hours * (overlap / span)
-    }, 0)
-  }
-  const hours = Number(item.estHours) || 0
-  const span  = daysInclusive(item.startDate, item.endDate)
-  if (span === 0) return hours
-  const overlap = overlapDays(item.startDate, item.endDate, fromTs, untilTs)
-  return hours * (overlap / span)
-}
-
 // ─── Cel dispatcher ───────────────────────────────────────────────────────────
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
@@ -876,11 +857,19 @@ function Cell({ item, col, onUpdate }: {
   if (col.type === 'url')       return <UrlCell       value={(item[col.key] as string) ?? ''} onChange={v => onUpdate({ [col.key]: v })} />
 
   const hasSubs = (item.subitems?.length ?? 0) > 0
+  const isProrated = Boolean((item as unknown as { __prorated?: boolean }).__prorated)
 
   // estHours: when subitems exist, show their sum (read-only).
   if (col.key === 'estHours' && hasSubs) {
     const sum = effectiveHours(item)
-    return <span title="Som van subitems" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{sum}u</span>
+    const tip = isProrated ? 'Som van subitems · pro-rated naar het periode-filter' : 'Som van subitems'
+    return <span title={tip} style={{ fontSize: 13, color: 'var(--text-muted)' }}>{sum}u</span>
+  }
+  // Pro-rated naar een periode-filter: read-only tonen zodat een edit niet
+  // de gedeeltelijke waarde als 'echte' estHours wegschrijft.
+  if (col.key === 'estHours' && isProrated) {
+    const v = Number(item.estHours) || 0
+    return <span title="Pro-rated naar het periode-filter — wis filter om te bewerken" style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>{v}u</span>
   }
   // dagen: always computed from estHours (or sum of subs), read-only.
   if (col.key === 'dagen') {
@@ -2950,6 +2939,19 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       if (until !== null && ms > until) return false
       return true
     }
+    // Pro-rate de estHours van een item/subitem naar het deel van zijn span
+    // dat binnen [from, until] valt. 20u over 58 dagen, filter 24 dagen
+    // overlappend → 8.3u. Bij ontbrekende datums of geen filter blijft het
+    // origineel staan.
+    const prorate = (hours: number, startISO: string | null | undefined, endISO: string | null | undefined): number => {
+      if (from === null && until === null) return hours
+      if (!startISO) return hours
+      const span = daysInclusive(startISO, endISO)
+      if (span === 0) return hours
+      const overlap = overlapDays(startISO, endISO, from, until)
+      if (overlap === 0) return 0
+      return Math.round(hours * (overlap / span) * 10) / 10
+    }
     return groups.map(g => ({
       ...g,
       items: g.items
@@ -2968,16 +2970,28 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           return true
         })
         .map(item => {
-          // Subitems die buiten het filter-bereik vallen verbergen we; je
-          // wil alleen de instances zien die in de gekozen periode zitten.
-          if ((from === null && until === null) || !item.subitems || item.subitems.length === 0) return item
-          const visibleSubs = item.subitems.filter(s => overlapsRange(s.startDate, s.endDate))
-          // Parent had subitems EN er zijn alleen niet-zichtbare → toon alle
-          // subitems alsnog zodat de rij niet leeg oogt (kan alleen wanneer
-          // de parent zelf op datum matchte).
-          if (visibleSubs.length === 0) return item
-          if (visibleSubs.length === item.subitems.length) return item
-          return { ...item, subitems: visibleSubs }
+          // Geen periode-filter actief → niets aanpassen aan uren.
+          if (from === null && until === null) return item
+          // Items met subitems: filter onzichtbare subitems weg én pro-rateer
+          // de zichtbare op hun eigen span. De parent.estHours wordt door
+          // effectiveHours() automatisch de som van de pro-rated subitems.
+          // We taggen het item met __prorated zodat Cell de uren-kolom
+          // als read-only kan renderen — bewerken zou de pro-rated waarde
+          // anders als echte estHours wegschrijven.
+          if (item.subitems && item.subitems.length > 0) {
+            let subs = item.subitems.filter(s => overlapsRange(s.startDate, s.endDate))
+            if (subs.length === 0) subs = item.subitems
+            const prorated = subs.map(s => ({
+              ...s,
+              estHours: prorate(Number(s.estHours) || 0, s.startDate, s.endDate),
+            }))
+            return { ...item, subitems: prorated, __prorated: true } as BoardItem
+          }
+          return {
+            ...item,
+            estHours: prorate(Number(item.estHours) || 0, item.startDate, item.endDate),
+            __prorated: true,
+          } as BoardItem
         }),
     })).filter(g => g.items.length > 0)
   }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter])
@@ -3488,13 +3502,11 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             </button>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{resultCount} resultaten</span>
             {(filterFrom || filterUntil) && (() => {
-              // Som van uren + dagen in de gefilterde set — pro-rateerd
-              // wanneer een item z'n timeline maar deels in het filter-
-              // window valt. Bijvoorbeeld een project 28 mrt – 24 mei van
-              // 20u telt voor de filter 1–31 mei lineair als 24/58 × 20 mee.
-              const fromTs  = filterFrom  ? new Date(filterFrom).getTime() : null
-              const untilTs = filterUntil ? new Date(filterUntil).getTime() + 86400000 - 1 : null
-              const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + hoursInRange(i, fromTs, untilTs), 0), 0)
+              // Items in filteredGroups zijn al pro-rated naar de gekozen
+              // periode (zie filteredGroups-useMemo), dus effectiveHours
+              // hier geeft direct het binnen-window-deel — geen dubbele
+              // pro-ratie meer.
+              const totalHours = filteredGroups.reduce((s, g) => s + g.items.reduce((ss, i) => ss + effectiveHours(i), 0), 0)
               const totalDays  = totalHours / 8
               const fmt = (n: number) => Math.round(n * 10) / 10
               return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>· {fmt(totalHours)}u in periode ({fmt(totalDays)} dagen)</span>
