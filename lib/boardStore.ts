@@ -305,7 +305,24 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   }
   if (itemRows.length > 0) {
     const { error: iErr } = await supabase.from('board_items').upsert(itemRows, { onConflict: 'id' })
-    if (iErr) return false
+    if (iErr) {
+      // eslint-disable-next-line no-console
+      console.error(`[boardStore] item upsert FAILED voor '${boardName}':`, iErr.message, iErr.details, iErr.hint)
+      // Dispatch een toast-event zodat de UI dit zichtbaar kan maken
+      // i.p.v. een silent rollback wanneer de user later een pull doet.
+      if (typeof window !== 'undefined') {
+        const isPermission = /permission|denied|RLS|policy/i.test(iErr.message ?? '')
+        window.dispatchEvent(new CustomEvent('yoko-push-failed', {
+          detail: {
+            boardName,
+            message: isPermission
+              ? 'Geen rechten om dit item te wijzigen. Check Supabase RLS-policy voor board_items.'
+              : `Opslaan mislukt: ${iErr.message}`,
+          },
+        }))
+      }
+      return false
+    }
   }
 
   // SAFETY GUARD #2 — reconcile-deletie alleen voor rijen die OUDER zijn
