@@ -3185,11 +3185,17 @@ export default function PlanningPage() {
   // useEffect onderaan scrollLeft aan zodat de today-line op screenX blijft.
   const pendingAnchorRef = useRef<{ screenX: number } | null>(null)
   // Opgeslagen scrollLeft uit localStorage — bij eerste mount restoren we
-  // 'm zodat een refresh op exact dezelfde positie terugkomt.
+  // 'm zodat een refresh op exact dezelfde positie terugkomt. We restoren
+  // ALLEEN als de laatste scroll-actie < 15 min geleden was; anders
+  // beginnen we standaard bij 'vandaag'. Vermeed dat gebruikers die uren
+  // geleden ver in 't verleden hadden gescrolld nooit meer 'vandaag' zien.
   const savedScrollLeftRef = useRef<number | null>(null)
   if (savedScrollLeftRef.current === null && typeof window !== 'undefined') {
+    const RECENT_MS = 15 * 60 * 1000
     const v = parseInt(window.localStorage.getItem('planning-scroll-left') ?? '', 10)
-    if (Number.isFinite(v)) savedScrollLeftRef.current = v
+    const at = parseInt(window.localStorage.getItem('planning-scroll-left-at') ?? '', 10)
+    const isRecent = Number.isFinite(at) && Date.now() - at < RECENT_MS
+    if (Number.isFinite(v) && isRecent) savedScrollLeftRef.current = v
   }
   // Setter-wrapper voor col-width-zoom die eerst de today-line z'n screenX
   // vastlegt zodat we daar na de re-render weer op anker'en — voorkomt
@@ -3511,8 +3517,11 @@ export default function PlanningPage() {
     if (savedScrollLeftRef.current !== null) {
       el.scrollLeft = savedScrollLeftRef.current
     } else if (colOffset === 0) {
+      // Plaats 'vandaag' rond 25% van de zichtbare breedte zodat
+      // gebruikers meteen wat verleden EN toekomst zien zonder te
+      // hoeven scrollen. Eerder stond today pal tegen de linker rand.
       const back = HISTORY_BACK[zoom]
-      el.scrollLeft = back * colW
+      el.scrollLeft = Math.max(0, back * colW - el.clientWidth * 0.25)
     }
     initialScrollDoneRef.current = true
   }, [zoom, colW, colOffset])
@@ -3530,7 +3539,10 @@ export default function PlanningPage() {
         queued = false
         const cur = gridRef.current?.scrollLeft
         if (cur == null) return
-        try { window.localStorage.setItem('planning-scroll-left', String(cur)) } catch {}
+        try {
+          window.localStorage.setItem('planning-scroll-left', String(cur))
+          window.localStorage.setItem('planning-scroll-left-at', String(Date.now()))
+        } catch {}
       })
     }
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -3866,7 +3878,23 @@ export default function PlanningPage() {
   function stepForward() { setColOffset(o => o + 1) }
   function jumpBack()    { setColOffset(o => o - ZOOM_COUNT[zoom]) }
   function jumpForward() { setColOffset(o => o + ZOOM_COUNT[zoom]) }
-  function goToday()     { setColOffset(0) }
+  // Vandaag-knop: reset kolom-offset + scroll viewport zodat 't VANDAAG-
+  // markertje rond 1/4 van de zichtbare breedte staat. Eerder zette deze
+  // alleen colOffset=0 maar liet ie de scrollLeft staan — dan zag je
+  // alleen verandering als je toevallig ver in het verleden zat.
+  function goToday() {
+    setColOffset(0)
+    try { window.localStorage.removeItem('planning-scroll-left') } catch {}
+    try { window.localStorage.removeItem('planning-scroll-left-at') } catch {}
+    requestAnimationFrame(() => {
+      const el = gridRef.current
+      if (!el) return
+      const todayEl = el.querySelector<HTMLElement>('[data-today-marker]')
+      if (!todayEl) return
+      const target = Math.max(0, todayEl.offsetLeft - el.clientWidth * 0.25)
+      el.scrollTo({ left: target, behavior: 'smooth' })
+    })
+  }
 
   // ─── KPIs (this week) ───────────────────────────────────────────────────────
   const kpis = useMemo(() => {
