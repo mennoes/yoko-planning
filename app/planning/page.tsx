@@ -579,12 +579,12 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
     return Math.max(1, Math.round((e - s) / 86400000) + 1)
   })()
   const hoursPerDay = (project.estHours || 0) / projectDays
-  // Bar-hoogte schalen op uren-per-dag met sqrt + 75% baseline zodat
+  // Bar-hoogte schalen op uren-per-dag met sqrt + 80% baseline zodat
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
-  // 1u/dag ≈ 84%, 8u/dag = 100%.
+  // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
   const scaledH = scaleByHours
-    ? Math.max(6, Math.round(availH * (0.75 + Math.sqrt(ratio) * 0.25)))
+    ? Math.max(6, Math.round(availH * (0.8 + Math.sqrt(ratio) * 0.2)))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -1667,10 +1667,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
   // events als mini-staafdiagram per dag kunnen renderen.
-  // Overzicht (week-zoom): compacte lane-hoogte. 22px houdt de hoogte-
-  // scaling op uren-per-dag intact maar drukt de bars maximaal dicht
-  // op elkaar — minimale witruimte tussen rij-lanes.
-  const PROJECT_LANE_H = zoom === 'week' ? 22 : (BAR_H + BAR_GAP)
+  // Overzicht (week-zoom): compacte lane-hoogte. 32px geeft genoeg
+  // hoogte voor leesbare bars, met scaling op uren-per-dag binnen
+  // die lane.
+  const PROJECT_LANE_H = zoom === 'week' ? 32 : (BAR_H + BAR_GAP)
   const MEETING_LANE_H = BAR_H + BAR_GAP
 
   function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
