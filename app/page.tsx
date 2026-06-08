@@ -30,6 +30,7 @@ import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
 import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, pushBoardToRemote } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
+import { setVrijDaysFromProjects } from '@/lib/vrijDays'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
   effectiveCategory,
@@ -143,7 +144,7 @@ function helpHint({ slack, others }: { slack: number; others: { member: { name: 
   return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
 }
 
-type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string; done: boolean }
+type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }
 
 type Category = WorkloadCategory
 
@@ -223,11 +224,29 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
   const rowContent = (
     <>
       <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+      {item.startTime && (
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+          fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 36 }}>
+          {item.startTime.slice(0,5)}
+        </span>
+      )}
       <span style={{ fontSize: 13,
         color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)',
         fontWeight: cat === 'maken' ? 500 : 400, flex: 1,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         textDecoration: item.done ? 'line-through' : 'none' }}>{item.name}</span>
+      {item.meetLink && (
+        <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
+          title="Open Google Meet"
+          onClick={e => e.stopPropagation()}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '1px 6px 1px 5px', borderRadius: 4,
+            background: '#00ac47', color: '#fff',
+            fontSize: 9.5, fontWeight: 700, lineHeight: 1.3, flexShrink: 0,
+            textDecoration: 'none' }}>
+          Meet<span style={{ fontSize: 8, opacity: 0.85 }}>↗</span>
+        </a>
+      )}
       {item.source === 'google' && (
         <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
           title="Open in Google Calendar"
@@ -348,7 +367,7 @@ export default function HomePage() {
   const [newTodoText,  setNewTodoText]  = useState('')
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
-  const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; source?: 'manual' | 'google'; externalLink?: string; done: boolean }[]>([])
+  const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }[]>([])
   const [weekOffset,   setWeekOffset]   = useState(0)
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
@@ -398,6 +417,9 @@ export default function HomePage() {
       }
     }
     setAllProjects(projectList)
+    // Vrij-events cachen voor de countWorkdays-checks zodat memberContributions
+    // ze direct kan overslaan in de werkdruk-berekening.
+    setVrijDaysFromProjects(projectList)
     allDeadlines.sort((a, b) => new Date(a.item.deadline as string).getTime() - new Date(b.item.deadline as string).getTime())
     setDeadlineItems(allDeadlines)
 
@@ -415,6 +437,9 @@ export default function HomePage() {
         if (memberId in map) cap = map[memberId]
       }
     } catch {}
+    // Géén extra schaling op days_off — weeklyCapacity is al wat de user
+    // daadwerkelijk werkt (Menno zet 32u in als hij 4 dagen werkt).
+    // Dubbele schaling zou er 25.6u van maken.
     setWeekCapacity(cap)
 
     // Restore mobile section order
@@ -441,13 +466,25 @@ export default function HomePage() {
     const week = new Date(base); week.setDate(week.getDate() + weekOffset * 7)
     const contribs = memberContributions(allProjects, memberId, week)
     setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
+    // Vandaag-aware day-toewijzing. Voor multi-day items die NU lopen
+    // schuift 't item mee naar de dag-rij van vandaag — anders bleef
+    // een ma-do-project alleen op maandag staan en zag je op woensdag
+    // niet meer dat je er aan moest werken. Buiten de huidige week
+    // (weekOffset != 0) of buiten 't project-bereik vallen we terug op
+    // de start-dag.
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const weekEnd = new Date(week); weekEnd.setDate(weekEnd.getDate() + 7)
     setWeekItems(contribs.map(c => {
       const sd = c.project.startDate ? new Date(c.project.startDate) : null
-      const dayJs = sd ? sd.getDay() : 1
-      const day   = (dayJs + 6) % 7
-      // c.project.id is geprefixt met '{board}__'; voor het mutator-pad
-      // hebben we de oorspronkelijke item-id nodig om de juiste row in
-      // board_items aan te raken.
+      const ed = c.project.endDate   ? new Date(c.project.endDate)   : sd
+      const startDay = sd ? (sd.getDay() + 6) % 7 : 0
+      let day = startDay
+      const todayIsInWeek = weekOffset === 0
+      const todayD = new Date(todayIso)
+      const todayInProject = sd && ed && todayD >= sd && todayD <= ed
+      if (todayIsInWeek && todayInProject && todayD < weekEnd) {
+        day = (todayD.getDay() + 6) % 7
+      }
       const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
         ? c.project.id.slice(c.project.board.length + 2)
         : c.project.id
@@ -456,7 +493,9 @@ export default function HomePage() {
         rawItemId,
         name: c.project.name, board: c.project.board, hours: c.hours, day,
         startDate: c.project.startDate, endDate: c.project.endDate,
+        startTime: c.project.startTime, endTime: c.project.endTime,
         source: c.project.source, externalLink: c.project.externalLink,
+        meetLink: c.project.meetLink,
         done: c.project.status === 'done',
       }
     }))
@@ -611,6 +650,11 @@ export default function HomePage() {
     const contribs = memberContributions(allProjects, m.id, weekStartTeam)
     memberHoursThisWeek[m.id] = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
   }
+  // Geen extra cap-schaling op days_off — weeklyCapacity is al wat de
+  // gebruiker daadwerkelijk werkt. Vrije dagen worden al gerespecteerd
+  // door de uren-distributie (die geeft 0u op off-days, dus 't totaal
+  // dat in de week-cellen verschijnt klopt al). Dubbele schaling zou
+  // 32u-cap nóg eens 4/5 maken = 25.6u, wat klopt niet.
   const overloaded = yokoMembers
     .map(m => {
       const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
@@ -855,7 +899,17 @@ export default function HomePage() {
                     </div>
                   </div>
                   {(['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'] as const).map((dayLabel, dayIdx) => {
-                    const dayItems = weekItems.filter(i => i.day === dayIdx)
+                    const dayItems = weekItems.filter(i => i.day === dayIdx).slice().sort((a, b) => {
+                      // Sorteren op startTime — items met tijd staan voor
+                      // items zonder. Bij gelijke tijd alfabetisch fallback
+                      // zodat de volgorde voorspelbaar is.
+                      const aT = a.startTime ?? null
+                      const bT = b.startTime ?? null
+                      if (aT && !bT) return -1
+                      if (!aT && bT) return 1
+                      if (aT && bT) return aT.localeCompare(bT)
+                      return a.name.localeCompare(b.name)
+                    })
                     if (dayItems.length === 0) return null
                     const dayTotal = Math.round(dayItems.reduce((s, i) => s + i.hours, 0) * 10) / 10
                     return (
@@ -885,32 +939,70 @@ export default function HomePage() {
         </div>
       </div>
     ),
-    team: (
-      <div style={card}>
-        <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconUsers size={isMobile ? 17 : 15} />Team vandaag</h2>
+    team: (() => {
+      // Splits Yoko-team (vaste medewerkers) en freelancers. Freelancers
+      // tonen we ALLEEN als ze vandaag werk hebben (eigenaar van een
+      // project waarvan today binnen [startDate, endDate] valt). Anders
+      // wordt de lijst een onbruikbaar lange waslijst van inactieve
+      // freelancers waarmee je nooit hebt gewerkt.
+      const todayIso = new Date().toISOString().slice(0, 10)
+      const hasWorkToday = (memberId: string) => allProjects.some(p => {
+        if (!p.ownerIds.includes(memberId)) return false
+        const s = p.startDate; const e = p.endDate ?? s
+        if (!s) return false
+        return todayIso >= s && todayIso <= (e ?? s)
+      })
+      const activeFreelancers = allMembersForHome.filter(m =>
+        !isYokoCrew(m.id) && m.id !== 'unassigned' && hasWorkToday(m.id)
+      )
+      const yokoAvail = yokoMembers.filter(m => statusFor(m.id).kind === 'available').length
+      const flAvail   = activeFreelancers.filter(m => statusFor(m.id).kind === 'available').length
+      const totalCount = yokoMembers.length + activeFreelancers.length
+      const totalAvail = yokoAvail + flAvail
+      const renderRow = (m: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }) => {
+        const s = statusFor(m.id)
+        const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
+                   : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
+                   :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
+        return (
+          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
+            <UserAvatar memberId={m.id} size={22} />
+            <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {m.name}
+            </Link>
+            <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+              {tone.label}
+            </span>
+          </div>
+        )
+      }
+      const subHeader = (label: string, count: number, avail: number) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 18px 2px', marginTop: 2 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {avail}/{count}</span>
         </div>
-        <div style={{ padding: '6px 0 10px' }}>
-          {yokoMembers.map(m => {
-            const s = statusFor(m.id)
-            const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
-                       : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
-                       :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
-            return (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
-                <UserAvatar memberId={m.id} size={22} />
-                <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {m.name}
-                </Link>
-                <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
-                  {tone.label}
-                </span>
-              </div>
-            )
-          })}
+      )
+      return (
+        <div style={card}>
+          <div style={cardHeader}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <IconUsers size={isMobile ? 17 : 15} />Team vandaag
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
+            </h2>
+          </div>
+          <div style={{ padding: '6px 0 10px' }}>
+            {subHeader('Studio Yoko', yokoMembers.length, yokoAvail)}
+            {yokoMembers.map(renderRow)}
+            {activeFreelancers.length > 0 && (
+              <>
+                {subHeader('Freelancers vandaag', activeFreelancers.length, flAvail)}
+                {activeFreelancers.map(renderRow)}
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    ),
+      )
+    })(),
     deadlines: (
       <div style={card}>
         <div style={cardHeader}>

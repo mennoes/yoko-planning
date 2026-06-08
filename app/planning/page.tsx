@@ -14,6 +14,19 @@ import dienjaarRaw       from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscribeRemoteBoard, pullBoardFromRemote } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
+import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
+
+// Helper voor synchrone off-day-check binnen render. Leest dezelfde
+// localStorage-cache als countWorkdaysMs, plus 'n Vrij-event-check.
+function isOffDayInline(memberId: string, date: Date): boolean {
+  const dow = date.getDay()
+  if (dow === 0 || dow === 6) return true
+  // Days-off uit profile UITGESCHAKELD — was bron van 'maandag toont
+  // niks' bug doordat de localStorage cache stale/foutief kon zijn.
+  // Vrij-events blijven gerespecteerd (dynamische detectie via boards).
+  if (isVrijDayForMember(memberId, date)) return true
+  return false
+}
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
@@ -91,8 +104,8 @@ const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 
 // Column counts per zoom
 // Week-zoom: 21 dagen = 7 dagen historie + vandaag + 13 dagen vooruit (zie
 // HISTORY_BACK). Overzicht (week-zoom) en maand-fallback hun bredere range.
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 21, week: 56, maand: 18 }
-const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 7, week: 4, maand: 2 }
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 56, week: 70, maand: 24 }
+const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 28, week: 14, maand: 6 }
 const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
@@ -181,6 +194,30 @@ function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; wi
   return groups
 }
 
+// Werkdag-teller (ma-vr) tussen twee timestamps, beide uiteinden incl.
+// Skipt óók statische vrije dagen + Vrij-events voor `memberId`.
+function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): number {
+  if (endMs < startMs) return 0
+  let count = 0
+  const oneDay = 86400000
+  const start = new Date(startMs); start.setHours(0, 0, 0, 0)
+  const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
+  void memberId
+  const off: number[] = []
+  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
+    const d = new Date(t)
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) continue
+    if (memberId) {
+      const iso = dow === 0 ? 7 : dow
+      if (off.includes(iso)) continue
+      if (isVrijDayForMember(memberId, d)) continue
+    }
+    count++
+  }
+  return count
+}
+
 // ─── Hours in arbitrary range ─────────────────────────────────────────────────
 function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): number {
   if (!project.ownerIds.includes(memberId)) return 0
@@ -190,13 +227,18 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   if (re < pS || rs > pE) return 0
   const oS = rs > pS ? rs : pS
   const oE = re < pE ? re : pE
-  const totalMs   = pE.getTime() - pS.getTime()
-  const overlapMs = oE.getTime() - oS.getTime()
-  const fraction  = overlapMs / totalMs
+  // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
+  // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
+  // duwt in de werkdruk-cellen.
+  // Zie lib/workload.ts: noemer = kalenderdagen, teller = werkdagen-in-
+  // overlap. 10u over 10 cal-dagen → 1u/dag op de werkdagen die er in
+  // vallen. Weekend/vrij blijven 0u i.p.v. uren naar zich toe trekken.
+  const totalCalDays = Math.max(1, Math.floor((pE.getTime() - pS.getTime()) / 86400000) + 1)
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), memberId)
+  if (overlapWork === 0) return 0
+  const fraction  = overlapWork / totalCalDays
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
-  // Zonder deze check viel een pie-chart-aanpassing buiten 't workload-overzicht
-  // en bleef de werkdruk-bol op de oude verdeling staan.
   const myShare = project.ownerHours && memberId in project.ownerHours
     ? Number(project.ownerHours[memberId]) || 0
     : project.estHours / Math.max(project.ownerIds.length, 1)
@@ -352,8 +394,7 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
       }}>
         <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
         {total > 0 && (
-          <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1,
-            position: 'relative', zIndex: 15 }}>
+          <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
             {total}u
           </span>
         )}
@@ -527,8 +568,13 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
   const FULL_DAY_HOURS = 8
   const availH = (laneH ?? BAR_H + BAR_GAP) - BAR_GAP
   const baseH  = small ? 10 : BAR_H
+  // Bar-hoogte schalen op uren met sqrt + 50% baseline, zodat 't verschil
+  // tussen korte (1u) en lange (8u) bars visueel kleiner is. Voorheen was
+  // 't lineair: 1u = 12% hoogte, 8u = 100% — vond user te groot contrast.
+  // Nu: 1u ≈ 50% + sqrt(1/8)*50% = 67%; 8u = 100%.
+  const ratio = Math.min(1, Math.max(0, (project.estHours || 0) / FULL_DAY_HOURS))
   const scaledH = scaleByHours
-    ? Math.max(6, Math.min(availH, Math.round(((project.estHours || 0) / FULL_DAY_HOURS) * availH)))
+    ? Math.max(6, Math.round(availH * (0.5 + Math.sqrt(ratio) * 0.5)))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -901,7 +947,8 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
         ...p,
         startTime: '09:00',
         endTime:   fmt(endH, endM),
-      } as Project)
+        __synthFullDay: true,
+      } as Project & { __synthFullDay: boolean })
       continue
     }
     if (isVrij(p)) {
@@ -933,13 +980,43 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   type AllDayBar = { p: Project; left: number; width: number; lane: number }
   const rawAllDay: { p: Project; left: number; width: number }[] = []
   for (const p of allDay) {
-    const s = new Date(p.startDate ?? p.endDate!).getTime()
-    const e = (p.endDate ? new Date(p.endDate).getTime() : s) + 86400000
-    if (e < gridStartMs || s > gridEndMs) continue
-    const cs = Math.max(s, gridStartMs); const ce = Math.min(e, gridEndMs)
-    const left = (cs - gridStartMs) / msPerPx
-    const width = Math.max((ce - cs) / msPerPx - 4, 80)
-    rawAllDay.push({ p, left, width })
+    const sFull = new Date(p.startDate ?? p.endDate!); sFull.setHours(0,0,0,0)
+    const eFull = p.endDate ? new Date(p.endDate) : new Date(sFull); eFull.setHours(0,0,0,0)
+    const fullEndMs = eFull.getTime() + 86400000
+    if (fullEndMs < gridStartMs || sFull.getTime() > gridEndMs) continue
+    // Fragmenteer op werkdagen voor deze member. Een ma-vr project waarvan
+    // de owner vrijdag vrij is renderen we als twee bars: ma-do én niets
+    // op vrijdag (cell daar laat 'm dim staan, geen bar). Zo zie je dat
+    // er op vrije dagen niet daadwerkelijk gewerkt wordt.
+    const oneDay = 86400000
+    type Seg = { s: number; e: number }
+    const segments: Seg[] = []
+    let cur: number | null = null
+    for (let t = sFull.getTime(); t <= eFull.getTime(); t += oneDay) {
+      const d = new Date(t)
+      // Fragmenter alleen op WEEKEND, niet meer op days_off/Vrij. Was bron
+      // van 'bar verschijnt niet op maandag' bug. Off-day striping op cellen
+      // blijft maar bars renderen door hun hele werkdag-bereik.
+      void memberId
+      const isOff = (d.getDay() === 0 || d.getDay() === 6)
+      if (!isOff) {
+        if (cur === null) cur = t
+      } else if (cur !== null) {
+        segments.push({ s: cur, e: t })
+        cur = null
+      }
+    }
+    if (cur !== null) segments.push({ s: cur, e: fullEndMs })
+    if (segments.length === 0) continue   // alles is off → geen bar
+    for (const seg of segments) {
+      const cs = Math.max(seg.s, gridStartMs)
+      const ce = Math.min(seg.e, gridEndMs)
+      if (ce <= cs) continue
+      const left  = (cs - gridStartMs) / msPerPx
+      const width = Math.max((ce - cs) / msPerPx - 4, 30)
+      rawAllDay.push({ p, left, width })
+    }
+    continue
   }
   const laneEnds: number[] = []
   const allDayBars: AllDayBar[] = [...rawAllDay].sort((a, b) => a.left - b.left).map(b => {
@@ -948,9 +1025,13 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     laneEnds[lane] = b.left + b.width
     return { ...b, lane }
   })
-  const allDayLaneCount = Math.max(1, laneEnds.length)
-  const allDayLaneH = 32
-  const allDayH = allDayLaneCount * (allDayLaneH + 4) + 8
+  // Max 5 lanes voor de all-day-banner; bij meer overlap gaan extra
+  // events naar 'n verborgen overflow zodat de banner nooit een tien-rijen-
+  // hoge muur wordt. Lane-hoogte iets kleiner zodat 't compacter oogt.
+  const ALL_DAY_MAX_LANES = 5
+  const allDayLaneCount = Math.min(Math.max(1, laneEnds.length), ALL_DAY_MAX_LANES)
+  const allDayLaneH = 26
+  const allDayH = allDayLaneCount * (allDayLaneH + 3) + 6
 
   // Col-index voor het positioneren van getimede events per dag
   const colByIso = new Map<string, { col: Col; left: number; idx: number }>()
@@ -970,10 +1051,45 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }
 
   type TimedBar = { p: Project; left: number; width: number; top: number; height: number; iso: string; startMin: number; durMin: number }
+  // Achtergrond-balk regel: synthetische dag-blokken (langlopende projecten
+  // zonder concrete tijd) EN echte events ≥4u krijgen de volle kolombreedte
+  // op een lagere z-index. Korte meetings die overlappen sitten daar
+  // bovenop ipv ernaast in een lane-slot — anders werd een PinkFloyd of
+  // een 8u NL-College opeens half zo breed zodra er een 30-min check-in
+  // op dezelfde dag stond. Drempel: 240 minuten = 4u.
+  const LONG_BG_THRESHOLD_MIN = 240
+  const synthBackgroundBars: TimedBar[] = []
+  const realTimed: Project[] = []
+  for (const p of timed) {
+    const isSynth = (p as Project & { __synthFullDay?: boolean }).__synthFullDay
+    const [shCheck, smCheck] = (p.startTime ?? '00:00').split(':').map(Number)
+    const [ehCheck, emCheck] = (p.endTime ?? p.startTime ?? '00:00').split(':').map(Number)
+    const durMin = (ehCheck * 60 + emCheck) - (shCheck * 60 + smCheck)
+    const isLong = durMin >= LONG_BG_THRESHOLD_MIN
+    if (isSynth || isLong) {
+      const iso = p.startDate; if (!iso) continue
+      const info = colByIso.get(iso); if (!info) continue
+      const [sh, sm] = (p.startTime ?? '09:00').split(':').map(Number)
+      const [eh, em] = (p.endTime ?? '17:00').split(':').map(Number)
+      const startMin = sh * 60 + sm
+      const endMin   = Math.max(startMin + 15, eh * 60 + em)
+      const top = (startMin - HOUR_START * 60) / 60 * HOUR_H
+      const height = Math.max(22, (endMin - startMin) / 60 * HOUR_H)
+      synthBackgroundBars.push({
+        p, iso, startMin, durMin: endMin - startMin,
+        left: info.left + 2,
+        width: Math.max(40, info.col.widthPx - 4),
+        top, height,
+      })
+    } else {
+      realTimed.push(p)
+    }
+  }
+
   // Per dag: groep events bij elkaar zodat overlap z'n eigen kolom-stukje
   // krijgt (events worden naast elkaar zichtbaar i.p.v. boven elkaar).
   const byIso = new Map<string, { p: Project; startMin: number; endMin: number; info: { col: Col; left: number; idx: number } }[]>()
-  for (const p of timed) {
+  for (const p of realTimed) {
     const iso = p.startDate; if (!iso) continue
     const info = colByIso.get(iso); if (!info) continue
     const [sh, sm] = (p.startTime ?? '00:00').split(':').map(Number)
@@ -1115,7 +1231,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10,
           background: stickyBg, borderRight: '1px solid var(--border-light)',
           display: 'flex', alignItems: 'center', padding: leftHeader ? '0' : '0 12px',
           fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -1126,11 +1242,17 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
             const isWeekStart = dow === 1
+            const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
+            const bg = col.isCurrent ? 'var(--accent-light)'
+                     : weekend ? 'var(--weekend-bg)'
+                     : isOff ? 'rgba(154,149,144,0.12)'
+                     : 'transparent'
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: allDayH,
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
+                background: bg,
+                backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.04) 6px 7px)' : undefined,
                 pointerEvents: 'none',
               }} />
             )
@@ -1208,7 +1330,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                   marginLeft: titleShift,
-                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>{b.p.name}</span>
+                  textShadow: '0 1px 1px rgba(0,0,0,0.18)' }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
+                  {b.p.name}
+                </span>
                 <OwnerCircle owners={owners} size={20} />
               </div>
             )
@@ -1220,7 +1345,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           ziet de gebruiker enkel de all-day banner hierboven. */}
       {expanded !== false && (
       <div style={{ display: 'flex' }}>
-        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3,
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10,
           background: stickyBg, borderRight: '1px solid var(--border-light)' }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => {
             const hour = HOUR_START + i
@@ -1245,11 +1370,17 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const dow = col.rangeStart.getDay()
             const weekend = dow === 0 || dow === 6
             const isWeekStart = dow === 1
+            const isOff = !!memberId && isOffDayInline(memberId, col.rangeStart)
+            const bg = col.isCurrent ? 'var(--accent-light)'
+                     : weekend ? 'var(--weekend-bg)'
+                     : isOff ? 'rgba(154,149,144,0.12)'
+                     : 'transparent'
             return (
               <div key={col.key} style={{
                 position: 'absolute', left, top: 0, width: col.widthPx, height: timeGridH,
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
-                background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent',
+                background: bg,
+                backgroundImage: (weekend || isOff) ? 'repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,0.05) 6px 7px)' : undefined,
                 pointerEvents: 'none',
               }} />
             )
@@ -1267,6 +1398,39 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 background: '#e2445c', pointerEvents: 'none', zIndex: 2 }} />
             )
           })()}
+          {/* Synth-day-blokken: langlopende projecten zonder concrete tijd,
+              renderen we eerst als volledige kolombreedte met lagere z-index
+              en zachtere achtergrond. Korte meetings die op dezelfde dag
+              vallen sitten daar bovenop. */}
+          {synthBackgroundBars.map(b => {
+            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            return (
+              <div key={`synth-${b.p.id}`}
+                onClick={() => onSelect(b.p)}
+                title={`${b.p.name} · ${b.p.estHours}u`}
+                style={{
+                  position: 'absolute',
+                  left: b.left, top: b.top, width: b.width, height: b.height,
+                  background: color + '22',
+                  borderLeft: `2px solid ${color}88`,
+                  borderRadius: 6,
+                  padding: '6px 8px',
+                  cursor: 'pointer',
+                  zIndex: 1,
+                  overflow: 'hidden',
+                }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-primary)',
+                  whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden',
+                  opacity: 0.78 }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
+                  {b.p.name}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                  {b.p.startTime}–{b.p.endTime}
+                </div>
+              </div>
+            )
+          })}
           {timedBars.map(b => {
             const isDragging = drag?.p.id === b.p.id
             const color = BOARD_COLORS[b.p.board] ?? '#888'
@@ -1304,7 +1468,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                   display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden',
                   boxShadow: isDragging ? '0 6px 20px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.12)',
                   opacity: isDragging ? 0.92 : 1,
-                  userSelect: 'none', zIndex: isDragging ? 5 : 1,
+                  userSelect: 'none', zIndex: isDragging ? 5 : 3,
                   // Google-events krijgen een gele strip aan de linkerkant +
                   // een diagonale highlight in de hoek — meteen herkenbaar als
                   // 'komt uit Google Calendar'.
@@ -1326,7 +1490,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                     eindigen. Volgorde van weglaten: owner → tijd → titel. */}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   textShadow: '0 1px 2px rgba(0,0,0,0.55)', fontWeight: 700, fontSize: 12,
-                  paddingRight: isGoogle ? 18 : 0 }}>{b.p.name}</span>
+                  paddingRight: isGoogle ? 18 : 0 }}>
+                  {b.p.id.includes('__si') && <span style={{ opacity: 0.7, marginRight: 4 }}>↳</span>}
+                  {b.p.name}
+                </span>
                 {height >= 30 && (
                   <span style={{ fontSize: 9.5, opacity: 0.92, fontWeight: 600,
                     textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>
@@ -3191,6 +3358,11 @@ export default function PlanningPage() {
     [allGroups]
   )
 
+  // Vrij-events vullen we elk render in de cache zodat countWorkdays (in
+  // hoursInRange / projectHoursInWeek) ze direct kan checken voor
+  // memberId. Vacatures, ziek, verlof tellen zo niet als werkdag.
+  useEffect(() => { setVrijDaysFromProjects(projects) }, [projects])
+
   // Per-item verberg-vlag uit het bron-board uitlezen. Items met
   // hiddenFromPlanning=true verschijnen niet meer in de planning-view
   // maar blijven op het bord staan. Werkt voor Google én handmatig.
@@ -3220,18 +3392,14 @@ export default function PlanningPage() {
     }
     // Per-item filter: het project ZELF (via z'n volledige id) of de PARENT
     // (via baseId zonder __siN-suffix) mag niet in de hidden-set zitten.
-    // Een hidden parent verbergt automatisch al z'n afgeleide subitems;
-    // een hidden subitem verbergt alleen dat ene event.
+    // Verbergen geldt strikt per ID: een verborgen parent verbergt niet
+    // automatisch z'n subitems. Project-subitems (Boekomslag maken,
+    // Femsplainers etc) staan los van de parent-balk; als je alleen die
+    // balk wegklikt, willen de subitem-uren wel gewoon in de planning
+    // verschijnen. Wil je een subitem ook weg? Vink 'verberg' op dát
+    // subitem.
     if (hiddenIds.size > 0) {
-      next = next.filter(p => {
-        if (hiddenIds.has(p.id)) return false
-        const subStart = p.id.indexOf('__si')
-        if (subStart >= 0) {
-          const parentBaseId = p.id.slice(0, subStart)
-          if (hiddenIds.has(parentBaseId)) return false
-        }
-        return true
-      })
+      next = next.filter(p => !hiddenIds.has(p.id))
     }
     return next
   }, [projects, shadowDrag, zoom, hiddenIds])
@@ -3323,8 +3491,20 @@ export default function PlanningPage() {
   const cols = useMemo(() => buildCols(zoom, baseFrom, colW), [zoom, baseFrom, colW])
 
   // Capacity in the right unit per zoom
-  function colCapacity(weeklyCapacity: number): number {
-    if (zoom === 'dag')   return Math.round((weeklyCapacity / 5) * 10) / 10
+  function colCapacity(weeklyCapacity: number, memberId?: string): number {
+    if (zoom === 'dag') {
+      // Per-dag cap = weeklyCap / aantal werkdagen (Mon-Fri minus eigen
+      // vrije dagen). Voor 32u/4-dag-week → 8u/dag i.p.v. 6.4u/dag.
+      let workdays = 5
+      if (memberId && typeof window !== 'undefined') {
+        try {
+          const offMap = JSON.parse(localStorage.getItem('yoko-profile-days-off') ?? '{}') as Record<string, number[]>
+          const off = (offMap[memberId] ?? []).filter(n => n >= 1 && n <= 5)
+          workdays = Math.max(1, 5 - off.length)
+        } catch {}
+      }
+      return Math.round((weeklyCapacity / workdays) * 10) / 10
+    }
     if (zoom === 'maand') return Math.round((weeklyCapacity * 4.33) * 10) / 10
     return weeklyCapacity
   }
@@ -3737,10 +3917,30 @@ export default function PlanningPage() {
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   padding: '6px 8px', lineHeight: 1 }}>−</button>
-              <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
-                value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                style={{ width: 96, accentColor: 'var(--accent)' }} />
+              <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                  value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                  title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                  style={{ width: 96, accentColor: 'var(--accent)' }} />
+                {/* Tick op de cross-over zodat de gebruiker ziet waar 't
+                    omslaat van Overzicht naar Week-view. */}
+                <span aria-hidden style={{
+                  position: 'absolute',
+                  left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 96}px`,
+                  top: '50%', transform: 'translate(-50%, -50%)',
+                  width: 2, height: 14, background: 'var(--accent)', borderRadius: 1,
+                  pointerEvents: 'none', opacity: 0.7,
+                }} />
+              </div>
+              <span style={{
+                fontSize: 9.5, fontWeight: 700, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+                padding: '2px 6px', borderRadius: 999,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                marginLeft: 4,
+              }}>
+                {zoom === 'dag' ? 'Week' : 'Overz.'}
+              </span>
               <button onClick={() => anchoredColWZoom(z => z + 10)}
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
@@ -4166,13 +4366,32 @@ export default function PlanningPage() {
                   <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                  <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
-                    value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                    title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
-                    style={{ width: 120, accentColor: 'var(--accent)' }} />
+                  <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                    <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                      value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                      title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%   ·   sneltoetsen +/−`}
+                      style={{ width: 120, accentColor: 'var(--accent)' }} />
+                    <span aria-hidden style={{
+                      position: 'absolute',
+                      left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 120}px`,
+                      top: '50%', transform: 'translate(-50%, -50%)',
+                      width: 2, height: 14, background: 'var(--accent)', borderRadius: 1,
+                      pointerEvents: 'none', opacity: 0.7,
+                    }} />
+                  </div>
                   <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                  {/* Modus-label naast de slider: laat zien wat de slider doet
+                      in 't huidige perspectief, en welke perspectief je ziet. */}
+                  <span style={{
+                    fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
+                    padding: '3px 8px', borderRadius: 999,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                  }}>
+                    {zoom === 'dag' ? 'Week-planner' : 'Overzicht'}
+                  </span>
                 </div>
               )}
             </div>
@@ -4239,7 +4458,7 @@ export default function PlanningPage() {
               // Workload-bollen per dag, bovenop het Google-Cal raster.
               // Zelfde bol-stijl als Overzicht zodat de visuele continuïteit
               // bewaard blijft tussen beide zoom-niveaus.
-              const cap = colCapacity(m.weeklyCapacity)
+              const cap = colCapacity(m.weeklyCapacity, m.id)
               return (
                 <div key={m.id} data-member-id={m.id} style={{
                   borderBottom: '1px solid var(--border)', background: 'transparent',
@@ -4352,7 +4571,7 @@ export default function PlanningPage() {
 
             const renderMember = (member: TeamMember, mIdx: number) => {
             const isExp = expanded.has(member.id)
-            const cap   = colCapacity(member.weeklyCapacity)
+            const cap   = colCapacity(member.weeklyCapacity, member.id)
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
 
             return (
@@ -4488,17 +4707,11 @@ export default function PlanningPage() {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
               if (freelancersOpen) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
-              } else {
-                // Ingeklapt: toon freelancers die OWNERSHIP hebben op een
-                // project, ongeacht of dat project een datum heeft. Eerder
-                // checkten we alleen op uren-in-zichtbare-kolommen, waardoor
-                // toegewezen freelancers zónder concrete planning (bv. Fokke
-                // met alleen uren, nog geen datums) onzichtbaar bleven.
-                const active = freelancers.filter(m =>
-                  effectiveProjects.some(p => p.ownerIds.includes(m.id))
-                )
-                active.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
+              // Ingeklapt = écht ingeklapt (geen rijen meer). Vroeger lieten
+              // we 'active' freelancers (met uren) staan, maar dan kon de
+              // gebruiker nooit alles verbergen. Klap je 't open via de
+              // chevron, dan kun je iedereen weer zien.
             }
             return out
           })()}

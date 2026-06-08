@@ -15,7 +15,6 @@ import {
   type ContactGroup as StoredGroup,
 } from '@/lib/teamPageStore'
 import { addExtra, removeExtra, listExtras, onTeamUpdate } from '@/lib/teamExtras'
-
 // ─── Contacts types ───────────────────────────────────────────────────────────
 type Contact = { id: string; name: string; role: string; email: string; phone: string }
 type Group   = { id: string; name: string; color: string; contacts: Contact[] }
@@ -203,9 +202,10 @@ function TeamMemberCard({ member, capacity, onCapacityChange }: {
               </button>
             )}
           </div>
-
-          {/* Color dot */}
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: member.color, flexShrink: 0 }} />
+          {/* Vrije dagen / kleur-dot: deze zaten dubbelop met profile-page
+              waar je veel rijker werkdagen + vakantie kunt instellen.
+              Verwijderd om verwarring weg te halen — workload-calc leest
+              voortaan rechtstreeks uit profiles.days_off. */}
         </>
       )}
     </div>

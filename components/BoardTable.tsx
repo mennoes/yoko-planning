@@ -392,8 +392,19 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
     }
     return out
   })()
-  const toggle = (id: string) =>
-    onChange(value.includes(id) ? value.filter(x => x !== id) : [...value, id])
+  const toggle = (id: string) => {
+    if (value.includes(id)) {
+      onChange(value.filter(x => x !== id))
+      return
+    }
+    // Bij assignen automatisch 'unassigned' eruit gooien — anders blijft een
+    // item zowel een echte owner als 'niemand toegewezen' tegelijk dragen,
+    // wat de werkdruk-distributie en filter-chips door de war stuurt.
+    const next = id === 'unassigned'
+      ? [...value, id]
+      : [...value.filter(x => x !== 'unassigned'), id]
+    onChange(next)
+  }
 
   // Yoko-collega's altijd bovenaan met grotere foto's zodat aanwijzen makkelijk
   // is. Freelancers / externe contactpersonen verschijnen pas wanneer je
@@ -1222,8 +1233,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
       {active.map((sub, idx) => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
-          selected={selectedIds?.has(sub.id) ?? false}
-          onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+          selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
+          onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
@@ -1258,8 +1269,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           {doneOpen && done.map((sub, idx) => (
             <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
               rail={rail}
-              selected={selectedIds?.has(sub.id) ?? false}
-              onToggleSelect={onToggleSelect ? () => onToggleSelect(sub.id) : undefined}
+              selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
+              onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
               isLast={idx === lastDoneIdx}
               parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
               onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
@@ -2617,20 +2628,15 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
             {renderItems.map((item) => {
               const realIdx = group.items.findIndex(i => i.id === item.id)
               return (
-              <div key={item.id} data-item-id={item.id} draggable={!reorderMode}
-                onDragStart={e => {
-                  dragRowRef.current = realIdx
-                  e.dataTransfer.effectAllowed = 'move'
-                  // Geef ook expliciet door welke groep + item we slepen.
-                  // Als het gesleepte item geselecteerd is én er zijn meerdere
-                  // selecties, nemen we de hele selectie mee — drop op een
-                  // andere groep verplaatst dan álles in één keer.
-                  const isMulti = selectedIds.has(item.id) && selectedIds.size > 1
-                  const itemIds = isMulti ? Array.from(selectedIds) : [item.id]
-                  e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({
-                    itemId: item.id, fromGroupId: group.id, fromBoard: boardId,
-                    itemIds,
-                  }))
+              <div key={item.id} data-item-id={item.id}
+                style={{ position: 'relative' }}
+                onMouseEnter={e => {
+                  const h = e.currentTarget.querySelector<HTMLElement>('.row-grip')
+                  if (h) h.style.opacity = '1'
+                }}
+                onMouseLeave={e => {
+                  const h = e.currentTarget.querySelector<HTMLElement>('.row-grip')
+                  if (h) h.style.opacity = '0.35'
                 }}
                 onDragOver={e => {
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
@@ -2684,6 +2690,40 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   } catch {}
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
+                {/* Drag-handle: alleen via dit puntje kun je een rij verslepen
+                    naar een andere groep. Vroeger was de hele rij draggable —
+                    daardoor sleepte je per ongeluk uit de groep zodra je een
+                    cel wilde aanklikken om te bewerken. */}
+                {!reorderMode && (
+                  <span draggable
+                    className="row-grip"
+                    title="Sleep om te verplaatsen tussen groepen"
+                    onDragStart={e => {
+                      dragRowRef.current = realIdx
+                      e.dataTransfer.effectAllowed = 'move'
+                      const isMulti = selectedIds.has(item.id) && selectedIds.size > 1
+                      const itemIds = isMulti ? Array.from(selectedIds) : [item.id]
+                      e.dataTransfer.setData('application/x-yoko-item', JSON.stringify({
+                        itemId: item.id, fromGroupId: group.id, fromBoard: boardId,
+                        itemIds,
+                      }))
+                      // Drag-image = hele rij ipv alleen 't grip-icoontje,
+                      // anders ziet de gebruiker bij 't slepen alleen een
+                      // puntjes-blok zweven.
+                      const row = e.currentTarget.parentElement
+                      if (row) e.dataTransfer.setDragImage(row, 20, 12)
+                    }}
+                    style={{
+                      position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+                      width: 18, height: 32,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'grab', userSelect: 'none',
+                      color: 'var(--text-secondary)', fontSize: 18, fontWeight: 700, lineHeight: 1,
+                      opacity: 0.35, transition: 'opacity 0.12s',
+                      zIndex: 5,
+                      background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
+                    }}>⠿</span>
+                )}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
                   selected={selectedIds.has(item.id)}
                   accentColor={group.color}
@@ -2792,6 +2832,9 @@ type BoardTableProps = {
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const storageKey = `board-col-widths-${title}`
+  // DEDUPE VERWIJDERD — de name+dates+uren matching was te agressief en
+  // gooide rechtmatige top-level items weg (Gerolsteiner etc) wanneer
+  // er ergens 'n subitem met dezelfde data bestond. Geen autodedupe meer.
   const onChange = (next: BoardGroup[]) => rawOnChange(autoMoveDoneItems(next))
   const { profile } = useProfile()
   const { pushUndo } = useUndo()

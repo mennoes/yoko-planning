@@ -44,7 +44,11 @@ const RAW: Record<string, { groups: unknown[] }> = {
   vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
 }
 
-const MEMBER_IDS = new Set(teamData.members.map(m => m.id))
+// Member-id-set wordt op render uit teamData getrokken — extras (Manuel,
+// freelancers etc) worden bij boot in teamData.members gemerged, dus een
+// statische Set bij module-load mist die. Functie + Set in elke compute,
+// goedkoop genoeg.
+const memberIdSet = () => new Set(teamData.members.map(m => m.id))
 
 function loadAllProjects(): ProjectLink[] {
   if (typeof window === 'undefined') return []
@@ -53,7 +57,9 @@ function loadAllProjects(): ProjectLink[] {
     const groups = loadGroups(board, raw.groups as BoardGroup[])
     for (const g of groups) for (const item of g.items) {
       if (!item.name) continue
-      out.push({ board, itemId: item.id, name: item.name })
+      out.push({ board, itemId: item.id, name: item.name,
+        startDate: (item.startDate as string | null) ?? null,
+        endDate:   (item.endDate   as string | null) ?? null })
     }
   }
   return out
@@ -81,10 +87,36 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
-        if (!Array.isArray(item.ownerIds) || !item.ownerIds.includes(memberId)) continue
+        const parentOwns = Array.isArray(item.ownerIds) && item.ownerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
-        if (end && end < today) continue
-        out.push({ board, itemId: item.id, name: item.name })
+        const parentExpired = end && end < today
+        // Parent zelf als todo wanneer ik eigenaar ben én 'm nog niet voorbij is.
+        if (parentOwns && !parentExpired) {
+          out.push({ board, itemId: item.id, name: item.name })
+        }
+        // Subitems óók als losse todo's. Een subitem telt voor mij als:
+        //  - status niet 'Done'
+        //  - eind-datum (of start) niet in 't verleden
+        //  - ofwel ik staat in subitem.ownerIds, OF subitem is unassigned/
+        //    leeg en parent heeft mij als owner (parent-fallback).
+        const subs = item.subitems ?? []
+        for (const sub of subs) {
+          if (!sub?.name) continue
+          if ((sub.status ?? '').toLowerCase() === 'done') continue
+          const subEnd = sub.endDate ?? sub.startDate
+          if (subEnd && subEnd < today) continue
+          const subOwners = (sub.ownerIds ?? []).filter(o => o && o !== 'unassigned')
+          const subMine = subOwners.includes(memberId) || (subOwners.length === 0 && parentOwns)
+          if (!subMine) continue
+          // Skip subitem-name als 't 'n date-label is ('wo 3 jun') —
+          // gebruik dan alleen parent-naam. User vond dubbele info storend.
+          const isDateLabel = /^[a-z]{2,3}\s+\d{1,2}(\s+[a-z.]+)?$/i.test(sub.name.trim())
+          out.push({
+            board,
+            itemId: `${item.id}__si__${sub.id ?? sub.name}`,
+            name:   isDateLabel ? item.name : `${item.name} · ${sub.name}`,
+          })
+        }
       }
     }
   }
@@ -334,6 +366,33 @@ function TodoCard({
   const open    = visible.filter(i => !i.done)
   const done    = visible.filter(i =>  i.done)
 
+  // Splits open-items in 'Deze week' (project loopt overlap met de
+  // komende 7 dagen) vs 'Daarna'. Voor losse todo's zonder projectRef
+  // landen ze op 'Deze week' (= prioritair). Alleen voor member-secties
+  // tonen we de kopjes — een algemene Ideeën-sectie hoeft geen
+  // tijds-indeling, daar zou 't visueel ruis worden.
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const inSevenDaysIso = (() => {
+    const d = new Date(); d.setDate(d.getDate() + 7)
+    return d.toISOString().slice(0, 10)
+  })()
+  const projectDates = new Map<string, { start: string | null; end: string | null }>()
+  for (const p of allProjects) {
+    projectDates.set(`${p.board}:${p.itemId}`, { start: p.startDate ?? null, end: p.endDate ?? null })
+  }
+  const isThisWeek = (i: TodoItem): boolean => {
+    if (!i.projectRef) return true
+    const d = projectDates.get(`${i.projectRef.board}:${i.projectRef.itemId}`)
+    if (!d) return true
+    const s = d.start; const e = d.end ?? s
+    if (!s) return true
+    // Overlap [s..e] met [today..today+7d]?
+    return s <= inSevenDaysIso && (e ?? s) >= todayIso
+  }
+  const showWeekSplit = isMember
+  const openThisWeek = showWeekSplit ? open.filter(isThisWeek)  : open
+  const openLater    = showWeekSplit ? open.filter(i => !isThisWeek(i)) : []
+
   // Editable header — handmatige (niet-member) secties: klik op emoji of
   // titel om te bewerken. Member-secties tonen avatar + member-naam zoals
   // voorheen.
@@ -448,10 +507,15 @@ function TodoCard({
         )}
       </div>
 
-      {/* Open items */}
+      {/* Open items — optional 'Deze week' / 'Daarna' split voor persoonlijke
+          secties zodat de huidige werkdruk altijd bovenaan staat. */}
       <ul style={{ listStyle: 'none', padding: '6px 0 0', margin: 0 }}>
-        {open.map((item, openIdx) => {
+        {showWeekSplit && openLater.length > 0 && openThisWeek.length > 0 && (
+          <li style={weekHeaderStyle}>Deze week</li>
+        )}
+        {(showWeekSplit ? openThisWeek : open).map(item => {
           const itemIdx = section.items.findIndex(i => i.id === item.id)
+          const openIdx = open.findIndex(i => i.id === item.id)
           return (
             <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
               editing={editId === item.id} editTxt={editTxt}
@@ -478,6 +542,40 @@ function TodoCard({
             />
           )
         })}
+        {showWeekSplit && openLater.length > 0 && (
+          <>
+            <li style={weekHeaderStyle}>Daarna</li>
+            {openLater.map(item => {
+              const itemIdx = section.items.findIndex(i => i.id === item.id)
+              const openIdx = open.findIndex(i => i.id === item.id)
+              return (
+                <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
+                  editing={editId === item.id} editTxt={editTxt}
+                  editOrder={editOrder}
+                  isFirstItem={openIdx === 0}
+                  isLastItem={openIdx === open.length - 1}
+                  onMoveUp={() => moveItem(itemIdx, -1)}
+                  onMoveDown={() => moveItem(itemIdx, 1)}
+                  onToggle={() => toggle(item.id)}
+                  onRemove={() => remove(item.id)}
+                  onEditStart={() => { setEditId(item.id); setEditTxt(item.text) }}
+                  onEditChange={setEditTxt}
+                  onEditSave={() => saveEdit(item.id)}
+                  onEditCancel={() => setEditId(null)}
+                  dragIdx={itemIdx}
+                  onDragStart={(from) => { dragFromRef.current = from }}
+                  onDropOnIdx={(target) => {
+                    const from = dragFromRef.current
+                    if (from == null) return
+                    dragFromRef.current = null
+                    moveItemTo(from, target)
+                  }}
+                  onDragEnd={() => { dragFromRef.current = null }}
+                />
+              )
+            })}
+          </>
+        )}
       </ul>
 
       {/* Done items (collapsed) */}
@@ -552,6 +650,12 @@ function TodoCard({
       </div>
     </div>
   )
+}
+
+const weekHeaderStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
+  textTransform: 'uppercase', letterSpacing: '0.07em',
+  padding: '6px 14px 2px', listStyle: 'none',
 }
 
 function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirstItem, isLastItem, onMoveUp, onMoveDown, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel, dragIdx, onDragStart, onDropOnIdx, onDragEnd }: {
@@ -1037,10 +1141,10 @@ export default function TodosPage() {
     const idx = sections.findIndex(s => s.id === sectionId)
     if (idx < 0) return
     const target = sections[idx]
-    const isMember = MEMBER_IDS.has(target.id)
+    const isMember = memberIdSet().has(target.id)
     // Find neighbour within the same group (general vs personal)
     const groupIndices = sections
-      .map((s, i) => ({ i, member: MEMBER_IDS.has(s.id) }))
+      .map((s, i) => ({ i, member: memberIdSet().has(s.id) }))
       .filter(x => x.member === isMember)
       .map(x => x.i)
     const posInGroup = groupIndices.indexOf(idx)
@@ -1065,7 +1169,20 @@ export default function TodosPage() {
     const toIdx   = next.findIndex(s => s.id === targetId)
     if (fromIdx < 0 || toIdx < 0) return
     const [moved] = next.splice(fromIdx, 1)
-    next.splice(toIdx, 0, moved)
+    // Cross-block detectie: sleep je een algemene sectie OP een persoonlijke
+    // (of andersom), dan stempelen we 't kind-flag zodat de getroffen
+    // sectie in 't andere blok terechtkomt. memberIdSet().has(s.id) blijft
+    // de impliciete fallback voor teamleden zonder expliciete kind-flag.
+    const target = sections[toIdx]
+    const movedIsPersonal  = isPersonalSection(moved)
+    const targetIsPersonal = isPersonalSection(target)
+    let adjusted = moved
+    if (movedIsPersonal && !targetIsPersonal) {
+      adjusted = { ...moved, kind: 'general' as const }
+    } else if (!movedIsPersonal && targetIsPersonal) {
+      adjusted = { ...moved, kind: 'personal' as const }
+    }
+    next.splice(toIdx, 0, adjusted)
     setSections(next)
     saveSections(next)
   }
@@ -1077,7 +1194,7 @@ export default function TodosPage() {
     const fresh: Section = { id, title, emoji: '📋', items: [] }
     // Plaats 'm tussen general en personal — net na de laatste niet-member
     // sectie zodat-ie meteen bovenaan staat in 't 'algemeen' blok.
-    const lastGeneralIdx = sections.map((s, i) => MEMBER_IDS.has(s.id) ? -1 : i).reduce((m, i) => i > m ? i : m, -1)
+    const lastGeneralIdx = sections.map((s, i) => memberIdSet().has(s.id) ? -1 : i).reduce((m, i) => i > m ? i : m, -1)
     const insertAt = lastGeneralIdx + 1
     const next = [...sections.slice(0, insertAt), fresh, ...sections.slice(insertAt)]
     setSections(next)
@@ -1085,22 +1202,28 @@ export default function TodosPage() {
   }
 
   function deleteSection(id: string) {
-    if (MEMBER_IDS.has(id)) return  // member-secties beschermen
+    if (memberIdSet().has(id)) return  // member-secties beschermen
     const next = sections.filter(s => s.id !== id)
     setSections(next)
     saveSections(next)
   }
 
-  const general  = sections.filter(s => !MEMBER_IDS.has(s.id))
+  // 'Persoonlijk' = sectie hoort bij een teamlid (id matched) ÓF de
+  // gebruiker heeft 'm expliciet als personal gemarkeerd via een drag
+  // naar de persoonlijk-rij. Section.kind='general' kan een member-
+  // sectie omgekeerd weer naar algemeen schuiven.
+  const isPersonalSection = (s: Section) =>
+    s.kind === 'personal' || (s.kind !== 'general' && memberIdSet().has(s.id))
+  const general  = sections.filter(s => !isPersonalSection(s))
   // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
   // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
   // (Odette, Vincent, Menno, Anne-Fleur, Kars, …) ipv de json-volgorde.
-  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'kars', 'take-lijzenga']
+  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'marcus-driessen', 'kars', 'take-lijzenga']
   const orderIdx = (id: string) => {
     const i = PERSONAL_ORDER.indexOf(id)
     return i >= 0 ? i : 999
   }
-  const personal = sections.filter(s => MEMBER_IDS.has(s.id))
+  const personal = sections.filter(isPersonalSection)
     .sort((a, b) => {
       const me = currentProfile?.memberId
       if (a.id === me) return -1

@@ -13,7 +13,7 @@ import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
 import Link from 'next/link'
-import { IconMenu, IconSearch, IconHome } from './Icon'
+import { IconMenu, IconSearch, IconHome, IconHistory } from './Icon'
 import { NotificationBell } from './NotificationBell'
 import { FeedbackBubble } from './FeedbackBubble'
 import { requiresAuth } from '@/lib/supabase'
@@ -26,6 +26,7 @@ import teamData from '@/data/team.json'
 import { ensureRewindItems } from '@/lib/rewindScheduler'
 import { pullCategoryOverrides, subscribeRemoteCategories } from '@/lib/workloadCategory'
 import { pullCapacities, subscribeRemoteCapacities } from '@/lib/capacitiesStore'
+import { pullProfileDaysOff, subscribeRemoteProfileDaysOff } from '@/lib/profileDaysOff'
 import { pullFeedback, subscribeRemoteFeedback } from '@/lib/feedbackStore'
 import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
@@ -190,6 +191,9 @@ function Inner({ children }: { children: ReactNode }) {
       // Team capaciteiten (u/w per persoon)
       pullCapacities()
       unsubs.push(subscribeRemoteCapacities())
+      // Vrije dagen per persoon (Ma=1..Zo=7)
+      pullProfileDaysOff()
+      unsubs.push(subscribeRemoteProfileDaysOff())
       // Runtime-toegevoegde teamleden (via /team UI). Trekt 't merge-werk
       // op localStorage-niveau zelf, deze pull haalt cross-device additions.
       pullExtrasFromRemote()
@@ -327,9 +331,18 @@ function Inner({ children }: { children: ReactNode }) {
               <IconHome size={20} />
             </Link>
           </div>
-          {/* Notificaties + zoeken rechtsboven. */}
+          {/* Notificaties + papierbak + zoeken rechtsboven. */}
           <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
             <NotificationBell />
+            <Link href="/papierbak" aria-label="Papierbak"
+              title="Papierbak — verwijderde items herstellen"
+              style={{
+                width: 38, height: 38, borderRadius: 9,
+                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                color: 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                textDecoration: 'none',
+              }}><IconHistory size={18} /></Link>
             <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
               style={{
                 width: 38, height: 38, borderRadius: 9,

@@ -23,6 +23,7 @@ export type Project = {
   status: 'active' | 'done'
   source?: 'manual' | 'google'
   externalLink?: string
+  meetLink?: string
   // Set on virtual projects produced by merging same-name Google items in
   // the planner. The detail panel uses it to render a sub-event list.
   mergedFrom?: Project[]
@@ -50,9 +51,17 @@ export const BOARD_COLORS = new Proxy({} as Record<string, string>, {
 export function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
   return groups.flatMap(g =>
     g.items
-      .filter(i => Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0)
+      .filter(i => {
+        // Toon óók als de parent zelf geen owners heeft maar er subitems met
+        // owners onder hangen — anders verdwijnt een net-genest project uit
+        // de planning omdat de zojuist-aangemaakte parent leeg is.
+        const ownOwners = Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0
+        if (ownOwners) return true
+        const subs = (i.subitems as Array<{ ownerIds?: string[] }> | undefined)
+        return !!(subs && subs.some(s => Array.isArray(s.ownerIds) && s.ownerIds.length > 0))
+      })
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string }> | undefined) ?? []
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string }> | undefined) ?? []
         const subsWithDates = subs.filter(si => (si.status ?? '') !== 'Done' && (si.startDate || si.endDate))
         if (subsWithDates.length > 0) {
           return subsWithDates.map((si, idx): Project => {
@@ -68,7 +77,17 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               : (i.ownerIds as string[])
             return {
               id:        `${boardName}__${i.id}__si${idx}`,
-              name:      `${i.name}${si.name ? ' · ' + si.name : ''}`,
+              // Subitem-bar toont alleen de subitem-naam — niet "Parent ·
+              // Subitem". User vond 't dubbel: "het hoofditem staat er nu
+              // ook". Subitem-naam is meestal duidelijk genoeg op zichzelf
+              // ('Boekomslag v2'); voor extra context kun je 'm openklikken.
+              // Bestaande subitems hebben mogelijk nog 'wo 3 jun' (date-
+              // label) als naam uit een vorige sync. Detecteer dat patroon
+              // en val terug op parent-naam zodat we niet wachten op de
+              // volgende sync-write.
+              name:      (si.name && !/^[a-z]{2,3}\s+\d{1,2}(\s+[a-z.]+)?$/i.test(si.name.trim()))
+                           ? si.name
+                           : (i.name as string),
               board:     boardName,
               group:     g.name,
               ownerIds:  owners,
@@ -80,6 +99,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               status:    (i.status as string) === 'Done' ? 'done' : 'active',
               source:    (i.source as 'manual' | 'google' | undefined),
               externalLink: (i.externalLink as string | undefined),
+              meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
             }
           })
         }
@@ -102,6 +122,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           status:    (i.status as string) === 'Done' ? 'done' : 'active',
           source:        (i.source as 'manual' | 'google' | undefined),
           externalLink:  (i.externalLink as string | undefined),
+          meetLink:      (i.meetLink as string | undefined),
         }]
       })
   )
@@ -176,9 +197,45 @@ export type ProjectContribution = {
   hours: number
 }
 
+// Telt het aantal werkdagen (Ma-Vr) tussen twee datums inclusief beide
+// uiteinden — minus eventuele off-days voor `memberId` (statische vrije
+// weekdagen via daysOffStore + dynamische Vrij-events via vrijDays).
+//   - Weekend altijd uitgesloten.
+//   - memberId optioneel: zonder member checken we alleen Ma-Vr.
+function countWorkdays(startMs: number, endMs: number, memberId?: string): number {
+  if (endMs < startMs) return 0
+  let count = 0
+  const oneDay = 86400000
+  const start = new Date(startMs); start.setHours(0, 0, 0, 0)
+  const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
+  // Days-off filter UITGESCHAKELD voor uren-distributie. Was bron van
+  // 'maandag toont niks' wanneer de localStorage-cache ergens stale of
+  // verkeerd was. Weekend-skip blijft. Voor de zichtbare dim-stripe op
+  // off-days check ik elders rechtstreeks profilesById.
+  void memberId
+  const off: number[] = []
+  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
+    const d = new Date(t)
+    const dow = d.getDay()                       // 0=Sun..6=Sat
+    if (dow === 0 || dow === 6) continue          // weekend altijd uit
+    if (memberId) {
+      const iso = dow === 0 ? 7 : dow             // ISO weekday 1..7
+      if (off.includes(iso)) continue             // statische vrije dag
+      // Dynamische Vrij-event via lazy require om circular imports te
+      // vermijden. vrijDays.ts cached zelf in module-scope.
+      try {
+        const { isVrijDayForMember } = require('./vrijDays') as typeof import('./vrijDays')
+        if (isVrijDayForMember(memberId, d)) continue
+      } catch {}
+    }
+    count++
+  }
+  return count
+}
+
 /**
  * Hours a specific project contributes to `memberId` in the week starting `weekStart`.
- * Hours are distributed evenly across all calendar days of the project timeline,
+ * Hours are distributed evenly across WORKING DAYS (Mon-Fri) of the project timeline,
  * then the overlap with the given week is taken, split equally among owners.
  */
 export function projectHoursInWeek(
@@ -212,10 +269,18 @@ export function projectHoursInWeek(
   const overlapStart = wStart > pStart ? wStart : pStart
   const overlapEnd   = wEnd   < pEnd   ? wEnd   : pEnd
 
-  const totalMs   = pEnd.getTime()   - pStart.getTime()
-  const overlapMs = overlapEnd.getTime() - overlapStart.getTime()
+  // Verdeling alleen over werkdagen — weekenden krijgen 0u uit een
+  // project. Als 't project alleen weekend overspant (zeldzaam) krijgen
+  // we 0u terug, wat klopt: 't werk valt simpelweg niet in werkdagen.
+  // Verdeling per KALENDER-dag (incl. weekend), niet per werkdag. User-
+  // mental-model: 10u over 10 dagen = 1u/dag. Weekend-/vrije-dag-cellen
+  // tonen geen werk (countWorkdays skipt ze in de noemer), maar de
+  // hours-per-day rate blijft op total/calDays.
+  const totalCalDays = Math.max(1, Math.floor((pEnd.getTime() - pStart.getTime()) / 86400000) + 1)
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), memberId)
+  if (overlapWork === 0) return 0
 
-  const fraction        = overlapMs / totalMs
+  const fraction        = overlapWork / totalCalDays
   const result          = fraction * myShare
 
   return Math.round(result * 10) / 10
