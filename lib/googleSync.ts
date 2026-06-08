@@ -460,9 +460,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const id = resolveAttendeeEmail(email)
       if (id) yokos.add(id)
     }
-    // De calendar-owner zélf staat soms niet in de attendees-lijst (single-
-    // person events) — toch meenemen.
-    if (memberId) yokos.add(memberId)
+    // Geen eager-add van de calendar-owner meer. Eerder werd memberId
+    // ALTIJD toegevoegd, ook wanneer die niet als attendee in 't event
+    // stond — daardoor kreeg bv. Anne-Fleur owner-status op events die
+    // toevallig op haar agenda stonden zonder dat ze uitgenodigd was.
+    // Voor solo-events (geen attendees) vangen we 't af via de
+    // fallback hieronder.
     const owners = [...yokos]
     if (owners.length === 0) return { owners: ownerIds, perPerson: dur, total: dur }
     return { owners, perPerson: dur, total: dur * owners.length }
@@ -703,13 +706,14 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
                   ? await getVrijGroupFor(keepBoard)
                   : await getMeetingsGroupFor(keepBoard)))
       const eventOwners = ownersForEvent(ev)
-      // Union van bestaande + Google-attendees: bestaande user-toevoegingen
-      // blijven staan, en nieuwe Yoko-deelnemers uit Google worden vanzelf
-      // toegevoegd. (Vorige variant 'als er al iets staat → niet aanraken'
-      // betekende dat Vincent/Anne-Fleur op een Teamdag nooit binnenkwamen.)
-      const ownerSet = new Set<string>(existingRow?.owner_ids ?? [])
-      for (const o of eventOwners.owners) ownerSet.add(o)
-      const finalOwners = [...ownerSet]
+      // Vervang owner_ids met de VERSE set Yoko-attendees uit Google.
+      // De eerdere 'union met bestaande'-strategie zorgde ervoor dat ooit
+      // toegevoegde owners (bv. iemand die ooit per ongeluk toegevoegd
+      // was, of die zelf 'declined' heeft sinds de vorige sync) eeuwig
+      // bleven hangen. Manuele toevoegingen vanuit de planning-UI worden
+      // hierdoor wel overschreven; user kan ze opnieuw toevoegen — beter
+      // dat dan dat random mensen onverklaard owner blijven.
+      const finalOwners = [...eventOwners.owners]
       // per-persoon uren in ownerHours, totaal in est_hours zodat
       // workload-berekeningen per persoon kloppen.
       const ownerHoursMap: Record<string, number> = {}
