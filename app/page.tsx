@@ -1208,7 +1208,6 @@ export default function HomePage() {
           padding: isMobile ? '16px 18px' : '20px 26px',
           borderRadius: 16,
           marginBottom: isMobile ? 18 : 32,
-          boxShadow: '0 6px 22px rgba(216, 182, 46, 0.30)',
         }}>
           {/* Wat-deze-week + vandaag + rest van de week → één paragraaf.
               Daarnaast / Check even / Capaciteit-tip → elk hun eigen alinea
