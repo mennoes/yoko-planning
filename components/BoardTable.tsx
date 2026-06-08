@@ -1001,14 +1001,13 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             window.dispatchEvent(new CustomEvent('yoko-subitem-drag-start', { detail: { subitemId: subitem.id, name: subitem.name } }))
           }}
           style={{
-            position: 'absolute', left: -2, top: '50%', transform: 'translateY(-50%)',
+            position: 'absolute', left: -22, top: '50%', transform: 'translateY(-50%)',
             width: 18, height: 28,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'grab', userSelect: 'none',
             color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
             opacity: 0, transition: 'opacity 0.12s',
             zIndex: 5,
-            background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
           }}>⠿</span>
       )}
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
@@ -2143,7 +2142,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
   boardId: string
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   selectedIds: Set<string>
@@ -2156,6 +2155,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
   onMoveItemsHere: (itemIds: string[]) => void
   onNestItem:     (sourceId: string, fromGroupId: string, targetId: string) => void
+  onReparentSubitem: (subitemId: string, fromParentId: string, fromGroupId: string, toParentId: string) => void
   onUnnestSubitemHere: (subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) => void
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
@@ -2650,8 +2650,27 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   if (h) h.style.opacity = '0'
                 }}
                 onDragOver={e => {
-                  const raw = e.dataTransfer.types.includes('application/x-yoko-item')
-                  if (raw && dragRowRef.current === null) return
+                  const hasItem    = e.dataTransfer.types.includes('application/x-yoko-item')
+                  const hasSubitem = e.dataTransfer.types.includes('application/x-yoko-subitem')
+                  // Subitem-drag heeft geen dragRowRef (komt uit een
+                  // andere component-context) — voor die drag toch
+                  // nest-zone outline tonen zolang muis in 't middelste
+                  // gedeelte van de row staat.
+                  if (hasSubitem) {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    const y = e.clientY - r.top
+                    const nestZone = y > r.height * 0.25 && y < r.height * 0.75
+                    if (nestZone) {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      e.currentTarget.style.outline = '2px dashed var(--accent)'
+                      e.currentTarget.style.outlineOffset = '-2px'
+                    } else {
+                      e.currentTarget.style.outline = ''
+                    }
+                    return
+                  }
+                  if (hasItem && dragRowRef.current === null) return
                   if (dragRowRef.current === null || dragRowRef.current === realIdx) {
                     e.currentTarget.style.outline = ''
                     return
@@ -2684,21 +2703,33 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 onDragLeave={e => { e.currentTarget.style.outline = '' }}
                 onDrop={e => {
                   e.currentTarget.style.outline = ''
-                  const raw = e.dataTransfer.getData('application/x-yoko-item')
-                  if (!raw) return
-                  // Alleen nesten als de drop in de nest-zone (middelste
-                  // 50%) gebeurt; randen leveren al de reorder af.
                   const r = e.currentTarget.getBoundingClientRect()
                   const y = e.clientY - r.top
                   const nestZone = y > r.height * 0.25 && y < r.height * 0.75
                   if (!nestZone) return
-                  try {
-                    const data = JSON.parse(raw) as { itemId: string; fromGroupId: string; fromBoard?: string }
-                    if (!data.itemId || data.itemId === item.id) return
-                    if (data.fromBoard && data.fromBoard !== boardId) return  // alleen binnen hetzelfde bord
-                    e.preventDefault()
-                    onNestItem(data.itemId, data.fromGroupId, item.id)
-                  } catch {}
+                  // Top-level item gesleept op dit item -> nest 'm hieronder.
+                  const rawItem = e.dataTransfer.getData('application/x-yoko-item')
+                  if (rawItem) {
+                    try {
+                      const data = JSON.parse(rawItem) as { itemId: string; fromGroupId: string; fromBoard?: string }
+                      if (!data.itemId || data.itemId === item.id) return
+                      if (data.fromBoard && data.fromBoard !== boardId) return
+                      e.preventDefault()
+                      onNestItem(data.itemId, data.fromGroupId, item.id)
+                    } catch {}
+                    return
+                  }
+                  // Subitem uit een ander item gesleept op dit item ->
+                  // verhuis 'm onder dit item.
+                  const rawSub = e.dataTransfer.getData('application/x-yoko-subitem')
+                  if (rawSub) {
+                    try {
+                      const data = JSON.parse(rawSub) as { subitemId: string; parentItemId: string; fromGroupId: string }
+                      if (!data.subitemId || !data.parentItemId || data.parentItemId === item.id) return
+                      e.preventDefault()
+                      onReparentSubitem(data.subitemId, data.parentItemId, data.fromGroupId, item.id)
+                    } catch {}
+                  }
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
                 {/* Drag-handle: alleen via dit puntje kun je een rij verslepen
@@ -3042,6 +3073,31 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // Un-nest een subitem terug naar een top-level item in de gekozen groep.
   // Subitem verdwijnt uit z'n parent.subitems en verschijnt als nieuw
   // BoardItem onderaan de doel-groep.
+  // Verhuis een subitem van de ene parent naar een andere parent. Beide
+  // parents kunnen in verschillende groepen zitten. Geen top-level rij
+  // wordt aangeraakt.
+  function reparentSubitem(subitemId: string, fromParentId: string, fromGroupId: string, toParentId: string) {
+    if (fromParentId === toParentId) return
+    const fromGroup = groups.find(g => g.id === fromGroupId)
+    const parent    = fromGroup?.items.find(i => i.id === fromParentId)
+    const sub       = parent?.subitems?.find(s => s.id === subitemId)
+    if (!parent || !sub) return
+    onChange(groups.map(g => {
+      let items = g.items.map(i => {
+        if (i.id === fromParentId) {
+          return { ...i, subitems: (i.subitems ?? []).filter(s => s.id !== subitemId) }
+        }
+        if (i.id === toParentId) {
+          const already = (i.subitems ?? []).some(s => s.id === sub.id)
+          if (already) return i
+          return { ...i, subitems: [...(i.subitems ?? []), sub] }
+        }
+        return i
+      })
+      return { ...g, items }
+    }))
+  }
+
   function unnestSubitemHere(subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) {
     const fromGroup = groups.find(g => g.id === fromGroupId)
     const parent    = fromGroup?.items.find(i => i.id === parentItemId)
@@ -3659,6 +3715,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
               onMoveItemsHere={(itemIds) => moveItemsBetweenGroups(itemIds, group.id)}
               onNestItem={nestItemUnder}
+              onReparentSubitem={reparentSubitem}
               onUnnestSubitemHere={unnestSubitemHere}
               onDeleteGroup={() => handleDeleteGroup(group.id)} />
           </div>
