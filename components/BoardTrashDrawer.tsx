@@ -107,6 +107,7 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose }: {
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                   {t.groupName ?? '—'} · verwijderd {fmtDate(t.deletedAt)}
+                  {t.deletedByName && ` · door ${t.deletedByName}`}
                 </div>
               </div>
               <button onClick={() => onRestore(t)} disabled={busy === t.id}

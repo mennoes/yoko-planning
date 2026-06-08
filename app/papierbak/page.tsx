@@ -84,20 +84,22 @@ export default function TrashPage() {
 
       {items.length > 0 && (
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 100px 1fr 1fr 90px 90px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 100px 1fr 1fr 1fr 90px 90px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
             <span>Naam</span>
             <span>Bord</span>
             <span>Oorspr. groep</span>
             <span>Verwijderd op</span>
+            <span>Door</span>
             <span></span>
             <span></span>
           </div>
           {items.map(t => (
-            <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '2fr 100px 1fr 1fr 90px 90px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-light)', alignItems: 'center' }}>
+            <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '2fr 100px 1fr 1fr 1fr 90px 90px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-light)', alignItems: 'center' }}>
               <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{t.name}</span>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.boardId}</span>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.groupName ?? '—'}</span>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatDate(t.deletedAt)}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t.deletedByName ?? '—'}</span>
               <button onClick={() => onRestore(t)} disabled={busy === t.id}
                 style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: busy === t.id ? 'wait' : 'pointer' }}>
                 Herstel

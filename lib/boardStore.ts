@@ -371,26 +371,63 @@ export type TrashItem = {
   groupId:    string | null
   deletedAt:  string
   groupName:  string | null
+  deletedByName: string | null
 }
 
 export async function loadTrash(): Promise<TrashItem[]> {
   if (!supabase) return []
   if (!await getCurrentUserId()) return []
-  const { data } = await supabase
-    .from('board_items')
-    .select('id, name, board_id, group_id, deleted_at, board_groups(name)')
-    .not('deleted_at', 'is', null)
-    .order('deleted_at', { ascending: false })
-    .limit(500)
-  if (!data) return []
-  type Row = { id: string; name: string; board_id: string; group_id: string; deleted_at: string; board_groups: { name: string } | { name: string }[] | null }
-  return (data as Row[]).map(r => ({
+  // Eerst proberen met deleted_by; valt 't om door schema-cache (kolom
+  // bestaat nog niet, migratie 0032 niet gedraaid) dan zonder.
+  let data: unknown[] | null = null
+  if (deletedByColumnSupported) {
+    const res = await supabase
+      .from('board_items')
+      .select('id, name, board_id, group_id, deleted_at, deleted_by, board_groups(name)')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+      .limit(500)
+    if (res.error) {
+      if (/column .*deleted_by.*does not exist|PGRST204|schema cache|cannot find/i.test(res.error.message ?? '')) {
+        deletedByColumnSupported = false
+      }
+    } else {
+      data = res.data as unknown[]
+    }
+  }
+  if (!data) {
+    const res = await supabase
+      .from('board_items')
+      .select('id, name, board_id, group_id, deleted_at, board_groups(name)')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+      .limit(500)
+    if (res.error || !res.data) return []
+    data = res.data as unknown[]
+  }
+  type Row = { id: string; name: string; board_id: string; group_id: string; deleted_at: string; deleted_by?: string | null; board_groups: { name: string } | { name: string }[] | null }
+  const rows = data as Row[]
+  // Map deleted_by (auth uid) -> member-name via de profiles-tabel.
+  const uniqUids = Array.from(new Set(rows.map(r => r.deleted_by).filter((x): x is string => !!x)))
+  const nameByUid = new Map<string, string>()
+  if (uniqUids.length > 0) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('user_id, name, member_id')
+      .in('user_id', uniqUids)
+    for (const p of (profs as { user_id: string; name: string | null; member_id: string | null }[] | null) ?? []) {
+      const label = p.name ?? p.member_id ?? null
+      if (label) nameByUid.set(p.user_id, label)
+    }
+  }
+  return rows.map(r => ({
     id:        r.id,
     name:      r.name ?? '(naamloos)',
     boardId:   r.board_id,
     groupId:   r.group_id,
     deletedAt: r.deleted_at,
     groupName: Array.isArray(r.board_groups) ? (r.board_groups[0]?.name ?? null) : (r.board_groups?.name ?? null),
+    deletedByName: r.deleted_by ? (nameByUid.get(r.deleted_by) ?? null) : null,
   }))
 }
 
@@ -452,11 +489,33 @@ export async function purgeTrashItem(itemId: string): Promise<boolean> {
 // — de top-level row moet dan ook in Supabase verdwijnen, want
 // pushBoardToRemote upsert alleen items die in de lokale staat
 // voorkomen en kent geen automatische reconcile-deletie meer.
+//
+// `deleted_by` registreert wie de actie deed, zodat de papierbak
+// kan tonen wie 't verwijderd heeft. Migration 0032 voegt de kolom
+// toe; we proberen 't met de kolom én vallen terug zonder als 't
+// schema 'm nog niet kent.
+let deletedByColumnSupported = true
 export async function softDeleteItem(itemId: string): Promise<boolean> {
   if (!supabase) return false
-  if (!await getCurrentUserId()) return false
+  const uid = await getCurrentUserId()
+  if (!uid) return false
+  const stamp = new Date().toISOString()
+  if (deletedByColumnSupported) {
+    const { error } = await supabase.from('board_items')
+      .update({ deleted_at: stamp, deleted_by: uid })
+      .eq('id', itemId)
+    if (error) {
+      if (/column .*deleted_by.*does not exist|PGRST204|schema cache|cannot find/i.test(error.message ?? '')) {
+        deletedByColumnSupported = false
+      } else {
+        return false
+      }
+    } else {
+      return true
+    }
+  }
   const { error } = await supabase.from('board_items')
-    .update({ deleted_at: new Date().toISOString() })
+    .update({ deleted_at: stamp })
     .eq('id', itemId)
   return !error
 }
