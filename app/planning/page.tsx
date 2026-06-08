@@ -579,12 +579,12 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
     return Math.max(1, Math.round((e - s) / 86400000) + 1)
   })()
   const hoursPerDay = (project.estHours || 0) / projectDays
-  // Bar-hoogte schalen op uren-per-dag met sqrt + 50% baseline, zodat 't
-  // verschil tussen korte (1u/dag) en lange (8u/dag) bars visueel
-  // kleiner is. 1u/dag ≈ 67%, 8u/dag = 100%.
+  // Bar-hoogte schalen op uren-per-dag met sqrt + 75% baseline zodat
+  // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
+  // 1u/dag ≈ 84%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
   const scaledH = scaleByHours
-    ? Math.max(6, Math.round(availH * (0.5 + Math.sqrt(ratio) * 0.5)))
+    ? Math.max(6, Math.round(availH * (0.75 + Math.sqrt(ratio) * 0.25)))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -1667,9 +1667,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
   // events als mini-staafdiagram per dag kunnen renderen.
-  // Overzicht (week-zoom): compactere lane-hoogte. 28px houdt de hoogte-
-  // scaling op uren-per-dag intact maar drukt de bars dicht op elkaar.
-  const PROJECT_LANE_H = zoom === 'week' ? 28 : (BAR_H + BAR_GAP)
+  // Overzicht (week-zoom): compacte lane-hoogte. 22px houdt de hoogte-
+  // scaling op uren-per-dag intact maar drukt de bars maximaal dicht
+  // op elkaar — minimale witruimte tussen rij-lanes.
+  const PROJECT_LANE_H = zoom === 'week' ? 22 : (BAR_H + BAR_GAP)
   const MEETING_LANE_H = BAR_H + BAR_GAP
 
   function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
@@ -4111,7 +4112,17 @@ export default function PlanningPage() {
               <span style={separator} />
               <div style={segGroup}>
                 {(['compact', 'large'] as ViewSize[]).map(v => (
-                  <button key={v} onClick={() => setViewSize(v)} style={segBtn(viewSize === v)}>
+                  <button key={v} onClick={() => {
+                      if (v === viewSize) return
+                      // Anker bij de today-line zodat een toggle compact <->
+                      // standaard niet de hele timeline laat verspringen.
+                      const el = gridRef.current
+                      const todayEl = el?.querySelector<HTMLElement>('[data-today-marker]')
+                      if (el && todayEl) {
+                        pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
+                      }
+                      setViewSize(v)
+                    }} style={segBtn(viewSize === v)}>
                     {v === 'compact' ? 'Compact' : 'Standaard'}
                   </button>
                 ))}
