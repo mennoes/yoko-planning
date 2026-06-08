@@ -106,14 +106,26 @@ export async function pushToRemote(sections: Section[]): Promise<boolean> {
     if (error) return false
   }
 
-  // Verwijder rijen die lokaal verdwenen zijn.
-  const localIds = new Set(itemRows.map(r => r.id))
-  const { data: remoteIds } = await supabase.from('todo_items').select('id')
-  if (remoteIds) {
-    const stale = (remoteIds as { id: string }[])
-      .filter(r => !localIds.has(r.id)).map(r => r.id)
+  // Verwijder items die lokaal verdwenen zijn.
+  const localItemIds = new Set(itemRows.map(r => r.id))
+  const { data: remoteItemIds } = await supabase.from('todo_items').select('id')
+  if (remoteItemIds) {
+    const stale = (remoteItemIds as { id: string }[])
+      .filter(r => !localItemIds.has(r.id)).map(r => r.id)
     if (stale.length > 0) {
       await supabase.from('todo_items').delete().in('id', stale)
+    }
+  }
+  // Verwijder secties die lokaal verdwenen zijn — anders kwam een
+  // verwijderde sectie (bv. 'Test') bij elke refresh terug omdat de
+  // remote rij bleef bestaan.
+  const localSectionIds = new Set(sectionRows.map(r => r.id))
+  const { data: remoteSectionIds } = await supabase.from('todo_sections').select('id')
+  if (remoteSectionIds) {
+    const stale = (remoteSectionIds as { id: string }[])
+      .filter(r => !localSectionIds.has(r.id)).map(r => r.id)
+    if (stale.length > 0) {
+      await supabase.from('todo_sections').delete().in('id', stale)
     }
   }
   return true

@@ -1021,13 +1021,16 @@ export default function TodosPage() {
     } catch {}
     for (const m of liveTeam) {
       if (m.hidden) continue
-      // Seed een sectie voor élk niet-verborgen teamlid (behalve het
-      // pseudo-'unassigned' lid). Liever te ruim seeden — een lege
-      // sectie kan de user altijd zelf verwijderen via de prullenbak
-      // naast de naam; we onthouden die verwijdering hieronder.
       if (m.id === 'unassigned') continue
       if (existing.has(m.id)) continue
       if (deletedIds.has(m.id)) continue
+      // Yoko-crew (kind 'yoko' of nog niet gezet) -> altijd seeden.
+      // Freelancers -> alleen als ze actief werk hebben in de planning,
+      //   anders puilt de personal-row uit van inactive freelancers.
+      if (m.kind === 'freelance') {
+        const hasWork = loadMyOpenProjects(m.id).length > 0
+        if (!hasWork) continue
+      }
       toAdd.push({ id: m.id, title: m.name, emoji: '👤', items: [] })
     }
     if (toAdd.length === 0) return
@@ -1229,12 +1232,15 @@ export default function TodosPage() {
     } catch {}
   }
 
-  // 'Persoonlijk' = sectie hoort bij een teamlid (id matched) ÓF de
-  // gebruiker heeft 'm expliciet als personal gemarkeerd via een drag
-  // naar de persoonlijk-rij. Section.kind='general' kan een member-
-  // sectie omgekeerd weer naar algemeen schuiven.
+  // 'Persoonlijk' = sectie hoort bij een teamlid (id matched in seed OF
+  // liveTeam) ÓF de gebruiker heeft 'm expliciet als personal gemarkeerd
+  // via een drag naar de persoonlijk-rij. liveTeam meenemen is cruciaal
+  // voor leden die alleen in team_members staan (zoals Manuel) — anders
+  // zouden ze als 'algemeen' bovenaan blijven hangen.
+  const liveTeamIds = new Set(liveTeam.map(m => m.id))
   const isPersonalSection = (s: Section) =>
-    s.kind === 'personal' || (s.kind !== 'general' && memberIdSet().has(s.id))
+    s.kind === 'personal'
+    || (s.kind !== 'general' && (memberIdSet().has(s.id) || liveTeamIds.has(s.id)))
   const general  = sections.filter(s => !isPersonalSection(s))
   // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
   // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
