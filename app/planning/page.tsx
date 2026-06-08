@@ -770,17 +770,22 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
-      {/* Hit-area expander — sibling of the bar (not clipped by its
-          overflow:hidden) so thin bars are easy to click. Rendered BEFORE
-          the bar so the bar's handles stay on top. */}
-      <div
-        onMouseDown={e => startDrag(e, 'move')}
-        onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
-        style={{ position: 'absolute', top: barTop - 6, left: g.left + 2 - 8,
-          width: g.width + 16, height: barH + 12,
-          cursor: ghost ? 'grabbing' : 'grab',
-          pointerEvents: 'auto' }}
-      />
+      {/* Hit-area expander — sibling of de bar zodat dunne bars makkelijk
+          aanklikbaar zijn. ALLEEN voor draggable items; read-only items
+          (Google-meetings) overslaan we 'm zodat ie geen events
+          intercepteert die voor onderliggende project-bars bedoeld zijn
+          (Google-meeting overlapt 't project — anders niet meer te
+          slepen). */}
+      {!isReadOnly && (
+        <div
+          onMouseDown={e => startDrag(e, 'move')}
+          onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
+          style={{ position: 'absolute', top: barTop - 6, left: g.left + 2 - 8,
+            width: g.width + 16, height: barH + 12,
+            cursor: ghost ? 'grabbing' : 'grab',
+            pointerEvents: 'auto' }}
+        />
+      )}
       <div
         ref={barRef}
         onMouseDown={e => startDrag(e, 'move')}
