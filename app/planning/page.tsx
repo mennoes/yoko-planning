@@ -791,11 +791,11 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
         onMouseDown={e => startDrag(e, 'move')}
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
         style={{ position: 'absolute', top: barTop, left: g.left + 2, width: g.width, height: barH,
-          background: color + 'cc', borderRadius: 4, display: 'flex', alignItems: 'center',
-          overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 600, color: '#fff',
+          background: color, borderRadius: 4, display: 'flex', alignItems: 'center',
+          overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 500, color: '#fff',
           cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
           pointerEvents: 'auto',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
         <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
@@ -1667,10 +1667,9 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
   // events als mini-staafdiagram per dag kunnen renderen.
-  // Overzicht (week-zoom): compactere lane-hoogte. Eerder 64px, gaf veel
-  // witruimte tussen rijen. 36px houdt de hoogte-scaling op uren-per-dag
-  // intact maar drukt de bars dichter op elkaar.
-  const PROJECT_LANE_H = zoom === 'week' ? 36 : (BAR_H + BAR_GAP)
+  // Overzicht (week-zoom): compactere lane-hoogte. 28px houdt de hoogte-
+  // scaling op uren-per-dag intact maar drukt de bars dicht op elkaar.
+  const PROJECT_LANE_H = zoom === 'week' ? 28 : (BAR_H + BAR_GAP)
   const MEETING_LANE_H = BAR_H + BAR_GAP
 
   function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
