@@ -667,6 +667,12 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
     setGhost({ left, width })
     reassignRef.current = null
     captureRows()
+    // Pauseer remote-pulls tijdens een drag — anders kan een binnen-
+    // komende refetch midden in de sleep allGroups vervangen en breekt
+    // de bar visueel weg of springt 'ie terug naar de oude positie.
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive = true
+    }
 
     function onMove(ev: MouseEvent) {
       if (!dragRef.current) return
@@ -713,6 +719,9 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
     function onUp(ev: MouseEvent) {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      if (typeof window !== 'undefined') {
+        (window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive = false
+      }
       onDragMove(project.startDate, project.endDate)
       if (!dragRef.current) return
       const targetId = reassignRef.current
@@ -3178,7 +3187,12 @@ export default function PlanningPage() {
       setAllGroups(loaded)
     }
     refresh()
-    function onBoardUpdate() { refresh() }
+    function onBoardUpdate() {
+      // Niet refreshen tijdens een drag — anders snapt allGroups
+      // halverwege weg en mist de drag z'n eind-positie.
+      if ((window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive) return
+      refresh()
+    }
     window.addEventListener('yoko-board-update', onBoardUpdate)
     window.addEventListener('yoko-boards-registry-update', onBoardUpdate)
 
@@ -3198,6 +3212,9 @@ export default function PlanningPage() {
     // forceren we een verse pull zodat je geen verouderde state ziet
     // na 't terugkeren naar de tab.
     function pullAll() {
+      // Tijdens een actieve drag NIET pullen — een midden-in-de-sleep
+      // refetch zou allGroups vervangen en de bar laten springen.
+      if ((window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive) return
       for (const name of BOARD_NAMES) pullBoardFromRemote(name).catch(() => {})
     }
     const pollTimer = window.setInterval(() => {

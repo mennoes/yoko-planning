@@ -112,17 +112,32 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   if (!await getCurrentUserId()) return false
   // Niet-bevestigde lokale wijzigingen mogen NOOIT worden overschreven door
   // een pull. Push 'em eerst omhoog; faalt dat, dan slaan we de pull over.
-  if (typeof window !== 'undefined' && localStorage.getItem(dirtyKey(boardName))) {
-    const localRaw = localStorage.getItem(key(boardName))
-    if (localRaw) {
-      try {
-        const localGroups = JSON.parse(localRaw) as BoardGroup[]
-        const ok = await pushBoardToRemote(boardName, localGroups)
-        if (!ok) return false  // push failed, niet pullen want we zouden lokale changes verliezen
-        if (localStorage.getItem(key(boardName)) === localRaw) {
-          localStorage.removeItem(dirtyKey(boardName))
+  // Uitzondering: een dirty-flag die ouder is dan 1 uur beschouwen we als
+  // verloren (push faalde permanent door RLS/auth-issue). Anders blijft
+  // die user 'gegijzeld' — geen verse data van anderen meer, alleen z'n
+  // eigen stale localStorage.
+  if (typeof window !== 'undefined') {
+    const dirtyRaw = localStorage.getItem(dirtyKey(boardName))
+    const STALE_DIRTY_MS = 60 * 60 * 1000
+    if (dirtyRaw) {
+      const dirtyAt = Number(dirtyRaw)
+      if (Number.isFinite(dirtyAt) && Date.now() - dirtyAt > STALE_DIRTY_MS) {
+        // eslint-disable-next-line no-console
+        console.warn(`[boardStore] Stale dirty-flag voor '${boardName}' (>1u oud) — clearen zodat pulls hervatten.`)
+        localStorage.removeItem(dirtyKey(boardName))
+      } else {
+        const localRaw = localStorage.getItem(key(boardName))
+        if (localRaw) {
+          try {
+            const localGroups = JSON.parse(localRaw) as BoardGroup[]
+            const ok = await pushBoardToRemote(boardName, localGroups)
+            if (!ok) return false  // push faalde, niet pullen want we zouden lokale changes verliezen
+            if (localStorage.getItem(key(boardName)) === localRaw) {
+              localStorage.removeItem(dirtyKey(boardName))
+            }
+          } catch { return false }
         }
-      } catch { return false }
+      }
     }
   }
   // Soft-deleted rijen filteren we out — die staan in de papierbak.
