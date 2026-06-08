@@ -314,40 +314,22 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   // we niet stilzwijgend wegvegen omdat wij 'm toevallig niet in onze
   // lokale kopie hebben. Dit voorkomt het 'andere user logt in en alle
   // projecten zijn weg'-scenario.
+  // Reconcile-deletie helemaal uitschakelen voor items — was bron van
+  // 'item verdwijnt uit het niets' bugs wanneer 'n lokale cache niet
+  // up-to-date is (Supabase had nieuwere items, push gooit ze weg omdat
+  // ze niet in 't lokale snapshot zitten). Soft-delete gebeurt nu
+  // uitsluitend via expliciete UI-actie (× knop, delete-handler). Geen
+  // automatische opruim meer.
   const lastSync = readLastSync(boardName)
-  const SYNC_MARGIN_MS = 5_000   // veiligheidsmarge — clock-skew tolerantie
-  const cutoff = new Date(Math.max(0, lastSync - SYNC_MARGIN_MS)).toISOString()
+  void lastSync
   const localGroupIds = new Set(groups.map(g => g.id))
 
-  // Items — SOFT-DELETE: in plaats van hard DELETE zetten we deleted_at
-  // zodat de papierbak ze kan tonen en herstellen. Niets gaat écht weg.
-  //
-  // Een item wordt ALLEEN soft-deleted wanneer 't aan ALLE drie de
-  // voorwaarden voldoet:
-  //   1. Niet in onze lokale staat (we vinden 'm niet).
-  //   2. Wél in onze baseline (we hebben 'm ooit gezien tijdens een
-  //      pull — dus dit is een intentionele verwijdering door ons).
-  //   3. updated_at remote is ouder dan onze lastSync (niemand anders
-  //      heeft 'm net toegevoegd na onze laatste sync).
-  // De baseline-check (#2) voorkomt dat we items die ANDER users
-  // recent hebben toegevoegd per ongeluk weggooien.
+  // Reconcile-deletie items volledig uitgeschakeld. De baseline-check
+  // was bedoeld als safeguard maar items bleven verdwijnen bij stale
+  // caches. Verwijdering gebeurt nu alleen expliciet via removeItem() /
+  // deleteItem-handlers; geen automatische soft-delete bij sync meer.
   const stamp = new Date().toISOString()
-  const { data: remoteItems } = await supabase
-    .from('board_items').select('id, updated_at').eq('board_id', boardName).is('deleted_at', null)
-  if (remoteItems) {
-    const stale = (remoteItems as { id: string; updated_at: string | null }[])
-      .filter(r => !localItemIds.has(r.id))
-      .filter(r => baselineSerialized.has(r.id))   // alleen items uit onze baseline
-      .filter(r => !lastSync || (r.updated_at && r.updated_at < cutoff))
-      .map(r => r.id)
-    if (stale.length > 0) {
-      await supabase.from('board_items')
-        .update({ deleted_at: stamp })
-        .in('id', stale)
-    }
-  }
-  // Groups — eerste push uit een verse sessie verwijdert NOOIT remote
-  // groepen. Ook hier soft-delete via deleted_at-stamp.
+  void stamp
   if (lastSync > 0) {
     const { data: remoteGroups } = await supabase
       .from('board_groups').select('id').eq('board_id', boardName).is('deleted_at', null)
