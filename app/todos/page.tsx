@@ -99,6 +99,10 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
         //  - eind-datum (of start) niet in 't verleden
         //  - ofwel ik staat in subitem.ownerIds, OF subitem is unassigned/
         //    leeg en parent heeft mij als owner (parent-fallback).
+        // Vrij/vakantie-subitems (uit recurring 'Vrijdag vrij' e.d.) slaan
+        // we over — die hoeven niet in iemand's to-do-lijst, gaan over
+        // afwezigheid en zouden de lijst onbruikbaar lang maken.
+        const parentIsVrij = /\b(vrij|vakantie|verlof|hemelvaart|pinksteren|pasen|kerst|feestdag)\b/i.test(item.name)
         const subs = item.subitems ?? []
         for (const sub of subs) {
           if (!sub?.name) continue
@@ -108,6 +112,8 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
           const subOwners = (sub.ownerIds ?? []).filter(o => o && o !== 'unassigned')
           const subMine = subOwners.includes(memberId) || (subOwners.length === 0 && parentOwns)
           if (!subMine) continue
+          if (parentIsVrij) continue
+          if (/\b(vrij|vakantie|verlof)\b/i.test(sub.name)) continue
           // Skip subitem-name als 't 'n date-label is ('wo 3 jun') —
           // gebruik dan alleen parent-naam. User vond dubbele info storend.
           const isDateLabel = /^[a-z]{2,3}\s+\d{1,2}(\s+[a-z.]+)?$/i.test(sub.name.trim())
