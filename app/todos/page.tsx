@@ -94,35 +94,9 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
         if (parentOwns && !parentExpired) {
           out.push({ board, itemId: item.id, name: item.name })
         }
-        // Subitems óók als losse todo's. Een subitem telt voor mij als:
-        //  - status niet 'Done'
-        //  - eind-datum (of start) niet in 't verleden
-        //  - ofwel ik staat in subitem.ownerIds, OF subitem is unassigned/
-        //    leeg en parent heeft mij als owner (parent-fallback).
-        // Vrij/vakantie-subitems (uit recurring 'Vrijdag vrij' e.d.) slaan
-        // we over — die hoeven niet in iemand's to-do-lijst, gaan over
-        // afwezigheid en zouden de lijst onbruikbaar lang maken.
-        const parentIsVrij = /\b(vrij|vakantie|verlof|hemelvaart|pinksteren|pasen|kerst|feestdag)\b/i.test(item.name)
-        const subs = item.subitems ?? []
-        for (const sub of subs) {
-          if (!sub?.name) continue
-          if ((sub.status ?? '').toLowerCase() === 'done') continue
-          const subEnd = sub.endDate ?? sub.startDate
-          if (subEnd && subEnd < today) continue
-          const subOwners = (sub.ownerIds ?? []).filter(o => o && o !== 'unassigned')
-          const subMine = subOwners.includes(memberId) || (subOwners.length === 0 && parentOwns)
-          if (!subMine) continue
-          if (parentIsVrij) continue
-          if (/\b(vrij|vakantie|verlof)\b/i.test(sub.name)) continue
-          // Skip subitem-name als 't 'n date-label is ('wo 3 jun') —
-          // gebruik dan alleen parent-naam. User vond dubbele info storend.
-          const isDateLabel = /^[a-z]{2,3}\s+\d{1,2}(\s+[a-z.]+)?$/i.test(sub.name.trim())
-          out.push({
-            board,
-            itemId: `${item.id}__si__${sub.id ?? sub.name}`,
-            name:   isDateLabel ? item.name : `${item.name} · ${sub.name}`,
-          })
-        }
+        // Subitems NIET als losse todo's tonen — gaf te veel ruis (vrij-
+        // herhalingen, episode-instances, etc.). De parent-item dekt 't.
+        // Open je 'm in de agenda dan zie je daar de subitem-lijst.
       }
     }
   }
