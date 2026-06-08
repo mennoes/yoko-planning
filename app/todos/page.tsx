@@ -1224,11 +1224,14 @@ export default function TodosPage() {
   const general  = sections.filter(s => !isPersonalSection(s))
   // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
   // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
-  // (Odette, Vincent, Menno, Anne-Fleur, Kars, …) ipv de json-volgorde.
-  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'marcus-driessen', 'kars', 'take-lijzenga']
+  // (Odette, Vincent, Menno, Anne-Fleur, …). Kars staat altijd achteraan
+  // — gebruikersvoorkeur, ook nà members zonder vaste positie (Manuel,
+  // freelancers etc).
+  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'marcus-driessen', 'take-lijzenga']
+  const BACK_IDS = new Set<string>(['kars'])
   const orderIdx = (id: string) => {
     const i = PERSONAL_ORDER.indexOf(id)
-    return i >= 0 ? i : 999
+    return i >= 0 ? i : 500
   }
   // Persoonlijke secties verbergen voor inactieve freelancers: anders
   // staat de hele freelancers-lijst altijd onderaan ook als ze nu geen
@@ -1247,6 +1250,10 @@ export default function TodosPage() {
       const me = currentProfile?.memberId
       if (a.id === me) return -1
       if (b.id === me) return 1
+      const aBack = BACK_IDS.has(a.id)
+      const bBack = BACK_IDS.has(b.id)
+      if (aBack && !bBack) return 1
+      if (bBack && !aBack) return -1
       return orderIdx(a.id) - orderIdx(b.id)
     })
 
@@ -1343,13 +1350,22 @@ export default function TodosPage() {
         // zodat Socials/Reminders/Kansen direct naast Komend/Ideeën staan.
         // Wat niet in de eerste regel past wrapt vanzelf naar de tweede.
         const cols = Math.max(1, personal.length)
+        // Breder + horizontaal scrollen: explicit één-rij grid met
+        // vaste min-breedte per kolom. Passen ze samen in 't scherm dan
+        // rekken ze tot 1fr; passen ze niet → horizontale scrollbar
+        // zodat je doorheen kunt swipen zonder dat kaarten te smal worden.
+        const COL_MIN = 340
+        const rowStyle = {
+          display: 'grid',
+          gridTemplateColumns: `repeat(${cols}, minmax(${COL_MIN}px, 1fr))`,
+          gap: 12,
+          alignItems: 'start',
+          overflowX: 'auto' as const,
+          paddingBottom: 6,
+        }
         return (
           <>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: 12, alignItems: 'start', marginBottom: 28,
-            }}>
+            <div style={{ ...rowStyle, marginBottom: 28 }}>
               {general.map((s, i) => (
                 <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
                   allProjects={allProjects}
@@ -1372,11 +1388,7 @@ export default function TodosPage() {
               </div>
             )}
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: 12, alignItems: 'start',
-            }}>
+            <div style={rowStyle}>
               {personal.map((s, i) => (
                 <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
                   allProjects={allProjects}
