@@ -1828,6 +1828,12 @@ function MeetingHoverBar({ project, memberId, left, width, colW, laneH, onDragMo
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
             padding: '10px 12px',
             boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.12)' }}>
+          {project.parentName && project.parentName !== project.name && (
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+              ↳ in {project.parentName}
+            </div>
+          )}
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
             marginBottom: 4, lineHeight: 1.25 }}>
             {project.name}

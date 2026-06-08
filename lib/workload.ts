@@ -27,6 +27,10 @@ export type Project = {
   // Set on virtual projects produced by merging same-name Google items in
   // the planner. The detail panel uses it to render a sub-event list.
   mergedFrom?: Project[]
+  // Wanneer dit project is afgeleid van een subitem onder een parent-item:
+  // de naam van de parent. Gebruikt door planning-popovers zodat duidelijk
+  // is bij welke parent de subitem hoort.
+  parentName?: string
 }
 
 import { getBoardColor } from './boardsRegistry'
@@ -100,6 +104,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               source:    (i.source as 'manual' | 'google' | undefined),
               externalLink: (i.externalLink as string | undefined),
               meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
+              parentName: i.name as string,
             }
           })
         }
