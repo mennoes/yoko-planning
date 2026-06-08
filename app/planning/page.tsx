@@ -2669,10 +2669,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           <ItemHistory itemId={project.id.slice(project.board.length + 2)} />
         </Row>
       </div>}
-      <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
         {!isGoogle && !isMerged && (
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Wijzigingen worden direct opgeslagen · ⌘Z voor ongedaan maken
+          <span title="Wijzigingen worden direct opgeslagen — ⌘Z voor ongedaan"
+            style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            ⌘Z = ongedaan
           </span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
