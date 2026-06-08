@@ -334,15 +334,6 @@ function Inner({ children }: { children: ReactNode }) {
           {/* Notificaties + papierbak + zoeken rechtsboven. */}
           <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
             <NotificationBell />
-            <Link href="/papierbak" aria-label="Papierbak"
-              title="Papierbak — verwijderde items herstellen"
-              style={{
-                width: 38, height: 38, borderRadius: 9,
-                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                color: 'var(--text-secondary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                textDecoration: 'none',
-              }}><IconHistory size={18} /></Link>
             <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
               style={{
                 width: 38, height: 38, borderRadius: 9,
