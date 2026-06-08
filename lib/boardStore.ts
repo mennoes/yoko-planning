@@ -36,6 +36,11 @@ function key(boardName: string)      { return `yoko-board-${boardName}` }
 // Supabase. Een pull mag deze NIET overschrijven, anders verlies je je
 // eigen wijzigingen na refresh als de push wegviel.
 function dirtyKey(boardName: string) { return `yoko-board-${boardName}-dirty` }
+// "Pulled" bewaart de laatste-geziene REMOTE state. Diff tegen deze
+// baseline is wat we daadwerkelijk gewijzigd hebben — alleen die items
+// pushen we omhoog, zodat we per ongeluk geen verse edits van andere
+// users overschrijven met onze stale data.
+function pulledKey(boardName: string) { return `yoko-board-${boardName}-pulled` }
 
 // BOARD_NAMES is dynamisch — leeg op SSR, gevuld op client zodra de
 // registry is geladen. Bestaande code die `for (const b of BOARD_NAMES)`
@@ -73,10 +78,11 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
   pushBoardToRemote(boardName, groups).then(ok => {
     if (!ok) return
-    // Alleen flag wissen als wat we nét gepusht hebben nog steeds = wat
-    // er in localStorage staat. Tussentijdse wijzigingen → flag blijft
-    // staan, volgende push schoont 'm op.
+    // Baseline ververst naar wat we net gepusht hebben. Volgende save
+    // diffen dan correct: items die we niet aanraken pushen we niet
+    // mee, zodat verse edits van andere users blijven staan.
     if (localStorage.getItem(key(boardName)) === next) {
+      localStorage.setItem(pulledKey(boardName), next)
       localStorage.removeItem(dirtyKey(boardName))
     }
   }).catch(() => {})
@@ -173,6 +179,9 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   // tijd toegevoegd door anderen worden niet stilzwijgend verwijderd.
   writeLastSync(boardName)
   const serialized = JSON.stringify(groups)
+  // Baseline altijd bijwerken — ook als de lokale staat identiek is —
+  // zodat we weten dat we tot dit moment in sync zijn met remote.
+  localStorage.setItem(pulledKey(boardName), serialized)
   if (localStorage.getItem(key(boardName)) === serialized) return true  // no change
   localStorage.setItem(key(boardName), serialized)
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
@@ -255,14 +264,44 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   const { error: gErr } = await supabase.from('board_groups').upsert(groupRows, { onConflict: 'id' })
   if (gErr) return false
 
-  // Upsert items
-  const itemRows: Record<string, unknown>[] = []
-  const localItemIds = new Set<string>()
+  // Upsert items — maar alleen die we DAADWERKELIJK gewijzigd hebben
+  // t.o.v. onze pulled-baseline. Eerder pushten we elke item uit de
+  // lokale staat, wat bij twee mensen die parallel verschillende items
+  // sleepten leidde tot stale-overwrites (B pushte X-oud over A's
+  // verse X-update). Door alleen diffs te pushen blijven andere users
+  // hun edits behouden.
+  type ItemSnap = { groupId: string; idx: number; serialized: string; item: BoardItem }
+  const localSnaps = new Map<string, ItemSnap>()
   for (const g of groups) {
     g.items.forEach((it, idx) => {
-      itemRows.push(itemToRow(boardName, g.id, idx, it))
-      localItemIds.add(it.id)
+      localSnaps.set(it.id, { groupId: g.id, idx, serialized: JSON.stringify(it), item: it })
     })
+  }
+  const localItemIds = new Set<string>(localSnaps.keys())
+
+  // Baseline: laatste-geziene remote state. Items die identiek zijn aan
+  // de baseline overslaan we — er is niets om te pushen voor die item.
+  const baselineSerialized: Map<string, { groupId: string; idx: number; serialized: string }> = new Map()
+  try {
+    const raw = localStorage.getItem(pulledKey(boardName))
+    if (raw) {
+      const base = JSON.parse(raw) as BoardGroup[]
+      for (const g of base) g.items.forEach((it, idx) => {
+        baselineSerialized.set(it.id, { groupId: g.id, idx, serialized: JSON.stringify(it) })
+      })
+    }
+  } catch {}
+
+  const itemRows: Record<string, unknown>[] = []
+  for (const [id, snap] of localSnaps) {
+    const base = baselineSerialized.get(id)
+    // Pushen wanneer: item is nieuw (geen baseline) OF inhoud/groep/
+    // positie verschilt van baseline.
+    const changed = !base
+      || base.serialized !== snap.serialized
+      || base.groupId !== snap.groupId
+      || base.idx !== snap.idx
+    if (changed) itemRows.push(itemToRow(boardName, snap.groupId, snap.idx, snap.item))
   }
   if (itemRows.length > 0) {
     const { error: iErr } = await supabase.from('board_items').upsert(itemRows, { onConflict: 'id' })
@@ -282,12 +321,23 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
 
   // Items — SOFT-DELETE: in plaats van hard DELETE zetten we deleted_at
   // zodat de papierbak ze kan tonen en herstellen. Niets gaat écht weg.
+  //
+  // Een item wordt ALLEEN soft-deleted wanneer 't aan ALLE drie de
+  // voorwaarden voldoet:
+  //   1. Niet in onze lokale staat (we vinden 'm niet).
+  //   2. Wél in onze baseline (we hebben 'm ooit gezien tijdens een
+  //      pull — dus dit is een intentionele verwijdering door ons).
+  //   3. updated_at remote is ouder dan onze lastSync (niemand anders
+  //      heeft 'm net toegevoegd na onze laatste sync).
+  // De baseline-check (#2) voorkomt dat we items die ANDER users
+  // recent hebben toegevoegd per ongeluk weggooien.
   const stamp = new Date().toISOString()
   const { data: remoteItems } = await supabase
     .from('board_items').select('id, updated_at').eq('board_id', boardName).is('deleted_at', null)
   if (remoteItems) {
     const stale = (remoteItems as { id: string; updated_at: string | null }[])
       .filter(r => !localItemIds.has(r.id))
+      .filter(r => baselineSerialized.has(r.id))   // alleen items uit onze baseline
       .filter(r => !lastSync || (r.updated_at && r.updated_at < cutoff))
       .map(r => r.id)
     if (stale.length > 0) {

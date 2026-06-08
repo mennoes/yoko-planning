@@ -2714,8 +2714,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                       if (row) e.dataTransfer.setDragImage(row, 20, 12)
                     }}
                     style={{
-                      position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                      width: 18, height: 32,
+                      position: 'absolute', left: -10, top: '50%', transform: 'translateY(-50%)',
+                      width: 22, height: 32, paddingRight: 6,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'grab', userSelect: 'none',
                       color: 'var(--text-secondary)', fontSize: 18, fontWeight: 700, lineHeight: 1,
