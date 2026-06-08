@@ -1731,19 +1731,11 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
             </div>
           )
         }
-        // Items van ~hele werkdag (>=7u/dag) in Overzicht vullen verticaal
-        // de hele beschikbare row-hoogte — visueel signaleert dat de
-        // dag dichtgetimmerd zit. Mag andere bars overlappen.
-        // Belangrijk: kijk naar uren-PER-DAG, niet 't totaal. Een 20u
-        // project van 2 maanden is ~16min/dag, geen volle werkdag.
-        const projDays = (() => {
-          if (!b.p.startDate || !b.p.endDate) return 1
-          const s = new Date(b.p.startDate).getTime()
-          const e = new Date(b.p.endDate).getTime()
-          return Math.max(1, Math.round((e - s) / 86400000) + 1)
-        })()
-        const hoursPerDay = (b.p.estHours || 0) / projDays
-        const isFullDay = zoom === 'week' && hoursPerDay >= 7
+        // Hoogte blijft binnen één lane — eerder lieten we hele-dag-
+        // projecten de volle row-hoogte vullen, maar dat werd visueel
+        // onoverzichtelijk. Subtieler is beter; de bol-cijfers tonen
+        // de totale belasting al.
+        const isFullDay = false
         const top = projectLaneTop(b.lane)
         const wrapperH = isFullDay
           ? Math.max(PROJECT_LANE_H, baseHeight - top - 6)

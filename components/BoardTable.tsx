@@ -2637,7 +2637,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 }}
                 onMouseLeave={e => {
                   const h = e.currentTarget.querySelector<HTMLElement>('.row-grip')
-                  if (h) h.style.opacity = '0.35'
+                  if (h) h.style.opacity = '0'
                 }}
                 onDragOver={e => {
                   const raw = e.dataTransfer.types.includes('application/x-yoko-item')
@@ -2720,7 +2720,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'grab', userSelect: 'none',
                       color: 'var(--text-secondary)', fontSize: 18, fontWeight: 700, lineHeight: 1,
-                      opacity: 0.35, transition: 'opacity 0.12s',
+                      opacity: 0, transition: 'opacity 0.12s',
                       zIndex: 5,
                       background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
                     }}>⠿</span>
