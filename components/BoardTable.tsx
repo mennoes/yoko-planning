@@ -14,7 +14,8 @@ import { useTeam }        from './TeamContext'
 import { useUndo }        from './UndoContext'
 import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
-import { IconComment, IconSearch, IconActivity } from './Icon'
+import { IconComment, IconSearch, IconActivity, IconHistory } from './Icon'
+import { BoardTrashDrawer } from './BoardTrashDrawer'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity }    from '@/lib/itemActivity'
 import {
@@ -2919,6 +2920,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const [titleDraft,    setTitleDraft]   = useState(title)
   const [dedupOpen,     setDedupOpen]    = useState(false)
   const [activityOpen,  setActivityOpen] = useState(false)
+  const [trashOpen,     setTrashOpen]    = useState(false)
 
   function resizeCol(key: string, newWidth: number) {
     const updated = { ...colWidths, [key]: Math.max(60, newWidth) }
@@ -3304,6 +3306,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <IconActivity size={13} /> {isMobile ? '' : 'Activiteit'}
           </button>
+          <button onClick={() => setTrashOpen(true)}
+            title={`Papierbak van bord '${title}'`}
+            style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              color: 'var(--text-secondary)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <IconHistory size={13} /> {isMobile ? '' : 'Papierbak'}
+          </button>
           {/* Share-knop: alleen voor borden in de SHAREABLE_BOARDS-whitelist
               op de server (zelfde lijst). Geeft een copy-able URL die
               externen zonder login kunnen openen. Gevoelige velden
@@ -3506,6 +3516,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         boardTitle={title}
         open={activityOpen}
         onClose={() => setActivityOpen(false)} />
+
+      <BoardTrashDrawer
+        boardId={boardId}
+        boardTitle={title}
+        open={trashOpen}
+        onClose={() => setTrashOpen(false)} />
 
       {dedupOpen && (
         <DedupModal groups={groups} onClose={() => setDedupOpen(false)}
