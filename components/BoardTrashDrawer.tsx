@@ -18,11 +18,12 @@ function fmtDate(iso: string): string {
   } catch { return iso }
 }
 
-export function BoardTrashDrawer({ boardId, boardTitle, open, onClose }: {
+export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog }: {
   boardId:    string
   boardTitle: string
   open:       boolean
   onClose:    () => void
+  onOpenLog?: () => void
 }) {
   const [items, setItems]     = useState<TrashItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,11 +86,21 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose }: {
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {boardTitle}
               </div>
-              <h2 style={{ margin: '3px 0 0', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Papierbak</h2>
+              <h2 style={{ margin: '3px 0 0', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Geschiedenis</h2>
             </div>
             <button onClick={onClose} title="Sluiten (Esc)"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
           </div>
+          {onOpenLog && (
+            <div style={{ marginTop: 10 }}>
+              <button onClick={onOpenLog}
+                style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  textDecoration: 'underline' }}>
+                Bekijk volledig wijzigingen-logboek →
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>

@@ -276,13 +276,20 @@ function ShareButton({ boardId, isMobile }: { boardId: string; isMobile: boolean
   return (
     <>
       <button ref={btnRef} onClick={() => setOpen(o => !o)}
-        title="Genereer een publieke read-only link"
-        style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+        title="Deel: genereer een publieke read-only link"
+        aria-label="Deel"
+        style={{ padding: '7px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600,
           background: open ? 'var(--accent-light)' : 'var(--bg-card)',
           border: `1px solid ${open ? 'var(--accent)' : 'var(--border)'}`,
           color: open ? 'var(--accent)' : 'var(--text-secondary)',
-          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        ↗ {isMobile ? '' : 'Deel'}
+          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* Standaard share-icoon: box met pijl-omhoog uit de bovenkant. */}
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
+          <polyline points="16 6 12 2 8 6" />
+          <line x1="12" y1="2" x2="12" y2="15" />
+        </svg>
       </button>
       {open && (
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
@@ -3395,21 +3402,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           )}
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setActivityOpen(true)}
-            title={`Activiteit van bord '${title}'`}
-            style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              color: 'var(--text-secondary)', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <IconActivity size={13} /> {isMobile ? '' : 'Activiteit'}
-          </button>
+          {/* Eén Geschiedenis-knop voor zowel wijzigingen-logboek als
+              papierbak. Opent de trash-drawer; binnenin staat een knop
+              naar het volledige wijzigingen-logboek voor wie meer
+              detail wil. */}
           <button onClick={() => setTrashOpen(true)}
-            title={`Papierbak van bord '${title}'`}
+            title={`Geschiedenis van bord '${title}'`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
               background: 'var(--bg-card)', border: '1px solid var(--border)',
               color: 'var(--text-secondary)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <IconHistory size={13} /> {isMobile ? '' : 'Papierbak'}
+            <IconHistory size={13} /> {isMobile ? '' : 'Geschiedenis'}
           </button>
           {/* Share-knop: alleen voor borden in de SHAREABLE_BOARDS-whitelist
               op de server (zelfde lijst). Geeft een copy-able URL die
@@ -3420,20 +3423,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             <ShareButton boardId={boardId} isMobile={isMobile} />
           )}
           {!isMobile && (
-            <>
-              <button onClick={() => setReorderMode(r => !r)}
-                title={reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
-                style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  background: reorderMode ? 'var(--accent-light)' : 'var(--bg-card)',
-                  border: `1px solid ${reorderMode ? 'var(--accent)' : 'var(--border)'}`,
-                  color: reorderMode ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer' }}>
-                ↕ {reorderMode ? 'Klaar' : 'Volgorde'}
-              </button>
-              <button onClick={exportCSV} title="Exporteer als CSV"
-                style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                ↓ CSV
-              </button>
-            </>
+            <button onClick={exportCSV} title="Exporteer als CSV"
+              style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              ↓ CSV
+            </button>
           )}
           <button onClick={addGroup}
             style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
@@ -3597,13 +3590,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           </>
         )}
 
-        <button onClick={() => setDedupOpen(true)}
-          title="Vind items met dezelfde naam en laat je kiezen welke je houdt"
-          style={{ marginLeft: 'auto', padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-card)' }}>
-          🧹 Schoonmaken
-        </button>
       </div>
 
       <BoardActivityDrawer
@@ -3616,7 +3602,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         boardId={boardId}
         boardTitle={title}
         open={trashOpen}
-        onClose={() => setTrashOpen(false)} />
+        onClose={() => setTrashOpen(false)}
+        onOpenLog={() => { setTrashOpen(false); setActivityOpen(true) }} />
 
       {dedupOpen && (
         <DedupModal groups={groups} onClose={() => setDedupOpen(false)}
