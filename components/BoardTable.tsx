@@ -962,25 +962,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   const [isDraggingMe, setIsDraggingMe] = useState(false)
   return (
     <div
-      draggable={!editName && !!parentItemId && !!fromGroupId}
-      onDragStart={e => {
-        if (!parentItemId || !fromGroupId) return
-        e.stopPropagation()
-        e.dataTransfer.effectAllowed = 'move'
-        e.dataTransfer.setData('application/x-yoko-subitem', JSON.stringify({
-          subitemId: subitem.id, parentItemId, fromGroupId,
-        }))
-        setIsDraggingMe(true)
-        // Broadcast: alle groepen op het bord moeten 'oplichten' als
-        // potentieel drop-doel zodat de gebruiker direct ziet waar 'ie
-        // de subitem heen kan slepen.
-        window.dispatchEvent(new CustomEvent('yoko-subitem-drag-start', { detail: { subitemId: subitem.id, name: subitem.name } }))
-      }}
       onDragEnd={() => {
         setIsDraggingMe(false)
         window.dispatchEvent(new CustomEvent('yoko-subitem-drag-end'))
       }}
       style={{
+      position: 'relative',
       display: 'grid', gridTemplateColumns: gridTemplate,
       alignItems: 'center', minHeight: 44,
       borderBottom: '1px solid var(--border)',
@@ -988,9 +975,42 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       opacity:    isDraggingMe ? 0.5 : 1,
       transform:  isDraggingMe ? 'scale(0.985)' : 'none',
       transition: 'background 0.1s, opacity 0.1s, transform 0.1s',
-      cursor: !editName && parentItemId ? (isDraggingMe ? 'grabbing' : 'grab') : 'default',
+      cursor: 'default',
     }}
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      onMouseEnter={e => {
+        setHover(true)
+        const h = e.currentTarget.querySelector<HTMLElement>('.subitem-grip')
+        if (h) h.style.opacity = '1'
+      }}
+      onMouseLeave={e => {
+        setHover(false)
+        const h = e.currentTarget.querySelector<HTMLElement>('.subitem-grip')
+        if (h) h.style.opacity = '0'
+      }}>
+      {!editName && parentItemId && fromGroupId && (
+        <span draggable
+          className="subitem-grip"
+          title="Sleep om subitem te verplaatsen"
+          onDragStart={e => {
+            e.stopPropagation()
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('application/x-yoko-subitem', JSON.stringify({
+              subitemId: subitem.id, parentItemId, fromGroupId,
+            }))
+            setIsDraggingMe(true)
+            window.dispatchEvent(new CustomEvent('yoko-subitem-drag-start', { detail: { subitemId: subitem.id, name: subitem.name } }))
+          }}
+          style={{
+            position: 'absolute', left: -2, top: '50%', transform: 'translateY(-50%)',
+            width: 18, height: 28,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'grab', userSelect: 'none',
+            color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
+            opacity: 0, transition: 'opacity 0.12s',
+            zIndex: 5,
+            background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
+          }}>⠿</span>
+      )}
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
           (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
           checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}

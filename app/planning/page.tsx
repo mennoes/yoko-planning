@@ -2945,14 +2945,37 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
     return next
   }
 
-  // Bouw segmenten voor de DistributionPie. Member-kleur als segment-kleur,
-  // photo of initialen voor identificatie in 't segment zelf.
+  // Bouw segmenten voor de DistributionPie. Twee leden met dezelfde
+  // member-kleur zijn in de pie onmogelijk te onderscheiden — daarom
+  // genereren we een variant-kleur (hue-shift) voor duplicates op
+  // basis van hun id, zodat elk segment uniek is.
+  const PALETTE = ['#579bfc', '#a36efc', '#5fa06e', '#ff7b24', '#e2445c', '#d8b62e', '#3db883', '#9a4ce0', '#0096c7', '#f57c00']
+  function fallbackColorFor(id: string): string {
+    let hash = 0
+    for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) & 0xffffffff
+    return PALETTE[Math.abs(hash) % PALETTE.length]
+  }
+  const seenColors = new Map<string, string[]>()
   const segments = owners.map(oid => {
     const m = teamLookup(oid)
+    let color = m?.color ?? fallbackColorFor(oid)
+    const existing = seenColors.get(color)
+    if (existing && existing.length > 0) {
+      // Dubbele kleur — kies een unieke uit het palet (op id) die nog
+      // niet aan een andere owner is toegekend.
+      const taken = new Set([...seenColors.keys()])
+      const start = Math.abs([...oid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) & 0xffffffff, 0)) % PALETTE.length
+      for (let i = 0; i < PALETTE.length; i++) {
+        const cand = PALETTE[(start + i) % PALETTE.length]
+        if (!taken.has(cand)) { color = cand; break }
+      }
+    }
+    const arr = seenColors.get(color) ?? []
+    arr.push(oid); seenColors.set(color, arr)
     return {
       id:        oid,
       value:     current[oid] ?? 0,
-      color:     m?.color ?? '#9aa3ad',
+      color,
       label:     m?.name ?? oid,
       avatarUrl: m ? getPhoto(m.id) : undefined,
       initials:  m?.name?.slice(0, 1).toUpperCase() ?? '?',
@@ -2984,9 +3007,12 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
             const pct = total > 0 ? Math.round((val / total) * 100) : 0
             const setHours = (h: number) => onChange(rebalance(oid, h))
             const setPct   = (p: number) => onChange(rebalance(oid, (Math.max(0, Math.min(100, p)) / 100) * total))
+            // Legenda-kleur synchroon met de pie: pak de unieke kleur
+            // die we voor deze owner berekenden in `segments`.
+            const segColor = segments.find(s => s.id === oid)?.color ?? '#9aa3ad'
             return (
               <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color ?? '#9aa3ad', flexShrink: 0 }} />
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: segColor, flexShrink: 0 }} />
                 <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)' }}>{m.name}</span>
                 <input type="number" step="0.5" min="0" max={total}
                   value={val}
