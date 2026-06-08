@@ -34,18 +34,39 @@ const EVENT         = 'yoko-item-activity'
  *  Supabase table (target = `board_item:${itemId}`). Stilletjes-no-op
  *  als de gebruiker niet ingelogd is of Supabase ontbreekt.
  *  Meta bevat optioneel gestructureerde before/after-data zodat de
- *  /activity-drawer 'Ongedaan maken' kan tonen. */
+ *  /activity-drawer 'Ongedaan maken' kan tonen.
+ *
+ *  Als de DB geen 'meta'-kolom heeft (migratie 0020 niet gedraaid),
+ *  faalt de insert met 400. We onthouden dat en proberen 't bij de
+ *  volgende call zonder meta, zodat de console niet vol komt met
+ *  POST 400 (Bad Request) regels.
+ */
+let metaSupported = true
 export async function logItemActivity(itemId: string, action: string, detail?: string, meta?: ActivityMeta): Promise<void> {
   if (!supabase) return
   const uid = await getCurrentUserId()
   if (!uid) return
-  await supabase.from('activity').insert({
+  const base: Record<string, unknown> = {
     user_id: uid,
     action,
     target:  TARGET_PREFIX + itemId,
     detail:  detail ?? null,
-    meta:    meta ?? null,
-  })
+  }
+  if (metaSupported) {
+    const { error } = await supabase.from('activity').insert({ ...base, meta: meta ?? null })
+    if (error) {
+      // 400/PGRST204 wijzen op een ontbrekende kolom — disable meta
+      // voor de rest van de sessie en retry zonder.
+      if (/column .*meta.*does not exist|PGRST204|schema cache|cannot find/i.test(error.message ?? '')) {
+        metaSupported = false
+        await supabase.from('activity').insert(base)
+      } else {
+        return  // andere error, niet retryen
+      }
+    }
+  } else {
+    await supabase.from('activity').insert(base)
+  }
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(EVENT, { detail: { itemId } }))
 }
 
