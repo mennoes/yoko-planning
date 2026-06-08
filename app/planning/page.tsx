@@ -1667,7 +1667,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
   // events als mini-staafdiagram per dag kunnen renderen.
-  const PROJECT_LANE_H = zoom === 'week' ? 64 : (BAR_H + BAR_GAP)
+  // Overzicht (week-zoom): compactere lane-hoogte. Eerder 64px, gaf veel
+  // witruimte tussen rijen. 36px houdt de hoogte-scaling op uren-per-dag
+  // intact maar drukt de bars dichter op elkaar.
+  const PROJECT_LANE_H = zoom === 'week' ? 36 : (BAR_H + BAR_GAP)
   const MEETING_LANE_H = BAR_H + BAR_GAP
 
   function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
