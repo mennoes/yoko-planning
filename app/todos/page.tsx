@@ -1012,15 +1012,22 @@ export default function TodosPage() {
     if (liveTeam.length === 0) return
     const existing = new Set(sections.map(s => s.id))
     const toAdd: Section[] = []
+    // Sectie-id's die de user expliciet heeft verwijderd; niet meer
+    // auto-seeden, ook al staat 't lid nog in liveTeam.
+    let deletedIds: Set<string> = new Set()
+    try {
+      const raw = localStorage.getItem('yoko-todos-deleted-sections')
+      if (raw) deletedIds = new Set(JSON.parse(raw) as string[])
+    } catch {}
     for (const m of liveTeam) {
       if (m.hidden) continue
       // Seed een sectie voor élk niet-verborgen teamlid (behalve het
-      // pseudo-'unassigned' lid). Eerder filterden we op kind==='yoko',
-      // wat leden zoals Manuel weghield als hun kind nog op 'freelance'
-      // of leeg stond. Liever te ruim seeden — een lege sectie kan de
-      // user altijd zelf verwijderen via de prullenbak naast de naam.
+      // pseudo-'unassigned' lid). Liever te ruim seeden — een lege
+      // sectie kan de user altijd zelf verwijderen via de prullenbak
+      // naast de naam; we onthouden die verwijdering hieronder.
       if (m.id === 'unassigned') continue
       if (existing.has(m.id)) continue
+      if (deletedIds.has(m.id)) continue
       toAdd.push({ id: m.id, title: m.name, emoji: '👤', items: [] })
     }
     if (toAdd.length === 0) return
@@ -1207,10 +1214,19 @@ export default function TodosPage() {
   }
 
   function deleteSection(id: string) {
-    if (memberIdSet().has(id)) return  // member-secties beschermen
+    if (memberIdSet().has(id)) return  // hard-coded seed-leden beschermen
     const next = sections.filter(s => s.id !== id)
     setSections(next)
     saveSections(next)
+    // Onthoud dat de gebruiker deze sectie expliciet heeft verwijderd
+    // — anders zou de auto-seed-loop hieronder 'm bij elke refresh
+    // weer terugbrengen omdat het id in liveTeam staat.
+    try {
+      const raw = localStorage.getItem('yoko-todos-deleted-sections')
+      const set = new Set<string>(raw ? JSON.parse(raw) : [])
+      set.add(id)
+      localStorage.setItem('yoko-todos-deleted-sections', JSON.stringify([...set]))
+    } catch {}
   }
 
   // 'Persoonlijk' = sectie hoort bij een teamlid (id matched) ÓF de
