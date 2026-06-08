@@ -385,15 +385,17 @@ export async function purgeTrashItem(itemId: string): Promise<boolean> {
 
 const channelByBoard: Record<string, ReturnType<NonNullable<typeof supabase>['channel']>> = {}
 
-// Debounce realtime-triggered pulls so a batch of N events (e.g. Google sync
-// upserting 50 items at once) doesn't fan out into N parallel REST fetches.
+// Debounce realtime-triggered pulls. 150ms is genoeg om een batch
+// (zoals Google-sync van 50 items) te dedupen zonder zichtbare delay
+// voor een enkele timeline-edit. Eerder stond dit op 600ms — dat voelde
+// na elke collega-edit traag.
 const pullTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 function schedulePull(boardName: string) {
   if (pullTimers[boardName]) return
   pullTimers[boardName] = setTimeout(() => {
     delete pullTimers[boardName]
     pullBoardFromRemote(boardName).catch(() => {})
-  }, 600)
+  }, 150)
 }
 
 export function subscribeRemoteBoard(boardName: string): () => void {

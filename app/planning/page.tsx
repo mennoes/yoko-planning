@@ -3203,7 +3203,7 @@ export default function PlanningPage() {
     const pollTimer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       pullAll()
-    }, 15000)
+    }, 4000)
     function onFocus() { pullAll() }
     function onVisibility() { if (document.visibilityState === 'visible') pullAll() }
     window.addEventListener('focus', onFocus)
