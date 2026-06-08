@@ -140,12 +140,24 @@ export async function pullExtrasFromRemote(): Promise<boolean> {
   return true
 }
 
+// Module-level dedup: voorkomt 'cannot add postgres_changes callbacks
+// after subscribe()' wanneer AppShell start() opnieuw runt (bv. na
+// auth-change) terwijl 't channel-object intern nog leeft. Pas opnieuw
+// subscriben als de vorige expliciet is opgeruimd.
+let extrasChannel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
 export function subscribeRemoteExtras(): () => void {
   if (!supabase) return () => {}
+  if (extrasChannel) return () => {}
   const ch = supabase.channel('team_members_extra')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members_extra' }, () => {
       pullExtrasFromRemote().catch(() => {})
     })
     .subscribe()
-  return () => { if (supabase) supabase.removeChannel(ch) }
+  extrasChannel = ch
+  return () => {
+    if (supabase && extrasChannel) {
+      supabase.removeChannel(extrasChannel)
+      extrasChannel = null
+    }
+  }
 }

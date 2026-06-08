@@ -3078,6 +3078,14 @@ export default function PlanningPage() {
     setExpanded(prev => prev.has(profile.memberId!) ? prev : new Set([...prev, profile.memberId!]))
   }, [profile?.memberId])
   const [detailProject, setDetailProject] = useState<Project | null>(null)
+  // Sync detail-open flag naar window zodat de poll-loop pulls kan
+  // skippen tijdens een actieve detail-edit (anders zou een refetch
+  // de input-velden mid-typing resetten).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    (window as unknown as { __yokoDetailOpen?: boolean }).__yokoDetailOpen = detailProject !== null
+    return () => { (window as unknown as { __yokoDetailOpen?: boolean }).__yokoDetailOpen = false }
+  }, [detailProject])
   // Klik-positie van de laatste bar-klik. Detail-popup positioneert zich
   // hierop zodat-ie naast het aangeklikte bolletje verschijnt i.p.v.
   // gecentreerd over de hele tijdlijn — zo zie je live wat een wijziging
@@ -3235,9 +3243,11 @@ export default function PlanningPage() {
     }
     refresh()
     function onBoardUpdate() {
-      // Niet refreshen tijdens een drag — anders snapt allGroups
-      // halverwege weg en mist de drag z'n eind-positie.
-      if ((window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive) return
+      const w = window as unknown as { __yokoDragActive?: boolean; __yokoDetailOpen?: boolean }
+      // Niet refreshen tijdens een drag of open detail-panel — anders
+      // snapt allGroups halverwege weg en raakt de input/de drag z'n
+      // staat kwijt.
+      if (w.__yokoDragActive || w.__yokoDetailOpen) return
       refresh()
     }
     window.addEventListener('yoko-board-update', onBoardUpdate)
@@ -3259,9 +3269,14 @@ export default function PlanningPage() {
     // forceren we een verse pull zodat je geen verouderde state ziet
     // na 't terugkeren naar de tab.
     function pullAll() {
+      const w = window as unknown as { __yokoDragActive?: boolean; __yokoDetailOpen?: boolean }
       // Tijdens een actieve drag NIET pullen — een midden-in-de-sleep
       // refetch zou allGroups vervangen en de bar laten springen.
-      if ((window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive) return
+      if (w.__yokoDragActive) return
+      // Tijdens een open DetailPanel NIET pullen — een pull resette
+      // het project-prop terwijl de user net iets aan't typen was
+      // (datums, uren, notes), waardoor invoer onzichtbaar verdween.
+      if (w.__yokoDetailOpen) return
       for (const name of BOARD_NAMES) pullBoardFromRemote(name).catch(() => {})
     }
     const pollTimer = window.setInterval(() => {
