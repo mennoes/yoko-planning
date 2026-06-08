@@ -1367,7 +1367,7 @@ export default function TodosPage() {
           <>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
               gap: 12, alignItems: 'start', marginBottom: 28,
             }}>
               {general.map((s, i) => (
@@ -1394,7 +1394,7 @@ export default function TodosPage() {
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
               gap: 12, alignItems: 'start',
             }}>
               {personal.map((s, i) => (
