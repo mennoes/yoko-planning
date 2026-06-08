@@ -568,11 +568,21 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
   const FULL_DAY_HOURS = 8
   const availH = (laneH ?? BAR_H + BAR_GAP) - BAR_GAP
   const baseH  = small ? 10 : BAR_H
-  // Bar-hoogte schalen op uren met sqrt + 50% baseline, zodat 't verschil
-  // tussen korte (1u) en lange (8u) bars visueel kleiner is. Voorheen was
-  // 't lineair: 1u = 12% hoogte, 8u = 100% — vond user te groot contrast.
-  // Nu: 1u ≈ 50% + sqrt(1/8)*50% = 67%; 8u = 100%.
-  const ratio = Math.min(1, Math.max(0, (project.estHours || 0) / FULL_DAY_HOURS))
+  // Hoogte schaalt op uren-PER-DAG, niet op het totaal van het project.
+  // Een 20u project dat 2.5 maanden loopt is ~16 minuten/dag, niet een
+  // volle werkdag. Eerder gebruikten we project.estHours direct,
+  // waardoor lange projecten ten onrechte als hele-dag werden getoond.
+  const projectDays = (() => {
+    if (!project.startDate || !project.endDate) return 1
+    const s = new Date(project.startDate).getTime()
+    const e = new Date(project.endDate).getTime()
+    return Math.max(1, Math.round((e - s) / 86400000) + 1)
+  })()
+  const hoursPerDay = (project.estHours || 0) / projectDays
+  // Bar-hoogte schalen op uren-per-dag met sqrt + 50% baseline, zodat 't
+  // verschil tussen korte (1u/dag) en lange (8u/dag) bars visueel
+  // kleiner is. 1u/dag ≈ 67%, 8u/dag = 100%.
+  const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
   const scaledH = scaleByHours
     ? Math.max(6, Math.round(availH * (0.5 + Math.sqrt(ratio) * 0.5)))
     : baseH
@@ -1721,11 +1731,19 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
             </div>
           )
         }
-        // Items van ~hele werkdag (>=7u) in Overzicht vullen verticaal
+        // Items van ~hele werkdag (>=7u/dag) in Overzicht vullen verticaal
         // de hele beschikbare row-hoogte — visueel signaleert dat de
-        // dag dichtgetimmerd zit. Mag andere bars overlappen; daarom
-        // z-index hoger dan reguliere bars maar lager dan meetings.
-        const isFullDay = zoom === 'week' && (b.p.estHours || 0) >= 7
+        // dag dichtgetimmerd zit. Mag andere bars overlappen.
+        // Belangrijk: kijk naar uren-PER-DAG, niet 't totaal. Een 20u
+        // project van 2 maanden is ~16min/dag, geen volle werkdag.
+        const projDays = (() => {
+          if (!b.p.startDate || !b.p.endDate) return 1
+          const s = new Date(b.p.startDate).getTime()
+          const e = new Date(b.p.endDate).getTime()
+          return Math.max(1, Math.round((e - s) / 86400000) + 1)
+        })()
+        const hoursPerDay = (b.p.estHours || 0) / projDays
+        const isFullDay = zoom === 'week' && hoursPerDay >= 7
         const top = projectLaneTop(b.lane)
         const wrapperH = isFullDay
           ? Math.max(PROJECT_LANE_H, baseHeight - top - 6)
