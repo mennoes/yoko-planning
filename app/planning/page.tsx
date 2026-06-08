@@ -2003,7 +2003,22 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   onDelete?: () => void
 }) {
   const color   = BOARD_COLORS[project.board] ?? '#888'
-  const team    = teamData.members
+  // Team = seed (team.json) + live team_members. Eerder gebruikten we
+  // alleen de seed, waardoor leden die later via /team-admin zijn
+  // toegevoegd (bv. Manuel) niet in de Verdeling-pie verschenen — hun
+  // segment kreeg een '?'-badge en hun naam-regel werd weggefilterd.
+  const { members: liveTeam } = useTeam()
+  const team = useMemo(() => {
+    const byId = new Map<string, TeamMember>(teamData.members.map(m => [m.id, m as TeamMember]))
+    for (const lm of liveTeam) {
+      if (lm.id === 'unassigned' || lm.hidden) continue
+      const existing = byId.get(lm.id)
+      byId.set(lm.id, existing
+        ? { ...existing, name: lm.name || existing.name, color: lm.color || existing.color }
+        : { id: lm.id, name: lm.name || lm.id, color: lm.color || '#9aa3ad', weeklyCapacity: lm.weeklyCapacity || 40 })
+    }
+    return Array.from(byId.values())
+  }, [liveTeam])
   const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => `${project.board}__${i.id}` === project.id)
 
   const [startDate, setStartDate] = useState(project.startDate ?? '')
@@ -2692,7 +2707,20 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
   onCreate: (boardName: string, item: BoardItem) => void
   defaultMemberId: string | null
 }) {
-  const team = teamData.members
+  // Merge seed + liveTeam zodat ook later-toegevoegde leden (Manuel)
+  // in de owner-dropdown van het Nieuw-item-popup verschijnen.
+  const { members: liveTeam } = useTeam()
+  const team = useMemo(() => {
+    const byId = new Map<string, TeamMember>(teamData.members.map(m => [m.id, m as TeamMember]))
+    for (const lm of liveTeam) {
+      if (lm.id === 'unassigned' || lm.hidden) continue
+      const existing = byId.get(lm.id)
+      byId.set(lm.id, existing
+        ? { ...existing, name: lm.name || existing.name, color: lm.color || existing.color }
+        : { id: lm.id, name: lm.name || lm.id, color: lm.color || '#9aa3ad', weeklyCapacity: lm.weeklyCapacity || 40 })
+    }
+    return Array.from(byId.values())
+  }, [liveTeam])
   const today = new Date().toISOString().slice(0, 10)
   const [name,    setName]    = useState('')
   const [board,   setBoard]   = useState<string>(BOARD_NAMES[0])
