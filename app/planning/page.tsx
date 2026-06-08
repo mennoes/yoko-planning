@@ -1721,10 +1721,19 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
             </div>
           )
         }
+        // Items van ~hele werkdag (>=7u) in Overzicht vullen verticaal
+        // de hele beschikbare row-hoogte — visueel signaleert dat de
+        // dag dichtgetimmerd zit. Mag andere bars overlappen; daarom
+        // z-index hoger dan reguliere bars maar lager dan meetings.
+        const isFullDay = zoom === 'week' && (b.p.estHours || 0) >= 7
+        const top = projectLaneTop(b.lane)
+        const wrapperH = isFullDay
+          ? Math.max(PROJECT_LANE_H, baseHeight - top - 6)
+          : PROJECT_LANE_H
         return (
-          <div key={b.p.id} style={{ position: 'absolute', top: projectLaneTop(b.lane), left: 0, right: 0, height: PROJECT_LANE_H, pointerEvents: 'none' }}>
+          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: isFullDay ? 3 : 1 }}>
             <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
-              laneH={PROJECT_LANE_H} scaleByHours={zoom === 'week'}
+              laneH={wrapperH} scaleByHours={zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
