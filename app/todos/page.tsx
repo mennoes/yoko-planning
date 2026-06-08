@@ -1250,7 +1250,19 @@ export default function TodosPage() {
     const i = PERSONAL_ORDER.indexOf(id)
     return i >= 0 ? i : 999
   }
+  // Persoonlijke secties verbergen voor inactieve freelancers: anders
+  // staat de hele freelancers-lijst altijd onderaan ook als ze nu geen
+  // werk hebben. Yoko-crew (kind 'yoko' of nog niet gezet) tonen we
+  // altijd. Sectie met items > 0 tonen we sowieso (gebruiker heeft er
+  // actief iets in zitten).
   const personal = sections.filter(isPersonalSection)
+    .filter(s => {
+      if (s.items.length > 0) return true
+      const m = liveTeam.find(lt => lt.id === s.id)
+      if (!m) return true
+      if (m.kind !== 'freelance') return true
+      return loadMyOpenProjects(s.id).length > 0
+    })
     .sort((a, b) => {
       const me = currentProfile?.memberId
       if (a.id === me) return -1
@@ -1355,7 +1367,7 @@ export default function TodosPage() {
           <>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               gap: 12, alignItems: 'start', marginBottom: 28,
             }}>
               {general.map((s, i) => (
@@ -1382,7 +1394,7 @@ export default function TodosPage() {
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               gap: 12, alignItems: 'start',
             }}>
               {personal.map((s, i) => (
