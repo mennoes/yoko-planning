@@ -4829,11 +4829,17 @@ export default function PlanningPage() {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
               if (freelancersOpen) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
+              } else {
+                // Ingeklapt: toch tonen wie ownership heeft op tenminste
+                // één zichtbaar project. Voorkomt dat een toegewezen
+                // freelancer (bv. Fokke) onzichtbaar blijft tot iemand de
+                // sectie handmatig open klikt. Heeft niemand werk → secties
+                // blijft echt leeg na inklappen.
+                const active = freelancers.filter(m =>
+                  effectiveProjects.some(p => p.ownerIds.includes(m.id))
+                )
+                active.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
-              // Ingeklapt = écht ingeklapt (geen rijen meer). Vroeger lieten
-              // we 'active' freelancers (met uren) staan, maar dan kon de
-              // gebruiker nooit alles verbergen. Klap je 't open via de
-              // chevron, dan kun je iedereen weer zien.
             }
             return out
           })()}

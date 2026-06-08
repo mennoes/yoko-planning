@@ -23,6 +23,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
+import { softDeleteItem } from '@/lib/boardStore'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
@@ -3144,6 +3145,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       })
       return { ...g, items }
     }))
+    // Top-level row ook in Supabase wegzetten. pushBoardToRemote upsert
+    // alleen items die in de lokale staat staan; zonder expliciete soft-
+    // delete blijft de oude top-level rij in DB en komt 'ie bij de
+    // volgende pull terug, dus duplicaat (parent met subitem + losse
+    // top-level item).
+    softDeleteItem(sourceId).catch(() => {})
   }
 
   function handleUpdateGroup(updatedGroup: BoardGroup) {

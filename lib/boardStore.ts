@@ -447,6 +447,20 @@ export async function purgeTrashItem(itemId: string): Promise<boolean> {
   return !error
 }
 
+// Verwijder een specifiek item uit een bord (soft-delete). Gebruikt
+// bv. wanneer een item als subitem wordt genest onder een ander item
+// — de top-level row moet dan ook in Supabase verdwijnen, want
+// pushBoardToRemote upsert alleen items die in de lokale staat
+// voorkomen en kent geen automatische reconcile-deletie meer.
+export async function softDeleteItem(itemId: string): Promise<boolean> {
+  if (!supabase) return false
+  if (!await getCurrentUserId()) return false
+  const { error } = await supabase.from('board_items')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', itemId)
+  return !error
+}
+
 const channelByBoard: Record<string, ReturnType<NonNullable<typeof supabase>['channel']>> = {}
 
 // Debounce realtime-triggered pulls. 150ms is genoeg om een batch
