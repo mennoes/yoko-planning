@@ -1014,12 +1014,11 @@ export default function TodosPage() {
     const toAdd: Section[] = []
     for (const m of liveTeam) {
       if (m.hidden) continue
-      // Auto-seed voor 'yoko' EN voor leden zonder expliciete kind
-      // (kind null/leeg). Eerder werd alleen kind==='yoko' geseed,
-      // waardoor nieuwe leden die per ongeluk zonder kind in de DB
-      // belandden (bv. Manuel via een eerdere admin-flow) geen sectie
-      // kregen. Freelance + unassigned blijven uitgesloten.
-      if (m.kind === 'freelance' || m.kind === 'unassigned') continue
+      // Seed een sectie voor élk niet-verborgen teamlid (behalve het
+      // pseudo-'unassigned' lid). Eerder filterden we op kind==='yoko',
+      // wat leden zoals Manuel weghield als hun kind nog op 'freelance'
+      // of leeg stond. Liever te ruim seeden — een lege sectie kan de
+      // user altijd zelf verwijderen via de prullenbak naast de naam.
       if (m.id === 'unassigned') continue
       if (existing.has(m.id)) continue
       toAdd.push({ id: m.id, title: m.name, emoji: '👤', items: [] })
