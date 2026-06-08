@@ -11,7 +11,7 @@ import pnpRaw            from '@/data/boards/pnp.json'
 import nederlandRaw      from '@/data/boards/nederland.json'
 import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
 import dienjaarRaw       from '@/data/boards/dienjaar.json'
-import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard } from '@/lib/boardStore'
+import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscribeRemoteBoard, pullBoardFromRemote } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
@@ -3014,6 +3014,33 @@ export default function PlanningPage() {
     function onBoardUpdate() { refresh() }
     window.addEventListener('yoko-board-update', onBoardUpdate)
     window.addEventListener('yoko-boards-registry-update', onBoardUpdate)
+
+    // Realtime: abonneer op postgres_changes voor elk bord zodat
+    // wijzigingen door collega's meteen via pullBoardFromRemote
+    // binnenkomen en een yoko-board-update-event triggeren.
+    // Ook één keer remote-pullen bij mount zodat de cache up-to-date
+    // is voor mensen die net de tool open hebben gegooid.
+    const boardUnsubs: Array<() => void> = []
+    for (const name of BOARD_NAMES) {
+      pullBoardFromRemote(name).catch(() => {})
+      boardUnsubs.push(subscribeRemoteBoard(name))
+    }
+    // Safety-net: als realtime een edit mist (verbinding gedropt,
+    // postgres_changes-filter mismatch, etc.) pullen we elke 15s
+    // alsnog opnieuw. Ook bij window-focus + tab-visibility-change
+    // forceren we een verse pull zodat je geen verouderde state ziet
+    // na 't terugkeren naar de tab.
+    function pullAll() {
+      for (const name of BOARD_NAMES) pullBoardFromRemote(name).catch(() => {})
+    }
+    const pollTimer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      pullAll()
+    }, 15000)
+    function onFocus() { pullAll() }
+    function onVisibility() { if (document.visibilityState === 'visible') pullAll() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
     // Vacation lookup for the palm-tree marker
     if (typeof window !== 'undefined') {
       import('@/lib/supabase').then(({ supabase }) => {
@@ -3031,6 +3058,10 @@ export default function PlanningPage() {
     return () => {
       window.removeEventListener('yoko-board-update', onBoardUpdate)
       window.removeEventListener('yoko-boards-registry-update', onBoardUpdate)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.clearInterval(pollTimer)
+      for (const off of boardUnsubs) off()
     }
   }, [])
 
