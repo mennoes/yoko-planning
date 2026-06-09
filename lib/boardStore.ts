@@ -330,41 +330,13 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   // stale cache) zou een onbedoelde mass-delete plaatsvinden. Verwijderen
   // gebeurt nu uitsluitend door expliciete UI-acties via softDeleteItem.
 
-  // SAFETY GUARD #2 — reconcile-deletie alleen voor rijen die OUDER zijn
-  // dan onze laatste succesvolle pull. Een rij die NA dat moment door
-  // iemand anders is toegevoegd, hebben wij nog niet gezien — die mogen
-  // we niet stilzwijgend wegvegen omdat wij 'm toevallig niet in onze
-  // lokale kopie hebben. Dit voorkomt het 'andere user logt in en alle
-  // projecten zijn weg'-scenario.
-  // Reconcile-deletie helemaal uitschakelen voor items — was bron van
-  // 'item verdwijnt uit het niets' bugs wanneer 'n lokale cache niet
-  // up-to-date is (Supabase had nieuwere items, push gooit ze weg omdat
-  // ze niet in 't lokale snapshot zitten). Soft-delete gebeurt nu
-  // uitsluitend via expliciete UI-actie (× knop, delete-handler). Geen
-  // automatische opruim meer.
-  const lastSync = readLastSync(boardName)
-  void lastSync
-  const localGroupIds = new Set(groups.map(g => g.id))
-
-  // Reconcile-deletie items volledig uitgeschakeld. De baseline-check
-  // was bedoeld als safeguard maar items bleven verdwijnen bij stale
-  // caches. Verwijdering gebeurt nu alleen expliciet via removeItem() /
-  // deleteItem-handlers; geen automatische soft-delete bij sync meer.
-  const stamp = new Date().toISOString()
-  void stamp
-  if (lastSync > 0) {
-    const { data: remoteGroups } = await supabase
-      .from('board_groups').select('id').eq('board_id', boardName).is('deleted_at', null)
-    if (remoteGroups) {
-      const stale = (remoteGroups as { id: string }[]).map(r => r.id).filter(id => !localGroupIds.has(id))
-      if (stale.length > 0) {
-        await supabase.from('board_groups')
-          .update({ deleted_at: stamp })
-          .in('id', stale)
-      }
-    }
-  }
-
+  // OOK GEEN automatische reconcile-deletie van groepen meer. Eerder
+  // werden groepen die NIET in de lokale staat zaten soft-deleted op
+  // basis van een lastSync-cutoff — maar als de lokale staat tijdelijk
+  // partial/gefilterd was, vlogen hele groepen + hun items uit beeld
+  // (board_items met group_id van soft-deleted group worden niet meer
+  // door pullBoardFromRemote opgehaald). Groepen verwijderen vereist
+  // nu een expliciete UI-actie.
   return true
 }
 
