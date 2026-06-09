@@ -1673,10 +1673,16 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   const PROJECT_LANE_H = zoom === 'week' ? 32 : (BAR_H + BAR_GAP)
   const MEETING_LANE_H = BAR_H + BAR_GAP
 
-  function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
-  // Meetings worden bovenop project-balken gerenderd — mogen overlappen
-  // omdat ze toch een eigen hover-popover hebben met details.
+  // Meeting-lanes BOVEN project-lanes plaatsen zodat ze elkaar visueel
+  // niet meer overlappen. Eerder mochten ze overlappen, maar dat brak
+  // drag-functionaliteit van project-bars onder een meeting (read-only
+  // meeting-bar ving 't mousedown-event af). Met de meetings duidelijk
+  // gescheiden bovenaan blijven projecten direct sleepbaar.
   function meetingLaneTop(lane: number) { return BAR_GAP + lane * MEETING_LANE_H }
+  function projectLaneTop(lane: number) {
+    const meetingsBlockH = meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 4 : 0)
+    return BAR_GAP + meetingsBlockH + lane * PROJECT_LANE_H
+  }
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
   const bars: Single[] = [
