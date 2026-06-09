@@ -960,7 +960,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       case 'ownerIds':
         return <div style={cellBorder}><OwnersCell value={subitem.ownerIds} onChange={v => onUpdate({ ownerIds: v })} /></div>
       case 'status':
-        return <div style={cellBorder}><StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} /></div>
+        // Status: cell-border zonder padding/center zodat de status-tag
+        // de volledige rij-hoogte van het subitem vult (visueel hetzelfde
+        // gedrag als bij top-level items).
+        return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
+          <StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} />
+        </div>
       case 'timeline':
         return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
       case 'estHours':
