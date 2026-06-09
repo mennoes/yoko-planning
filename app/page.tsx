@@ -520,6 +520,13 @@ export default function HomePage() {
     const todayD = new Date(todayIso)
     const wStart = new Date(week)
     const wEnd   = new Date(week); wEnd.setDate(wEnd.getDate() + 7)
+    // Lokale 'done'-vinkjes uit de werkdruk-widget; deze worden NIET
+    // naar de agenda gepusht — alleen visueel afgevinkt in deze widget.
+    let werkdrukDone: Set<string> = new Set()
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('yoko-werkdruk-done-flags') : null
+      if (raw) werkdrukDone = new Set(JSON.parse(raw) as string[])
+    } catch {}
     setWeekItems(contribs.map(c => {
       const sd = c.project.startDate ? new Date(c.project.startDate) : null
       const ed = c.project.endDate   ? new Date(c.project.endDate)   : sd
@@ -549,7 +556,7 @@ export default function HomePage() {
         startTime: c.project.startTime, endTime: c.project.endTime,
         source: c.project.source, externalLink: c.project.externalLink,
         meetLink: c.project.meetLink,
-        done: c.project.status === 'done',
+        done: c.project.status === 'done' || werkdrukDone.has(`${c.project.board}:${rawItemId}`),
         parentName: c.project.parentName,
       }
     }))
@@ -611,25 +618,22 @@ export default function HomePage() {
   }
 
   // Tick een workload-item Done (of un-Done): laadt het juiste bord, zet
-  // status='Done' (of '' bij un-Done) op de matchende row, slaat op én pusht
-  // naar Supabase. Update óók optimistic in weekItems zodat de strike-through
-  // direct zichtbaar is zonder te wachten op de board-update-event.
+  // Lokaal-only afvinken: de werkdruk-widget krijgt een strike-through
+  // maar de agenda blijft ONGEMOEID. Eerder zetten we de agenda-status
+  // ook op 'Done', maar dat overschrijft een conscious keuze in de
+  // agenda (waar de gebruiker zelf bepaalt wanneer iets Done is) en
+  // gaf onverwachte side-effects. Persisteer alleen lokaal zodat een
+  // refresh de fade behoudt zonder de echte agenda-status te muteren.
   async function toggleWorkloadDone(it: WorkloadItem, next: boolean) {
     setWeekItems(items => items.map(w => w.id === it.id ? { ...w, done: next } : w))
-    const groups = loadGroups(it.board, [])
-    const updated = groups.map(g => ({
-      ...g,
-      items: g.items.map(i => {
-        if (i.id !== it.rawItemId) return i
-        // Bij uitvinken zetten we 'm terug naar 'Working on...' (default voor
-        // actief werk) tenzij 'ie al een andere niet-Done status had.
-        if (next) return { ...i, status: 'Done' }
-        const prev = (i.status as string) ?? ''
-        return { ...i, status: prev === 'Done' ? '' : prev }
-      }),
-    }))
-    saveGroups(it.board, updated)
-    pushBoardToRemote(it.board, updated).catch(() => {})
+    try {
+      const KEY = 'yoko-werkdruk-done-flags'
+      const raw = window.localStorage.getItem(KEY)
+      const set = new Set<string>(raw ? JSON.parse(raw) as string[] : [])
+      const flagKey = `${it.board}:${it.rawItemId}`
+      if (next) set.add(flagKey); else set.delete(flagKey)
+      window.localStorage.setItem(KEY, JSON.stringify([...set]))
+    } catch {}
   }
 
   function moveSection(id: SectionId, dir: -1 | 1) {
