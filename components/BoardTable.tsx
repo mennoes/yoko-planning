@@ -216,13 +216,17 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
   const opt = STATUS_OPTIONS.find(s => s.label === value) ?? STATUS_OPTIONS[0]
 
   return (
-    <div>
+    <div style={{ width: '100%', height: '100%' }}>
+      {/* Vol-cel status-tag: vult de hele rij-cel met de status-kleur
+          zodat de kolom in één oogopslag visueel scant. Geen rond pilletje
+          meer met witruimte eromheen. */}
       <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
-        padding: '6px 16px', borderRadius: 999, cursor: 'pointer', border: 'none',
+        width: '100%', height: '100%',
+        padding: '0 10px', borderRadius: 0, cursor: 'pointer', border: 'none',
         background: opt.color || 'var(--overlay-medium)',
         color: opt.color ? '#fff' : 'var(--text-muted)',
         fontSize: 12.5, fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
-        whiteSpace: 'nowrap', maxWidth: '100%',
+        whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflow: 'hidden', textOverflow: 'ellipsis',
       }}>
         {value || '—'}
