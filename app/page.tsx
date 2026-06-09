@@ -22,6 +22,7 @@ import {
   type Section as TodoSection,
   type TodoItem as TodoStoreItem,
 } from '@/lib/todosStore'
+import { loadMyOpenProjects } from '@/lib/todoProjectSeed'
 import teamData  from '@/data/team.json'
 import yokoRaw        from '@/data/boards/yoko.json'
 import pnpRaw         from '@/data/boards/pnp.json'
@@ -399,17 +400,39 @@ export default function HomePage() {
     // My todos: lees uit de live todosStore (zelfde bron als /todos pagina)
     // i.p.v. de statische initial-data JSON. Subscribe op updates zodat
     // wijzigingen op /todos hier meteen verschijnen.
+    // Daarnaast vullen we aan met openstaande project-items (loadMyOpen-
+    // Projects) — anders zou de home-card minder items tonen dan /todos
+    // wanneer de auto-seed daar nog niet is gedraaid (user heeft /todos
+    // nooit geopend in deze sessie).
     function loadMine() {
       const fallback: TodoSection[] = todosData.sections as TodoSection[]
       const sections = loadTodoSectionsStore(fallback)
       const s = sections.find(x => x.id === memberId)
-      setMyTodos((s?.items ?? []) as TodoStoreItem[])
+      const stored = (s?.items ?? []) as TodoStoreItem[]
+      const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
+      const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
+        .filter(p => !existingIds.has(p.itemId))
+        .map((p, i) => ({
+          id: `auto-${p.board}-${p.itemId}-${i}`,
+          text: p.name, done: false,
+          projectRef: { board: p.board, itemId: p.itemId, name: p.name },
+        }))
+      setMyTodos([...stored, ...extras])
     }
     loadMine()
     pullTodos().then(remote => {
       if (remote) {
         const s = remote.find(x => x.id === memberId)
-        setMyTodos((s?.items ?? []) as TodoStoreItem[])
+        const stored = (s?.items ?? []) as TodoStoreItem[]
+        const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
+        const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
+          .filter(p => !existingIds.has(p.itemId))
+          .map((p, i) => ({
+            id: `auto-${p.board}-${p.itemId}-${i}`,
+            text: p.name, done: false,
+            projectRef: { board: p.board, itemId: p.itemId, name: p.name },
+          }))
+        setMyTodos([...stored, ...extras])
       }
     }).catch(() => {})
     const offTodos = onTodosUpdate(loadMine)
