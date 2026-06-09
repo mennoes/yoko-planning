@@ -917,7 +917,7 @@ function subitemAsItem(s: SubItem): BoardItem {
 }
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -934,11 +934,13 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   // Klik op naam → open detail-drawer met alle info, comments etc. De G-knop
   // links blijft naar Google leiden voor wie alleen het event wil openen.
   onOpenDetail?: () => void
+  // Net-aangemaakt subitem? Start dan meteen in edit-mode voor de naam.
+  defaultEditName?: boolean
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
-  const [editName,  setEditName]  = useState(false)
-  const [nameDraft, setNameDraft] = useState(subitem.name)
+  const [editName,  setEditName]  = useState(!!defaultEditName)
+  const [nameDraft, setNameDraft] = useState(defaultEditName ? '' : subitem.name)
 
   const cellBorder: React.CSSProperties = {
     borderLeft: '1px solid var(--border)', height: '100%',
@@ -1158,8 +1160,15 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     }))
   }
   function deleteOne(id: string) { onUpdate(subitems.filter(s => s.id !== id)) }
+  const [justCreatedSubId, setJustCreatedSubId] = useState<string | null>(null)
   function addOne() {
-    onUpdate([...subitems, { id: Date.now().toString(), name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
+    const id = Date.now().toString()
+    onUpdate([...subitems, { id, name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
+    // Onthoud de net-aangemaakte id zodat de rij meteen in edit-mode
+    // staat en de gebruiker direct kan typen i.p.v. de placeholder
+    // 'Nieuw subitem' apart te moeten aanklikken.
+    setJustCreatedSubId(id)
+    setTimeout(() => setJustCreatedSubId(prev => prev === id ? null : prev), 5000)
   }
   const rail = accentColor ?? 'var(--accent)'
   const hdrCell: React.CSSProperties = { padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)' }
@@ -1200,6 +1209,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           selectedIds={selectedIds} onToggleSelect={onToggleSelect}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail}
+          justCreatedSubId={justCreatedSubId}
           updateOne={updateOne} deleteOne={deleteOne} />
         <div style={{ padding: '8px 12px 8px 56px' }}>
           <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
@@ -1215,7 +1225,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, updateOne, deleteOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, updateOne, deleteOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
@@ -1225,6 +1235,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
   // de per-instance link werd opgeslagen).
   parentExternalLink?: string | null
   onOpenDetail?: (sub: SubItem) => void
+  // Id van een net-aangemaakte subitem — die rij start meteen in edit-mode.
+  justCreatedSubId?: string | null
   updateOne: (id: string, u: Partial<SubItem>) => void
   deleteOne: (id: string) => void
 }) {
@@ -1255,6 +1267,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           isLast={!hasDone && idx === lastActiveIdx}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
+          defaultEditName={sub.id === justCreatedSubId}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
       {hasDone && (
