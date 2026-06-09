@@ -1591,16 +1591,16 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         left  = (cs - gridStartMs) / msPerPx
         width = Math.max((ce - cs) / msPerPx - 2, MIN_BAR_W)
       }
-      // Meetings: zowel korte Google-events als alles wat door de gebruiker
-      // (of de classifier) op categorie 'meeting' is gezet. Daardoor komen
-      // handmatig-gemarkeerde meetings ook netjes onder de Meetings-toggle
-      // en in de cluster-pill terecht in plaats van als project-bar te
-      // blijven hangen.
-      const cat = effectiveCategory(
-        { name: p.name, hours: p.estHours || 0, source: p.source },
-        overrides[p.id],
-      )
-      const isMeeting = cat === 'meeting'
+      // Meeting-classificatie: BEPERKT tot duidelijke gevallen, niet alles
+      // wat per ongeluk 'Meeting' in z'n naam heeft. De automatische
+      // name-pattern classifier vangt te veel handmatige items (een
+      // subitem 'Meeting' onder 'Medialogica Marineland' is geen
+      // calendar-meeting). We tellen alleen items als meeting wanneer:
+      //   1. de gebruiker 'm expliciet via de detail-popup op meeting
+      //      heeft gezet (override), OF
+      //   2. 't echt 'n Google-event is (source==='google').
+      const explicitCat = overrides[p.id]
+      const isMeeting = explicitCat === 'meeting'
         || (p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2)
       if (hideMeetings && isMeeting) return null
       return { p, left, width, isMeeting }
