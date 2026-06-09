@@ -502,25 +502,15 @@ export default function HomePage() {
     const week = new Date(base); week.setDate(week.getDate() + weekOffset * 7)
     const contribs = memberContributions(allProjects, memberId, week)
     setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
-    // Vandaag-aware day-toewijzing. Voor multi-day items die NU lopen
-    // schuift 't item mee naar de dag-rij van vandaag — anders bleef
-    // een ma-do-project alleen op maandag staan en zag je op woensdag
-    // niet meer dat je er aan moest werken. Buiten de huidige week
-    // (weekOffset != 0) of buiten 't project-bereik vallen we terug op
-    // de start-dag.
-    const todayIso = new Date().toISOString().slice(0, 10)
-    const weekEnd = new Date(week); weekEnd.setDate(weekEnd.getDate() + 7)
+    // Items blijven op hun start-dag staan. Eerdere variant schoof
+    // ongoing items naar 'vandaag', waardoor afgelopen dagen leeg
+    // raakten en uit de lijst verdwenen. Nu zie je ook gisteren en
+    // eerder deze week terug — gerendered met fade zodat duidelijk is
+    // dat 't verleden is.
     setWeekItems(contribs.map(c => {
       const sd = c.project.startDate ? new Date(c.project.startDate) : null
-      const ed = c.project.endDate   ? new Date(c.project.endDate)   : sd
       const startDay = sd ? (sd.getDay() + 6) % 7 : 0
-      let day = startDay
-      const todayIsInWeek = weekOffset === 0
-      const todayD = new Date(todayIso)
-      const todayInProject = sd && ed && todayD >= sd && todayD <= ed
-      if (todayIsInWeek && todayInProject && todayD < weekEnd) {
-        day = (todayD.getDay() + 6) % 7
-      }
+      const day = startDay
       const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
         ? c.project.id.slice(c.project.board.length + 2)
         : c.project.id
@@ -958,9 +948,6 @@ export default function HomePage() {
                   </div>
                   {(['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'] as const).map((dayLabel, dayIdx) => {
                     const dayItems = weekItems.filter(i => i.day === dayIdx).slice().sort((a, b) => {
-                      // Sorteren op startTime — items met tijd staan voor
-                      // items zonder. Bij gelijke tijd alfabetisch fallback
-                      // zodat de volgorde voorspelbaar is.
                       const aT = a.startTime ?? null
                       const bT = b.startTime ?? null
                       if (aT && !bT) return -1
@@ -970,10 +957,14 @@ export default function HomePage() {
                     })
                     if (dayItems.length === 0) return null
                     const dayTotal = Math.round(dayItems.reduce((s, i) => s + i.hours, 0) * 10) / 10
+                    // Verleden-dagen in de huidige week subtiel uitfaden
+                    // zodat duidelijk is dat 't gepasseerd is — items
+                    // blijven nuttig voor terugkijken.
+                    const isPast = weekOffset === 0 && dayIdx < todayDay
                     return (
-                      <div key={dayIdx}>
+                      <div key={dayIdx} style={{ opacity: isPast ? 0.5 : 1, transition: 'opacity 0.15s' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span>{dayLabel}</span>
+                          <span>{dayLabel}{isPast ? ' · geweest' : ''}</span>
                           <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{dayTotal}u</span>
                         </div>
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
