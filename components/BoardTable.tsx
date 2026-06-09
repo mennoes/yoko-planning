@@ -2625,6 +2625,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                 </button>
                 <div title="Sleep om Item-kolom te verbreden of versmallen"
                   style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }}
+                  onClick={e => e.stopPropagation()}
                   onMouseDown={e => {
                     e.preventDefault(); e.stopPropagation()
                     const startX = e.clientX
@@ -2648,6 +2649,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   <div
                     title="Kolom breder/smaller slepen"
                     style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }}
+                    onClick={e => e.stopPropagation()}
                     onMouseDown={e => {
                       e.preventDefault(); e.stopPropagation()
                       const startX = e.clientX
