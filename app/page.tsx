@@ -507,46 +507,52 @@ export default function HomePage() {
     // raakten en uit de lijst verdwenen. Nu zie je ook gisteren en
     // eerder deze week terug — gerendered met fade zodat duidelijk is
     // dat 't verleden is.
-    // Expand multi-day items zodat ze op ELKE actieve werkdag in de
-    // week verschijnen (i.p.v. alleen op start-dag). Voor 'n project van
-    // ma-do zie je 'm dus op ma, di, wo én do — handig om over de hele
-    // week en op past days te zien wat er liep. Per-dag-uren = totaal
-    // project-uren in de week / aantal actieve werkdagen, zodat de som
-    // klopt met de week-totaal-balk.
-    const expanded: WorkloadItem[] = []
-    for (const c of contribs) {
+    // Eén item per project, geclampt naar 'vandaag binnen 't project-
+    // bereik'. Logica:
+    //  - Loopt 't project NU (start <= today <= end): day = today
+    //  - Project al voorbij (end < today): day = end (laatste actieve dag)
+    //  - Project begint nog (today < start): day = start
+    // Zo verschuift 'n ma-wo project op maandag naar maandag, op dinsdag
+    // naar dinsdag, en blijft 't dan op woensdag op woensdag staan. Past
+    // days tonen niet meer dezelfde lopende items, alleen items die op
+    // die dag écht zijn afgerond.
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const todayD = new Date(todayIso)
+    const wStart = new Date(week)
+    const wEnd   = new Date(week); wEnd.setDate(wEnd.getDate() + 7)
+    setWeekItems(contribs.map(c => {
       const sd = c.project.startDate ? new Date(c.project.startDate) : null
       const ed = c.project.endDate   ? new Date(c.project.endDate)   : sd
-      const wStart = new Date(week)
-      const wEnd   = new Date(week); wEnd.setDate(wEnd.getDate() + 6)
-      // Voor elke dag (ma-zo) in deze week kijken of 't project actief is.
-      const activeDays: number[] = []
-      for (let d = 0; d < 7; d++) {
-        const dayDate = new Date(wStart); dayDate.setDate(wStart.getDate() + d)
-        if (sd && ed && dayDate >= sd && dayDate <= ed) activeDays.push(d)
+      let ref: Date
+      if (sd && ed) {
+        if (todayD < sd) ref = sd
+        else if (todayD > ed) ref = ed
+        else ref = todayD
+      } else if (sd) {
+        ref = sd
+      } else {
+        ref = wStart
       }
-      const fallbackDay = sd ? (sd.getDay() + 6) % 7 : 0
-      const days = activeDays.length > 0 ? activeDays : [fallbackDay]
-      const perDayHours = Math.round((c.hours / days.length) * 10) / 10
+      // Buiten de zichtbare week vallen we terug op de project-start (zo
+      // verschuift een 'vorige-week-view' niet plots ongeoorloofd).
+      if (ref < wStart) ref = sd ?? wStart
+      if (ref >= wEnd && ed) ref = ed
+      const day = (ref.getDay() + 6) % 7
       const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
         ? c.project.id.slice(c.project.board.length + 2)
         : c.project.id
-      for (const day of days) {
-        expanded.push({
-          id: `${c.project.id}__d${day}`,
-          rawItemId,
-          name: c.project.name, board: c.project.board, hours: perDayHours, day,
-          startDate: c.project.startDate, endDate: c.project.endDate,
-          startTime: c.project.startTime, endTime: c.project.endTime,
-          source: c.project.source, externalLink: c.project.externalLink,
-          meetLink: c.project.meetLink,
-          done: c.project.status === 'done',
-          parentName: c.project.parentName,
-        })
+      return {
+        id: c.project.id,
+        rawItemId,
+        name: c.project.name, board: c.project.board, hours: c.hours, day,
+        startDate: c.project.startDate, endDate: c.project.endDate,
+        startTime: c.project.startTime, endTime: c.project.endTime,
+        source: c.project.source, externalLink: c.project.externalLink,
+        meetLink: c.project.meetLink,
+        done: c.project.status === 'done',
+        parentName: c.project.parentName,
       }
-      void wEnd
-    }
-    setWeekItems(expanded)
+    }))
   }, [memberId, weekOffset, allProjects])
 
   // Re-load category overrides if another view changes them.
