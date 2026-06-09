@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom'
 import {
   loadTrash, restoreTrashItem, purgeTrashItem, pullBoardFromRemote, type TrashItem,
 } from '@/lib/boardStore'
-import { loadBoardActivity, type ItemActivity, type ActivityField } from '@/lib/itemActivity'
+import { loadBoardActivity, itemIdFromTarget, type ItemActivity, type ActivityField } from '@/lib/itemActivity'
 import { supabase } from '@/lib/supabase'
 import teamData from '@/data/team.json'
 import { useTeamPhotos } from './TeamPhotosContext'
@@ -166,7 +166,7 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', zIndex: 9000 }} />
       <div onClick={e => e.stopPropagation()} style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 'min(520px, 100vw)', zIndex: 9001,
+        width: 'min(640px, 100vw)', zIndex: 9001,
         background: 'var(--bg-base)', borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         boxShadow: '-12px 0 40px rgba(0,0,0,0.35)',
@@ -342,48 +342,88 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, onP
         const memberColor = teamData.members.find(m => m.id === memberId)?.color ?? '#9aa3ad'
         const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
         const iconKind = iconTypeFor(e)
+        const itemId = itemIdFromTarget(e.target)
+        const itemName = e.meta?.itemName ?? null
+        const boardForLink = (e.meta?.boardId as string | undefined) ?? null
+        function openItem() {
+          if (!itemId || !boardForLink) return
+          const url = `/projects/${boardForLink}?focus=${encodeURIComponent(itemId)}&drawer=${encodeURIComponent(itemId)}`
+          window.location.href = url
+        }
         return (
-          <div key={`a_${e.id}`} style={{ padding: '10px 18px', borderTop: '1px solid var(--border-light)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <span style={{ width: 22, height: 22, borderRadius: '50%', background: memberColor + '22', color: memberColor,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-              <ActionIcon type={iconKind} />
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {e.meta?.itemName && (
-                <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {e.meta.itemName}
-                </div>
+          <div key={`a_${e.id}`}
+            onClick={openItem}
+            style={{ padding: '12px 18px', borderTop: '1px solid var(--border-light)',
+              display: 'flex', gap: 12, alignItems: 'flex-start',
+              cursor: itemId ? 'pointer' : 'default',
+              background: 'var(--bg-base)',
+              transition: 'background 0.1s' }}
+            onMouseEnter={ev2 => { if (itemId) (ev2.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
+            onMouseLeave={ev2 => { (ev2.currentTarget as HTMLElement).style.background = 'var(--bg-base)' }}>
+            {/* Avatar van actor met klein action-icon-badge in de hoek
+                (zoals Monday's activity-log). */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              {photo ? (
+                <img src={photo} alt={name} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ width: 34, height: 34, borderRadius: '50%',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  background: memberColor + '22', color: memberColor, fontSize: 12, fontWeight: 700 }}>
+                  {initials}
+                </span>
               )}
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>
+              <span style={{ position: 'absolute', right: -3, bottom: -3,
+                width: 18, height: 18, borderRadius: '50%',
+                background: 'var(--bg-card)', border: '2px solid var(--bg-base)',
+                color: 'var(--text-primary)',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ActionIcon type={iconKind} />
+              </span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Lijn 1: ITEM-naam dik bovenaan (waar de wijziging op is). */}
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                marginBottom: 2 }}>
+                {itemName ?? <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 500 }}>(item zonder naam)</span>}
+              </div>
+              {/* Lijn 2: WIE + WAT. */}
+              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
                 <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>{' '}{e.action}
               </div>
+              {/* Lijn 3: before -> after via duidelijke pills. */}
               {(e.meta?.before !== undefined || e.meta?.after !== undefined) ? (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {fmtSimple(e.meta?.before)} → {fmtSimple(e.meta?.after)}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                  <span style={pillStyle(false)}>{fmtSimple(e.meta?.before)}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
+                  <span style={pillStyle(true)}>{fmtSimple(e.meta?.after)}</span>
                 </div>
               ) : e.detail ? (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{e.detail}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{e.detail}</div>
               ) : null}
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>
+              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 5 }}>
                 {fmtDate(e.ts)}
+                {itemId && boardForLink && <span style={{ marginLeft: 6, color: 'var(--accent)' }}>· klik om item te openen ↗</span>}
               </div>
             </div>
-            {photo && (
-              <img src={photo} alt={name} title={name}
-                style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-            )}
-            {!photo && (
-              <span title={name} style={{ width: 22, height: 22, borderRadius: '50%',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                background: memberColor + '22', color: memberColor, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
-                {initials}
-              </span>
-            )}
           </div>
         )
       })}
     </div>
   )
+}
+
+function pillStyle(positive: boolean): React.CSSProperties {
+  return {
+    display: 'inline-block',
+    padding: '3px 9px',
+    borderRadius: 999,
+    background: positive ? 'rgba(46, 175, 90, 0.14)' : 'rgba(196, 69, 58, 0.10)',
+    color: positive ? '#2eaf5a' : 'var(--text-secondary)',
+    border: `1px solid ${positive ? 'rgba(46, 175, 90, 0.35)' : 'var(--border)'}`,
+    fontSize: 11.5, fontWeight: 600,
+    maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  }
 }
 
 function fmtSimple(v: unknown): string {
