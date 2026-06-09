@@ -151,8 +151,9 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
               arr.push(t); groups.set(k, arr)
             }
             const sorted = [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]))
-            return sorted.map(([day, dayItems]) => (
+            return sorted.map(([day, dayItems], idx) => (
               <DayGroup key={day} day={day} dayItems={dayItems} busyId={busy}
+                defaultOpen={idx === 0}
                 onPickItem={setDetailItem}
                 onRestore={onRestore} onPurge={onPurge} onRestoreAll={() => onRestoreAll(dayItems)} />
             ))
@@ -172,20 +173,19 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
 
 // Eén dag-groep in de Geschiedenis. Inklapbare header met telling +
 // 'Herstel alle' bulk-knop; daaronder de individuele items.
-function DayGroup({ day, dayItems, busyId, onPickItem, onRestore, onPurge, onRestoreAll }: {
+function DayGroup({ day, dayItems, busyId, defaultOpen, onPickItem, onRestore, onPurge, onRestoreAll }: {
   day: string
   dayItems: TrashItem[]
   busyId: string | null
+  defaultOpen?: boolean
   onPickItem: (t: TrashItem) => void
   onRestore: (t: TrashItem) => void
   onPurge:   (t: TrashItem) => void
   onRestoreAll: () => void
 }) {
-  // Vandaag/Gisteren open by default; oudere dagen ingeklapt.
-  const today = new Date(); today.setHours(0,0,0,0)
-  const dayDate = new Date(day); dayDate.setHours(0,0,0,0)
-  const diff = Math.round((today.getTime() - dayDate.getTime()) / 86400000)
-  const [open, setOpen] = useState(diff <= 1)
+  // Alleen de meest recente dag start open; overige dagen ingeklapt
+  // om de lijst overzichtelijk te houden.
+  const [open, setOpen] = useState(!!defaultOpen)
 
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>

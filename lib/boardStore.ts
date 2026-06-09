@@ -439,14 +439,57 @@ export async function restoreRecentTrash(sinceMinutes: number): Promise<number> 
 export async function restoreTrashItem(itemId: string): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
+  // Haal item op + z'n originele groep + alle ACTIVE groepen van 't bord.
   const { data: itemData } = await supabase
-    .from('board_items').select('group_id').eq('id', itemId).single()
-  const groupId = (itemData as { group_id: string } | null)?.group_id
-  if (groupId) {
-    await supabase.from('board_groups')
-      .update({ deleted_at: null })
-      .eq('id', groupId)
-      .not('deleted_at', 'is', null)
+    .from('board_items').select('group_id, board_id').eq('id', itemId).single()
+  const itemRow = itemData as { group_id: string | null; board_id: string | null } | null
+  if (!itemRow) return false
+  const boardId = itemRow.board_id
+  let targetGroupId = itemRow.group_id
+  if (boardId && targetGroupId) {
+    // Haal originele groep + alle huidige actieve groepen op 't bord op.
+    const [{ data: origGroup }, { data: activeGroups }] = await Promise.all([
+      supabase.from('board_groups').select('id, name, deleted_at').eq('id', targetGroupId).single(),
+      supabase.from('board_groups').select('id, name').eq('board_id', boardId).is('deleted_at', null),
+    ])
+    const orig = origGroup as { id: string; name: string; deleted_at: string | null } | null
+    const actives = (activeGroups as { id: string; name: string }[] | null) ?? []
+    // Wanneer er een ACTIEVE groep met (bijna) dezelfde naam bestaat,
+    // routeren we het herstelde item daarheen i.p.v. de oude (mogelijk
+    // soft-deleted) groep weer tot leven te wekken. Voorkomt dat een
+    // legacy 'Meetings'-groep terugkomt naast de bestaande 'Meetings &
+    // doorlopend' wanneer items uit oude data worden gerestored.
+    function normalize(s: string) {
+      return (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    }
+    const origNorm = orig ? normalize(orig.name) : ''
+    let match: { id: string; name: string } | undefined
+    if (origNorm) {
+      // 1. Exacte match op genormaliseerde naam
+      match = actives.find(g => normalize(g.name) === origNorm)
+      // 2. 'Meetings'-achtige overlap (een actieve naam bevat 'meeting'
+      //    én de originele bevat 'meeting' → samenvoegen).
+      if (!match && /meeting/.test(origNorm)) {
+        match = actives.find(g => /meeting/.test(normalize(g.name)))
+      }
+      // 3. Eén actieve naam bevat de originele of vice versa
+      if (!match) {
+        match = actives.find(g => normalize(g.name).includes(origNorm) || origNorm.includes(normalize(g.name)))
+      }
+    }
+    if (match && match.id !== targetGroupId) {
+      // Re-route naar de bestaande actieve groep i.p.v. originele uit
+      // de prullenbak halen. Wij willen geen dubbele groepen.
+      targetGroupId = match.id
+      await supabase.from('board_items')
+        .update({ group_id: targetGroupId })
+        .eq('id', itemId)
+    } else if (orig?.deleted_at) {
+      // Geen passende actieve groep — origineel uit prullenbak halen.
+      await supabase.from('board_groups')
+        .update({ deleted_at: null })
+        .eq('id', orig.id)
+    }
   }
   const { error } = await supabase.from('board_items')
     .update({ deleted_at: null })
