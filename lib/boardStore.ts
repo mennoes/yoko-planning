@@ -158,37 +158,36 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   // Iedereen ziet dezelfde rijen — geen per-user filtering. Sync zorgt
   // dat er één row per Google-event bestaat (canonical via iCalUID),
   // maar door eerdere restore-acties uit de papierbak kunnen legacy +
-  // canonical rijen tegelijk bestaan voor hetzelfde event. We dedupen
-  // hier per iCalUID (en als laatste fallback per external_id) zodat
-  // de UI nooit dubbele Google-rijen toont. Prevereren: de rij met de
-  // kortste id — die is meestal de canonical 'it_g_{iCalUID}'.
-  const seenIcal = new Map<string, string>()       // ical_uid -> chosen row id
-  const seenExt  = new Map<string, string>()       // external_id -> chosen row id
-  const itemsByGroup = new Map<string, BoardItem[]>()
-  // Eerste pass: per iCalUID/external_id de id met kortste tekenlengte
-  // selecteren als 'winner'.
-  for (const r of itemRows) {
-    const row = r as { id: string; source?: string; ical_uid?: string | null; external_id?: string | null }
-    if (row.source !== 'google') continue
-    if (row.ical_uid) {
-      const winner = seenIcal.get(row.ical_uid)
-      if (!winner || row.id.length < winner.length) seenIcal.set(row.ical_uid, row.id)
-    } else if (row.external_id) {
-      const winner = seenExt.get(row.external_id)
-      if (!winner || row.id.length < winner.length) seenExt.set(row.external_id, row.id)
-    }
+  // canonical rijen tegelijk bestaan voor hetzelfde event.
+  //
+  // Aggressieve dedupe-strategie voor Google-items: bouw één key per
+  // rij door eerst iCalUID, dan external_id, dan name+startDate te
+  // proberen. Eén winner per key (rij met kortste id wint → meestal
+  // de canonical 'it_g_{iCalUID}'). Duplicaten worden weggefilterd in
+  // de UI; de DB blijft intact zodat herstel mogelijk is.
+  type GoogleRow = { id: string; source?: string; ical_uid?: string | null; external_id?: string | null; name?: string; start_date?: string | null }
+  function dedupeKey(row: GoogleRow): string | null {
+    if (row.source !== 'google') return null
+    if (row.ical_uid) return `ical:${row.ical_uid}`
+    if (row.external_id) return `ext:${row.external_id}`
+    if (row.name && row.start_date) return `ns:${row.name.toLowerCase().trim()}|${row.start_date}`
+    return null
   }
+  const winners = new Map<string, string>()  // key -> chosen row id
   for (const r of itemRows) {
-    const row = r as Record<string, unknown> & { id: string; source?: string; ical_uid?: string | null; external_id?: string | null }
-    // Skip duplicate Google rows (niet winner)
-    if (row.source === 'google') {
-      if (row.ical_uid) {
-        const winner = seenIcal.get(row.ical_uid)
-        if (winner && winner !== row.id) continue
-      } else if (row.external_id) {
-        const winner = seenExt.get(row.external_id)
-        if (winner && winner !== row.id) continue
-      }
+    const row = r as GoogleRow
+    const k = dedupeKey(row)
+    if (!k) continue
+    const cur = winners.get(k)
+    if (!cur || row.id.length < cur.length) winners.set(k, row.id)
+  }
+  const itemsByGroup = new Map<string, BoardItem[]>()
+  for (const r of itemRows) {
+    const row = r as Record<string, unknown> & GoogleRow
+    const k = dedupeKey(row)
+    if (k) {
+      const winner = winners.get(k)
+      if (winner && winner !== row.id) continue
     }
     const it = rowToItem(row)
     const gid = String((row as unknown as { group_id: string }).group_id)
