@@ -984,20 +984,18 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // De extra `external_id`-check die hier eerst stond blokkeerde scenario 2:
   // we hadden het Google event-id wél gezien (seenExt), alleen routed naar
   // een ander board_items.id, waardoor mijn stale rij bleef hangen.
-  const toRemove = existing
-    .filter(r => r.external_user_id === cal.user_id)
-    .filter(r => !seenIds.has(r.id))
-    .map(r => r.id)
-  let removed = 0
-  if (toRemove.length > 0) {
-    // SOFT-delete — items gaan naar /trash en kunnen hersteld worden.
-    // Eerder hard DELETE'd dat hier; bij sync-bugs verdween dan ALLES
-    // zonder pardon en onomkeerbaar.
-    await admin.from('board_items')
-      .update({ deleted_at: new Date().toISOString() })
-      .in('id', toRemove)
-    removed = toRemove.length
-  }
+  // CLEANUP UITGESCHAKELD. Eerder soft-deleten we items waarvan we het
+  // id niet meer hadden gezien in deze sync-run. Klonk veilig maar
+  // veegde in praktijk EN MASSE oude Done-meetings weg zodra ze buiten
+  // het 180-dagen-window vielen (recurring instances van een jaar
+  // geleden, items waarvan het Google-event was gewijzigd of waarvan
+  // de status op Done was gezet en de gebruiker 'm verder met rust
+  // wilde laten). Geen automatische opruim meer; verwijderen gaat
+  // uitsluitend via expliciete UI-acties en is dan via de Geschiedenis
+  // (Papierbak) drawer herstelbaar.
+  void existing
+  void seenIds
+  const removed = 0
 
   // VERWIJDERD: de oude 'auto-cleanup non-google rows met dezelfde naam
   // als een synced Google item' veegde handmatige projecten weg zodra
