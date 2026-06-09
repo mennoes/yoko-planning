@@ -2283,6 +2283,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
     const idx = group.items.findIndex(i => i.id === itemId)
     const snapshot = { ...group, items: [...group.items] }
     onUpdateGroup({ ...group, items: group.items.filter(i => i.id !== itemId) })
+    // Expliciet soft-deleten in Supabase. pushBoardToRemote upsert
+    // alleen items die in de lokale staat staan; zonder deze call
+    // blijft de remote-rij hangen en komt het item bij de volgende
+    // pull terug. Soft-delete registreert óók deleted_by zodat /papierbak
+    // kan tonen wie 't heeft verwijderd.
+    softDeleteItem(itemId).catch(() => {})
     pushUndo(() => onUpdateGroup(snapshot), removed ? `'${removed.name}' verwijderd` : 'Item verwijderd')
     void idx
   }

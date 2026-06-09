@@ -325,32 +325,10 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
     }
   }
 
-  // Items die in de BASELINE zaten maar nu niet meer in de lokale staat
-  // staan: dat is een EXPLICIETE verwijdering door deze gebruiker. Soft-
-  // deleten in Supabase zodat ze niet bij de volgende pull terugkomen.
-  // Belangrijk: alleen items uit de baseline; items die WEL in remote
-  // maar NIET in baseline staan (door anderen toegevoegd na onze laatste
-  // pull) blijven onaangeraakt. Voorkomt het 'andere user logt in en
-  // verwijdert per ongeluk alles'-scenario.
-  const removedFromBaseline = [...baselineSerialized.keys()].filter(id => !localItemIds.has(id))
-  if (removedFromBaseline.length > 0) {
-    const stamp = new Date().toISOString()
-    const uid = await getCurrentUserId()
-    const updatePayload: Record<string, unknown> = { deleted_at: stamp }
-    if (uid && deletedByColumnSupported) updatePayload.deleted_by = uid
-    const { error: dErr } = await supabase.from('board_items')
-      .update(updatePayload)
-      .in('id', removedFromBaseline)
-      .is('deleted_at', null)
-    if (dErr && /column .*deleted_by.*does not exist|PGRST204|schema cache|cannot find/i.test(dErr.message ?? '')) {
-      // Schema-cache: deleted_by-kolom bestaat nog niet → retry zonder.
-      deletedByColumnSupported = false
-      await supabase.from('board_items')
-        .update({ deleted_at: stamp })
-        .in('id', removedFromBaseline)
-        .is('deleted_at', null)
-    }
-  }
+  // GEEN reconcile-deletie meer op basis van baseline-diff. Te gevaarlijk:
+  // als de lokale staat tijdelijk gefilterd is (search-query, paginatie,
+  // stale cache) zou een onbedoelde mass-delete plaatsvinden. Verwijderen
+  // gebeurt nu uitsluitend door expliciete UI-acties via softDeleteItem.
 
   // SAFETY GUARD #2 — reconcile-deletie alleen voor rijen die OUDER zijn
   // dan onze laatste succesvolle pull. Een rij die NA dat moment door

@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom'
 import {
   loadTrash, restoreTrashItem, purgeTrashItem, pullBoardFromRemote, type TrashItem,
 } from '@/lib/boardStore'
+import { supabase } from '@/lib/supabase'
 
 function fmtDate(iso: string): string {
   try {
@@ -111,29 +112,91 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
               Geen verwijderde items op dit bord.
             </p>
           ) : items.map(t => (
-            <div key={t.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.name}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {t.groupName ?? '—'} · verwijderd {fmtDate(t.deletedAt)}
-                  {t.deletedByName && ` · door ${t.deletedByName}`}
-                </div>
-              </div>
-              <button onClick={() => onRestore(t)} disabled={busy === t.id}
-                style={{ padding: '6px 11px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent-light)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 700, cursor: busy === t.id ? 'wait' : 'pointer', flexShrink: 0 }}>
-                Herstel
-              </button>
-              <button onClick={() => onPurge(t)} disabled={busy === t.id}
-                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--red, #C9483D)', fontSize: 12, fontWeight: 600, cursor: busy === t.id ? 'wait' : 'pointer', flexShrink: 0 }}>
-                Voorgoed
-              </button>
-            </div>
+            <TrashRow key={t.id} t={t} busy={busy === t.id}
+              onRestore={() => onRestore(t)} onPurge={() => onPurge(t)} />
           ))}
         </div>
       </div>
     </>,
     document.body,
+  )
+}
+
+function TrashRow({ t, busy, onRestore, onPurge }: {
+  t: TrashItem
+  busy: boolean
+  onRestore: () => void
+  onPurge: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [details, setDetails] = useState<Record<string, unknown> | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function toggle() {
+    const next = !expanded
+    setExpanded(next)
+    if (next && !details && supabase) {
+      setLoading(true)
+      try {
+        const { data } = await supabase
+          .from('board_items')
+          .select('start_date, end_date, est_hours, owner_ids, notes, status')
+          .eq('id', t.id)
+          .single()
+        if (data) setDetails(data as Record<string, unknown>)
+      } catch {}
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid var(--border-light)' }}>
+      <div style={{ padding: '12px 18px', display: 'flex', gap: 10, alignItems: 'center' }}>
+        <button onClick={toggle}
+          style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+          <div style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {t.name}
+            <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+              {expanded ? '▾' : '▸'}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+            {t.groupName ?? '—'} · verwijderd {fmtDate(t.deletedAt)} · door {t.deletedByName ?? '— (oude entry)'}
+          </div>
+        </button>
+        <button onClick={onRestore} disabled={busy}
+          style={{ padding: '6px 11px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent-light)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}>
+          Herstel
+        </button>
+        <button onClick={onPurge} disabled={busy}
+          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--red, #C9483D)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}>
+          Voorgoed
+        </button>
+      </div>
+      {expanded && (
+        <div style={{ padding: '4px 18px 14px 18px', fontSize: 12, color: 'var(--text-secondary)', background: 'var(--overlay-faint)' }}>
+          {loading ? (
+            <span style={{ color: 'var(--text-muted)' }}>Laden…</span>
+          ) : details ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 6, columnGap: 12 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Status</span>
+              <span>{(details.status as string) || '—'}</span>
+              <span style={{ color: 'var(--text-muted)' }}>Datums</span>
+              <span>{(details.start_date as string) ?? '—'} → {(details.end_date as string) ?? '—'}</span>
+              <span style={{ color: 'var(--text-muted)' }}>Uren</span>
+              <span>{(details.est_hours as number) ?? 0}u</span>
+              <span style={{ color: 'var(--text-muted)' }}>Owners</span>
+              <span>{((details.owner_ids as string[]) ?? []).join(', ') || '—'}</span>
+              {!!details.notes && <>
+                <span style={{ color: 'var(--text-muted)' }}>Notes</span>
+                <span style={{ whiteSpace: 'pre-wrap' }}>{details.notes as string}</span>
+              </>}
+            </div>
+          ) : (
+            <span style={{ color: 'var(--text-muted)' }}>Geen extra details beschikbaar.</span>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
