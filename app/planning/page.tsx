@@ -1618,23 +1618,34 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   // Project-balken packen we horizontaal — meetings krijgen elke een
   // eigen lane, gesorteerd op start-tijd (vroegste bovenaan).
   //
-  // Pack-strategie: brede balken EERST (width desc), zodat de langste
-  // projecten de bovenste lanes pakken en kortere blokjes daarna in de
-  // ongevulde gaten passen. Visueel een 'voller' beeld — short events
-  // verschijnen langs lopende lange projecten i.p.v. op eigen lege rijen.
+  // Twee passes:
+  // 1) First-fit met items gesorteerd op `left` ascending — geeft het
+  //    optimale aantal lanes (interval graph coloring), en doordat we
+  //    in tijd-orde lopen blijft laneEnds een correcte 'volgende vrije
+  //    positie'. Dat laat korte blokjes in de leading gap van een lane
+  //    landen i.p.v. een eigen onderste rij te starten.
+  // 2) Lanes hernoemen zodat de lane met de BREEDSTE balk bovenaan komt
+  //    — visueel: lange projecten boven, korte blokjes daaronder/erin.
   function packLanes<T extends { left: number; width: number }>(items: T[]) {
-    const sorted   = [...items].sort((a, b) => {
-      if (b.width !== a.width) return b.width - a.width
-      return a.left - b.left
-    })
+    const sorted   = [...items].sort((a, b) => a.left - b.left)
     const laneEnds: number[] = []
-    const packed   = sorted.map(b => {
+    const initial: (T & { lane: number })[] = sorted.map(b => {
       let lane = laneEnds.findIndex(end => end <= b.left + 1)
       if (lane < 0) { lane = laneEnds.length; laneEnds.push(b.left + b.width) }
       else          laneEnds[lane] = b.left + b.width
       return { ...b, lane }
     })
-    return { items: packed, numLanes: laneEnds.length }
+    // Per lane de breedste balk bepalen en lanes daarop sorteren — lane
+    // met de breedste balk krijgt index 0 (bovenaan).
+    const N = laneEnds.length
+    const maxW = new Array(N).fill(0)
+    for (const it of initial) maxW[it.lane] = Math.max(maxW[it.lane], it.width)
+    const order = Array.from({ length: N }, (_, i) => i)
+      .sort((a, b) => maxW[b] - maxW[a])
+    const remap = new Map<number, number>()
+    order.forEach((oldLane, newLane) => remap.set(oldLane, newLane))
+    const packed = initial.map(it => ({ ...it, lane: remap.get(it.lane) ?? it.lane }))
+    return { items: packed, numLanes: N }
   }
 
   // Vrij-events trekken we uit de lane-pack zodat ze geen rij vergroten —
