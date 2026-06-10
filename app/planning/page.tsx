@@ -1260,7 +1260,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           display: 'flex', alignItems: 'center', padding: leftHeader ? '0' : '0 12px',
           fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>{leftHeader ?? 'De hele dag'}</div>
-        <div style={{ position: 'relative', width: totalWidth, minHeight: allDayH, background: stickyBg }}>
+        <div style={{ position: 'relative', width: totalWidth, minHeight: allDayH, background: stickyBg, overflowX: 'clip', overflowY: 'visible' }}>
           {cols.map((col, idx) => {
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
@@ -1694,7 +1694,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
   return (
-    <div style={{ position: 'relative', height, overflow: 'visible' }}>
+    <div style={{ position: 'relative', height, overflowX: 'clip', overflowY: 'visible' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
