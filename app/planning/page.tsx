@@ -53,7 +53,7 @@ import { logActivity }   from '@/lib/activityLog'
 import {
   IconMore, IconUsers, IconBoard, IconHourglass, IconRange, IconShare,
   IconDownload, IconSort, IconChevronLeft, IconChevronRight, IconChevronsLeft, IconChevronsRight,
-  IconPlay, IconStop, IconClose,
+  IconPlay, IconStop, IconClose, IconEye, IconEyeOff,
 } from '@/components/Icon'
 import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -1617,8 +1617,16 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   // Project-balken packen we horizontaal — meetings krijgen elke een
   // eigen lane, gesorteerd op start-tijd (vroegste bovenaan).
+  //
+  // Pack-strategie: brede balken EERST (width desc), zodat de langste
+  // projecten de bovenste lanes pakken en kortere blokjes daarna in de
+  // ongevulde gaten passen. Visueel een 'voller' beeld — short events
+  // verschijnen langs lopende lange projecten i.p.v. op eigen lege rijen.
   function packLanes<T extends { left: number; width: number }>(items: T[]) {
-    const sorted   = [...items].sort((a, b) => a.left - b.left)
+    const sorted   = [...items].sort((a, b) => {
+      if (b.width !== a.width) return b.width - a.width
+      return a.left - b.left
+    })
     const laneEnds: number[] = []
     const packed   = sorted.map(b => {
       let lane = laneEnds.findIndex(end => end <= b.left + 1)
@@ -1700,7 +1708,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
   return (
-    <div style={{ position: 'relative', height, overflowX: 'clip', overflowY: 'visible' }}>
+    <div style={{ position: 'relative', height, overflow: 'hidden' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
@@ -4170,7 +4178,10 @@ export default function PlanningPage() {
               <button onClick={() => setHideMeetings(v => !v)}
                 title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
                 style={ghostBtn(hideMeetings)}>
-                {hideMeetings ? '👁 Meetings' : '🚫 Meetings'}
+                {hideMeetings
+                  ? <IconEye    size={14} style={{ marginRight: 6 }} />
+                  : <IconEyeOff size={14} style={{ marginRight: 6 }} />}
+                Meetings
               </button>
               <span style={separator} />
               <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
