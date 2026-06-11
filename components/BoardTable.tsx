@@ -947,7 +947,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   const [nameDraft, setNameDraft] = useState(defaultEditName ? '' : subitem.name)
 
   const cellBorder: React.CSSProperties = {
-    borderLeft: '1px solid var(--border)', height: '100%',
+    borderLeft: '1px solid var(--border)', height: '100%', flex: 1, minWidth: 0,
     display: 'flex', alignItems: 'center', padding: '3px 8px', overflow: 'hidden',
   }
 
@@ -964,7 +964,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         // de volledige rij-hoogte van het subitem vult (visueel hetzelfde
         // gedrag als bij top-level items). alignSelf:stretch overruled
         // de alignItems:center van de grid-row zodat de pill écht uitvult.
-        return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden' }}>
+        return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden', flex: 1, minWidth: 0 }}>
           <StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} />
         </div>
       case 'timeline':
@@ -1137,7 +1137,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           </>
         )}
       </div>
-      {cols.map(c => <div key={c.key}>{renderCol(c)}</div>)}
+      {cols.map(c => <div key={c.key} style={{ alignSelf: 'stretch', display: 'flex', minWidth: 0 }}>{renderCol(c)}</div>)}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%' }}>
         {hover && (
           <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
