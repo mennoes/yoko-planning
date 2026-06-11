@@ -755,6 +755,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
   }
 
   const g = ghost ?? { left, width }
+  const [hoverBar, setHoverBar] = useState(false)
   // In hour-scale mode (week-overzicht) anker'en we onderaan zodat langere
   // events bovenuit steken — vrij (8u) vult volledig, 4u half, etc.
   const barTop = scaleByHours
@@ -790,6 +791,8 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
         ref={barRef}
         onMouseDown={e => startDrag(e, 'move')}
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
+        onMouseEnter={() => setHoverBar(true)}
+        onMouseLeave={() => setHoverBar(false)}
         style={{ position: 'absolute', top: barTop, left: g.left + 2, width: g.width, height: barH,
           background: color, borderRadius: 4, display: 'flex', alignItems: 'center',
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 500, color: '#fff',
@@ -800,22 +803,53 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
           opacity: project.status === 'done' ? 0.45 : 1,
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
-        <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
-          style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
-        </div>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 8, paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: titleShift }}>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 6, paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: titleShift }}>
           {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {project.name}{project.group ? ` | ${project.group}` : ''}
           </span>
           {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
         </span>
-        <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'end') }}
-          style={{ width: HANDLE_W, height: '100%', cursor: 'ew-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 2, height: 10, background: 'rgba(255,255,255,0.4)', borderRadius: 1 }} />
-        </div>
       </div>
+      {/* Resize-handles BUITEN de balk, alleen bij hover en niet-readonly.
+          Zo blijft binnen de bar maximale ruimte voor tekst, en ze vallen
+          duidelijker op zodra je over de balk hovert. */}
+      {!isReadOnly && hoverBar && (
+        <>
+          <div
+            onMouseEnter={() => setHoverBar(true)}
+            onMouseLeave={() => setHoverBar(false)}
+            onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
+            title="Sleep om startdatum te verschuiven"
+            style={{
+              position: 'absolute', top: barTop, left: g.left + 2 - HANDLE_W,
+              width: HANDLE_W, height: barH, cursor: 'ew-resize',
+              background: color, borderRadius: '3px 0 0 3px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              pointerEvents: 'auto', zIndex: 4,
+              opacity: project.status === 'done' ? 0.6 : 1,
+            }}>
+            <div style={{ width: 2, height: Math.max(6, barH - 6), background: 'rgba(255,255,255,0.85)', borderRadius: 1 }} />
+          </div>
+          <div
+            onMouseEnter={() => setHoverBar(true)}
+            onMouseLeave={() => setHoverBar(false)}
+            onMouseDown={e => { e.stopPropagation(); startDrag(e, 'end') }}
+            title="Sleep om einddatum te verschuiven"
+            style={{
+              position: 'absolute', top: barTop, left: g.left + 2 + g.width,
+              width: HANDLE_W, height: barH, cursor: 'ew-resize',
+              background: color, borderRadius: '0 3px 3px 0',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              pointerEvents: 'auto', zIndex: 4,
+              opacity: project.status === 'done' ? 0.6 : 1,
+            }}>
+            <div style={{ width: 2, height: Math.max(6, barH - 6), background: 'rgba(255,255,255,0.85)', borderRadius: 1 }} />
+          </div>
+        </>
+      )}
     </>
   )
 }
