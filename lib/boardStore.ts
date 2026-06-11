@@ -7,24 +7,50 @@ import { normalizeTitle } from './subitemRules'
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
 // migraties van Google-id-vormen (it_g_{ev.id} → it_g_{iCalUID}) konden
 // twee subitems naast elkaar belanden die feitelijk hetzelfde event waren.
-// Dedup-strategie: eerst op id (literal duplicate); daarna op de combinatie
-// naam + start + end (zelfde gebeurtenis met andere id-vorm). Volgorde
-// blijft behouden: eerste voorkomen wint.
+//
+// Dedupe-strategie:
+//   1. Hard dedup op id (literal duplicate).
+//   2. Bij gelijke naam + start + end (different id) HOUDEN WE de variant
+//      met de meest 'rijke' status — anders verdwijnt een door de
+//      gebruiker handmatig op Done gezette subitem permanent zodra een
+//      sync z'n eigen variant met lege status ernaast plaatst.
+//      Prioriteit: Done > Stuck > Working on… > Doorlopend > rest > leeg.
+function statusRank(status: string | undefined | null): number {
+  const s = (status ?? '').trim()
+  if (s === 'Done')          return 5
+  if (s === 'Stuck')         return 4
+  if (s === 'Working on...') return 3
+  if (s === 'Doorlopend')    return 2
+  if (s)                     return 1
+  return 0
+}
 function dedupeSubitems(subs: SubItem[] | undefined): SubItem[] | undefined {
   if (!subs || subs.length < 2) return subs
-  const seenIds  = new Set<string>()
-  const seenKeys = new Set<string>()
+  const seenIds = new Set<string>()
+  // keyToIdx: snel kunnen kijken of we al een sub met deze key in `out`
+  // hebben, en zo ja: 'm vervangen door de rijkere variant i.p.v. de
+  // nieuwe te droppen.
+  const keyToIdx = new Map<string, number>()
   const out: SubItem[] = []
   for (const s of subs) {
     const id = s?.id
     if (id && seenIds.has(id)) continue
     const name = (s?.name ?? '').trim().toLowerCase()
-    const key  = `${name}|${s?.startDate ?? ''}|${s?.endDate ?? ''}`
-    // Lege key (geen naam én geen datums) niet dedupen — die kan voorkomen
-    // bij net-aangemaakte handmatige subitems en willen we ongemoeid laten.
-    if (name && seenKeys.has(key)) continue
+    const key  = name ? `${name}|${s?.startDate ?? ''}|${s?.endDate ?? ''}` : ''
+    if (key && keyToIdx.has(key)) {
+      // Conflict: bestaande sub met dezelfde naam + datums. Behoud
+      // degene met de hoogste status-rank (Done wint van leeg).
+      const existingIdx = keyToIdx.get(key)!
+      const existing = out[existingIdx]
+      if (statusRank(s?.status) > statusRank(existing?.status)) {
+        out[existingIdx] = s
+        if (id) seenIds.add(id)
+      }
+      // anders: nieuwe sub heeft lagere status → niet meenemen.
+      continue
+    }
     if (id) seenIds.add(id)
-    if (name) seenKeys.add(key)
+    if (key) keyToIdx.set(key, out.length)
     out.push(s)
   }
   return out
