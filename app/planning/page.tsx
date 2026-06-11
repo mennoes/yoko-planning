@@ -2844,10 +2844,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 }
 
 // ─── New item popup (planner → agenda) ───────────────────────────────────────
-function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
+function NewItemPopup({ onClose, onCreate, defaultMemberId, allGroups }: {
   onClose: () => void
-  onCreate: (boardName: string, item: BoardItem) => void
+  onCreate: (boardName: string, item: BoardItem, groupId: string | null) => void
   defaultMemberId: string | null
+  allGroups: Record<string, BoardGroup[]>
 }) {
   // Merge seed + liveTeam zodat ook later-toegevoegde leden (Manuel)
   // in de owner-dropdown van het Nieuw-item-popup verschijnen.
@@ -2864,13 +2865,26 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
     return Array.from(byId.values())
   }, [liveTeam])
   const today = new Date().toISOString().slice(0, 10)
-  const [name,    setName]    = useState('')
-  const [board,   setBoard]   = useState<string>(BOARD_NAMES[0])
-  const [owner,   setOwner]   = useState<string>(defaultMemberId ?? team[0]?.id ?? '')
-  const [start,   setStart]   = useState<string>(today)
-  const [end,     setEnd]     = useState<string>(today)
-  const [hours,   setHours]   = useState<string>('1')
+  const [name,      setName]      = useState('')
+  const [board,     setBoard]     = useState<string>(BOARD_NAMES[0])
+  const [groupId,   setGroupId]   = useState<string>('')
+  const [owner,     setOwner]     = useState<string>(defaultMemberId ?? team[0]?.id ?? '')
+  const [status,    setStatus]    = useState<string>('')
+  const [start,     setStart]     = useState<string>(today)
+  const [end,       setEnd]       = useState<string>(today)
+  const [hours,     setHours]     = useState<string>('1')
+  const [startTime, setStartTime] = useState<string>('')
+  const [endTime,   setEndTime]   = useState<string>('')
+  const [deadline,  setDeadline]  = useState<string>('')
+  const [notes,     setNotes]     = useState<string>('')
   const nameRef = useRef<HTMLInputElement>(null)
+
+  // Beschikbare groepen voor de gekozen agenda — switcht mee zodra de
+  // agenda verandert. Default = eerste groep (= huidige gedrag).
+  const groupsForBoard = allGroups[board] ?? []
+  useEffect(() => {
+    setGroupId(groupsForBoard[0]?.id ?? '')
+  }, [board, groupsForBoard])
 
   useEffect(() => { nameRef.current?.focus() }, [])
   useEffect(() => {
@@ -2885,14 +2899,17 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
       id:        `it_${Date.now().toString(36)}`,
       name:      name.trim(),
       ownerIds:  owner ? [owner] : [],
-      status:    '',
+      status,
       startDate: start || null,
       endDate:   end   || null,
-      deadline:  null,
+      deadline:  deadline || null,
       estHours:  parseFloat(hours) || 0,
       dagen:     0,
+      ...(notes.trim()     ? { notes: notes.trim() }     : {}),
+      ...(startTime        ? { startTime }               : {}),
+      ...(endTime          ? { endTime }                 : {}),
     }
-    onCreate(board, item)
+    onCreate(board, item, groupId || null)
     onClose()
   }
 
@@ -2901,7 +2918,8 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
       <div onClick={onClose}
         style={{ position: 'fixed', inset: 0, zIndex: 299, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} />
       <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 300,
-        width: 'min(440px, 92vw)', background: 'var(--bg-card)', border: '1px solid var(--border)',
+        width: 'min(520px, 94vw)', maxHeight: '90vh', overflowY: 'auto',
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 14, padding: '20px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Nieuw item</h3>
@@ -2911,7 +2929,7 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input ref={nameRef} type="text" placeholder="Naam"
             value={name} onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') save() }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) save() }}
             style={popupInput} />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -2920,10 +2938,28 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
                 {BOARD_NAMES.map(b => <option key={b} value={b}>{BOARD_CONFIGS[b]?.name ?? b}</option>)}
               </select>
             </label>
+            <label style={popupLabel}>Groep
+              <select value={groupId} onChange={e => setGroupId(e.target.value)} style={popupSelect}
+                disabled={groupsForBoard.length === 0}>
+                {groupsForBoard.length === 0
+                  ? <option value="">— nieuwe groep —</option>
+                  : groupsForBoard.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <label style={popupLabel}>Owner
               <select value={owner} onChange={e => setOwner(e.target.value)} style={popupSelect}>
                 <option value="">— geen —</option>
                 {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+            <label style={popupLabel}>Status
+              <select value={status} onChange={e => setStatus(e.target.value)} style={popupSelect}>
+                {STATUS_PICKER_OPTIONS.map(o => (
+                  <option key={o.label || '_'} value={o.label}>{o.display}</option>
+                ))}
               </select>
             </label>
           </div>
@@ -2939,6 +2975,24 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId }: {
               <input type="number" step="0.5" min="0" value={hours} onChange={e => setHours(e.target.value)} style={popupSelect} />
             </label>
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <label style={popupLabel}>Start tijd
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={popupSelect} />
+            </label>
+            <label style={popupLabel}>Eind tijd
+              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={popupSelect} />
+            </label>
+            <label style={popupLabel}>Deadline
+              <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} style={popupSelect} />
+            </label>
+          </div>
+
+          <label style={popupLabel}>Notities
+            <textarea value={notes} onChange={e => setNotes(e.target.value)}
+              rows={3} placeholder="Optioneel — wat moet je weten over dit item?"
+              style={{ ...popupSelect, padding: '8px 10px', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4, minHeight: 60 }} />
+          </label>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <button onClick={onClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
@@ -5051,13 +5105,22 @@ export default function PlanningPage() {
       {newItemOpen && (
         <NewItemPopup
           defaultMemberId={profile?.memberId ?? null}
+          allGroups={allGroups}
           onClose={() => setNewItemOpen(false)}
-          onCreate={(boardName, item) => {
+          onCreate={(boardName, item, groupId) => {
             const cur = allGroups[boardName] ?? []
-            // Drop into the first group; create one if the board has no groups yet
-            const next = cur.length > 0
-              ? cur.map((g, idx) => idx === 0 ? { ...g, items: [...g.items, item] } : g)
-              : [{ id: `g_${Date.now().toString(36)}`, name: 'Nieuwe items', color: '#9aadbd', items: [item] }]
+            // Specifieke groep gekozen? Drop daar. Anders eerste groep,
+            // of een nieuwe als 't bord leeg is.
+            let next: BoardGroup[]
+            if (cur.length === 0) {
+              next = [{ id: `g_${Date.now().toString(36)}`, name: 'Nieuwe items', color: '#9aadbd', items: [item] }]
+            } else {
+              const targetIdx = groupId
+                ? cur.findIndex(g => g.id === groupId)
+                : 0
+              const idx = targetIdx >= 0 ? targetIdx : 0
+              next = cur.map((g, i) => i === idx ? { ...g, items: [...g.items, item] } : g)
+            }
             saveGroups(boardName, next)
             setAllGroups(prev => ({ ...prev, [boardName]: next }))
             logActivity('Item toegevoegd', item.name, `in ${boardName}`)
