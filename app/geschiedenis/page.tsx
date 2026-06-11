@@ -60,6 +60,40 @@ export default function SnapshotsPage() {
     refresh()
   }
 
+  // Recovery voor "Done-subitems zijn weg" — merget ontbrekende subs uit de
+  // meest recente snapshot (van vóór 30 min geleden) terug in de HUIDIGE
+  // items. Recente top-level-wijzigingen blijven dus behouden.
+  async function mergeMissingSubs(boardId: string) {
+    if (!supabase) return
+    if (!window.confirm(
+      `Ontbrekende subitems voor '${boardId}' terughalen?\n\n` +
+      `Pakt de meest recente snapshot van vóór 30 min geleden, kijkt per item welke ` +
+      `subitems daar wél in zitten maar nu missen, en plaatst die terug op de ` +
+      `huidige items. Top-level wijzigingen van net blijven staan.`,
+    )) return
+    const sess = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token
+    if (!token) return
+    setBusy(`recover:${boardId}`)
+    const res = await fetch('/api/snapshots/merge-missing-subitems', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ boardId }),
+    })
+    const json = await res.json() as { ok: boolean; error?: string; touchedItems?: number; restoredSubs?: number; usedSnapshot?: string; status?: string }
+    setBusy(null)
+    if (!json.ok) {
+      window.alert(`Recovery mislukt: ${json.error ?? 'onbekend'}`)
+      return
+    }
+    await pullBoardFromRemote(boardId).catch(() => {})
+    if (json.status === 'nothing_to_restore') {
+      window.alert(`Niets terug te zetten — de huidige state heeft al alle subitems uit de snapshot van ${formatDate(json.usedSnapshot ?? '')}.`)
+    } else {
+      window.alert(`Hersteld: ${json.restoredSubs} subitem(s) op ${json.touchedItems} item(s) (uit snapshot ${formatDate(json.usedSnapshot ?? '')}).`)
+    }
+  }
+
   async function restore(snap: Snapshot) {
     if (!supabase) return
     if (!window.confirm(
@@ -108,6 +142,17 @@ export default function SnapshotsPage() {
           <button key={b} onClick={() => setFilterBoard(b)} style={pillStyle(filterBoard === b)}>{b}</button>
         ))}
         <div style={{ flex: 1 }} />
+        {boards.map(b => (
+          <button key={`recover-${b}`} onClick={() => mergeMissingSubs(b)} disabled={busy === `recover:${b}`}
+            title="Haal ontbrekende subitems uit de laatste snapshot terug op de huidige items"
+            style={{
+              padding: '5px 10px', borderRadius: 999, border: '1px solid var(--accent)',
+              background: 'var(--accent-light, rgba(88,150,255,0.18))', color: 'var(--text-primary)',
+              fontSize: 11, fontWeight: 700, cursor: busy === `recover:${b}` ? 'wait' : 'pointer',
+            }}>
+            ↩︎ Herstel subs van {b}
+          </button>
+        ))}
         {boards.map(b => (
           <button key={`new-${b}`} onClick={() => manualSnapshot(b)} disabled={busy === `new:${b}`}
             style={{
