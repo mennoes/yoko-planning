@@ -1633,7 +1633,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   // rijen. Items die niet zonder conflict passen worden bij de lane met
   // de minste overlap geduwd in plaats van een nieuwe rij te starten.
   function packLanes<T extends { left: number; width: number }>(items: T[]) {
-    const MAX_LANES = 5
+    // MAX_LANES = 4: gebruiker prefereert tightere packing met wat overlap
+    // boven nog meer rijen onder elkaar. Boven de 4 rijen worden korte
+    // blokjes bij de lane met de minste overlap geduwd.
+    const MAX_LANES = 4
     const sorted = [...items].sort((a, b) => {
       if (b.width !== a.width) return b.width - a.width
       return a.left - b.left
@@ -1692,9 +1695,13 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
     if (!p.startDate || !p.endDate) return false
     if (p.startDate !== p.endDate) return false
     const hrs = Number(p.estHours) || 0
-    if (hrs >= 7) return true
-    // All-day calendar event (geen tijd) telt ook als hele dag
-    if (!p.startTime && !p.endTime && hrs === 0) return true
+    // ≥6 uur = praktisch hele dag — een 8u-project van 0.1u marge moet
+    // ook full-height tonen (Google-events spreken soms van 7.8u i.p.v. 8).
+    if (hrs >= 6) return true
+    // All-day Google event: geen start/eind-tijd gezet en source=google
+    // → behandel als hele dag ongeacht estHours (kan 0 zijn als Google
+    // niet duidelijk een duur communiceert).
+    if (p.source === 'google' && !p.startTime && !p.endTime) return true
     return false
   }
   const vrijBars     = projectAllSingles.filter(isVrijBar)
