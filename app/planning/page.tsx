@@ -296,14 +296,16 @@ function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
 function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; or: number }) {
   const cx    = cs / 2, cy = cs / 2
   const color = pct > 1 ? '#e2445c' : '#579bfc'
-  // Hoogte-variantie comprimeren: vroeger gebruikten we sqrt(pct) wat
-  // tussen 1.9u en 35u nog steeds een 5× verschil in straal gaf. We hebben
-  // nu een minimum-straal (35% van outerR) plus een vlakkere curve
-  // (pct^0.4) — kleine cap-loads blijven goed leesbaar, drukke weken
-  // springen niet meer 4× zo groot uit de bocht.
-  const MIN_FRAC = 0.35
+  // Pure proportionele vulling: oppervlakte (niet straal!) schaalt
+  // lineair met pct. Voorheen pakten we straal × sqrt-curve plus een
+  // 35% minimum — daardoor zag een lege bol er al voor de helft vol
+  // uit, en deed alles met >1u 'snel druk' aan terwijl er nog volop
+  // capaciteit over was. Nu: 0u = leeg, 50% cap = 50% area, 100% cap
+  // = volle bol. Boven 100% kleurt 'ie rood en groeit nog 4% over de
+  // ring heen als overflow-signaal.
+  const ratio = Math.min(Math.max(pct, 0), 1)
   const fillR = pct > 0
-    ? Math.max(2, Math.min(outerR - 1, (outerR - 1) * (MIN_FRAC + (1 - MIN_FRAC) * Math.pow(Math.min(pct, 1), 0.4))))
+    ? Math.max(2, (outerR - 1) * Math.sqrt(ratio))  // straal = sqrt zodat OPPERVLAK lineair is
     : 0
   const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.04) : fillR
   return (
@@ -1832,28 +1834,15 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
       {bars.map(b => {
         const top = projectLaneTop(b.lane)
         const wrapperH = PROJECT_LANE_H
-        // Meetings krijgen MeetingHoverBar (hover-popover met tijd/details),
-        // reguliere projecten DraggableBar. Beide leven in dezelfde lane-
-        // stack — geen aparte rijen meer.
-        // Geen wrapper-z-index meer: bars competeren rechtstreeks via hun
-        // eigen z-index, zodat een hover-bar (z=15) écht boven andere
-        // bars uitkomt — i.p.v. opgesloten in z'n eigen wrapper-context.
-        if (b.track === 'meeting') {
-          return (
-            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
-              <MeetingHoverBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW}
-                laneH={wrapperH}
-                onDragMove={(s, e) => onDragMove(b.p, s, e)}
-                onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
-                onClick={() => onBarClick(b.p)}
-                onReassign={onReassign} />
-            </div>
-          )
-        }
+        // Alle bars (meetings én reguliere projecten) gaan door dezelfde
+        // MeetingHoverBar-wrapper: hover-popover met naam/tijd/uren/board/
+        // parent-context werkt zo overal in de planning, niet alleen op
+        // Google-events. scaleByHours actief in week-zoom voor projecten.
         return (
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
-            <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
-              laneH={wrapperH} scaleByHours={zoom === 'week'}
+            <MeetingHoverBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW}
+              laneH={wrapperH}
+              scaleByHours={b.track !== 'meeting' && zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
@@ -1874,13 +1863,14 @@ const MEETING_BAR_H = 18
 // Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
 // gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
 // met naam, tijd, uren en link naar Google Calendar.
-function MeetingHoverBar({ project, memberId, left, width, colW, laneH, onDragMove, onDragEnd, onClick, onReassign }: {
+function MeetingHoverBar({ project, memberId, left, width, colW, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project
   memberId: string
   left: number
   width: number
   colW: number
   laneH: number
+  scaleByHours?: boolean
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick: () => void
@@ -1921,7 +1911,7 @@ function MeetingHoverBar({ project, memberId, left, width, colW, laneH, onDragMo
       onMouseLeave={schedule}
       style={{ position: 'absolute', top: 0, left: 0, right: 0, height: laneH, pointerEvents: 'none' }}>
       <DraggableBar project={project} memberId={memberId} left={left} width={width} colW={colW} small={false}
-        laneH={laneH} scaleByHours={false}
+        laneH={laneH} scaleByHours={scaleByHours ?? false}
         onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
         <div onMouseEnter={cancel} onMouseLeave={schedule}
@@ -1947,11 +1937,17 @@ function MeetingHoverBar({ project, memberId, left, width, colW, laneH, onDragMo
             <span style={{ opacity: 0.4 }}>·</span>
             <span style={{ textTransform: 'capitalize' }}>{project.board}</span>
           </div>
+          {project.status && project.status !== 'active' && (
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+              Status: <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{project.status === 'done' ? 'Done' : project.status}</span>
+            </div>
+          )}
           {project.externalLink && (
             <a href={project.externalLink} target="_blank" rel="noopener noreferrer"
+              onClick={ev => ev.stopPropagation()}
               style={{ display: 'inline-block', marginTop: 8, fontSize: 11, color: 'var(--accent)',
                 textDecoration: 'none', fontWeight: 600 }}>
-              Open in Google Calendar ↗
+              {project.source === 'google' ? 'Open in Google Calendar ↗' : 'Open bron ↗'}
             </a>
           )}
         </div>,
