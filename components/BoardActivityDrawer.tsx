@@ -93,6 +93,16 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter]   = useState<'all' | 'mine'>('all')
   const [meId, setMeId]       = useState<string | null>(null)
+  // Lokaal opgeladen huidige bord-state — voor naam-lookup bij entries
+  // waar meta.itemName ontbreekt ('(item zonder naam)').
+  const [itemNameById, setItemNameById] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!open) return
+    const groups = loadGroups(boardId, [])
+    const map: Record<string, string> = {}
+    for (const g of groups) for (const i of g.items) if (i?.id) map[i.id] = (i.name as string) ?? ''
+    setItemNameById(map)
+  }, [open, boardId])
 
   // Profielen voor user_id → naam/foto mapping
   useEffect(() => {
@@ -215,10 +225,32 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
             const photo = memberId ? getPhoto(memberId) : null
             const memberColor = teamData.members.find(m => m.id === memberId)?.color ?? '#888'
             const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-            const itemName = e.meta?.itemName ?? null
+            const itemId   = itemIdFromTarget(e.target)
+            // Fallback voor '(item zonder naam)' wanneer meta.itemName niet
+            // bewaard is — pak de huidige item-naam uit de live bord-state.
+            const itemName = e.meta?.itemName ?? (itemId ? itemNameById[itemId] : null) ?? null
             const canUndo  = !!(e.meta?.field && e.meta.before !== undefined && (e.meta.boardId ?? boardId))
+            const canFocus = !!itemId && !!itemNameById[itemId ?? '']
+            const onRowClick = () => {
+              if (!canFocus || !itemId) return
+              onClose()
+              // Update ?focus=<itemId> in de URL — BoardTable luistert al
+              // op popstate en scrollt + flasht de juiste rij.
+              const url = new URL(window.location.href)
+              url.searchParams.set('focus', itemId)
+              window.history.pushState(null, '', url.toString())
+              window.dispatchEvent(new PopStateEvent('popstate'))
+            }
             return (
-              <div key={e.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <div key={e.id}
+                onClick={onRowClick}
+                title={canFocus ? `Spring naar '${itemName}' op het bord` : undefined}
+                style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-light)',
+                  display: 'flex', gap: 10, alignItems: 'flex-start',
+                  cursor: canFocus ? 'pointer' : 'default',
+                  transition: 'background 0.1s' }}
+                onMouseEnter={ev => { if (canFocus) ev.currentTarget.style.background = 'var(--bg-hover)' }}
+                onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent' }}>
                 <div style={{ width: 36, flexShrink: 0, paddingTop: 2, fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
                   {relTime(e.ts)}
                 </div>
@@ -251,7 +283,7 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
                     <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>{e.detail}</div>
                   ) : null}
                 </div>
-                <button onClick={() => undoEntry(e)}
+                <button onClick={ev => { ev.stopPropagation(); undoEntry(e) }}
                   disabled={!canUndo}
                   title={canUndo ? 'Zet terug naar de vorige waarde' : 'Geen undo beschikbaar voor deze regel'}
                   style={{
