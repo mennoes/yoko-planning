@@ -861,6 +861,19 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         source:    'google' as const,
       }
     })
+    // Behoud subitems die NIET uit de Google-sync komen of waarvan
+    // het Google-event buiten ons window valt. Voorheen verving deze
+    // sync de subitems-lijst volledig met wat in `sorted` zat, dus
+    // handmatig toegevoegde subs (zonder si_g_-prefix) ÉN Done-instances
+    // waarvan Google de instance op een gegeven moment dropt verdwenen
+    // stilletjes. Nu mergen we: nieuwe sync-output + alle prior subs die
+    // niet door deze sync overschreven werden.
+    const syncedIds = new Set(subitems.map(s => s.id))
+    const preserved = priorSubs.filter(s => !syncedIds.has(s.id))
+    const mergedSubitems = [...subitems, ...preserved]
+    // Sorteer chronologisch: zo blijft de Done-sectie onderaan in de UI
+    // en houden gebruikers visueel hetzelfde beeld als voorheen.
+    mergedSubitems.sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
     const id          = lookup.id
     seenIds.add(id)
     // Door gebruiker genest onder een ander item → niet opnieuw top-level
@@ -915,7 +928,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       dagen:              0,
       notes:              sorted[0].description ?? null,
       contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
-      subitems,
+      subitems:           mergedSubitems,
       journal:            existingRow?.journal ?? [],
       extra:              (() => {
         const exExtra = (existingRow?.extra ?? {}) as Record<string, unknown>
