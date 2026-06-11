@@ -2299,8 +2299,28 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
     onUpdateGroup({
       ...group,
       items: group.items.map(i => {
-        if (bulk ? selectedIds.has(i.id) : i.id === itemId) return { ...i, ...updates }
-        return i
+        if (!(bulk ? selectedIds.has(i.id) : i.id === itemId)) return i
+        const merged: BoardItem = { ...i, ...updates }
+        // estHours veranderd én item heeft ownerHours? Schaal de
+        // verdeling proportioneel zodat de verhoudingen kloppen
+        // met de nieuwe totalen — pie + cijfers blijven in sync.
+        if ('estHours' in updates && i.ownerHours && Object.keys(i.ownerHours).length > 0) {
+          const oldSum = Object.values(i.ownerHours).reduce((s, v) => s + (Number(v) || 0), 0)
+          const newTotal = Number(updates.estHours) || 0
+          if (oldSum > 0 && newTotal > 0 && Math.abs(oldSum - newTotal) > 0.01) {
+            const factor = newTotal / oldSum
+            const scaled: Record<string, number> = {}
+            for (const [k, v] of Object.entries(i.ownerHours)) {
+              scaled[k] = Math.round((Number(v) || 0) * factor * 10) / 10
+            }
+            merged.ownerHours = scaled
+          } else if (newTotal === 0) {
+            // Naar 0u: leeg de verdeling, anders blijft de pie
+            // verkeerd staan met som > 0.
+            merged.ownerHours = undefined
+          }
+        }
+        return merged
       }),
     })
     // Toast + undo. Cell-handlers zelf zijn silent, dus we maken hier per
