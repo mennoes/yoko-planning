@@ -2365,6 +2365,12 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               </Link>{project.group ? <> · {project.group}</> : null}
               {rawItem?.source === 'google' && <span style={{ marginLeft: 8, color: '#a05400' }}>· Bewerk in Google Calendar</span>}
             </div>
+            {project.parentName && project.parentName !== project.name && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ opacity: 0.7 }}>↳ subitem van</span>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{project.parentName}</span>
+              </div>
+            )}
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
