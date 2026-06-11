@@ -164,9 +164,11 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
 
   return createPortal(
     <>
-      <div onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, backdropFilter: 'blur(3px)' }} />
-      <div onClick={e => e.stopPropagation()} style={{
+      {/* GEEN modale backdrop meer. Vroeger zat hier een fullscreen overlay
+          met onClick=onClose, maar dat blokkeerde óók alle klikken op de
+          bord-items eronder. Drawer staat nu naast het bord; sluiten kan
+          via de × of Esc. */}
+      <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(520px, 100vw)', zIndex: 9001,
         background: 'var(--bg-base)', borderLeft: '1px solid var(--border)',
