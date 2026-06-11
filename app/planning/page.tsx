@@ -1615,37 +1615,65 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
 
-  // Project-balken packen we horizontaal — meetings krijgen elke een
-  // eigen lane, gesorteerd op start-tijd (vroegste bovenaan).
+  // Project-balken packen we horizontaal. Gap-aware first-fit: elke lane
+  // houdt z'n volledige intervallenlijst bij i.p.v. alleen het einde van
+  // de laatste balk, zodat een korte balk WEL in een eerder hiaat van een
+  // bestaande lane kan landen (niet alleen na de laatste end-positie).
   //
-  // Twee passes:
-  // 1) First-fit met items gesorteerd op `left` ascending — geeft het
-  //    optimale aantal lanes (interval graph coloring), en doordat we
-  //    in tijd-orde lopen blijft laneEnds een correcte 'volgende vrije
-  //    positie'. Dat laat korte blokjes in de leading gap van een lane
-  //    landen i.p.v. een eigen onderste rij te starten.
-  // 2) Lanes hernoemen zodat de lane met de BREEDSTE balk bovenaan komt
-  //    — visueel: lange projecten boven, korte blokjes daaronder/erin.
+  // Sorteer-volgorde:
+  // 1) Breedste balken eerst (width desc) — krijgen lane 0/1/2 (bovenaan).
+  // 2) Daarna korte blokjes — die zoeken het EERSTE hiaat van de bovenste
+  //    bestaande lanes en vullen daar in. Pas als ze nergens passen ZONDER
+  //    overlap krijgen ze (a) gedeeld een lane met minste overlap (cap
+  //    bereikt) of (b) een nieuwe lane (cap niet bereikt).
+  //
+  // MAX_LANES = 5: gebruiker prefereert wat overlap boven onleesbaar veel
+  // rijen. Items die niet zonder conflict passen worden bij de lane met
+  // de minste overlap geduwd in plaats van een nieuwe rij te starten.
   function packLanes<T extends { left: number; width: number }>(items: T[]) {
-    const sorted   = [...items].sort((a, b) => a.left - b.left)
-    const laneEnds: number[] = []
-    const initial: (T & { lane: number })[] = sorted.map(b => {
-      let lane = laneEnds.findIndex(end => end <= b.left + 1)
-      if (lane < 0) { lane = laneEnds.length; laneEnds.push(b.left + b.width) }
-      else          laneEnds[lane] = b.left + b.width
-      return { ...b, lane }
+    const MAX_LANES = 5
+    const sorted = [...items].sort((a, b) => {
+      if (b.width !== a.width) return b.width - a.width
+      return a.left - b.left
     })
-    // Per lane de breedste balk bepalen en lanes daarop sorteren — lane
-    // met de breedste balk krijgt index 0 (bovenaan).
-    const N = laneEnds.length
-    const maxW = new Array(N).fill(0)
-    for (const it of initial) maxW[it.lane] = Math.max(maxW[it.lane], it.width)
-    const order = Array.from({ length: N }, (_, i) => i)
-      .sort((a, b) => maxW[b] - maxW[a])
-    const remap = new Map<number, number>()
-    order.forEach((oldLane, newLane) => remap.set(oldLane, newLane))
-    const packed = initial.map(it => ({ ...it, lane: remap.get(it.lane) ?? it.lane }))
-    return { items: packed, numLanes: N }
+    type IV = { start: number; end: number }
+    const lanes: IV[][] = []
+    const fitsLane = (intervals: IV[], s: number, e: number): boolean =>
+      intervals.every(iv => iv.end <= s + 1 || iv.start >= e - 1)
+    const overlapWith = (intervals: IV[], s: number, e: number): number => {
+      let total = 0
+      for (const iv of intervals) {
+        const lo = Math.max(iv.start, s)
+        const hi = Math.min(iv.end,   e)
+        if (hi > lo) total += (hi - lo)
+      }
+      return total
+    }
+    const packed = sorted.map(b => {
+      const s = b.left
+      const e = b.left + b.width
+      // Probeer een lane zonder enige overlap
+      let lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
+      if (lane >= 0) {
+        lanes[lane].push({ start: s, end: e })
+        return { ...b, lane }
+      }
+      // Cap niet bereikt → nieuwe lane
+      if (lanes.length < MAX_LANES) {
+        lanes.push([{ start: s, end: e }])
+        return { ...b, lane: lanes.length - 1 }
+      }
+      // Cap bereikt → kies de lane met de kleinste overlap; overlap toegestaan
+      let bestLane = 0
+      let bestOverlap = Infinity
+      for (let i = 0; i < lanes.length; i++) {
+        const o = overlapWith(lanes[i], s, e)
+        if (o < bestOverlap) { bestOverlap = o; bestLane = i }
+      }
+      lanes[bestLane].push({ start: s, end: e })
+      return { ...b, lane: bestLane }
+    })
+    return { items: packed, numLanes: lanes.length }
   }
 
   // Vrij-events trekken we uit de lane-pack zodat ze geen rij vergroten —
