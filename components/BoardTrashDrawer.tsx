@@ -162,9 +162,9 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
   if (!open || typeof document === 'undefined') return null
   return createPortal(
     <>
-      <div onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', zIndex: 9000 }} />
-      <div onClick={e => e.stopPropagation()} style={{
+      {/* Geen modale backdrop — bord-items moeten klikbaar/bewerkbaar
+          blijven terwijl de Geschiedenis open staat. Sluiten via × of Esc. */}
+      <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(640px, 100vw)', zIndex: 9001,
         background: 'var(--bg-base)', borderLeft: '1px solid var(--border)',
