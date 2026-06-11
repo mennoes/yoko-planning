@@ -66,7 +66,11 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
       })
       .flatMap((i): Project[] => {
         const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string }> | undefined) ?? []
-        const subsWithDates = subs.filter(si => (si.status ?? '') !== 'Done' && (si.startDate || si.endDate))
+        // Subitems mét eigen datums → eigen Project per subitem. Done blijft
+        // erbij maar krijgt status='done' zodat 'ie in de planning faded
+        // wordt i.p.v. te verdwijnen (anders 'verdwijnen items zomaar' bij
+        // een Done-tik).
+        const subsWithDates = subs.filter(si => (si.startDate || si.endDate))
         if (subsWithDates.length > 0) {
           return subsWithDates.map((si, idx): Project => {
             // Subitem-ownerIds gebruiken we alleen als 't ECHT toegewezen is
@@ -100,7 +104,9 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               startTime: si.startTime ?? null,
               endTime:   si.endTime ?? null,
               estHours:  Number(si.estHours) || 0,
-              status:    (i.status as string) === 'Done' ? 'done' : 'active',
+              // Done op de subitem zelf óf op de parent telt als done —
+              // beide krijgen in de planning een fade i.p.v. weg.
+              status:    ((si.status ?? '') === 'Done' || (i.status as string) === 'Done') ? 'done' : 'active',
               source:    (i.source as 'manual' | 'google' | undefined),
               externalLink: (i.externalLink as string | undefined),
               meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
