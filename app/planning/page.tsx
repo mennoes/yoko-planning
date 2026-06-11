@@ -804,7 +804,11 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
           // Hover-bar én actieve-drag krijgen hoge z-index zodat 'ie ALTIJD
           // bovenop overlappende balken zichtbaar is. Anders kan een short
           // event onder een langere balk verstopt blijven.
-          zIndex: ghost ? 20 : (hoverBar ? 15 : 'auto') }}
+          // Hover-bar én actieve-drag krijgen iets hogere z dan andere bars
+          // (z=auto/0), maar BLIJVEN ONDER de sticky naam-kolom (z=4–6) zodat
+          // 'ie niet door de avatars heen schiet wanneer je horizontaal
+          // gescrold hebt. VANDAAG-lijn (z=3) wint ook nog.
+          zIndex: ghost ? 2 : (hoverBar ? 2 : 'auto') }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 6, paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: titleShift }}>
           {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
@@ -830,7 +834,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
               background: color, borderRadius: '3px 0 0 3px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-              pointerEvents: 'auto', zIndex: 4,
+              pointerEvents: 'auto', zIndex: 2,
               opacity: project.status === 'done' ? 0.6 : 1,
             }}>
             <div style={{ width: 2, height: Math.max(6, barH - 6), background: 'rgba(255,255,255,0.85)', borderRadius: 1 }} />
@@ -846,7 +850,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
               background: color, borderRadius: '0 3px 3px 0',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-              pointerEvents: 'auto', zIndex: 4,
+              pointerEvents: 'auto', zIndex: 2,
               opacity: project.status === 'done' ? 0.6 : 1,
             }}>
             <div style={{ width: 2, height: Math.max(6, barH - 6), background: 'rgba(255,255,255,0.85)', borderRadius: 1 }} />
