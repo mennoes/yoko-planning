@@ -1633,10 +1633,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   // rijen. Items die niet zonder conflict passen worden bij de lane met
   // de minste overlap geduwd in plaats van een nieuwe rij te starten.
   function packLanes<T extends { left: number; width: number }>(items: T[]) {
-    // MAX_LANES = 4: gebruiker prefereert tightere packing met wat overlap
-    // boven nog meer rijen onder elkaar. Boven de 4 rijen worden korte
-    // blokjes bij de lane met de minste overlap geduwd.
-    const MAX_LANES = 4
+    // MAX_LANES = 5: balans tussen overlap en aantal rijen. Lager (4) gaf
+    // teveel overlap; hoger blies de hoogte op. Boven de 5 lanes worden
+    // korte blokjes bij de lane met de minste overlap geduwd.
+    const MAX_LANES = 5
     const sorted = [...items].sort((a, b) => {
       if (b.width !== a.width) return b.width - a.width
       return a.left - b.left
