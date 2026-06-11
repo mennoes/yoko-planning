@@ -796,6 +796,8 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
           cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
           pointerEvents: 'auto',
           boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
+          // Done-items faden naar 45% zodat actief werk visueel pop't.
+          opacity: project.status === 'done' ? 0.45 : 1,
           zIndex: ghost ? 1 : 'auto' }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
         <div onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
@@ -1738,12 +1740,13 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   ]
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  // Meetings overlappen project-balken, dus tellen ze niet apart mee
-  // voor de container-hoogte (tenzij ze hoger uitkomen dan de project-
-  // stack — dan extenden we zodat scrollen klopt).
+  // Meetings staan nu BOVEN projects (zie projectLaneTop), dus de container
+  // moet de som van beide stacks bevatten — niet de max. Anders krijg je
+  // een te lage container en wordt de onderste project-lane (vaak de
+  // langste/breedste balk) onderaan afgekapt door overflow:hidden.
   const projectStack = projectLanes * PROJECT_LANE_H
-  const meetingStack = meetingLanes * MEETING_LANE_H
-  const baseHeight = BAR_GAP + Math.max(projectStack, meetingStack) + 6
+  const meetingStack = meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 4 : 0)
+  const baseHeight = BAR_GAP + meetingStack + projectStack + 6
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
   return (
