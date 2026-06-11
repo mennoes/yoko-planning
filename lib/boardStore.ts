@@ -349,6 +349,13 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   } catch {}
 
   const itemRows: Record<string, unknown>[] = []
+  // PRE-PUSH SAFEGUARD — detecteer subitem-loss vs baseline. Bij ELKE
+  // push die subs zou wegnemen schrijven we eerst de huidige remote
+  // state als snapshot weg, zodat de Recovery-picker altijd een 0-min-
+  // oud herstel-punt heeft staan vlak voor de potentieel-destructieve
+  // upsert. Vroeger merkten gebruikers pas DAGEN later dat een sync of
+  // dedupe stilletjes had gewist — nu niet meer.
+  let subitemLossDetected = false
   for (const [id, snap] of localSnaps) {
     const base = baselineSerialized.get(id)
     // Pushen wanneer: item is nieuw (geen baseline) OF inhoud/groep/
@@ -357,8 +364,39 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
       || base.serialized !== snap.serialized
       || base.groupId !== snap.groupId
       || base.idx !== snap.idx
-    if (changed) itemRows.push(itemToRow(boardName, snap.groupId, snap.idx, snap.item))
+    if (changed) {
+      // Subitem-count diff: baseline had méér subs dan we nu pushen?
+      if (base) {
+        try {
+          const baseItem  = JSON.parse(base.serialized) as BoardItem
+          const baseSubs  = Array.isArray(baseItem.subitems) ? baseItem.subitems.length : 0
+          const localSubs = Array.isArray(snap.item.subitems) ? snap.item.subitems.length : 0
+          if (baseSubs > localSubs) subitemLossDetected = true
+        } catch {}
+      }
+      itemRows.push(itemToRow(boardName, snap.groupId, snap.idx, snap.item))
+    }
   }
+
+  if (subitemLossDetected) {
+    // Best-effort: snapshot van huidige Supabase-state vóór de push.
+    // Failure is geen blocker — we willen niet dat een snapshot-glitch
+    // legitieme edits tegenhoudt. /api/snapshots/create draait server-side
+    // met admin-rechten, pulls de live-state (= pre-push), en schrijft 'm
+    // weg met trigger='manual' om de daily-idempotency te omzeilen.
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (token) {
+        await fetch('/api/snapshots/create', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ boardId: boardName, trigger: 'manual' }),
+        }).catch(() => {})
+      }
+    } catch {}
+  }
+
   if (itemRows.length > 0) {
     const { error: iErr } = await supabase.from('board_items').upsert(itemRows, { onConflict: 'id' })
     if (iErr) {
