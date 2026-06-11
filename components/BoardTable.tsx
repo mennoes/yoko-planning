@@ -1532,6 +1532,26 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
     for (const oid of (item.ownerIds ?? [])) if (oid && oid !== 'unassigned') ownerSet.add(oid)
     for (const s of subitems) for (const oid of (s.ownerIds ?? [])) if (oid && oid !== 'unassigned') ownerSet.add(oid)
     if (ownerSet.size > 0) updates.ownerIds = [...ownerSet]
+    // Owner-hours rollup: wanneer de parent zelf geen verdeling heeft
+    // (item.ownerHours leeg) leiden we 'm af uit de subitems. Elke
+    // subitem-uren worden gelijk verdeeld over zijn eigen owners; die
+    // shares sommeren we per persoon. Display-only — wanneer de
+    // gebruiker zelf een verdeling instelt overruled die deze rollup.
+    if (!item.ownerHours || Object.keys(item.ownerHours).length === 0) {
+      const rolled: Record<string, number> = {}
+      for (const s of subitems) {
+        const subOwners = (s.ownerIds ?? []).filter(o => o && o !== 'unassigned')
+        const hrs = Number(s.estHours) || 0
+        if (subOwners.length === 0 || hrs <= 0) continue
+        const share = hrs / subOwners.length
+        for (const oid of subOwners) {
+          rolled[oid] = (rolled[oid] ?? 0) + share
+        }
+      }
+      // Rond af op 0.1u zodat de pie geen 7.34782u toont.
+      for (const k of Object.keys(rolled)) rolled[k] = Math.round(rolled[k] * 10) / 10
+      if (Object.keys(rolled).length > 0) updates.ownerHours = rolled
+    }
     // Status NIET auto-rollen. Done subitems blijven gewoon in het
     // parent-item zichtbaar; pas wanneer jij het item zelf op Done zet
     // verhuist 't naar de Done-groep. Voorkomt dat een item ongewenst
@@ -3191,9 +3211,28 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             }))
             return { ...item, subitems: prorated, __prorated: true } as BoardItem
           }
+          // Top-level item zonder subs: schaal zowel estHours ALS ownerHours
+          // met dezelfde overlap-factor zodat de verdeling-pie en de
+          // uren-cel synchroon blijven bij periode-filter. Anders toont
+          // de pie de volledige owner-shares (bv. 21u + 3u = 24u) terwijl
+          // de cel pro-rated 8u laat zien — inconsistent.
+          const newHours = prorate(Number(item.estHours) || 0, item.startDate, item.endDate)
+          let proOwnerHours = item.ownerHours
+          if (item.ownerHours && Object.keys(item.ownerHours).length > 0) {
+            const oldHours = Number(item.estHours) || 0
+            if (oldHours > 0) {
+              const factor = newHours / oldHours
+              const scaled: Record<string, number> = {}
+              for (const [k, v] of Object.entries(item.ownerHours)) {
+                scaled[k] = Math.round((Number(v) || 0) * factor * 10) / 10
+              }
+              proOwnerHours = scaled
+            }
+          }
           return {
             ...item,
-            estHours: prorate(Number(item.estHours) || 0, item.startDate, item.endDate),
+            estHours: newHours,
+            ownerHours: proOwnerHours,
             __prorated: true,
           } as BoardItem
         }),
