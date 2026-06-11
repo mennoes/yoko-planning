@@ -962,8 +962,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       case 'status':
         // Status: cell-border zonder padding/center zodat de status-tag
         // de volledige rij-hoogte van het subitem vult (visueel hetzelfde
-        // gedrag als bij top-level items).
-        return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', overflow: 'hidden' }}>
+        // gedrag als bij top-level items). alignSelf:stretch overruled
+        // de alignItems:center van de grid-row zodat de pill écht uitvult.
+        return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden' }}>
           <StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} />
         </div>
       case 'timeline':
