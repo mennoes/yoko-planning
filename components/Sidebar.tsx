@@ -629,8 +629,15 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
 
         <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
 
-        {/* Google Calendar — opens a right-side drawer */}
-        {requiresAuth && <GoogleCalendarMenuRow />}
+        {/* Google Calendar — opens a right-side drawer. Sync-knop staat
+            er direct naast zodat 'ie logisch bij dezelfde context hoort
+            (was eerder onderaan tussen thema/instellingen). */}
+        {requiresAuth && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}><GoogleCalendarMenuRow inline /></div>
+            <SyncButton />
+          </div>
+        )}
 
         {requiresAuth && profile && (
           <>
@@ -738,15 +745,19 @@ function SyncButton() {
 }
 
 // ─── Settings → Google Calendar row + drawer ──────────────────────────────────
-function GoogleCalendarMenuRow() {
+function GoogleCalendarMenuRow({ inline }: { inline?: boolean }) {
   const [open, setOpen] = useState(false)
   return (
     <>
       <button onClick={() => setOpen(true)}
-        style={{ width: 'calc(100% - 12px)', margin: '0 6px', padding: '8px 10px', borderRadius: 8,
+        style={{
+          width: inline ? '100%' : 'calc(100% - 12px)',
+          margin: inline ? 0 : '0 6px',
+          padding: '8px 10px', borderRadius: 8,
           background: 'transparent', border: 'none', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
-          color: 'var(--text-primary)', fontSize: 13, fontWeight: 500 }}
+          color: 'var(--text-primary)', fontSize: 13, fontWeight: 500,
+        }}
         onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
         <span style={{ fontSize: 14 }}>📅</span>
@@ -1411,8 +1422,6 @@ export default function Sidebar({
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
             {(() => { const T = (THEMES.find(t => t.value === theme) ?? THEMES[0]).Icon; return <T size={17} /> })()}
           </button>
-
-          {requiresAuth && <SyncButton />}
 
           <button onClick={() => setSettingsOpen(true)} title="Instellingen"
             style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}
