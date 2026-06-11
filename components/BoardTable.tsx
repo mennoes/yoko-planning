@@ -31,6 +31,7 @@ import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
+import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -3047,42 +3048,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const [dedupOpen,     setDedupOpen]    = useState(false)
   const [activityOpen,  setActivityOpen] = useState(false)
   const [trashOpen,     setTrashOpen]    = useState(false)
-  const [recoveryBusy,  setRecoveryBusy] = useState(false)
-
-  // Per-bord recovery: vraagt 't merge-missing-subitems endpoint om de
-  // ontbrekende subs uit de laatste snapshot terug te plaatsen op de
-  // HUIDIGE items. Top-level wijzigingen blijven staan.
-  async function runRecovery() {
-    if (recoveryBusy) return
-    if (!supabase) return
-    if (!window.confirm(
-      `Verdwenen subitems van '${title}' terughalen?\n\n` +
-      `Pakt de laatste snapshot van vóór 30 min, kijkt per item welke ` +
-      `subs daarop staan maar nu missen, en zet ze terug. De huidige ` +
-      `top-level fields (status/owner/datums/notes) blijven onaangeroerd.`,
-    )) return
-    const sess = await supabase.auth.getSession()
-    const token = sess.data.session?.access_token
-    if (!token) { window.alert('Niet ingelogd — herlaad de pagina.'); return }
-    setRecoveryBusy(true)
-    try {
-      const res = await fetch('/api/snapshots/merge-missing-subitems', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ boardId }),
-      })
-      const json = await res.json() as { ok: boolean; error?: string; touchedItems?: number; restoredSubs?: number; usedSnapshot?: string; status?: string }
-      if (!json.ok) { window.alert(`Recovery mislukt: ${json.error ?? 'onbekend'}`); return }
-      await pullBoardFromRemote(boardId).catch(() => {})
-      if (json.status === 'nothing_to_restore') {
-        window.alert('Niets terug te halen — alle subs in de snapshot staan al op de huidige items.')
-      } else {
-        window.alert(`Hersteld: ${json.restoredSubs ?? 0} subitem(s) op ${json.touchedItems ?? 0} item(s).`)
-      }
-    } finally {
-      setRecoveryBusy(false)
-    }
-  }
+  const [recoveryOpen,  setRecoveryOpen] = useState(false)
 
   function resizeCol(key: string, newWidth: number) {
     const updated = { ...colWidths, [key]: Math.max(60, newWidth) }
@@ -3531,14 +3497,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           {/* Recovery: haalt verdwenen subitems uit de laatste snapshot terug
               op de HUIDIGE items. Top-level edits blijven staan. Per-bord
               zichtbaar zodat je 'm direct vanuit elke agenda kunt gebruiken. */}
-          <button onClick={runRecovery} disabled={recoveryBusy}
-            title={`Verdwenen subitems van '${title}' terughalen uit laatste snapshot`}
+          <button onClick={() => setRecoveryOpen(true)}
+            title={`Snapshot-picker voor '${title}' — kies een versie om verdwenen subitems uit te herstellen`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700,
               background: 'var(--accent-light, rgba(88,150,255,0.18))',
               border: '1px solid var(--accent)',
-              color: 'var(--text-primary)', cursor: recoveryBusy ? 'wait' : 'pointer',
+              color: 'var(--text-primary)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            ↩︎ {isMobile ? '' : (recoveryBusy ? 'Bezig…' : 'Recovery')}
+            ↩︎ {isMobile ? '' : 'Recovery'}
           </button>
           {/* Share-knop: alleen voor borden in de SHAREABLE_BOARDS-whitelist
               op de server (zelfde lijst). Geeft een copy-able URL die
@@ -3730,6 +3696,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         open={trashOpen}
         onClose={() => setTrashOpen(false)}
         onOpenLog={() => { setTrashOpen(false); setActivityOpen(true) }} />
+
+      <BoardRecoveryDrawer
+        boardId={boardId}
+        boardTitle={title}
+        open={recoveryOpen}
+        onClose={() => setRecoveryOpen(false)} />
 
       {dedupOpen && (
         <DedupModal groups={groups} onClose={() => setDedupOpen(false)}
