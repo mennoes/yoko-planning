@@ -862,7 +862,22 @@ function overlapDays(
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
-  if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => onUpdate({ ownerIds: v })} />
+  if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => {
+    // ownerIds én ownerHours samen consistent houden: verwijderde owner
+    // mag geen stale uren-entry achterlaten (anders telt ie zomaar weer
+    // mee zodra je 'm later opnieuw toevoegt of bij periode-pro-rate).
+    if (item.ownerHours && Object.keys(item.ownerHours).length > 0) {
+      const active = new Set(v)
+      const cleaned: Record<string, number> = {}
+      for (const [oid, hrs] of Object.entries(item.ownerHours)) {
+        if (active.has(oid)) cleaned[oid] = hrs
+      }
+      const hasAny = Object.keys(cleaned).length > 0
+      onUpdate({ ownerIds: v, ownerHours: hasAny ? cleaned : undefined })
+    } else {
+      onUpdate({ ownerIds: v })
+    }
+  }} />
   if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
     onUpdate({ status: v })
     notifyOwnersOfStatusChange(item, item.status, v)
@@ -1937,7 +1952,17 @@ function OwnerDistributionSection({ item, owners, total, onUpdate }: {
           showAvatars
           innerLabel={`${round1(total)}u`}
           onChange={setLive}
-          onCommit={(next) => onUpdate({ ownerHours: next })}
+          onCommit={(next) => {
+            // Filter: alleen huidige owners. De pie kan in een
+            // raceconditie nog een stale owner-key meeleveren als de
+            // ownerIds-prop net wisselde — die mag NIET naar de DB.
+            const active = new Set(owners)
+            const cleaned: Record<string, number> = {}
+            for (const [oid, hrs] of Object.entries(next)) {
+              if (active.has(oid)) cleaned[oid] = hrs
+            }
+            onUpdate({ ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined })
+          }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
           {owners.map(oid => {
@@ -2313,12 +2338,32 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
             for (const [k, v] of Object.entries(i.ownerHours)) {
               scaled[k] = Math.round((Number(v) || 0) * factor * 10) / 10
             }
+            // Rounding kan een paar tienden afwijken van newTotal —
+            // corrigeer 't restje op de grootste deler zodat de som
+            // EXACT klopt en de pie geen drift krijgt.
+            const scaledSum = Object.values(scaled).reduce((s, v) => s + v, 0)
+            const diff = Math.round((newTotal - scaledSum) * 10) / 10
+            if (Math.abs(diff) >= 0.1) {
+              const largest = Object.entries(scaled).sort((a, b) => b[1] - a[1])[0]
+              if (largest) scaled[largest[0]] = Math.round((largest[1] + diff) * 10) / 10
+            }
             merged.ownerHours = scaled
           } else if (newTotal === 0) {
             // Naar 0u: leeg de verdeling, anders blijft de pie
             // verkeerd staan met som > 0.
             merged.ownerHours = undefined
           }
+        }
+        // ownerIds veranderd → cleanup stale ownerHours-entries (zelfde
+        // safeguard als in OwnersCell, voor bulk-updates die rechtstreeks
+        // updateItem aanroepen zonder het Cell-pad).
+        if ('ownerIds' in updates && i.ownerHours && Object.keys(i.ownerHours).length > 0) {
+          const active = new Set(updates.ownerIds ?? [])
+          const cleaned: Record<string, number> = {}
+          for (const [oid, hrs] of Object.entries(i.ownerHours)) {
+            if (active.has(oid)) cleaned[oid] = hrs
+          }
+          merged.ownerHours = Object.keys(cleaned).length > 0 ? cleaned : undefined
         }
         return merged
       }),
@@ -3430,6 +3475,33 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       ...g,
       items: g.items.map(i => {
         let nextItem = selectedIds.has(i.id) ? { ...i, ...patch } : i
+        // ownerIds/estHours consistency check ook in bulk-pad. Anders
+        // raken ownerHours stale wanneer een bulk-owner-wijziging eigenaren
+        // wegneemt of een bulk-uren-wijziging totalen verandert.
+        if (selectedIds.has(i.id)) {
+          if ('ownerIds' in patch && nextItem.ownerHours && Object.keys(nextItem.ownerHours).length > 0) {
+            const active = new Set(patch.ownerIds ?? [])
+            const cleaned: Record<string, number> = {}
+            for (const [oid, hrs] of Object.entries(nextItem.ownerHours)) {
+              if (active.has(oid)) cleaned[oid] = hrs
+            }
+            nextItem = { ...nextItem, ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined }
+          }
+          if ('estHours' in patch && i.ownerHours && Object.keys(i.ownerHours).length > 0) {
+            const oldSum = Object.values(i.ownerHours).reduce((s, v) => s + (Number(v) || 0), 0)
+            const newTotal = Number(patch.estHours) || 0
+            if (oldSum > 0 && newTotal > 0 && Math.abs(oldSum - newTotal) > 0.01) {
+              const factor = newTotal / oldSum
+              const scaled: Record<string, number> = {}
+              for (const [k, v] of Object.entries(i.ownerHours)) {
+                scaled[k] = Math.round((Number(v) || 0) * factor * 10) / 10
+              }
+              nextItem = { ...nextItem, ownerHours: scaled }
+            } else if (newTotal === 0) {
+              nextItem = { ...nextItem, ownerHours: undefined }
+            }
+          }
+        }
         if (hasSubPatch && nextItem.subitems && nextItem.subitems.length > 0) {
           const subs = nextItem.subitems.map(s => selectedIds.has(s.id) ? { ...s, ...subPatch } : s)
           if (subs.some((s, idx) => s !== nextItem.subitems![idx])) nextItem = { ...nextItem, subitems: subs }
