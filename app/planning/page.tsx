@@ -798,10 +798,13 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 500, color: '#fff',
           cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
           pointerEvents: 'auto',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
+          boxShadow: hoverBar ? '0 4px 12px rgba(0,0,0,0.4)' : '0 1px 2px rgba(0,0,0,0.18)',
           // Done-items faden naar 45% zodat actief werk visueel pop't.
           opacity: project.status === 'done' ? 0.45 : 1,
-          zIndex: ghost ? 1 : 'auto' }}
+          // Hover-bar én actieve-drag krijgen hoge z-index zodat 'ie ALTIJD
+          // bovenop overlappende balken zichtbaar is. Anders kan een short
+          // event onder een langere balk verstopt blijven.
+          zIndex: ghost ? 20 : (hoverBar ? 15 : 'auto') }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 6, paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: titleShift }}>
           {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
@@ -1828,9 +1831,12 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
         // Meetings krijgen MeetingHoverBar (hover-popover met tijd/details),
         // reguliere projecten DraggableBar. Beide leven in dezelfde lane-
         // stack — geen aparte rijen meer.
+        // Geen wrapper-z-index meer: bars competeren rechtstreeks via hun
+        // eigen z-index, zodat een hover-bar (z=15) écht boven andere
+        // bars uitkomt — i.p.v. opgesloten in z'n eigen wrapper-context.
         if (b.track === 'meeting') {
           return (
-            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: 2 }}>
+            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
               <MeetingHoverBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW}
                 laneH={wrapperH}
                 onDragMove={(s, e) => onDragMove(b.p, s, e)}
@@ -1841,7 +1847,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
           )
         }
         return (
-          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: 1 }}>
+          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
             <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
               laneH={wrapperH} scaleByHours={zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
@@ -4608,9 +4614,15 @@ export default function PlanningPage() {
               position: 'absolute', top: 0, bottom: 0,
               left: nowOffset, width: 0,
               borderLeft: '2px solid var(--yellow)',
-              pointerEvents: 'none', zIndex: 14,
+              pointerEvents: 'none',
+              // z=3: boven de bars (z=0–2) maar ONDER de sticky naam-kolom
+              // (z=4+). Anders snijdt de lijn dwars door de avatars heen.
+              zIndex: 3,
               boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
             }}>
+              {/* Pill krijgt een EIGEN hoge z-index zodat 'ie nog steeds
+                  boven de sticky kolom-header zichtbaar blijft, ook al
+                  hangt de lijn zelf onder de sticky cellen. */}
               <div style={{
                 position: 'sticky', top: 4,
                 marginLeft: -32, width: 64,
@@ -4620,6 +4632,7 @@ export default function PlanningPage() {
                 letterSpacing: '0.08em', textAlign: 'center',
                 borderRadius: 999,
                 boxShadow: '0 2px 6px rgba(216, 182, 46, 0.4)',
+                zIndex: 20,
               }}>VANDAAG</div>
             </div>
           )}
