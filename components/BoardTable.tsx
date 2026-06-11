@@ -921,7 +921,7 @@ function subitemAsItem(s: SubItem): BoardItem {
 }
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, colWidths, onResizeCol, onUpdate, onDelete }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -940,6 +940,10 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   onOpenDetail?: () => void
   // Net-aangemaakt subitem? Start dan meteen in edit-mode voor de naam.
   defaultEditName?: boolean
+  // Column-resize: gebruiker kan vanuit subitem-rijen kolommen verbreden/
+  // versmallen, niet alleen vanaf de sticky header bovenaan.
+  colWidths?: Record<string, number>
+  onResizeCol?: (key: string, width: number) => void
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
 }) {
   const [hover,     setHover]     = useState(false)
@@ -1137,7 +1141,30 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           </>
         )}
       </div>
-      {cols.map(c => <div key={c.key} style={{ alignSelf: 'stretch', display: 'flex', minWidth: 0 }}>{renderCol(c)}</div>)}
+      {cols.map(c => (
+        <div key={c.key} style={{ alignSelf: 'stretch', display: 'flex', minWidth: 0, position: 'relative' }}>
+          {renderCol(c)}
+          {onResizeCol && (
+            <div
+              title="Kolom breder/smaller slepen"
+              style={{ position: 'absolute', top: 0, right: -3, width: 6, height: '100%', cursor: 'col-resize', zIndex: 3 }}
+              onClick={e => e.stopPropagation()}
+              onMouseDown={e => {
+                e.preventDefault(); e.stopPropagation()
+                const startX = e.clientX
+                const startW = (colWidths && colWidths[c.key]) ?? c.width
+                function onMove(ev: MouseEvent) { onResizeCol!(c.key, startW + ev.clientX - startX) }
+                function onUp() {
+                  document.removeEventListener('mousemove', onMove)
+                  document.removeEventListener('mouseup', onUp)
+                }
+                document.addEventListener('mousemove', onMove)
+                document.addEventListener('mouseup', onUp)
+              }}
+            />
+          )}
+        </div>
+      ))}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%' }}>
         {hover && (
           <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
@@ -1148,7 +1175,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, onUpdate }: {
+function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
@@ -1157,6 +1184,8 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   fromGroupId?: string
   parentExternalLink?: string | null
   onOpenDetail?: (sub: SubItem) => void
+  colWidths?: Record<string, number>
+  onResizeCol?: (key: string, width: number) => void
   onUpdate: (u: SubItem[]) => void
 }) {
   function updateOne(id: string, u: Partial<SubItem>) {
@@ -1220,6 +1249,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail}
           justCreatedSubId={justCreatedSubId}
+          colWidths={colWidths} onResizeCol={onResizeCol}
           updateOne={updateOne} deleteOne={deleteOne} />
         <div style={{ padding: '8px 12px 8px 56px' }}>
           <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
@@ -1235,7 +1265,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, updateOne, deleteOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
@@ -1247,6 +1277,10 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
   onOpenDetail?: (sub: SubItem) => void
   // Id van een net-aangemaakte subitem — die rij start meteen in edit-mode.
   justCreatedSubId?: string | null
+  // Column-resize doorgegeven van BoardGroupSection zodat subitem-rijen
+  // ook een drag-handle per cel kunnen renderen.
+  colWidths?: Record<string, number>
+  onResizeCol?: (key: string, width: number) => void
   updateOne: (id: string, u: Partial<SubItem>) => void
   deleteOne: (id: string) => void
 }) {
@@ -1278,6 +1312,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
           defaultEditName={sub.id === justCreatedSubId}
+          colWidths={colWidths} onResizeCol={onResizeCol}
           onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
       ))}
       {hasDone && (
@@ -1314,6 +1349,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               isLast={idx === lastDoneIdx}
               parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
               onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
+              colWidths={colWidths} onResizeCol={onResizeCol}
               onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
           ))}
         </>
@@ -1352,7 +1388,7 @@ function NotesPreview({ value, onOpen }: { value: string; onOpen: () => void }) 
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, onUpdate, onDelete, defaultEditName }: {
+function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
   selected: boolean
   accentColor?: string
@@ -1367,6 +1403,10 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   isLast: boolean
   onMoveUp: () => void
   onMoveDown: () => void
+  // Column-resize via subitem-cellen — geven we door zodat de gebruiker
+  // niet hoeft te scrollen naar de sticky header bovenin.
+  colWidths?: Record<string, number>
+  onResizeCol?: (key: string, width: number) => void
   onUpdate: (u: Partial<BoardItem>) => void; onDelete: () => void
   // Wanneer true initialiseert de rij in name-edit-modus. Wordt door
   // 'Voeg item toe' gezet zodat de gebruiker direct kan typen zonder
@@ -1451,16 +1491,20 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
   let effectiveItem: BoardItem = item
   if (hasSubitems) {
     const updates: Partial<BoardItem> = {}
-    // Voorkeur: actieve (niet-Done) subitems voor de afgeleide timeline. Een
-    // recurring meeting met 7 Done en 4 openstaande heeft een 'live' bereik
-    // van de 4 openstaande, niet feb–jul. Pas als alles Done is val terug
-    // op alle subitems zodat de range nog ergens op slaat.
+    // Parent-timeline volgt altijd de ACTIEVE (niet-Done) subitems. Een
+    // Done-instance moet 't bereik niet meer beïnvloeden — anders blijft
+    // de parent op 20 mei staan terwijl alle resterende subitems pas op
+    // 17 juni beginnen. Zijn alle subitems Done, val terug op de complete
+    // set zodat de range nog ergens op slaat (anders zou de parent leeg
+    // ogen).
     const activeSubs = subitems.filter(s => s.status !== 'Done')
     const dateSubs   = activeSubs.length > 0 ? activeSubs : subitems
     const subStarts = dateSubs.map(s => s.startDate).filter(Boolean) as string[]
     const subEnds   = dateSubs.map(s => s.endDate).filter(Boolean) as string[]
-    if (!item.startDate && subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
-    if (!item.endDate   && subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
+    // Override de stored parent-datums altijd zodra subitems datums hebben.
+    // De parent eigen startDate/endDate zijn dan slechts een fallback.
+    if (subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
+    if (subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
     // Owner-rollup: alle eigenaren over subitems verzamelen en samenvoegen
     // met de parent eigen ownerIds. Voorheen vulden we alleen aan wanneer
     // de parent helemaal leeg was; daardoor zag je niet de Yoko-collega's
@@ -1676,6 +1720,7 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
           parentItemId={item.id} fromGroupId={groupId}
           parentExternalLink={item.externalLink ?? null}
           onOpenDetail={sub => setOpenSub(sub)}
+          colWidths={colWidths} onResizeCol={onResizeCol}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
       {showDetail && (
@@ -2814,6 +2859,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                   isFirst={realIdx === 0}
                   isLast={realIdx === group.items.length - 1}
                   defaultEditName={item.id === justCreatedId}
+                  colWidths={colWidths} onResizeCol={onResizeCol}
                   onMoveUp={() => moveItem(item.id, -1)}
                   onMoveDown={() => moveItem(item.id, 1)}
                   onUpdate={u => updateItem(item.id, u)} onDelete={() => deleteItem(item.id)} />
