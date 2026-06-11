@@ -1683,70 +1683,45 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
   // de andere events.
   const projectAllSingles = finalBars
   const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
+  // Hele-dag items: één enkele dag waarop het project (bijna) een volle
+  // werkdag duurt. Die renderen we als full-height achtergrond-blok zodat
+  // je in één oogopslag ziet dat de dag 'op slot' staat — vergelijkbaar
+  // met vrij-events maar zonder de groene styling.
+  const isFullDayBar = (b: SingleBar): boolean => {
+    const p = b.p
+    if (!p.startDate || !p.endDate) return false
+    if (p.startDate !== p.endDate) return false
+    const hrs = Number(p.estHours) || 0
+    if (hrs >= 7) return true
+    // All-day calendar event (geen tijd) telt ook als hele dag
+    if (!p.startTime && !p.endTime && hrs === 0) return true
+    return false
+  }
   const vrijBars     = projectAllSingles.filter(isVrijBar)
-  const meetingBars  = projectAllSingles.filter(b => !isVrijBar(b) && b.isMeeting)
-  const projectItems = projectAllSingles.filter(b => !isVrijBar(b) && !b.isMeeting)
+  const fullDayBars  = projectAllSingles.filter(b => !isVrijBar(b) && isFullDayBar(b))
+  const fullDayIds   = new Set(fullDayBars.map(b => b.p.id))
+  // Meetings + reguliere projecten DELEN nu één lane-stack. Vroeger kreeg
+  // elke meeting een eigen rij boven de projecten — dat blies de hoogte
+  // op zodra je 'Meetings tonen' aanzette. Nu fitten ze in dezelfde
+  // gap-aware packing en blijft 't compact.
+  const projectItems = projectAllSingles.filter(b => !isVrijBar(b) && !fullDayIds.has(b.p.id))
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // Meetings: per dag-positie sorteren op start-tijd, dan eigen lane
-  // toewijzen — vroegste in de bovenste lane.
-  function startMin(p: Project): number {
-    const t = p.startTime
-    if (!t) return 9 * 60
-    const [hh, mm] = t.split(':').map(Number)
-    return (hh || 0) * 60 + (mm || 0)
-  }
-  const meetingsSorted = [...meetingBars].sort((a, b) => {
-    if (a.left !== b.left) return a.left - b.left
-    return startMin(a.p) - startMin(b.p)
-  })
-  // Per dag (gegroepeerd op afgerond left) een eigen lane-index opbouwen
-  // op basis van start-tijd: lane 0 = vroegste.
-  const meetingLaneByDay = new Map<number, number>()
-  const meetingsPacked = meetingsSorted.map(b => {
-    const key = Math.round(b.left)
-    const lane = meetingLaneByDay.get(key) ?? 0
-    meetingLaneByDay.set(key, lane + 1)
-    return { ...b, lane }
-  })
-  const meetingLanes = meetingLaneByDay.size > 0
-    ? Math.max(...meetingLaneByDay.values())
-    : 0
-
-  // In Overzicht (week-zoom) maken we de project-lane veel hoger zodat we
-  // events als mini-staafdiagram per dag kunnen renderen.
-  // Overzicht (week-zoom): compacte lane-hoogte. 32px geeft genoeg
-  // hoogte voor leesbare bars, met scaling op uren-per-dag binnen
-  // die lane.
+  // In Overzicht (week-zoom) maken we de lane wat hoger zodat events als
+  // mini-staafdiagram per dag kunnen renderen.
   const PROJECT_LANE_H = zoom === 'week' ? 32 : (BAR_H + BAR_GAP)
-  const MEETING_LANE_H = BAR_H + BAR_GAP
 
-  // Meeting-lanes BOVEN project-lanes plaatsen zodat ze elkaar visueel
-  // niet meer overlappen. Eerder mochten ze overlappen, maar dat brak
-  // drag-functionaliteit van project-bars onder een meeting (read-only
-  // meeting-bar ving 't mousedown-event af). Met de meetings duidelijk
-  // gescheiden bovenaan blijven projecten direct sleepbaar.
-  function meetingLaneTop(lane: number) { return BAR_GAP + lane * MEETING_LANE_H }
-  function projectLaneTop(lane: number) {
-    const meetingsBlockH = meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 4 : 0)
-    return BAR_GAP + meetingsBlockH + lane * PROJECT_LANE_H
-  }
+  function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
-  const bars: Single[] = [
-    ...projectPacked.items.map(b => ({ ...b, track: 'project' as const })),
-    ...meetingsPacked.map(b => ({ ...b, track: 'meeting' as const })),
-  ]
+  const bars: Single[] = projectPacked.items.map(b => ({
+    ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
+  }))
 
-  if (bars.length === 0 && vrijBars.length === 0) return null
-  // Meetings staan nu BOVEN projects (zie projectLaneTop), dus de container
-  // moet de som van beide stacks bevatten — niet de max. Anders krijg je
-  // een te lage container en wordt de onderste project-lane (vaak de
-  // langste/breedste balk) onderaan afgekapt door overflow:hidden.
+  if (bars.length === 0 && vrijBars.length === 0 && fullDayBars.length === 0) return null
   const projectStack = projectLanes * PROJECT_LANE_H
-  const meetingStack = meetingLanes * MEETING_LANE_H + (meetingLanes > 0 ? 4 : 0)
-  const baseHeight = BAR_GAP + meetingStack + projectStack + 6
+  const baseHeight = BAR_GAP + projectStack + 6
   const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
 
   return (
@@ -1779,15 +1754,44 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
         </div>
       ))}
-      {bars.map((b, i) => {
-        // Meetings: aparte lane onder projecten, gesorteerd op start-
-        // tijd, met de oorspronkelijke project-kleur (geen geel meer).
-        void i
+      {/* Hele-dag-blokken: single-day items van ~8u worden full-height
+          gerenderd, met de board-kleur als subtiele tint. Zo zie je in één
+          oogopslag welke dagen volledig 'op slot' zitten. */}
+      {fullDayBars.map(b => {
+        const color = BOARD_COLORS[b.p.board] ?? '#888'
+        const isDone = b.p.status === 'done'
+        return (
+          <div key={`fd_${b.p.id}`}
+            onClick={() => onBarClick(b.p)}
+            title={`${b.p.name} · hele dag`}
+            style={{
+              position: 'absolute', top: 2, bottom: 2,
+              left: b.left + 2, width: Math.max(20, b.width - 4),
+              background: color + '33',
+              border: `1.5px solid ${color}`,
+              borderRadius: 8,
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
+              padding: '4px 8px', gap: 6,
+              cursor: 'pointer', zIndex: 0,
+              fontSize: 12, fontWeight: 600, color: '#fff',
+              opacity: isDone ? 0.45 : 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
+          </div>
+        )
+      })}
+      {bars.map(b => {
+        const top = projectLaneTop(b.lane)
+        const wrapperH = PROJECT_LANE_H
+        // Meetings krijgen MeetingHoverBar (hover-popover met tijd/details),
+        // reguliere projecten DraggableBar. Beide leven in dezelfde lane-
+        // stack — geen aparte rijen meer.
         if (b.track === 'meeting') {
           return (
-            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top: meetingLaneTop(b.lane), left: 0, right: 0, height: MEETING_LANE_H, pointerEvents: 'none', zIndex: 5 }}>
+            <div key={`mtg_${b.p.id}`} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: 2 }}>
               <MeetingHoverBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW}
-                laneH={MEETING_LANE_H}
+                laneH={wrapperH}
                 onDragMove={(s, e) => onDragMove(b.p, s, e)}
                 onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
                 onClick={() => onBarClick(b.p)}
@@ -1795,17 +1799,8 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
             </div>
           )
         }
-        // Hoogte blijft binnen één lane — eerder lieten we hele-dag-
-        // projecten de volle row-hoogte vullen, maar dat werd visueel
-        // onoverzichtelijk. Subtieler is beter; de bol-cijfers tonen
-        // de totale belasting al.
-        const isFullDay = false
-        const top = projectLaneTop(b.lane)
-        const wrapperH = isFullDay
-          ? Math.max(PROJECT_LANE_H, baseHeight - top - 6)
-          : PROJECT_LANE_H
         return (
-          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: isFullDay ? 3 : 1 }}>
+          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: 1 }}>
             <DraggableBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW} small={false}
               laneH={wrapperH} scaleByHours={zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
