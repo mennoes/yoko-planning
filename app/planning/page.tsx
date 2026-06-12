@@ -898,7 +898,7 @@ function localIso(d: Date): string {
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
 }
 
-function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, onSelect, onTimedDrag, onDateDragEnd, onReassign }: {
+function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, onSelect, onTimedDrag, onDateDragEnd, onReassign, onCreateAt }: {
   cols: Col[]
   projects: Project[]
   // Wanneer memberId niet gezet is, gebruiken we deze predicate om te
@@ -921,6 +921,9 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   onDateDragEnd?: (p: Project, ns: string | null, ne: string | null) => void
   // Sleep een pill naar een ander persoon-row → reassign owner.
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
+  // Klik op leeg uur-slot → nieuw item op die exacte datum + tijd
+  // (Google-Calendar-stijl).
+  onCreateAt?: (memberId: string, dateIso: string, startTime: string, endTime: string) => void
 }) {
   // Werkdag-raster: 09:00 → 18:00. Korter raster = overzichtelijker bij
   // het scrollen door de week. Avond-events (kroeg, premières, late
@@ -1439,10 +1442,39 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             )
           })}
         </div>
-        <div ref={gridRef} style={{ position: 'relative', width: totalWidth, height: timeGridH, background: stickyBg,
+        <div ref={gridRef}
+          onClick={(ev) => {
+            // Klik op leeg uur-slot → nieuw item op die datum + tijd.
+            // Bars/handles bovenop hebben pointerEvents/stopPropagation
+            // zodat hun klik niet hier landt.
+            if (!onCreateAt || !memberId) return
+            if (ev.target !== ev.currentTarget) return
+            const rect = ev.currentTarget.getBoundingClientRect()
+            const x = ev.clientX - rect.left
+            const y = ev.clientY - rect.top
+            // Welke kolom (dag) zit deze x in?
+            let acc = 0
+            let col: Col | null = null
+            for (const c of cols) {
+              if (x >= acc && x < acc + c.widthPx) { col = c; break }
+              acc += c.widthPx
+            }
+            if (!col) return
+            // Welk uur op de y-as?
+            const hourFloat = HOUR_START + (y / HOUR_H)
+            const hour = Math.max(HOUR_START, Math.min(HOUR_END - 1, Math.floor(hourFloat)))
+            const minRaw = Math.round((hourFloat - Math.floor(hourFloat)) * 60 / 15) * 15
+            const min = Math.min(45, Math.max(0, minRaw))
+            const startTime = `${pad2(hour)}:${pad2(min)}`
+            const endHour = hour + 1 > HOUR_END ? HOUR_END : hour + 1
+            const endTime = `${pad2(endHour)}:${pad2(min)}`
+            const dateIso = col.rangeStart.toISOString().slice(0, 10)
+            onCreateAt(memberId, dateIso, startTime, endTime)
+          }}
+          style={{ position: 'relative', width: totalWidth, height: timeGridH, background: stickyBg,
           // Events buiten 09:00–18:00 worden geclipt — geen visuele
           // overspill onder/boven het raster.
-          overflow: 'hidden' }}>
+          overflow: 'hidden', cursor: onCreateAt && memberId ? 'cell' : 'default' }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => (
             <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: HOUR_H,
               borderBottom: '1px solid var(--border)', pointerEvents: 'none' }} />
@@ -3422,6 +3454,21 @@ export default function PlanningPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   const [newItemOpen, setNewItemOpen] = useState(false)
+  // Pre-fill voor click-to-create vanuit het tijdlijn-grid. Wanneer
+  // de user op een lege cel klikt vullen we datum/tijd/owner in zodat
+  // 't NewItemPopup direct op die positie staat (Google-Calendar-stijl).
+  const [newItemDefaults, setNewItemDefaults] = useState<null | {
+    memberId?: string
+    startDate?: string
+    endDate?:   string
+    startTime?: string
+    endTime?:   string
+  }>(null)
+  // Open-helper: zet defaults + open popup in één call.
+  function openNewItemAt(defaults: NonNullable<typeof newItemDefaults>) {
+    setNewItemDefaults(defaults)
+    setNewItemOpen(true)
+  }
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     if (typeof window === 'undefined') return 'week'
     const v = localStorage.getItem('planning-zoom') as ZoomLevel
@@ -4908,11 +4955,26 @@ export default function PlanningPage() {
                       const contribs = memberHoursInCol(effectiveProjects, m.id, col)
                       const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                       const isWeekStart = col.rangeStart.getDay() === 1
+                      // Klik op leeg deel van de cel → nieuw item op deze
+                      // datum + member. WorkloadCell vangt zelf clicks op
+                      // de bol af (stopPropagation hieronder).
+                      const handleEmptyClick = (ev: React.MouseEvent) => {
+                        if (ev.target !== ev.currentTarget) return  // niet op de bol
+                        const startIso = col.rangeStart.toISOString().slice(0, 10)
+                        const endIso   = (zoom === 'week'
+                          ? new Date(col.rangeStart.getTime() + 4 * 86400000) // ma-vr blok
+                          : col.rangeStart).toISOString().slice(0, 10)
+                        openNewItemAt({ memberId: m.id, startDate: startIso, endDate: endIso })
+                      }
                       return (
-                        <div key={col.key} style={{ width: col.widthPx, height: Math.round(hh * 0.7), flexShrink: 0,
-                          borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
-                          padding: 2,
-                          background: col.isCurrent ? 'var(--accent-light)' : 'transparent', position: 'relative' }}>
+                        <div key={col.key}
+                          onClick={handleEmptyClick}
+                          title="Klik voor nieuw item op deze dag"
+                          style={{ width: col.widthPx, height: Math.round(hh * 0.7), flexShrink: 0,
+                            borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
+                            padding: 2,
+                            background: col.isCurrent ? 'var(--accent-light)' : 'transparent', position: 'relative',
+                            cursor: 'cell' }}>
                           <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={Math.round(cs * 0.7)} or={Math.round(or * 0.7)} zoom={zoom} onOpenDetails={p => openDetail(p)} />
                         </div>
                       )
@@ -4931,6 +4993,10 @@ export default function PlanningPage() {
                     onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
                     onDateDragEnd={(p, ns, ne) => handleDragEnd(p, ns, ne)}
                     onReassign={handleReassignOwner}
+                    onCreateAt={(mid, dateIso, st, et) => openNewItemAt({
+                      memberId: mid, startDate: dateIso, endDate: dateIso,
+                      startTime: st, endTime: et,
+                    })}
                   />
                 </div>
               )
