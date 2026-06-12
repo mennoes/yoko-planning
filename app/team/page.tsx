@@ -548,19 +548,31 @@ export default function TeamPage() {
             // policy te omzeilen (anders kun je alleen je eigen werkdagen
             // bijstellen, niet die van collega's).
             setDaysOffByMember(prev => ({ ...prev, [memberId]: next }))
-            if (!supabase) return
+            if (!supabase) { window.alert('Geen Supabase-verbinding.'); return }
             const sess = await supabase.auth.getSession()
             const token = sess.data.session?.access_token
-            if (!token) return
-            const res = await fetch('/api/team/days-off', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ memberId, daysOff: next }),
-            })
+            if (!token) { window.alert('Niet ingelogd — herlaad de pagina.'); return }
+            let res: Response
+            try {
+              res = await fetch('/api/team/days-off', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ memberId, daysOff: next }),
+              })
+            } catch (err) {
+              window.alert(`Netwerkfout: ${err instanceof Error ? err.message : String(err)}`)
+              return
+            }
             if (!res.ok) {
-              // Rollback bij fout
-              const json = await res.json().catch(() => ({}))
+              // Toon de fout direct aan de user — silent fail was juist het
+              // probleem (Manuels vrijdag bleef terugkomen na refresh).
+              const json = await res.json().catch(() => ({})) as { error?: string; expected?: unknown; actual?: unknown }
               console.error('[team] days_off save failed:', json)
+              window.alert(
+                `Werkdag-wijziging is niet opgeslagen.\n\n` +
+                `Reden: ${json.error ?? `HTTP ${res.status}`}\n` +
+                (json.expected !== undefined ? `Verwacht: ${JSON.stringify(json.expected)}\nWerkelijk: ${JSON.stringify(json.actual)}` : ''),
+              )
               // Refresh om te re-syncen met server-state
               const { data } = await supabase
                 .from('profiles')
