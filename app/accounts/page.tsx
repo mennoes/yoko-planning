@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { IconKey } from '@/components/Icon'
+import { IconKey, IconEye, IconEyeOff, IconCopy, IconCheck } from '@/components/Icon'
 import { useProfile } from '@/components/ProfileContext'
 import { useUndo } from '@/components/UndoContext'
 import { requiresAuth, supabase } from '@/lib/supabase'
@@ -199,7 +199,10 @@ export default function AccountsPage() {
             fontWeight: 500,
           }}
         >
-          {showPasswords ? '🙈 Verberg' : '👁 Toon alles'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {showPasswords ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+            {showPasswords ? 'Verberg' : 'Toon alles'}
+          </span>
         </button>
       </div>
 
@@ -336,7 +339,7 @@ export default function AccountsPage() {
                           title={revealed ? 'Verbergen' : 'Tonen'}
                           className="acct-eye"
                           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: '2px 5px', borderRadius: 4, flexShrink: 0, opacity: revealed ? 1 : 0, transition: 'opacity 0.12s' }}>
-                          {revealed ? '👁' : '👁‍🗨'}
+                          {revealed ? <IconEye size={14} /> : <IconEyeOff size={14} />}
                         </button>
                         <CopyButton text={value} title="Kopieer wachtwoord" />
                       </div>
@@ -436,7 +439,7 @@ function CopyButton({ text, title }: { text: string; title: string }) {
       }}
       onMouseEnter={(e) => { if (!copied) e.currentTarget.style.color = 'var(--text-secondary)' }}
       onMouseLeave={(e) => { if (!copied) e.currentTarget.style.color = 'var(--text-muted)' }}>
-      {copied ? '✓' : '⧉'}
+      {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
     </button>
   )
 }

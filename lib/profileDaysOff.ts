@@ -54,16 +54,31 @@ export function onProfileDaysOffChange(handler: () => void): () => void {
 export async function pullProfileDaysOff(): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('member_id, days_off')
-  if (error || !data) return false
+  // Primaire bron: team_members.days_off (geen auth-dependency, dus
+  // werkt voor ALLE teamleden inclusief degenen zonder profiles-rij).
+  // Profiles.days_off is een legacy fallback voor signed-up users
+  // wiens days_off vóór de team_members-migratie alleen daar landde.
   const map: ProfileDaysOffMap = {}
-  for (const r of data as { member_id: string | null; days_off: string[] | null }[]) {
-    if (!r.member_id) continue
-    const arr = Array.isArray(r.days_off) ? r.days_off : []
-    const iso = arr.map(d => DAY_TO_ISO[d.toLowerCase()]).filter((n): n is number => !!n)
-    if (iso.length > 0) map[r.member_id] = iso
+  const tm = await supabase.from('team_members').select('id, days_off')
+  if (tm.data) {
+    for (const r of tm.data as { id: string | null; days_off: string[] | null }[]) {
+      if (!r.id) continue
+      const arr = Array.isArray(r.days_off) ? r.days_off : []
+      const iso = arr.map(d => DAY_TO_ISO[d.toLowerCase()]).filter((n): n is number => !!n)
+      if (iso.length > 0) map[r.id] = iso
+    }
+  }
+  // Legacy: profiles.days_off — alleen overschrijven als team_members
+  // geen waarde had (mid-migratie, zodat oude data niet verloren gaat).
+  const pr = await supabase.from('profiles').select('member_id, days_off')
+  if (pr.data) {
+    for (const r of pr.data as { member_id: string | null; days_off: string[] | null }[]) {
+      if (!r.member_id) continue
+      if (map[r.member_id]) continue
+      const arr = Array.isArray(r.days_off) ? r.days_off : []
+      const iso = arr.map(d => DAY_TO_ISO[d.toLowerCase()]).filter((n): n is number => !!n)
+      if (iso.length > 0) map[r.member_id] = iso
+    }
   }
   if (JSON.stringify(readCache()) === JSON.stringify(map)) return true
   writeCache(map)
@@ -84,6 +99,7 @@ export function subscribeRemoteProfileDaysOff(): () => void {
   if (channel) return () => {}
   const ch = supabase.channel('profile_days_off')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => schedulePull())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, () => schedulePull())
     .subscribe()
   channel = ch
   return () => {

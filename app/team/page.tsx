@@ -104,13 +104,22 @@ function PhotoCropper({ src, onDone, onCancel }: {
 const DAY_LABELS_SHORT = ['M', 'D', 'W', 'D', 'V']
 const DAY_KEYS         = ['mon', 'tue', 'wed', 'thu', 'fri'] as const
 
-function TeamMemberCard({ member, capacity, daysOff, onDaysOffChange, onCapacityChange }: {
+function TeamMemberCard({ member, capacity, daysOff, compact, onDaysOffChange, onCapacityChange }: {
   member: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }
   capacity: number
   daysOff: string[]
+  compact?: boolean
   onDaysOffChange: (next: string[]) => void
   onCapacityChange: (cap: number) => void
 }) {
+  // Compact-modus (freelancers): half-size kaart. Alle maatvoeringen
+  // schalen mee zodat 't visueel duidelijk een 'minder prominente' rij is.
+  const AV     = compact ? 40 : 72
+  const CARD_W = compact ? 88 : 140
+  const CARD_P = compact ? '10px 8px' : '20px 16px'
+  const DOT    = compact ? 12 : 18
+  const NAME_FS = compact ? 11 : 13.5
+  const CAP_FS  = compact ? 10 : 11.5
   const { getPhoto, setPhoto }  = useTeamPhotos()
   const { profile }             = useProfile()
   const isMe    = profile?.memberId === member.id
@@ -137,9 +146,9 @@ function TeamMemberCard({ member, capacity, daysOff, onDaysOffChange, onCapacity
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-      padding: '20px 16px', background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 12, width: 140, flexShrink: 0,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: compact ? 6 : 10,
+      padding: CARD_P, background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 12, width: CARD_W, flexShrink: 0,
     }}>
       {cropSrc ? (
         <PhotoCropper src={cropSrc} onCancel={() => setCropSrc(null)}
@@ -151,18 +160,18 @@ function TeamMemberCard({ member, capacity, daysOff, onDaysOffChange, onCapacity
             onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
             {photo ? (
               <img src={photo} alt={member.name}
-                style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: `3px solid ${member.color}`, display: 'block' }} />
+                style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', border: `${compact ? 2 : 3}px solid ${member.color}`, display: 'block' }} />
             ) : (
               <div style={{
-                width: 72, height: 72, borderRadius: '50%', flexShrink: 0,
-                background: member.color + '25', border: `3px solid ${member.color}`,
+                width: AV, height: AV, borderRadius: '50%', flexShrink: 0,
+                background: member.color + '25', border: `${compact ? 2 : 3}px solid ${member.color}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 22, fontWeight: 700, color: member.color,
+                fontSize: compact ? 14 : 22, fontWeight: 700, color: member.color,
               }}>
                 {/* Try static /team/ photo as fallback */}
                 <img src={fallback} alt={member.name}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                  style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} />
+                  style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} />
                 {initials}
               </div>
             )}
@@ -186,7 +195,7 @@ function TeamMemberCard({ member, capacity, daysOff, onDaysOffChange, onCapacity
 
           {/* Name + capacity (capacity is inline-editable + gedeeld met Planning) */}
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>{member.name}</div>
+            <div style={{ fontSize: NAME_FS, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{member.name}</div>
             {capEdit ? (
               <input autoFocus type="number" min={0} value={capDraft}
                 onChange={e => setCapDraft(e.target.value)}
@@ -201,7 +210,7 @@ function TeamMemberCard({ member, capacity, daysOff, onDaysOffChange, onCapacity
             ) : (
               <button onClick={() => setCapEdit(true)} title="Klik om uren/week te wijzigen"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', marginTop: 2,
-                  fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 600, borderRadius: 4 }}
+                  fontSize: CAP_FS, color: 'var(--text-secondary)', fontWeight: 600, borderRadius: 4 }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 {capacity}u/week
@@ -224,10 +233,10 @@ function TeamMemberCard({ member, capacity, daysOff, onDaysOffChange, onCapacity
                   }}
                   title={`${DAY_LABELS_SHORT[i]} · ${isOff ? 'vrij — klik om werkdag te maken' : 'werkdag — klik om vrij te maken'}`}
                   style={{
-                    width: 18, height: 18, borderRadius: 4,
+                    width: DOT, height: DOT, borderRadius: 4,
                     background: isOff ? 'var(--overlay-faint)' : (member.color ?? 'var(--accent)') + 'cc',
                     color: isOff ? 'var(--text-muted)' : '#fff',
-                    fontSize: 9, fontWeight: 700,
+                    fontSize: compact ? 8 : 9, fontWeight: 700,
                     border: 'none', cursor: 'pointer', padding: 0,
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     opacity: isOff ? 0.5 : 1,
@@ -424,27 +433,37 @@ export default function TeamPage() {
   useEffect(() => onTeamUpdate(() => bumpRender(x => x + 1)), [])
   const extraIds = new Set(listExtras().map(e => e.id))
 
-  // Werkdagen per teamlid uit profiles.days_off — geeft de team-card een
-  // dagdotje-rij zodat je in één oogopslag ziet wie wanneer werkt. Klik op
-  // de naam → /profile/{id} om aan te passen.
+  // Werkdagen per teamlid: PRIMAIR uit team_members.days_off (geen auth-
+  // dependency, dus werkt voor iedereen — ook Manuel en freelancers
+  // zonder profiles-rij). Profiles.days_off blijft als legacy fallback
+  // voor signed-up users die hun werkdagen daar nog hadden staan.
   const [daysOffByMember, setDaysOffByMember] = useState<Record<string, string[]>>({})
   useEffect(() => {
     if (!supabase) return
     let cancelled = false
     async function load() {
-      const { data } = await supabase!
-        .from('profiles')
-        .select('member_id, days_off')
-      if (cancelled || !data) return
       const map: Record<string, string[]> = {}
-      for (const r of data as { member_id: string | null; days_off: string[] | null }[]) {
-        if (r.member_id) map[r.member_id] = Array.isArray(r.days_off) ? r.days_off : []
+      const tm = await supabase!.from('team_members').select('id, days_off')
+      if (tm.data) {
+        for (const r of tm.data as { id: string | null; days_off: string[] | null }[]) {
+          if (r.id) map[r.id] = Array.isArray(r.days_off) ? r.days_off : []
+        }
       }
+      const pr = await supabase!.from('profiles').select('member_id, days_off')
+      if (pr.data) {
+        for (const r of pr.data as { member_id: string | null; days_off: string[] | null }[]) {
+          if (r.member_id && !(r.member_id in map)) {
+            map[r.member_id] = Array.isArray(r.days_off) ? r.days_off : []
+          }
+        }
+      }
+      if (cancelled) return
       setDaysOffByMember(map)
     }
     load()
     const ch = supabase.channel('team_page_days_off')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },    load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, load)
       .subscribe()
     return () => { cancelled = true; supabase?.removeChannel(ch) }
   }, [])
@@ -552,11 +571,12 @@ export default function TeamPage() {
               }
             }
           }
-          const renderCard = (m: Card) => (
+          const renderCard = (m: Card, compact: boolean) => (
             <div key={m.id} style={{ position: 'relative' }}>
               <TeamMemberCard member={m}
                 capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
                 daysOff={daysOffByMember[m.id] ?? []}
+                compact={compact}
                 onDaysOffChange={next => saveDaysOff(m.id, next)}
                 onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
               {extraIds.has(m.id) && (
@@ -577,15 +597,15 @@ export default function TeamPage() {
                 Studio Yoko · {yokoCards.length}
               </div>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-                {yokoCards.map(renderCard)}
+                {yokoCards.map(m => renderCard(m, false))}
               </div>
               {freeCards.length > 0 && (
                 <>
                   <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
                     Freelance · {freeCards.length}
                   </div>
-                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                    {freeCards.map(renderCard)}
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {freeCards.map(m => renderCard(m, true))}
                   </div>
                 </>
               )}
