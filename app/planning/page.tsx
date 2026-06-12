@@ -2184,11 +2184,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
   const [estHours,  setEstHours]  = useState(String(project.estHours ?? 0))
   // Suggesteer estHours = werkdagen × 8 wanneer de gebruiker een
-  // timeline kiest en estHours nog op 0 staat (nog niet zelf ingevuld).
-  // Zo hoef je niet steeds handmatig "3 dagen × 8 = 24" te rekenen voor
-  // een nieuw project. Eenmaal je 't aanpast naar een eigen waarde
-  // raakt de auto-fill 'm niet meer aan.
-  function autofillEstFromDates(s: string, e: string, currentEst: string): { estHours?: number } {
+  // timeline kiest. Overschrijft ALTIJD bij datum-wijziging — user wil
+  // dit als principe. Manueel aanpassen blijft mogelijk, maar bij een
+  // volgende datum-edit gaat 't terug naar werkdagen×8.
+  function autofillEstFromDates(s: string, e: string, _currentEst: string): { estHours?: number } {
+    void _currentEst
     if (!s || !e) return {}
     const sd = new Date(s); const ed = new Date(e)
     if (isNaN(sd.getTime()) || isNaN(ed.getTime()) || ed < sd) return {}
@@ -2197,10 +2197,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
       const dow = d.getDay()
       if (dow !== 0 && dow !== 6) workdays++
     }
-    const auto = workdays * 8
-    const cur = parseFloat(currentEst) || 0
-    if (cur > 0) return {}
-    return { estHours: auto }
+    return { estHours: workdays * 8 }
   }
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
@@ -3922,16 +3919,34 @@ export default function PlanningPage() {
   function handleDragMove(project: Project, s: string | null, e: string | null) {
     setShadowDrag({ projectId: project.id, start: s, end: e })
   }
+  // Hercalc estHours = werkdagen × 8 voor de gegeven datum-range. Gebruikt
+  // dezelfde regel als de detail-drawer's autofillEstFromDates: na elke
+  // drag/resize krijgt 't item de uren-suggestie. Gebruiker kan handmatig
+  // bijstellen in de drawer; een volgende datum-edit overschrijft 'm weer.
+  function workdaysHours(s: string | null, e: string | null): number | null {
+    if (!s || !e) return null
+    const sd = new Date(s); const ed = new Date(e)
+    if (isNaN(sd.getTime()) || isNaN(ed.getTime()) || ed < sd) return null
+    let workdays = 0
+    for (const d = new Date(sd); d <= ed; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay()
+      if (dow !== 0 && dow !== 6) workdays++
+    }
+    return workdays * 8
+  }
+
   function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
     setShadowDrag(null)
     const boardName  = project.board
     const rawId      = project.id.slice(boardName.length + 2)
     const prevStart  = project.startDate
     const prevEnd    = project.endDate
+    const prevEst    = project.estHours
+    const autoHours  = workdaysHours(newStart, newEnd)
     // Subitem-afgeleide project? Id-vorm = `${parentId}__si${idx}`. Schrijf
     // de date-update dan op de juiste subitem, niet op de parent.
     const subMatch = rawId.match(/^(.+)__si(\d+)$/)
-    const apply = (s: string | null, e: string | null) => {
+    const apply = (s: string | null, e: string | null, est?: number | null) => {
       const groups = (allGroups[boardName] ?? []).map(g => ({
         ...g,
         items: g.items.map(i => {
@@ -3939,21 +3954,23 @@ export default function PlanningPage() {
             if (i.id !== subMatch[1]) return i
             const subs = (i.subitems ?? []).map((sub, idx) =>
               idx === Number(subMatch[2])
-                ? { ...sub, startDate: s, endDate: e }
+                ? { ...sub, startDate: s, endDate: e, ...(est != null ? { estHours: est } : {}) }
                 : sub,
             )
             return { ...i, subitems: subs }
           }
-          return i.id === rawId ? { ...i, startDate: s, endDate: e } : i
+          return i.id === rawId ? { ...i, startDate: s, endDate: e, ...(est != null ? { estHours: est } : {}) } : i
         }),
       }))
       saveGroups(boardName, groups)
       setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     }
-    apply(newStart, newEnd)
+    apply(newStart, newEnd, autoHours)
     logActivity('Datums bijgewerkt', project.name, `${prevStart ?? '—'} → ${newStart ?? '—'} / ${prevEnd ?? '—'} → ${newEnd ?? '—'}`)
-    if (detailProject?.id === project.id) setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
-    pushUndo(() => apply(prevStart, prevEnd), `Datums bijgewerkt op '${project.name}'`)
+    if (detailProject?.id === project.id) {
+      setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd, ...(autoHours != null ? { estHours: autoHours } : {}) })
+    }
+    pushUndo(() => apply(prevStart, prevEnd, prevEst), `Datums bijgewerkt op '${project.name}'`)
   }
 
   // Drag-end voor de uur-positionering in de Week-zoom: zet zowel datum
