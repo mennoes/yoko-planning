@@ -9,6 +9,9 @@ import { useTeam }  from '@/components/TeamContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
 import { supabase }      from '@/lib/supabase'
+import {
+  loadProfileDaysOff, setProfileDaysOff, onProfileDaysOffChange, pullProfileDaysOff,
+} from '@/lib/profileDaysOff'
 import { IconUsers, IconSearch } from '@/components/Icon'
 import {
   getCapacities, setCapacity, onCapacitiesChange,
@@ -435,41 +438,28 @@ export default function TeamPage() {
 
   // Werkdagen per teamlid: PRIMAIR uit team_capacities.days_off (int[],
   // ISO weekday). Geen auth-FK dus werkt voor iedereen — ook Manuel en
-  // freelancers zonder profiles-rij. Profiles.days_off (text[] mon/tue/..)
-  // is legacy fallback voor signed-up users. UI werkt in text[] zodat
-  // de toggles consistent blijven; we converteren bij read/write.
+  // Werkdagen leest PRIMAIR uit localStorage (lib/profileDaysOff) — geen
+  // Supabase-schema-dependency, dus werkt voor élk teamlid direct, ook
+  // wanneer de team_capacities.days_off kolom nog niet via SQL is
+  // aangemaakt. Cross-device sync gebeurt best-effort via Supabase als
+  // de kolom er WEL is.
   const ISO_TO_DAY: Record<number, string> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat', 7: 'sun' }
   const [daysOffByMember, setDaysOffByMember] = useState<Record<string, string[]>>({})
   useEffect(() => {
-    if (!supabase) return
-    let cancelled = false
-    async function load() {
+    const refresh = () => {
+      const isoMap = loadProfileDaysOff()
       const map: Record<string, string[]> = {}
-      const tc = await supabase!.from('team_capacities').select('member_id, days_off')
-      if (tc.data) {
-        for (const r of tc.data as { member_id: string | null; days_off: number[] | null }[]) {
-          if (!r.member_id) continue
-          const arr = Array.isArray(r.days_off) ? r.days_off : []
-          map[r.member_id] = arr.map(n => ISO_TO_DAY[n]).filter(Boolean)
-        }
+      for (const [mid, iso] of Object.entries(isoMap)) {
+        map[mid] = iso.map(n => ISO_TO_DAY[n]).filter(Boolean)
       }
-      const pr = await supabase!.from('profiles').select('member_id, days_off')
-      if (pr.data) {
-        for (const r of pr.data as { member_id: string | null; days_off: string[] | null }[]) {
-          if (r.member_id && !(r.member_id in map)) {
-            map[r.member_id] = Array.isArray(r.days_off) ? r.days_off : []
-          }
-        }
-      }
-      if (cancelled) return
       setDaysOffByMember(map)
     }
-    load()
-    const ch = supabase.channel('team_page_days_off')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },         load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_capacities' },  load)
-      .subscribe()
-    return () => { cancelled = true; supabase?.removeChannel(ch) }
+    refresh()
+    const off = onProfileDaysOffChange(refresh)
+    // Eénmalig: pull eventuele bestaande Supabase-data om de cache te
+    // seeden. Faalt silent als kolom ontbreekt.
+    pullProfileDaysOff().catch(() => {}).then(() => refresh())
+    return off
   }, [])
 
   // Contacts leven in localStorage (override op data/contacts.json) en
@@ -542,50 +532,26 @@ export default function TeamPage() {
           const yokoCards = all.filter(m => kindOf(m.id) === 'yoko')
           const freeCards = all.filter(m => kindOf(m.id) === 'freelance')
 
+          const DAY_TO_ISO: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
           const saveDaysOff = async (memberId: string, next: string[]) => {
-            // Optimistic update zodat de UI direct reageert; server-route
-            // gebruikt supabaseAdmin om de RLS 'Eigen profiel bijwerken'
-            // policy te omzeilen (anders kun je alleen je eigen werkdagen
-            // bijstellen, niet die van collega's).
-            setDaysOffByMember(prev => ({ ...prev, [memberId]: next }))
-            if (!supabase) { window.alert('Geen Supabase-verbinding.'); return }
+            // PRIMAIR: schrijf naar localStorage (profileDaysOff cache)
+            // — instant persist, geen Supabase-schema-dependency, werkt
+            // direct ongeacht of de team_capacities.days_off kolom al
+            // is aangemaakt. Optimistic UI komt automatisch via
+            // onProfileDaysOffChange-subscribe.
+            const iso = next.map(d => DAY_TO_ISO[d]).filter((n): n is number => !!n)
+            setProfileDaysOff(memberId, iso)
+            // BEST-EFFORT: ook naar Supabase pushen voor cross-device
+            // sync. Faalt silent als de days_off-kolom nog niet bestaat.
+            if (!supabase) return
             const sess = await supabase.auth.getSession()
             const token = sess.data.session?.access_token
-            if (!token) { window.alert('Niet ingelogd — herlaad de pagina.'); return }
-            let res: Response
-            try {
-              res = await fetch('/api/team/days-off', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ memberId, daysOff: next }),
-              })
-            } catch (err) {
-              window.alert(`Netwerkfout: ${err instanceof Error ? err.message : String(err)}`)
-              return
-            }
-            if (!res.ok) {
-              // Toon de fout direct aan de user — silent fail was juist het
-              // probleem (Manuels vrijdag bleef terugkomen na refresh).
-              const json = await res.json().catch(() => ({})) as { error?: string; expected?: unknown; actual?: unknown }
-              console.error('[team] days_off save failed:', json)
-              window.alert(
-                `Werkdag-wijziging is niet opgeslagen.\n\n` +
-                `Reden: ${json.error ?? `HTTP ${res.status}`}\n` +
-                (json.expected !== undefined ? `Verwacht: ${JSON.stringify(json.expected)}\nWerkelijk: ${JSON.stringify(json.actual)}` : ''),
-              )
-              // Refresh om te re-syncen met server-state
-              const { data } = await supabase
-                .from('profiles')
-                .select('member_id, days_off')
-                .eq('member_id', memberId)
-                .maybeSingle()
-              if (data) {
-                const arr = Array.isArray((data as { days_off?: string[] | null }).days_off)
-                  ? (data as { days_off: string[] }).days_off
-                  : []
-                setDaysOffByMember(prev => ({ ...prev, [memberId]: arr }))
-              }
-            }
+            if (!token) return
+            fetch('/api/team/days-off', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ memberId, daysOff: next }),
+            }).catch(() => {})  // silent — localStorage is bron-van-waarheid
           }
           const renderCard = (m: Card, compact: boolean) => (
             <div key={m.id} style={{ position: 'relative' }}>

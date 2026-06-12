@@ -2867,10 +2867,14 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 }
 
 // ─── New item popup (planner → agenda) ───────────────────────────────────────
-function NewItemPopup({ onClose, onCreate, defaultMemberId, allGroups }: {
+function NewItemPopup({ onClose, onCreate, defaultMemberId, defaultStart, defaultEnd, defaultStartTime, defaultEndTime, allGroups }: {
   onClose: () => void
   onCreate: (boardName: string, item: BoardItem, groupId: string | null) => void
   defaultMemberId: string | null
+  defaultStart?:     string
+  defaultEnd?:       string
+  defaultStartTime?: string
+  defaultEndTime?:   string
   allGroups: Record<string, BoardGroup[]>
 }) {
   // Merge seed + liveTeam zodat ook later-toegevoegde leden (Manuel)
@@ -2893,11 +2897,11 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId, allGroups }: {
   const [groupId,   setGroupId]   = useState<string>('')
   const [owner,     setOwner]     = useState<string>(defaultMemberId ?? team[0]?.id ?? '')
   const [status,    setStatus]    = useState<string>('')
-  const [start,     setStart]     = useState<string>(today)
-  const [end,       setEnd]       = useState<string>(today)
+  const [start,     setStart]     = useState<string>(defaultStart ?? today)
+  const [end,       setEnd]       = useState<string>(defaultEnd ?? defaultStart ?? today)
   const [hours,     setHours]     = useState<string>('1')
-  const [startTime, setStartTime] = useState<string>('')
-  const [endTime,   setEndTime]   = useState<string>('')
+  const [startTime, setStartTime] = useState<string>(defaultStartTime ?? '')
+  const [endTime,   setEndTime]   = useState<string>(defaultEndTime ?? '')
   const [deadline,  setDeadline]  = useState<string>('')
   const [notes,     setNotes]     = useState<string>('')
   const nameRef = useRef<HTMLInputElement>(null)
@@ -5171,9 +5175,13 @@ export default function PlanningPage() {
 
       {newItemOpen && (
         <NewItemPopup
-          defaultMemberId={profile?.memberId ?? null}
+          defaultMemberId={newItemDefaults?.memberId ?? profile?.memberId ?? null}
+          defaultStart={newItemDefaults?.startDate}
+          defaultEnd={newItemDefaults?.endDate}
+          defaultStartTime={newItemDefaults?.startTime}
+          defaultEndTime={newItemDefaults?.endTime}
           allGroups={allGroups}
-          onClose={() => setNewItemOpen(false)}
+          onClose={() => { setNewItemOpen(false); setNewItemDefaults(null) }}
           onCreate={(boardName, item, groupId) => {
             const cur = allGroups[boardName] ?? []
             // Specifieke groep gekozen? Drop daar. Anders eerste groep,

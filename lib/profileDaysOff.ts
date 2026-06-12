@@ -36,6 +36,17 @@ export function loadProfileDaysOff(): ProfileDaysOffMap {
   return readCache()
 }
 
+// Schrijf-API: gebruikt door de /team werkdagen-toggle als primaire
+// opslag. Persisteert direct in localStorage (geen Supabase-RTT, geen
+// schema-dependency). Realtime cross-device sync gebeurt later via een
+// echte DB-kolom; tot die migratie gedraaid is is per-browser de bron.
+export function setProfileDaysOff(memberId: string, isoDays: number[]): void {
+  const map = readCache()
+  if (isoDays.length === 0) delete map[memberId]
+  else map[memberId] = [...isoDays].sort((a, b) => a - b)
+  writeCache(map)
+}
+
 export function isProfileOff(memberId: string, date: Date): boolean {
   const map = readCache()
   const off = map[memberId]
