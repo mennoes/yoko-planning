@@ -8,6 +8,7 @@ import teamData     from '@/data/team.json'
 import { useTeam }  from '@/components/TeamContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
+import { supabase }      from '@/lib/supabase'
 import { IconUsers, IconSearch } from '@/components/Icon'
 import {
   getCapacities, setCapacity, onCapacitiesChange,
@@ -100,9 +101,13 @@ function PhotoCropper({ src, onDone, onCancel }: {
 }
 
 // ─── Team member card ─────────────────────────────────────────────────────────
-function TeamMemberCard({ member, capacity, onCapacityChange }: {
+const DAY_LABELS_SHORT = ['M', 'D', 'W', 'D', 'V', 'Z', 'Z']
+const DAY_KEYS         = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
+
+function TeamMemberCard({ member, capacity, daysOff, onCapacityChange }: {
   member: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }
   capacity: number
+  daysOff: string[]
   onCapacityChange: (cap: number) => void
 }) {
   const { getPhoto, setPhoto }  = useTeamPhotos()
@@ -202,10 +207,27 @@ function TeamMemberCard({ member, capacity, onCapacityChange }: {
               </button>
             )}
           </div>
-          {/* Vrije dagen / kleur-dot: deze zaten dubbelop met profile-page
-              waar je veel rijker werkdagen + vakantie kunt instellen.
-              Verwijderd om verwarring weg te halen — workload-calc leest
-              voortaan rechtstreeks uit profiles.days_off. */}
+          {/* Werkdagen-rij: 7 dots, ingekleurde dagen = werkdag, grijs = vrij.
+              Klikbaar (Link naar profile) zodat je vanuit dit overzicht
+              meteen kunt aanpassen. Workload-calc leest profiles.days_off
+              dus dit blijft de single source of truth. */}
+          <Link href={`/profile/${member.id}`} title="Aanpassen op profielpagina"
+            style={{ display: 'flex', gap: 4, marginTop: 4, textDecoration: 'none' }}>
+            {DAY_KEYS.map((k, i) => {
+              const isOff = daysOff.includes(k)
+              return (
+                <span key={k}
+                  style={{
+                    width: 16, height: 16, borderRadius: 4,
+                    background: isOff ? 'var(--overlay-faint)' : (member.color ?? 'var(--accent)') + 'cc',
+                    color: isOff ? 'var(--text-muted)' : '#fff',
+                    fontSize: 9, fontWeight: 700,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: isOff ? 0.5 : 1,
+                  }}>{DAY_LABELS_SHORT[i]}</span>
+              )
+            })}
+          </Link>
         </>
       )}
     </div>
@@ -394,6 +416,31 @@ export default function TeamPage() {
   useEffect(() => onTeamUpdate(() => bumpRender(x => x + 1)), [])
   const extraIds = new Set(listExtras().map(e => e.id))
 
+  // Werkdagen per teamlid uit profiles.days_off — geeft de team-card een
+  // dagdotje-rij zodat je in één oogopslag ziet wie wanneer werkt. Klik op
+  // de naam → /profile/{id} om aan te passen.
+  const [daysOffByMember, setDaysOffByMember] = useState<Record<string, string[]>>({})
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    async function load() {
+      const { data } = await supabase!
+        .from('profiles')
+        .select('member_id, days_off')
+      if (cancelled || !data) return
+      const map: Record<string, string[]> = {}
+      for (const r of data as { member_id: string | null; days_off: string[] | null }[]) {
+        if (r.member_id) map[r.member_id] = Array.isArray(r.days_off) ? r.days_off : []
+      }
+      setDaysOffByMember(map)
+    }
+    load()
+    const ch = supabase.channel('team_page_days_off')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, load)
+      .subscribe()
+    return () => { cancelled = true; supabase?.removeChannel(ch) }
+  }, [])
+
   // Contacts leven in localStorage (override op data/contacts.json) en
   // worden via een custom event live ge-sync'd binnen dezelfde browser.
   const initialGroups = contactsData.groups as Group[]
@@ -468,6 +515,7 @@ export default function TeamPage() {
             <div key={m.id} style={{ position: 'relative' }}>
               <TeamMemberCard member={m}
                 capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
+                daysOff={daysOffByMember[m.id] ?? []}
                 onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
               {extraIds.has(m.id) && (
                 <button onClick={() => {
