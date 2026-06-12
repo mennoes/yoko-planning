@@ -83,8 +83,8 @@ type Col = {
 // ─── Static layout constants ──────────────────────────────────────────────────
 const NAME_W   = 196
 const NAME_PAD = 28
-const BAR_H    = 22
-const BAR_GAP  = 3
+const BAR_H    = 30
+const BAR_GAP  = 4
 const HANDLE_W = 8
 
 // ─── View-size presets ────────────────────────────────────────────────────────
@@ -1773,7 +1773,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   // In Overzicht (week-zoom) maken we de lane wat hoger zodat events als
   // mini-staafdiagram per dag kunnen renderen.
-  const PROJECT_LANE_H = zoom === 'week' ? 32 : (BAR_H + BAR_GAP)
+  const PROJECT_LANE_H = zoom === 'week' ? 38 : (BAR_H + BAR_GAP)
 
   function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
 
