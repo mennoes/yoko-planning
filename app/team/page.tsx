@@ -433,20 +433,24 @@ export default function TeamPage() {
   useEffect(() => onTeamUpdate(() => bumpRender(x => x + 1)), [])
   const extraIds = new Set(listExtras().map(e => e.id))
 
-  // Werkdagen per teamlid: PRIMAIR uit team_members.days_off (geen auth-
-  // dependency, dus werkt voor iedereen — ook Manuel en freelancers
-  // zonder profiles-rij). Profiles.days_off blijft als legacy fallback
-  // voor signed-up users die hun werkdagen daar nog hadden staan.
+  // Werkdagen per teamlid: PRIMAIR uit team_capacities.days_off (int[],
+  // ISO weekday). Geen auth-FK dus werkt voor iedereen — ook Manuel en
+  // freelancers zonder profiles-rij. Profiles.days_off (text[] mon/tue/..)
+  // is legacy fallback voor signed-up users. UI werkt in text[] zodat
+  // de toggles consistent blijven; we converteren bij read/write.
+  const ISO_TO_DAY: Record<number, string> = { 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat', 7: 'sun' }
   const [daysOffByMember, setDaysOffByMember] = useState<Record<string, string[]>>({})
   useEffect(() => {
     if (!supabase) return
     let cancelled = false
     async function load() {
       const map: Record<string, string[]> = {}
-      const tm = await supabase!.from('team_members').select('id, days_off')
-      if (tm.data) {
-        for (const r of tm.data as { id: string | null; days_off: string[] | null }[]) {
-          if (r.id) map[r.id] = Array.isArray(r.days_off) ? r.days_off : []
+      const tc = await supabase!.from('team_capacities').select('member_id, days_off')
+      if (tc.data) {
+        for (const r of tc.data as { member_id: string | null; days_off: number[] | null }[]) {
+          if (!r.member_id) continue
+          const arr = Array.isArray(r.days_off) ? r.days_off : []
+          map[r.member_id] = arr.map(n => ISO_TO_DAY[n]).filter(Boolean)
         }
       }
       const pr = await supabase!.from('profiles').select('member_id, days_off')
@@ -462,8 +466,8 @@ export default function TeamPage() {
     }
     load()
     const ch = supabase.channel('team_page_days_off')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },    load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },         load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_capacities' },  load)
       .subscribe()
     return () => { cancelled = true; supabase?.removeChannel(ch) }
   }, [])

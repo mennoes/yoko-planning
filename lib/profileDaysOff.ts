@@ -54,22 +54,19 @@ export function onProfileDaysOffChange(handler: () => void): () => void {
 export async function pullProfileDaysOff(): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
-  // Primaire bron: team_members.days_off (geen auth-dependency, dus
-  // werkt voor ALLE teamleden inclusief degenen zonder profiles-rij).
-  // Profiles.days_off is een legacy fallback voor signed-up users
-  // wiens days_off vóór de team_members-migratie alleen daar landde.
+  // Primaire bron: team_capacities.days_off (int[], ISO weekday-nummers).
+  // Geen auth-FK dus werkt voor ALLE teamleden, ook degenen zonder
+  // profiles-rij. Profiles.days_off blijft legacy fallback voor
+  // signed-up users wiens werkdagen daar nog stonden vóór de switch.
   const map: ProfileDaysOffMap = {}
-  const tm = await supabase.from('team_members').select('id, days_off')
-  if (tm.data) {
-    for (const r of tm.data as { id: string | null; days_off: string[] | null }[]) {
-      if (!r.id) continue
-      const arr = Array.isArray(r.days_off) ? r.days_off : []
-      const iso = arr.map(d => DAY_TO_ISO[d.toLowerCase()]).filter((n): n is number => !!n)
-      if (iso.length > 0) map[r.id] = iso
+  const tc = await supabase.from('team_capacities').select('member_id, days_off')
+  if (tc.data) {
+    for (const r of tc.data as { member_id: string | null; days_off: number[] | null }[]) {
+      if (!r.member_id) continue
+      const arr = Array.isArray(r.days_off) ? r.days_off.filter(n => typeof n === 'number') : []
+      if (arr.length > 0) map[r.member_id] = arr
     }
   }
-  // Legacy: profiles.days_off — alleen overschrijven als team_members
-  // geen waarde had (mid-migratie, zodat oude data niet verloren gaat).
   const pr = await supabase.from('profiles').select('member_id, days_off')
   if (pr.data) {
     for (const r of pr.data as { member_id: string | null; days_off: string[] | null }[]) {
@@ -98,8 +95,8 @@ export function subscribeRemoteProfileDaysOff(): () => void {
   if (!supabase) return () => {}
   if (channel) return () => {}
   const ch = supabase.channel('profile_days_off')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => schedulePull())
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, () => schedulePull())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },         () => schedulePull())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_capacities' },  () => schedulePull())
     .subscribe()
   channel = ch
   return () => {
