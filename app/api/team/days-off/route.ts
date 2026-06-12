@@ -44,21 +44,25 @@ export async function POST(req: NextRequest) {
   const daysOff = (body.daysOff as unknown[])
     .filter((d): d is string => typeof d === 'string' && VALID_DAYS.has(d))
 
-  // Schrijf altijd naar team_members.days_off — deze tabel heeft geen
-  // auth-dependency en bestaat voor iedereen. Profiles.days_off
-  // updaten we óók als de rij bestaat (legacy + signed-up users
-  // lazen het daar nog vandaan), maar dat is best-effort en gaat
-  // silent als de rij ontbreekt.
-  const { error: tmErr } = await supabaseAdmin
-    .from('team_members')
-    .update({ days_off: daysOff, updated_at: new Date().toISOString() })
-    .eq('id', memberId)
-  if (tmErr) {
-    return Response.json({ ok: false, error: tmErr.message }, { status: 500 })
+  // Primaire opslag: team_capacities.days_off (int[]). Deze tabel heeft
+  // geen FK naar auth.users, dus werkt voor ÉLK teamlid — ook degenen
+  // zonder login (Manuel, freelancers). De kolom bestaat al sinds
+  // migratie 0021, geen extra SQL nodig.
+  const DAY_TO_ISO: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
+  const daysOffIso = daysOff.map(d => DAY_TO_ISO[d]).filter((n): n is number => !!n)
+  const { error: tcErr } = await supabaseAdmin
+    .from('team_capacities')
+    .upsert({
+      member_id:  memberId,
+      days_off:   daysOffIso,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'member_id' })
+  if (tcErr) {
+    return Response.json({ ok: false, error: tcErr.message }, { status: 500 })
   }
 
   // Legacy mirror naar profiles — schrijf alleen als er al een
-  // rij bestaat (anders blokkeert RLS / FK ons sowieso).
+  // rij bestaat. Best-effort; faalt silent als de rij ontbreekt.
   await supabaseAdmin
     .from('profiles')
     .update({ days_off: daysOff })
