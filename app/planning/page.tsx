@@ -3851,12 +3851,27 @@ export default function PlanningPage() {
   function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
     setShadowDrag(null)
     const boardName  = project.board
-    const origItemId = project.id.slice(boardName.length + 2)
+    const rawId      = project.id.slice(boardName.length + 2)
     const prevStart  = project.startDate
     const prevEnd    = project.endDate
+    // Subitem-afgeleide project? Id-vorm = `${parentId}__si${idx}`. Schrijf
+    // de date-update dan op de juiste subitem, niet op de parent.
+    const subMatch = rawId.match(/^(.+)__si(\d+)$/)
     const apply = (s: string | null, e: string | null) => {
       const groups = (allGroups[boardName] ?? []).map(g => ({
-        ...g, items: g.items.map(i => i.id === origItemId ? { ...i, startDate: s, endDate: e } : i),
+        ...g,
+        items: g.items.map(i => {
+          if (subMatch) {
+            if (i.id !== subMatch[1]) return i
+            const subs = (i.subitems ?? []).map((sub, idx) =>
+              idx === Number(subMatch[2])
+                ? { ...sub, startDate: s, endDate: e }
+                : sub,
+            )
+            return { ...i, subitems: subs }
+          }
+          return i.id === rawId ? { ...i, startDate: s, endDate: e } : i
+        }),
       }))
       saveGroups(boardName, groups)
       setAllGroups(prev => ({ ...prev, [boardName]: groups }))
@@ -3874,16 +3889,27 @@ export default function PlanningPage() {
     setShadowDrag(null)
     if (project.source === 'google') return  // Google items zijn read-only
     const boardName  = project.board
-    const origItemId = project.id.slice(boardName.length + 2)
+    const rawId      = project.id.slice(boardName.length + 2)
+    const subMatch   = rawId.match(/^(.+)__si(\d+)$/)
     const prev = {
       start: project.startDate, end: project.endDate,
       startTime: project.startTime ?? null, endTime: project.endTime ?? null,
     }
     const apply = (s: string, e: string, st: string | null, et: string | null) => {
       const groups = (allGroups[boardName] ?? []).map(g => ({
-        ...g, items: g.items.map(i => i.id === origItemId
-          ? { ...i, startDate: s, endDate: e, startTime: st, endTime: et }
-          : i),
+        ...g,
+        items: g.items.map(i => {
+          if (subMatch) {
+            if (i.id !== subMatch[1]) return i
+            const subs = (i.subitems ?? []).map((sub, idx) =>
+              idx === Number(subMatch[2])
+                ? { ...sub, startDate: s, endDate: e, startTime: st, endTime: et }
+                : sub,
+            )
+            return { ...i, subitems: subs }
+          }
+          return i.id === rawId ? { ...i, startDate: s, endDate: e, startTime: st, endTime: et } : i
+        }),
       }))
       saveGroups(boardName, groups)
       setAllGroups(prev2 => ({ ...prev2, [boardName]: groups }))
@@ -3900,18 +3926,32 @@ export default function PlanningPage() {
     if (project.source === 'google') return  // Google items zijn read-only
     if (fromMemberId === toMemberId) return
     const boardName  = project.board
-    const origItemId = project.id.slice(boardName.length + 2)
+    const rawId      = project.id.slice(boardName.length + 2)
+    const subMatch   = rawId.match(/^(.+)__si(\d+)$/)
     const before = allGroups[boardName] ?? []
     const apply = (replaceFrom: string, replaceWith: string) => {
+      const swapOwners = (prev: string[]) => {
+        const hasNew = prev.includes(replaceWith)
+        return prev.flatMap(o => o === replaceFrom ? (hasNew ? [] : [replaceWith]) : [o])
+      }
       const groups = (allGroups[boardName] ?? []).map(g => ({
         ...g,
         items: g.items.map(i => {
-          if (i.id !== origItemId) return i
+          // Subitem-afgeleide drag → eigenaar op de juiste subitem swappen.
+          if (subMatch) {
+            if (i.id !== subMatch[1]) return i
+            const idx = Number(subMatch[2])
+            const subs = (i.subitems ?? []).map((sub, j) => {
+              if (j !== idx) return sub
+              const prev = sub.ownerIds ?? []
+              const swapped = swapOwners(prev)
+              return { ...sub, ownerIds: swapped.length > 0 ? swapped : ['unassigned'] }
+            })
+            return { ...i, subitems: subs }
+          }
+          if (i.id !== rawId) return i
           const prev = (i.ownerIds as string[] | undefined) ?? []
-          // Vervang `replaceFrom` door `replaceWith`. Als de nieuwe eigenaar
-          // al in de lijst staat, verwijderen we alleen de oude (geen dupes).
-          const hasNew  = prev.includes(replaceWith)
-          const swapped = prev.flatMap(o => o === replaceFrom ? (hasNew ? [] : [replaceWith]) : [o])
+          const swapped = swapOwners(prev)
           // Houd ownerHours schoon: hours van de oude eigenaar verhuizen mee.
           const oldHours = (i.ownerHours as Record<string, number> | undefined) ?? {}
           const newHours: Record<string, number> = {}
@@ -3933,7 +3973,7 @@ export default function PlanningPage() {
     const fromName = team.find(m => m.id === fromMemberId)?.name ?? fromMemberId
     const toName   = team.find(m => m.id === toMemberId)?.name ?? toMemberId
     logActivity('Owner gewisseld', project.name, `${fromName} → ${toName}`)
-    logItemActivity(origItemId, 'wisselde owner', `${fromName} → ${toName}`).catch(() => {})
+    logItemActivity(subMatch ? subMatch[1] : rawId, 'wisselde owner', `${fromName} → ${toName}`).catch(() => {})
     if (toMemberId !== 'unassigned') {
       createNotification({
         recipientId: toMemberId,
