@@ -450,11 +450,29 @@ export default function TeamPage() {
       const isoMap = loadProfileDaysOff()
       const map: Record<string, string[]> = {}
       for (const [mid, iso] of Object.entries(isoMap)) {
+        if (mid.startsWith('name:')) continue  // skip naam-keys uit de lookup
         map[mid] = iso.map(n => ISO_TO_DAY[n]).filter(Boolean)
       }
       setDaysOffByMember(map)
     }
     refresh()
+    // BACKFILL: voor bestaande entries die nog GEEN naam-key hebben,
+    // schrijf 'm alsnog mee op basis van de live-team-info. Zo wordt
+    // de id-mismatch tussen /team en /home eenmalig achteraf gerepareerd.
+    {
+      const cache = loadProfileDaysOff()
+      for (const m of liveMembers) {
+        const ids = [m.id]
+        const nk = `name:${m.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+        if (cache[nk]) continue
+        for (const id of ids) {
+          if (Array.isArray(cache[id]) && cache[id].length > 0) {
+            setProfileDaysOff(id, cache[id], m.name)
+            break
+          }
+        }
+      }
+    }
     const off = onProfileDaysOffChange(refresh)
     // Eénmalig: pull eventuele bestaande Supabase-data om de cache te
     // seeden. Faalt silent als kolom ontbreekt.
@@ -533,14 +551,16 @@ export default function TeamPage() {
           const freeCards = all.filter(m => kindOf(m.id) === 'freelance')
 
           const DAY_TO_ISO: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
-          const saveDaysOff = async (memberId: string, next: string[]) => {
+          const saveDaysOff = async (memberId: string, next: string[], memberName?: string) => {
             // PRIMAIR: schrijf naar localStorage (profileDaysOff cache)
             // — instant persist, geen Supabase-schema-dependency, werkt
             // direct ongeacht of de team_capacities.days_off kolom al
             // is aangemaakt. Optimistic UI komt automatisch via
-            // onProfileDaysOffChange-subscribe.
+            // onProfileDaysOffChange-subscribe. Geeft naam mee zodat
+            // ie ook onder een naam-key bewaard wordt (id-mismatch
+            // tussen /team en /home wordt zo overbrugd).
             const iso = next.map(d => DAY_TO_ISO[d]).filter((n): n is number => !!n)
-            setProfileDaysOff(memberId, iso)
+            setProfileDaysOff(memberId, iso, memberName)
             // BEST-EFFORT: ook naar Supabase pushen voor cross-device
             // sync. Faalt silent als de days_off-kolom nog niet bestaat.
             if (!supabase) return
@@ -559,7 +579,7 @@ export default function TeamPage() {
                 capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
                 daysOff={daysOffByMember[m.id] ?? []}
                 compact={compact}
-                onDaysOffChange={next => saveDaysOff(m.id, next)}
+                onDaysOffChange={next => saveDaysOff(m.id, next, m.name)}
                 onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
               {extraIds.has(m.id) && (
                 <button onClick={() => {

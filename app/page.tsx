@@ -38,7 +38,7 @@ import {
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
-import { loadProfileDaysOff, onProfileDaysOffChange } from '@/lib/profileDaysOff'
+import { loadProfileDaysOff, lookupDaysOff, onProfileDaysOffChange } from '@/lib/profileDaysOff'
 import { supabase } from '@/lib/supabase'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 
@@ -686,13 +686,14 @@ export default function HomePage() {
   // ─── Team status helpers ────────────────────────────────────────────────────
   const todayCode = NL_DAY_CODES[new Date().getDay()]
   // Localstorage-cache (profileDaysOff) is sinds /team de bron-van-
-  // waarheid voor werkdagen — Supabase profiles.days_off is alleen nog
-  // legacy. Check de cache eerst, profiles.days_off als fallback.
+  // waarheid voor werkdagen. lookupDaysOff probeert id én naam-key
+  // (set door /team via setProfileDaysOff). Zo werkt 't ook wanneer
+  // /team en /home verschillende ids gebruiken voor hetzelfde lid.
   void daysOffTick  // forceer re-read na storage/event-tick
-  const dayOffLocalMap = loadProfileDaysOff()
+  void loadProfileDaysOff()  // touchen zodat tick echt re-read triggert
   const todayIso = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d })()
   type Status = { kind: 'vacation' | 'free' | 'available'; detail?: string }
-  function statusFor(memberIdLocal: string): Status {
+  function statusFor(memberIdLocal: string, memberName?: string): Status {
     const p = profilesById[memberIdLocal]
     if (p?.vacation_until) {
       const until = new Date(p.vacation_until)
@@ -702,7 +703,7 @@ export default function HomePage() {
         return { kind: 'vacation', detail: `terug ${fmt}` }
       }
     }
-    const localOff = dayOffLocalMap[memberIdLocal] ?? []
+    const localOff = lookupDaysOff(memberIdLocal, memberName)
     if (localOff.includes(todayIso)) return { kind: 'free', detail: 'vrij vandaag' }
     if (p?.days_off?.includes(todayCode)) return { kind: 'free', detail: 'vrij vandaag' }
     return { kind: 'available' }
@@ -1060,12 +1061,12 @@ export default function HomePage() {
       const activeFreelancers = allMembersForHome.filter(m =>
         !isYokoCrew(m.id) && m.id !== 'unassigned' && hasWorkToday(m.id)
       )
-      const yokoAvail = yokoMembers.filter(m => statusFor(m.id).kind === 'available').length
-      const flAvail   = activeFreelancers.filter(m => statusFor(m.id).kind === 'available').length
+      const yokoAvail = yokoMembers.filter(m => statusFor(m.id, m.name).kind === 'available').length
+      const flAvail   = activeFreelancers.filter(m => statusFor(m.id, m.name).kind === 'available').length
       const totalCount = yokoMembers.length + activeFreelancers.length
       const totalAvail = yokoAvail + flAvail
       const renderRow = (m: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }) => {
-        const s = statusFor(m.id)
+        const s = statusFor(m.id, m.name)
         const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
                    : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
                    :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
