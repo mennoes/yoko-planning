@@ -50,15 +50,56 @@ export async function POST(req: NextRequest) {
   // migratie 0021, geen extra SQL nodig.
   const DAY_TO_ISO: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
   const daysOffIso = daysOff.map(d => DAY_TO_ISO[d]).filter((n): n is number => !!n)
-  const { error: tcErr } = await supabaseAdmin
+
+  // Stap 1: ensure er een rij bestaat zonder bestaande velden te trashen.
+  // Insert-on-conflict-DO-NOTHING zou ideaal zijn, maar Supabase-JS heeft
+  // dat niet als optie — dus we doen 'n select + insert-als-niet-bestaat.
+  const { data: existing } = await supabaseAdmin
     .from('team_capacities')
-    .upsert({
-      member_id:  memberId,
-      days_off:   daysOffIso,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'member_id' })
-  if (tcErr) {
-    return Response.json({ ok: false, error: tcErr.message }, { status: 500 })
+    .select('member_id, weekly_capacity, days_off')
+    .eq('member_id', memberId)
+    .maybeSingle()
+
+  if (!existing) {
+    const { error: insErr } = await supabaseAdmin
+      .from('team_capacities')
+      .insert({
+        member_id:       memberId,
+        weekly_capacity: 0,
+        days_off:        daysOffIso,
+        updated_at:      new Date().toISOString(),
+      })
+    if (insErr) {
+      // eslint-disable-next-line no-console
+      console.error('[days-off] insert failed:', insErr)
+      return Response.json({ ok: false, error: `insert: ${insErr.message}` }, { status: 500 })
+    }
+  } else {
+    const { error: updErr } = await supabaseAdmin
+      .from('team_capacities')
+      .update({ days_off: daysOffIso, updated_at: new Date().toISOString() })
+      .eq('member_id', memberId)
+    if (updErr) {
+      // eslint-disable-next-line no-console
+      console.error('[days-off] update failed:', updErr)
+      return Response.json({ ok: false, error: `update: ${updErr.message}` }, { status: 500 })
+    }
+  }
+
+  // Verificatie: lees terug. Als de waarde niet matcht is er iets stilletjes
+  // misgegaan (kolom ontbreekt? trigger? RLS?) — surface dat naar de client.
+  const { data: verify } = await supabaseAdmin
+    .from('team_capacities')
+    .select('days_off')
+    .eq('member_id', memberId)
+    .maybeSingle()
+  const savedIso = Array.isArray(verify?.days_off) ? (verify!.days_off as number[]) : []
+  const sortedExpected = [...daysOffIso].sort((a, b) => a - b).join(',')
+  const sortedActual   = [...savedIso].sort((a, b) => a - b).join(',')
+  if (sortedExpected !== sortedActual) {
+    // eslint-disable-next-line no-console
+    console.error('[days-off] verify mismatch:', { memberId, expected: daysOffIso, actual: savedIso })
+    return Response.json({ ok: false, error: 'verify_mismatch', expected: daysOffIso, actual: savedIso }, { status: 500 })
   }
 
   // Legacy mirror naar profiles — schrijf alleen als er al een
@@ -69,5 +110,5 @@ export async function POST(req: NextRequest) {
     .eq('member_id', memberId)
     .then(() => {})
 
-  return Response.json({ ok: true, memberId, daysOff })
+  return Response.json({ ok: true, memberId, daysOff, persistedIso: savedIso })
 }
