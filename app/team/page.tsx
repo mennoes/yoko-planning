@@ -101,8 +101,8 @@ function PhotoCropper({ src, onDone, onCancel }: {
 }
 
 // ─── Team member card ─────────────────────────────────────────────────────────
-const DAY_LABELS_SHORT = ['M', 'D', 'W', 'D', 'V', 'Z', 'Z']
-const DAY_KEYS         = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
+const DAY_LABELS_SHORT = ['M', 'D', 'W', 'D', 'V']
+const DAY_KEYS         = ['mon', 'tue', 'wed', 'thu', 'fri'] as const
 
 function TeamMemberCard({ member, capacity, daysOff, onCapacityChange }: {
   member: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }
