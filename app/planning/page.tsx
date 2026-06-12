@@ -230,11 +230,13 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
   // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
   // duwt in de werkdruk-cellen.
-  // Zie lib/workload.ts: noemer = kalenderdagen, teller = werkdagen-in-
-  // overlap. 10u over 10 cal-dagen → 1u/dag op de werkdagen die er in
-  // vallen. Weekend/vrij blijven 0u i.p.v. uren naar zich toe trekken.
+  // VRIJ-events zelf moeten echter WEL meetellen op hun eigen dag — anders
+  // skipt countWorkdaysMs hen weg en wordt een 8u vakantiedag 0u in de bol.
+  // Voor vrij gebruiken we daarom GEEN memberId-skip: alleen weekend
+  // wordt nog uitgesloten.
+  const isVrij = isVrijTitle(project.name)
   const totalCalDays = Math.max(1, Math.floor((pE.getTime() - pS.getTime()) / 86400000) + 1)
-  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), memberId)
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
   const fraction  = overlapWork / totalCalDays
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
@@ -1832,33 +1834,117 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
           duidelijke palmboom, BOVEN alle andere bars en boven de
           vandaag-lijn. 't is je vrije dag — die mag niet wegvallen
           onder een meeting-pill. */}
-      {vrijBars.map(b => (
-        <div key={`vrij_${b.p.id}`}
-          onClick={() => onBarClick(b.p)}
-          title={`${b.p.name} · klik voor details`}
-          style={{
-            position: 'absolute', top: 2, bottom: 2,
-            left: b.left + 2, width: Math.max(20, b.width - 4),
-            background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
-            border: '2px solid rgba(72,130,82,1)',
-            borderRadius: 10,
-            display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
-            padding: '5px 9px', gap: 6,
-            cursor: 'pointer',
-            // z=3: hoogste laag in de tijdlijn-content (boven alle bars en
-            // de VANDAAG-streep DOM-rendering volgorde), maar netjes onder
-            // de sticky naam-kolom (z=4+) zodat de groene tape NIET door
-            // de avatars heen schiet bij horizontaal scrollen.
-            zIndex: 3,
-            fontSize: 12.5, fontWeight: 700, color: '#fff',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            textShadow: '0 1px 2px rgba(0,0,0,0.4)',
-            boxShadow: '0 2px 10px rgba(72,130,82,0.45)',
-          }}>
-          <span aria-hidden style={{ fontSize: 16, lineHeight: 1, filter: 'drop-shadow(0 1px 0 rgba(0,0,0,0.15))' }}>🌴</span>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
-        </div>
-      ))}
+      {vrijBars.map(b => {
+        // Vrij-bars zijn óók sleepbaar — Google-gesynchroniseerde events
+        // blijven read-only (bewerk via Google Calendar). Inline drag-flow
+        // i.p.v. DraggableBar omdat we de full-height groene tape-styling
+        // willen houden i.p.v. een compacte project-bar.
+        const isReadOnly = b.p.source === 'google'
+        const dpx = 7 / colW
+        function startVrijDrag(e: React.MouseEvent) {
+          if (isReadOnly) return
+          e.preventDefault(); e.stopPropagation()
+          const startX = e.clientX, startY = e.clientY
+          const origStart = b.p.startDate, origEnd = b.p.endDate
+          let didDrag = false
+          let reassignTarget: string | null = null
+          const rows: { id: string; top: number; bottom: number }[] = []
+          for (const el of document.querySelectorAll<HTMLElement>('[data-member-id]')) {
+            const r = el.getBoundingClientRect()
+            const id = el.dataset.memberId
+            if (id) rows.push({ id, top: r.top, bottom: r.bottom })
+          }
+          function clearHL() {
+            for (const el of document.querySelectorAll<HTMLElement>('[data-member-id][data-reassign-target]')) {
+              el.style.background = ''; el.style.outline = ''; el.style.outlineOffset = ''
+              el.removeAttribute('data-reassign-target')
+            }
+          }
+          function highlight(id: string | null) {
+            clearHL()
+            if (!id) return
+            const el = document.querySelector<HTMLElement>(`[data-member-id="${id}"]`)
+            if (!el) return
+            el.dataset.reassignTarget = '1'
+            el.style.background = 'rgba(88,150,255,0.18)'
+            el.style.outline = '2px solid rgba(88,150,255,0.85)'
+            el.style.outlineOffset = '-2px'
+          }
+          if (typeof window !== 'undefined') {
+            (window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive = true
+          }
+          function onMove(ev: MouseEvent) {
+            const dx = ev.clientX - startX
+            const dy = ev.clientY - startY
+            if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && !didDrag) return
+            if (Math.abs(dx) >= 10 || Math.abs(dy) >= 10) didDrag = true
+            if (onReassign) {
+              let hit: string | null = null
+              for (const r of rows) {
+                if (ev.clientY >= r.top && ev.clientY <= r.bottom) { hit = r.id; break }
+              }
+              if (hit === memberId) reassignTarget = null
+              else if (hit !== null) reassignTarget = hit
+            }
+            highlight(reassignTarget)
+            if (reassignTarget) return
+            const ddays = Math.round(dx * dpx)
+            const ss = origStart ? addDays(origStart, ddays) : null
+            const se = origEnd ? addDays(origEnd, ddays) : null
+            onDragMove(b.p, ss, se)
+          }
+          function onUp(ev: MouseEvent) {
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+            if (typeof window !== 'undefined') {
+              (window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive = false
+            }
+            onDragMove(b.p, origStart, origEnd)
+            clearHL()
+            if (reassignTarget && onReassign) {
+              onReassign(b.p, memberId, reassignTarget)
+              return
+            }
+            if (!didDrag) { onBarClick(b.p); return }
+            const dx = ev.clientX - startX
+            const ddays = Math.round(dx * dpx)
+            const ns = origStart ? addDays(origStart, ddays) : null
+            const ne = origEnd ? addDays(origEnd, ddays) : null
+            onDragEnd(b.p, ns, ne)
+          }
+          window.addEventListener('mousemove', onMove)
+          window.addEventListener('mouseup', onUp)
+        }
+        return (
+          <div key={`vrij_${b.p.id}`}
+            onMouseDown={isReadOnly ? undefined : startVrijDrag}
+            onClick={isReadOnly ? () => onBarClick(b.p) : undefined}
+            title={isReadOnly ? `${b.p.name} · bewerk in Google Calendar` : `${b.p.name} · sleep om te verplaatsen`}
+            style={{
+              position: 'absolute', top: 2, bottom: 2,
+              left: b.left + 2, width: Math.max(20, b.width - 4),
+              background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
+              border: '2px solid rgba(72,130,82,1)',
+              borderRadius: 10,
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
+              padding: '5px 9px', gap: 6,
+              cursor: isReadOnly ? 'pointer' : 'grab',
+              userSelect: 'none',
+              // z=3: hoogste laag in de tijdlijn-content (boven alle bars en
+              // de VANDAAG-streep DOM-rendering volgorde), maar netjes onder
+              // de sticky naam-kolom (z=4+) zodat de groene tape NIET door
+              // de avatars heen schiet bij horizontaal scrollen.
+              zIndex: 3,
+              fontSize: 12.5, fontWeight: 700, color: '#fff',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+              boxShadow: '0 2px 10px rgba(72,130,82,0.45)',
+            }}>
+            <span aria-hidden style={{ fontSize: 16, lineHeight: 1, filter: 'drop-shadow(0 1px 0 rgba(0,0,0,0.15))' }}>🌴</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
+          </div>
+        )
+      })}
       {/* Hele-dag-blokken: single-day items van ~8u worden full-height
           gerenderd, met de board-kleur als subtiele tint. Zo zie je in één
           oogopslag welke dagen volledig 'op slot' zitten. */}
