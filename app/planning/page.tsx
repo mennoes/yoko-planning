@@ -4704,31 +4704,35 @@ export default function PlanningPage() {
               position with a VANDAAG pill at the top so the marker is hard
               to miss when scrolling through time. */}
           {nowOffset !== null && (
-            <div aria-hidden data-today-marker style={{
-              position: 'absolute', top: 0, bottom: 0,
-              left: nowOffset, width: 0,
-              borderLeft: '2px solid var(--yellow)',
-              pointerEvents: 'none',
-              // z=3: boven de bars (z=0–2) maar ONDER de sticky naam-kolom
-              // (z=4+). Anders snijdt de lijn dwars door de avatars heen.
-              zIndex: 3,
-              boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
-            }}>
-              {/* Pill krijgt een EIGEN hoge z-index zodat 'ie nog steeds
-                  boven de sticky kolom-header zichtbaar blijft, ook al
-                  hangt de lijn zelf onder de sticky cellen. */}
-              <div style={{
+            <>
+              {/* De lijn zelf — laag z (3) zodat 'ie netjes onder de sticky
+                  naam-kolom blijft hangen. */}
+              <div aria-hidden data-today-marker style={{
+                position: 'absolute', top: 0, bottom: 0,
+                left: nowOffset, width: 0,
+                borderLeft: '2px solid var(--yellow)',
+                pointerEvents: 'none',
+                zIndex: 3,
+                boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
+              }} />
+              {/* VANDAAG-pill als SEPARATE sibling — eigen sticky-top, hoge
+                  z-index zodat 'ie BOVEN de kolom-headers (z=12) blijft
+                  hangen, ook al ligt de lijn eronder onder de sticky cellen.
+                  Voorheen zat 'ie als child binnen de lijn-div, en daarmee
+                  opgesloten in de stacking context van z=3 — kolom-header
+                  schoof 'm onzichtbaar. */}
+              <div aria-hidden style={{
                 position: 'sticky', top: 4,
-                marginLeft: -32, width: 64,
+                marginLeft: nowOffset - 32, width: 64,
                 padding: '2px 0',
                 background: 'var(--yellow)', color: '#1a1a1a',
                 fontSize: 9.5, fontWeight: 800,
                 letterSpacing: '0.08em', textAlign: 'center',
                 borderRadius: 999,
                 boxShadow: '0 2px 6px rgba(216, 182, 46, 0.4)',
-                zIndex: 20,
+                zIndex: 50, pointerEvents: 'none',
               }}>VANDAAG</div>
-            </div>
+            </>
           )}
 
           {/* Month grouping row (only for week/day zoom) */}
