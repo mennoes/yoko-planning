@@ -38,6 +38,7 @@ import {
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
+import { loadProfileDaysOff, onProfileDaysOffChange } from '@/lib/profileDaysOff'
 import { supabase } from '@/lib/supabase'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 
@@ -386,6 +387,11 @@ export default function HomePage() {
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
+  // Bump re-render zodra de profileDaysOff-cache wijzigt (bv. iemand
+  // klikt op /team Manuels vrijdag uit). Anders blijft 'Team vandaag'
+  // op de oude status hangen tot een handmatige refresh.
+  const [, bumpDaysOff] = useState(0)
+  useEffect(() => onProfileDaysOffChange(() => bumpDaysOff(n => n + 1)), [])
   const [profilesById, setProfilesById] = useState<Record<string, RemoteProfile>>({})
   const [allProjects,  setAllProjects]  = useState<Project[]>([])
   const [deadlineItems, setDeadlineItems] = useState<{ board: string; item: BoardItem }[]>([])
@@ -668,6 +674,11 @@ export default function HomePage() {
 
   // ─── Team status helpers ────────────────────────────────────────────────────
   const todayCode = NL_DAY_CODES[new Date().getDay()]
+  // Localstorage-cache (profileDaysOff) is sinds /team de bron-van-
+  // waarheid voor werkdagen — Supabase profiles.days_off is alleen nog
+  // legacy. Check de cache eerst, profiles.days_off als fallback.
+  const dayOffLocalMap = loadProfileDaysOff()
+  const todayIso = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d })()
   type Status = { kind: 'vacation' | 'free' | 'available'; detail?: string }
   function statusFor(memberIdLocal: string): Status {
     const p = profilesById[memberIdLocal]
@@ -679,6 +690,8 @@ export default function HomePage() {
         return { kind: 'vacation', detail: `terug ${fmt}` }
       }
     }
+    const localOff = dayOffLocalMap[memberIdLocal] ?? []
+    if (localOff.includes(todayIso)) return { kind: 'free', detail: 'vrij vandaag' }
     if (p?.days_off?.includes(todayCode)) return { kind: 'free', detail: 'vrij vandaag' }
     return { kind: 'available' }
   }
