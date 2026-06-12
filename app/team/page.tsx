@@ -104,10 +104,11 @@ function PhotoCropper({ src, onDone, onCancel }: {
 const DAY_LABELS_SHORT = ['M', 'D', 'W', 'D', 'V']
 const DAY_KEYS         = ['mon', 'tue', 'wed', 'thu', 'fri'] as const
 
-function TeamMemberCard({ member, capacity, daysOff, onCapacityChange }: {
+function TeamMemberCard({ member, capacity, daysOff, onDaysOffChange, onCapacityChange }: {
   member: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }
   capacity: number
   daysOff: string[]
+  onDaysOffChange: (next: string[]) => void
   onCapacityChange: (cap: number) => void
 }) {
   const { getPhoto, setPhoto }  = useTeamPhotos()
@@ -207,27 +208,34 @@ function TeamMemberCard({ member, capacity, daysOff, onCapacityChange }: {
               </button>
             )}
           </div>
-          {/* Werkdagen-rij: 7 dots, ingekleurde dagen = werkdag, grijs = vrij.
-              Klikbaar (Link naar profile) zodat je vanuit dit overzicht
-              meteen kunt aanpassen. Workload-calc leest profiles.days_off
-              dus dit blijft de single source of truth. */}
-          <Link href={`/profile/${member.id}`} title="Aanpassen op profielpagina"
-            style={{ display: 'flex', gap: 4, marginTop: 4, textDecoration: 'none' }}>
+          {/* Werkdagen-rij: 5 dots (Ma-Vr). Klik op een dag → toggle
+              werkdag/vrij voor dít teamlid. Schrijft direct naar
+              profiles.days_off in Supabase — workload-calc pikt 't via
+              dezelfde tabel op, dus alles is meteen consistent. */}
+          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}
+            title="Klik op een dag om te wisselen tussen werkdag/vrije dag">
             {DAY_KEYS.map((k, i) => {
               const isOff = daysOff.includes(k)
               return (
-                <span key={k}
+                <button key={k}
+                  onClick={() => {
+                    const next = isOff ? daysOff.filter(d => d !== k) : [...daysOff, k]
+                    onDaysOffChange(next)
+                  }}
+                  title={`${DAY_LABELS_SHORT[i]} · ${isOff ? 'vrij — klik om werkdag te maken' : 'werkdag — klik om vrij te maken'}`}
                   style={{
-                    width: 16, height: 16, borderRadius: 4,
+                    width: 18, height: 18, borderRadius: 4,
                     background: isOff ? 'var(--overlay-faint)' : (member.color ?? 'var(--accent)') + 'cc',
                     color: isOff ? 'var(--text-muted)' : '#fff',
                     fontSize: 9, fontWeight: 700,
+                    border: 'none', cursor: 'pointer', padding: 0,
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     opacity: isOff ? 0.5 : 1,
-                  }}>{DAY_LABELS_SHORT[i]}</span>
+                    transition: 'opacity 0.12s',
+                  }}>{DAY_LABELS_SHORT[i]}</button>
               )
             })}
-          </Link>
+          </div>
         </>
       )}
     </div>
@@ -511,11 +519,24 @@ export default function TeamPage() {
           const yokoCards = all.filter(m => kindOf(m.id) === 'yoko')
           const freeCards = all.filter(m => kindOf(m.id) === 'freelance')
 
+          const saveDaysOff = async (memberId: string, next: string[]) => {
+            // Optimistic update zodat de UI direct reageert; Supabase
+            // realtime corrigeert 't sowieso als de write later faalt.
+            setDaysOffByMember(prev => ({ ...prev, [memberId]: next }))
+            if (!supabase) return
+            await supabase.from('profiles')
+              .update({ days_off: next })
+              .eq('member_id', memberId)
+              .then(({ error }) => {
+                if (error) console.error('[team] days_off save failed:', error.message)
+              })
+          }
           const renderCard = (m: Card) => (
             <div key={m.id} style={{ position: 'relative' }}>
               <TeamMemberCard member={m}
                 capacity={caps[m.id] ?? m.weeklyCapacity ?? 0}
                 daysOff={daysOffByMember[m.id] ?? []}
+                onDaysOffChange={next => saveDaysOff(m.id, next)}
                 onCapacityChange={cap => { setCaps(p => ({ ...p, [m.id]: cap })); setCapacity(m.id, cap) }} />
               {extraIds.has(m.id) && (
                 <button onClick={() => {
