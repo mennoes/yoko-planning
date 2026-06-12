@@ -1783,7 +1783,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
           meer nodig. */}
       {/* Vrij-balken renderen we als volledige-hoogte achtergrond per
           dag(en), met lage z-index zodat andere events er bovenop staan.
-          Klikken werkt nog steeds — geeft door aan onBarClick. */}
+          Vrij-bars maken we HEEL nadrukkelijk: groene tint, full-height,
+          duidelijke palmboom, BOVEN alle andere bars en boven de
+          vandaag-lijn. 't is je vrije dag — die mag niet wegvallen
+          onder een meeting-pill. */}
       {vrijBars.map(b => (
         <div key={`vrij_${b.p.id}`}
           onClick={() => onBarClick(b.p)}
@@ -1791,16 +1794,22 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
           style={{
             position: 'absolute', top: 2, bottom: 2,
             left: b.left + 2, width: Math.max(20, b.width - 4),
-            background: 'rgba(95,160,110,0.18)',
-            border: '1.5px solid rgba(95,160,110,0.55)',
-            borderRadius: 8,
+            background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.42) 0 10px, rgba(95,160,110,0.28) 10px 20px)',
+            border: '2px solid rgba(95,160,110,0.85)',
+            borderRadius: 10,
             display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
-            padding: '4px 8px', gap: 6,
-            cursor: 'pointer', zIndex: 0,
-            fontSize: 12, fontWeight: 600, color: '#3b7a4b',
+            padding: '5px 9px', gap: 6,
+            cursor: 'pointer',
+            // z=8: boven bars (auto/2) en boven VANDAAG-lijn (3), maar nog
+            // onder de sticky naam-kolom (4-6) zodat de groene streep
+            // niet door avatars heen knalt bij horizontaal scrollen.
+            zIndex: 8,
+            fontSize: 12.5, fontWeight: 700, color: '#1f3d28',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            textShadow: '0 1px 0 rgba(255,255,255,0.35)',
+            boxShadow: '0 2px 8px rgba(95,160,110,0.35)',
           }}>
-          <span aria-hidden style={{ fontSize: 14 }}>🌴</span>
+          <span aria-hidden style={{ fontSize: 16, lineHeight: 1, filter: 'drop-shadow(0 1px 0 rgba(0,0,0,0.15))' }}>🌴</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
         </div>
       ))}
