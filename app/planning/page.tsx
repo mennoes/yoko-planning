@@ -812,12 +812,25 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
           // gescrold hebt. VANDAAG-lijn (z=3) wint ook nog.
           zIndex: ghost ? 2 : (hoverBar ? 2 : 'auto') }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 6, paddingRight: 4, display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: titleShift }}>
-          {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {project.name}{project.group ? ` | ${project.group}` : ''}
+        <span style={{ flex: 1, overflow: 'hidden', paddingLeft: 6, paddingRight: 4, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, marginLeft: titleShift }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.15 }}>
+              {project.name}{project.group ? ` | ${project.group}` : ''}
+            </span>
+            {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
           </span>
-          {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
+          {/* Parent-context: tweede regel met pijltje + parent-naam zodra
+              project een subitem-afgeleide is. Geeft visueel meteen
+              door welk hoofditem dit subitem hoort. Wordt alleen
+              gerenderd als de bar hoog genoeg is voor twee regels. */}
+          {project.parentName && project.parentName !== project.name && barH >= 20 && (
+            <span style={{
+              fontSize: small ? 8.5 : 9.5, fontWeight: 500,
+              opacity: 0.78, lineHeight: 1.1, marginTop: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>↳ {project.parentName}</span>
+          )}
         </span>
       </div>
       {/* Resize-handles BUITEN de balk, alleen bij hover en niet-readonly.
@@ -1794,8 +1807,8 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
           style={{
             position: 'absolute', top: 2, bottom: 2,
             left: b.left + 2, width: Math.max(20, b.width - 4),
-            background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.42) 0 10px, rgba(95,160,110,0.28) 10px 20px)',
-            border: '2px solid rgba(95,160,110,0.85)',
+            background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
+            border: '2px solid rgba(72,130,82,1)',
             borderRadius: 10,
             display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
             padding: '5px 9px', gap: 6,
@@ -1805,10 +1818,10 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
             // de sticky naam-kolom (z=4+) zodat de groene tape NIET door
             // de avatars heen schiet bij horizontaal scrollen.
             zIndex: 3,
-            fontSize: 12.5, fontWeight: 700, color: '#1f3d28',
+            fontSize: 12.5, fontWeight: 700, color: '#fff',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            textShadow: '0 1px 0 rgba(255,255,255,0.35)',
-            boxShadow: '0 2px 8px rgba(95,160,110,0.35)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+            boxShadow: '0 2px 10px rgba(72,130,82,0.45)',
           }}>
           <span aria-hidden style={{ fontSize: 16, lineHeight: 1, filter: 'drop-shadow(0 1px 0 rgba(0,0,0,0.15))' }}>🌴</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
