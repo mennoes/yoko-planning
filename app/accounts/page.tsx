@@ -297,22 +297,26 @@ export default function AccountsPage() {
                       }}
                     />
                   ) : isUrl ? (
-                    <a
-                      href={value}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        color: 'var(--blue)',
-                        fontSize: 15,
-                        textDecoration: 'none',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        maxWidth: '100%',
-                      }}
-                    >
-                      {value}
-                    </a>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
+                      <a
+                        href={value}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          color: 'var(--blue)',
+                          fontSize: 15,
+                          textDecoration: 'none',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          flex: 1, minWidth: 0,
+                        }}
+                      >
+                        {value}
+                      </a>
+                      <CopyButton text={value} title="Kopieer URL" />
+                    </div>
                   ) : col.key === 'password' && value ? (() => {
                     const revealed = showPasswords || revealedIds.has(account.id)
                     return (
@@ -334,34 +338,15 @@ export default function AccountsPage() {
                           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: '2px 5px', borderRadius: 4, flexShrink: 0, opacity: revealed ? 1 : 0, transition: 'opacity 0.12s' }}>
                           {revealed ? '👁' : '👁‍🗨'}
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            navigator.clipboard?.writeText(value)
-                            const btn = e.currentTarget
-                            const orig = btn.textContent
-                            btn.textContent = '✓'
-                            setTimeout(() => { btn.textContent = orig }, 1200)
-                          }}
-                          title="Kopieer wachtwoord"
-                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '2px 5px', borderRadius: 4, flexShrink: 0 }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}>⧉</button>
+                        <CopyButton text={value} title="Kopieer wachtwoord" />
                       </div>
                     )
-                  })() : (
-                    <span
-                      style={{
-                        fontSize: 15,
-                        color: col.key === 'account' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                        fontWeight: col.key === 'account' ? 500 : 400,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {value || <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                    </span>
+                  })() : value ? (
+                    <CopyableText value={value}
+                      bold={col.key === 'account'}
+                      title={`Klik om '${col.label.toLowerCase()}' te kopiëren`} />
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 15 }}>—</span>
                   )}
                 </div>
               )
@@ -421,12 +406,66 @@ export default function AccountsPage() {
       </div>
 
       <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-        Wachtwoorden staan in Supabase achter login (RLS). Dubbelklik op een cel om te bewerken.
+        Klik op een cel om de waarde te kopiëren · dubbelklik om te bewerken · wachtwoorden staan in Supabase achter login (RLS).
       </p>
 
       <style>{`
         div:hover .delete-btn { opacity: 1 !important; }
       `}</style>
     </div>
+  )
+}
+
+// ─── Click-to-copy helpers ────────────────────────────────────────────────────
+function CopyButton({ text, title }: { text: string; title: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        navigator.clipboard?.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1200)
+      }}
+      title={title}
+      style={{
+        background: 'none', border: 'none',
+        color: copied ? 'var(--green, #00c875)' : 'var(--text-muted)',
+        cursor: 'pointer', fontSize: 13, padding: '2px 5px', borderRadius: 4, flexShrink: 0,
+        transition: 'color 0.12s',
+      }}
+      onMouseEnter={(e) => { if (!copied) e.currentTarget.style.color = 'var(--text-secondary)' }}
+      onMouseLeave={(e) => { if (!copied) e.currentTarget.style.color = 'var(--text-muted)' }}>
+      {copied ? '✓' : '⧉'}
+    </button>
+  )
+}
+
+// CopyableText — hele cel-tekst is een knop die kopieert. Visueel onzichtbaar
+// (geen border, geen achtergrond) maar geeft een korte ✓ tooltip bij klik en
+// hover-cursor zodat 't duidelijk is dat 'ie klikbaar is. Dubbelklik blijft
+// werken voor edit-mode via de cel-onDoubleClick handler.
+function CopyableText({ value, bold, title }: { value: string; bold?: boolean; title: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <span
+      onClick={(e) => {
+        e.stopPropagation()
+        navigator.clipboard?.writeText(value)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1200)
+      }}
+      title={copied ? 'Gekopieerd ✓' : title}
+      style={{
+        fontSize: 15,
+        color: copied ? 'var(--green, #00c875)' : (bold ? 'var(--text-primary)' : 'var(--text-secondary)'),
+        fontWeight: bold ? 500 : 400,
+        cursor: 'copy',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        userSelect: 'text',
+        transition: 'color 0.12s',
+      }}>
+      {value}
+    </span>
   )
 }
