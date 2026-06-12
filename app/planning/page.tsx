@@ -1800,10 +1800,11 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
             display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
             padding: '5px 9px', gap: 6,
             cursor: 'pointer',
-            // z=8: boven bars (auto/2) en boven VANDAAG-lijn (3), maar nog
-            // onder de sticky naam-kolom (4-6) zodat de groene streep
-            // niet door avatars heen knalt bij horizontaal scrollen.
-            zIndex: 8,
+            // z=3: hoogste laag in de tijdlijn-content (boven alle bars en
+            // de VANDAAG-streep DOM-rendering volgorde), maar netjes onder
+            // de sticky naam-kolom (z=4+) zodat de groene tape NIET door
+            // de avatars heen schiet bij horizontaal scrollen.
+            zIndex: 3,
             fontSize: 12.5, fontWeight: 700, color: '#1f3d28',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             textShadow: '0 1px 0 rgba(255,255,255,0.35)',
