@@ -112,15 +112,17 @@ export function FeedbackBubble() {
       style={{
         position: 'fixed',
         right: 16,
-        bottom: `max(16px, env(safe-area-inset-bottom))`,
-        width: 48, height: 48, borderRadius: '50%',
-        background: 'var(--accent)', color: '#000',
-        border: 'none', cursor: 'pointer',
+        // Boven de eventuele Nieuw-item-FAB op /planning (die zit op
+        // bottom:22 met 54px height). 86px = 22 + 54 + 10 marge.
+        bottom: `max(86px, calc(env(safe-area-inset-bottom) + 70px))`,
+        width: 44, height: 44, borderRadius: '50%',
+        background: 'var(--bg-card)', color: 'var(--text-secondary)',
+        border: '1px solid var(--border)', cursor: 'pointer',
         boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 80, padding: 0,
       }}>
-      <IconComment size={22} strokeWidth={2} />
+      <IconComment size={20} strokeWidth={1.8} />
     </button>
   )
 
