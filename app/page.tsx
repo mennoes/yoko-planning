@@ -1064,12 +1064,20 @@ export default function HomePage() {
       )
       return (
         <div style={card}>
-          <div style={cardHeader}>
-            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <IconUsers size={isMobile ? 17 : 15} />Team vandaag
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
-            </h2>
-          </div>
+          {/* Header klikbaar — springt naar /team waar je werkdagen + cap
+              kunt aanpassen. Voorheen moest je dat zelf opzoeken. */}
+          <Link href="/team" style={{ textDecoration: 'none', color: 'inherit' }}
+            title="Open Team-pagina (werkdagen + capaciteit)">
+            <div style={{ ...cardHeader, cursor: 'pointer', transition: 'background 0.12s' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconUsers size={isMobile ? 17 : 15} />Team vandaag
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>›</span>
+              </h2>
+            </div>
+          </Link>
           <div style={{ padding: '6px 0 10px' }}>
             {subHeader('Studio Yoko', yokoMembers.length, yokoAvail)}
             {yokoMembers.map(renderRow)}

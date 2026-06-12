@@ -44,13 +44,26 @@ export async function POST(req: NextRequest) {
   const daysOff = (body.daysOff as unknown[])
     .filter((d): d is string => typeof d === 'string' && VALID_DAYS.has(d))
 
-  const { error } = await supabaseAdmin
+  // Schrijf altijd naar team_members.days_off — deze tabel heeft geen
+  // auth-dependency en bestaat voor iedereen. Profiles.days_off
+  // updaten we óók als de rij bestaat (legacy + signed-up users
+  // lazen het daar nog vandaan), maar dat is best-effort en gaat
+  // silent als de rij ontbreekt.
+  const { error: tmErr } = await supabaseAdmin
+    .from('team_members')
+    .update({ days_off: daysOff, updated_at: new Date().toISOString() })
+    .eq('id', memberId)
+  if (tmErr) {
+    return Response.json({ ok: false, error: tmErr.message }, { status: 500 })
+  }
+
+  // Legacy mirror naar profiles — schrijf alleen als er al een
+  // rij bestaat (anders blokkeert RLS / FK ons sowieso).
+  await supabaseAdmin
     .from('profiles')
     .update({ days_off: daysOff })
     .eq('member_id', memberId)
-  if (error) {
-    return Response.json({ ok: false, error: error.message }, { status: 500 })
-  }
+    .then(() => {})
 
   return Response.json({ ok: true, memberId, daysOff })
 }

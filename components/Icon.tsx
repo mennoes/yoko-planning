@@ -55,6 +55,7 @@ export const IconMoon       = (p: Props) => base({ ...p, children: <path d="M20 
 export const IconAuto       = (p: Props) => base({ ...p, children: <><circle cx="12" cy="12" r="9" /><path d="M12 3v18" /><path d="M3 12h18" /></> })
 export const IconChart      = (p: Props) => base({ ...p, children: <><line x1="4" y1="20" x2="20" y2="20" /><rect x="6" y="11" width="3" height="9" /><rect x="11" y="6" width="3" height="14" /><rect x="16" y="14" width="3" height="6" /></> })
 export const IconCalendar   = (p: Props) => base({ ...p, children: <><rect x="3" y="5" width="18" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="3" y1="10" x2="21" y2="10" /></> })
+export const IconCopy       = (p: Props) => base({ ...p, children: <><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></> })
 export const IconEye        = (p: Props) => base({ ...p, children: <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></> })
 export const IconEyeOff     = (p: Props) => base({ ...p, children: <><path d="M3 3l18 18" /><path d="M10.6 6.1A11 11 0 0 1 12 6c6 0 10 6 10 6a18.5 18.5 0 0 1-3.3 4" /><path d="M6.6 6.6A18.7 18.7 0 0 0 2 12s4 6 10 6a10 10 0 0 0 4.4-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></> })
 export const IconBoard      = (p: Props) => base({ ...p, children: <><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="9" x2="9" y2="21" /></> })
