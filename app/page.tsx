@@ -390,8 +390,19 @@ export default function HomePage() {
   // Bump re-render zodra de profileDaysOff-cache wijzigt (bv. iemand
   // klikt op /team Manuels vrijdag uit). Anders blijft 'Team vandaag'
   // op de oude status hangen tot een handmatige refresh.
-  const [, bumpDaysOff] = useState(0)
-  useEffect(() => onProfileDaysOffChange(() => bumpDaysOff(n => n + 1)), [])
+  const [daysOffTick, setDaysOffTick] = useState(0)
+  useEffect(() => {
+    const bump = () => setDaysOffTick(n => n + 1)
+    const off = onProfileDaysOffChange(bump)
+    // Cross-tab: localStorage 'storage' event vuurt in andere tabs
+    // wanneer dezelfde key wijzigt. Pakt /team-toggle in tab A → home
+    // re-render in tab B.
+    function onStorage(e: StorageEvent) {
+      if (e.key === 'yoko-profile-days-off') bump()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => { off(); window.removeEventListener('storage', onStorage) }
+  }, [])
   const [profilesById, setProfilesById] = useState<Record<string, RemoteProfile>>({})
   const [allProjects,  setAllProjects]  = useState<Project[]>([])
   const [deadlineItems, setDeadlineItems] = useState<{ board: string; item: BoardItem }[]>([])
@@ -677,6 +688,7 @@ export default function HomePage() {
   // Localstorage-cache (profileDaysOff) is sinds /team de bron-van-
   // waarheid voor werkdagen — Supabase profiles.days_off is alleen nog
   // legacy. Check de cache eerst, profiles.days_off als fallback.
+  void daysOffTick  // forceer re-read na storage/event-tick
   const dayOffLocalMap = loadProfileDaysOff()
   const todayIso = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d })()
   type Status = { kind: 'vacation' | 'free' | 'available'; detail?: string }
