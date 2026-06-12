@@ -1316,7 +1316,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10,
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
           background: stickyBg, borderRight: '1px solid var(--border-light)',
           display: 'flex', alignItems: 'center', padding: leftHeader ? '0' : '0 12px',
           fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -1430,7 +1430,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           ziet de gebruiker enkel de all-day banner hierboven. */}
       {expanded !== false && (
       <div style={{ display: 'flex' }}>
-        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10,
+        <div style={{ width: nameW, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
           background: stickyBg, borderRight: '1px solid var(--border-light)' }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => {
             const hour = HOUR_START + i
@@ -4779,14 +4779,16 @@ export default function PlanningPage() {
               to miss when scrolling through time. */}
           {nowOffset !== null && (
             <>
-              {/* De lijn zelf — laag z (3) zodat 'ie netjes onder de sticky
-                  naam-kolom blijft hangen. */}
+              {/* De lijn zelf: z=14 zodat 'ie BOVEN de kolom-headers (z=11)
+                  én maand-groep (z=12) door loopt — visueel ononderbroken
+                  van pill naar tijdlijn. Sticky naam-cellen worden hieronder
+                  naar z=20 gebumpt zodat ze nog steeds bovenop hangen. */}
               <div aria-hidden data-today-marker style={{
                 position: 'absolute', top: 0, bottom: 0,
                 left: nowOffset, width: 0,
                 borderLeft: '2px solid var(--yellow)',
                 pointerEvents: 'none',
-                zIndex: 3,
+                zIndex: 14,
                 boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
               }} />
               {/* VANDAAG-pill als SEPARATE sibling — eigen sticky-top, hoge
@@ -4812,7 +4814,7 @@ export default function PlanningPage() {
           {/* Month grouping row (only for week/day zoom) */}
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
-              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, background: stickyBg }} />
+              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg }} />
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
                   color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -4825,7 +4827,7 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 12, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: namePad }}>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: namePad }}>
               <button onClick={() => {
                   // Toggle: if all expanded → collapse all; otherwise expand all
                   if (expanded.size >= team.length) setExpanded(new Set())
@@ -4949,7 +4951,7 @@ export default function PlanningPage() {
                   transition: 'opacity 0.18s, filter 0.18s',
                 }}>
                   <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 4,
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
                       background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
                     {cols.map(col => {
                       const contribs = memberHoursInCol(effectiveProjects, m.id, col)
@@ -5080,7 +5082,7 @@ export default function PlanningPage() {
                 {/* Capacity row */}
                 <div style={{ display: 'flex' }}>
                   {/* Sticky name cell */}
-                  <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6,
+                  <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
                     background: stickyBg,
                     display: 'flex', alignItems: 'center',
                     padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border-light)' }}>
@@ -5160,7 +5162,7 @@ export default function PlanningPage() {
                 {/* Timeline bars (expanded) */}
                 {isExp && memberProjects.length > 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
@@ -5170,7 +5172,7 @@ export default function PlanningPage() {
                 )}
                 {isExp && memberProjects.length === 0 && (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 6, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
                 )}
