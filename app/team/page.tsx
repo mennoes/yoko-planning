@@ -520,16 +520,37 @@ export default function TeamPage() {
           const freeCards = all.filter(m => kindOf(m.id) === 'freelance')
 
           const saveDaysOff = async (memberId: string, next: string[]) => {
-            // Optimistic update zodat de UI direct reageert; Supabase
-            // realtime corrigeert 't sowieso als de write later faalt.
+            // Optimistic update zodat de UI direct reageert; server-route
+            // gebruikt supabaseAdmin om de RLS 'Eigen profiel bijwerken'
+            // policy te omzeilen (anders kun je alleen je eigen werkdagen
+            // bijstellen, niet die van collega's).
             setDaysOffByMember(prev => ({ ...prev, [memberId]: next }))
             if (!supabase) return
-            await supabase.from('profiles')
-              .update({ days_off: next })
-              .eq('member_id', memberId)
-              .then(({ error }) => {
-                if (error) console.error('[team] days_off save failed:', error.message)
-              })
+            const sess = await supabase.auth.getSession()
+            const token = sess.data.session?.access_token
+            if (!token) return
+            const res = await fetch('/api/team/days-off', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ memberId, daysOff: next }),
+            })
+            if (!res.ok) {
+              // Rollback bij fout
+              const json = await res.json().catch(() => ({}))
+              console.error('[team] days_off save failed:', json)
+              // Refresh om te re-syncen met server-state
+              const { data } = await supabase
+                .from('profiles')
+                .select('member_id, days_off')
+                .eq('member_id', memberId)
+                .maybeSingle()
+              if (data) {
+                const arr = Array.isArray((data as { days_off?: string[] | null }).days_off)
+                  ? (data as { days_off: string[] }).days_off
+                  : []
+                setDaysOffByMember(prev => ({ ...prev, [memberId]: arr }))
+              }
+            }
           }
           const renderCard = (m: Card) => (
             <div key={m.id} style={{ position: 'relative' }}>
