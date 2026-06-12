@@ -230,11 +230,13 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
   // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
   // duwt in de werkdruk-cellen.
-  // Zie lib/workload.ts: noemer = kalenderdagen, teller = werkdagen-in-
-  // overlap. 10u over 10 cal-dagen → 1u/dag op de werkdagen die er in
-  // vallen. Weekend/vrij blijven 0u i.p.v. uren naar zich toe trekken.
+  // VRIJ-events zelf moeten echter WEL meetellen op hun eigen dag — anders
+  // skipt countWorkdaysMs hen weg en wordt een 8u vakantiedag 0u in de bol.
+  // Voor vrij gebruiken we daarom GEEN memberId-skip: alleen weekend
+  // wordt nog uitgesloten.
+  const isVrij = isVrijTitle(project.name)
   const totalCalDays = Math.max(1, Math.floor((pE.getTime() - pS.getTime()) / 86400000) + 1)
-  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), memberId)
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
   const fraction  = overlapWork / totalCalDays
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),

@@ -287,8 +287,13 @@ export function projectHoursInWeek(
   // mental-model: 10u over 10 dagen = 1u/dag. Weekend-/vrije-dag-cellen
   // tonen geen werk (countWorkdays skipt ze in de noemer), maar de
   // hours-per-day rate blijft op total/calDays.
+  //
+  // EXCEPTION: vrij-events zelf moeten WEL meetellen — anders skipt
+  // countWorkdays hun eigen dag weg en wordt een 8u vakantie 0u in de
+  // werkdruk-bol. Voor vrij dus geen memberId-skip; alleen weekend.
+  const isVrij = /(^|\s)(vrij|vakantie|hemelvaart|verlof|tweede pinksterdag|tweede paasdag|tweede kerstdag|pasen|pinksteren|kerst|nieuwjaar|koningsdag|bevrijdingsdag|good ?friday)(\s|$)/i.test(project.name ?? '')
   const totalCalDays = Math.max(1, Math.floor((pEnd.getTime() - pStart.getTime()) / 86400000) + 1)
-  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), memberId)
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
 
   const fraction        = overlapWork / totalCalDays
