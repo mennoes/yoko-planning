@@ -36,15 +36,43 @@ export function loadProfileDaysOff(): ProfileDaysOffMap {
   return readCache()
 }
 
+// Helper: normaliseer een naam tot een key die robuust hetzelfde blijft
+// (lowercase, alleen alfanumeriek). 'Manuel de Ruijter' → 'manueldruijter'.
+export function nameKey(name: string | null | undefined): string {
+  return (name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
 // Schrijf-API: gebruikt door de /team werkdagen-toggle als primaire
 // opslag. Persisteert direct in localStorage (geen Supabase-RTT, geen
 // schema-dependency). Realtime cross-device sync gebeurt later via een
 // echte DB-kolom; tot die migratie gedraaid is is per-browser de bron.
-export function setProfileDaysOff(memberId: string, isoDays: number[]): void {
+//
+// Schrijft ÉN onder id ÉN onder een naam-key (prefix 'name:') zodat de
+// lookup ook werkt wanneer een page een ander id-formaat gebruikt
+// (bv. team_members.id 'm' vs teamData.json 'manuel-de-ruijter').
+export function setProfileDaysOff(memberId: string, isoDays: number[], memberName?: string): void {
   const map = readCache()
-  if (isoDays.length === 0) delete map[memberId]
-  else map[memberId] = [...isoDays].sort((a, b) => a - b)
+  const arr = isoDays.length === 0 ? null : [...isoDays].sort((a, b) => a - b)
+  if (arr === null) delete map[memberId]
+  else              map[memberId] = arr
+  if (memberName) {
+    const nk = `name:${nameKey(memberName)}`
+    if (arr === null) delete map[nk]
+    else              map[nk] = arr
+  }
   writeCache(map)
+}
+
+// Lookup helper: probeer eerst id, daarna naam-key fallback. Geeft de
+// ISO-array terug of [] als niets gevonden.
+export function lookupDaysOff(memberId: string, memberName?: string): number[] {
+  const map = readCache()
+  if (Array.isArray(map[memberId]) && map[memberId].length > 0) return map[memberId]
+  if (memberName) {
+    const nk = `name:${nameKey(memberName)}`
+    if (Array.isArray(map[nk]) && map[nk].length > 0) return map[nk]
+  }
+  return []
 }
 
 export function isProfileOff(memberId: string, date: Date): boolean {
