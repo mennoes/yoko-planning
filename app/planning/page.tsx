@@ -1530,6 +1530,11 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             const clamped = Math.max(HOUR_START * 60, Math.min(HOUR_END * 60, snapped))
             const dateIso = localIso(col.rangeStart)
             ev.preventDefault()
+            // BELANGRIJK: stop hier de propagatie zodat de outer-container's
+            // onMouseDown (drag-to-scroll) niet óók afgaat. Anders pakt
+            // de page-scroller de mouse-move-events en zie je 'm scrollen
+            // i.p.v. een tijdvak selecteren.
+            ev.stopPropagation()
             setCreateSel({
               iso: dateIso, left: colLeft, widthPx: col.widthPx,
               startMin: clamped, endMin: clamped + 60,
@@ -3097,14 +3102,36 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId, defaultStart, defaul
     return Array.from(byId.values())
   }, [liveTeam])
   const today = new Date().toISOString().slice(0, 10)
+  // Werkdagen × 8 uur — zelfde logica als in BoardTable / detail-popup.
+  // Default voor 'n nieuw item zodat een 2-daags item meteen 16u toont,
+  // een week 40u, etc. Zaterdag/zondag worden niet meegeteld.
+  function workdaysHours(s: string, e: string): number {
+    if (!s || !e) return 0
+    const sd = new Date(s); const ed = new Date(e)
+    if (isNaN(sd.getTime()) || isNaN(ed.getTime()) || ed < sd) return 0
+    let n = 0
+    for (const d = new Date(sd); d <= ed; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay()
+      if (dow !== 0 && dow !== 6) n++
+    }
+    return n * 8
+  }
+  const initialStart = defaultStart ?? today
+  const initialEnd   = defaultEnd ?? defaultStart ?? today
+  const initialHours = Math.max(1, workdaysHours(initialStart, initialEnd))
   const [name,      setName]      = useState('')
   const [board,     setBoard]     = useState<string>(BOARD_NAMES[0])
   const [groupId,   setGroupId]   = useState<string>('')
   const [owner,     setOwner]     = useState<string>(defaultMemberId ?? team[0]?.id ?? '')
   const [status,    setStatus]    = useState<string>('')
-  const [start,     setStart]     = useState<string>(defaultStart ?? today)
-  const [end,       setEnd]       = useState<string>(defaultEnd ?? defaultStart ?? today)
-  const [hours,     setHours]     = useState<string>('1')
+  const [start,     setStart]     = useState<string>(initialStart)
+  const [end,       setEnd]       = useState<string>(initialEnd)
+  const [hours,     setHours]     = useState<string>(String(initialHours))
+  // Bij elke datum-wijziging schalen we de uren automatisch mee
+  // (werkdagen × 8) zolang de gebruiker 't veld zelf nog niet manueel
+  // heeft aangepast. Zodra ze typen in 't uren-veld, schakelt de
+  // auto-fill uit zodat 'n bewuste waarde niet meer overschreven wordt.
+  const [hoursUserEdited, setHoursUserEdited] = useState(false)
   const [startTime, setStartTime] = useState<string>(defaultStartTime ?? '')
   const [endTime,   setEndTime]   = useState<string>(defaultEndTime ?? '')
   const [deadline,  setDeadline]  = useState<string>('')
@@ -3124,6 +3151,16 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId, defaultStart, defaul
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+  // Auto-fill uren = werkdagen × 8 bij elke datum-wijziging (zolang
+  // de gebruiker zelf niets ingetikt heeft). Zo geeft een 2-daags
+  // item meteen 16u, een week 40u, enz.
+  useEffect(() => {
+    if (hoursUserEdited) return
+    const h = workdaysHours(start, end)
+    if (h <= 0) return
+    setHours(String(h))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [start, end])
 
   function save() {
     if (!name.trim()) return
@@ -3204,7 +3241,10 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId, defaultStart, defaul
               <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={popupSelect} />
             </label>
             <label style={popupLabel}>Uren
-              <input type="number" step="0.5" min="0" value={hours} onChange={e => setHours(e.target.value)} style={popupSelect} />
+              <input type="number" step="0.5" min="0" value={hours}
+                onChange={e => { setHoursUserEdited(true); setHours(e.target.value) }}
+                title="Wordt automatisch ingevuld als werkdagen × 8u — typ om handmatig over te schrijven"
+                style={popupSelect} />
             </label>
           </div>
 
