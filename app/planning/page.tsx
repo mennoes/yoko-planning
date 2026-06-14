@@ -950,6 +950,16 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     //   resize-end    → alleen endDate schuift   (rechter grens)
     mode: 'move' | 'resize-start' | 'resize-end'
   }>(null)
+  // Drag-to-create: gebruiker drukt muis in op leeg uur-slot en sleept
+  // verticaal tot eind-tijd → opent nieuw-item-popup met dat tijdvak.
+  // Google-Calendar-stijl. Zonder slepen (< 8px) telt 't als klik en
+  // wordt 'n default 60-min block aangemaakt.
+  const [createSel, setCreateSel] = useState<null | {
+    iso: string; left: number; widthPx: number;
+    startMin: number; endMin: number;
+    mouseStartX: number; mouseStartY: number;
+    moved: boolean;
+  }>(null)
   // ScrollLeft van de buitenste horizontaal-scrollende container houden we
   // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
   // naam blijft links in beeld zolang de pill nog door 't viewport loopt).
@@ -1310,6 +1320,47 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayDrag])
 
+  // Drag-to-create: tijdens muis-ingedrukt updaten we de eind-minuut zodat
+  // de gebruiker visueel ziet welk tijdvak 'r geselecteerd wordt. Op
+  // mouse-up bepalen we klik-vs-sleep en roepen onCreateAt aan.
+  useEffect(() => {
+    if (!createSel || !onCreateAt || !memberId) return
+    function onMove(ev: MouseEvent) {
+      const el = gridRef.current; if (!el || !createSel) return
+      const rect = el.getBoundingClientRect()
+      const y = ev.clientY - rect.top
+      const rawMin = y / HOUR_H * 60 + HOUR_START * 60
+      const snapped = Math.round(rawMin / 15) * 15
+      const clamped = Math.max(HOUR_START * 60, Math.min(HOUR_END * 60, snapped))
+      const dx = ev.clientX - createSel.mouseStartX
+      const dy = ev.clientY - createSel.mouseStartY
+      const moved = createSel.moved || Math.abs(dx) >= 8 || Math.abs(dy) >= 8
+      setCreateSel(s => s ? { ...s, endMin: clamped, moved } : s)
+    }
+    function onUp() {
+      if (!createSel || !onCreateAt || !memberId) { setCreateSel(null); return }
+      const lo = Math.min(createSel.startMin, createSel.endMin)
+      const hi = Math.max(createSel.startMin, createSel.endMin)
+      let startMin = lo, endMin = hi
+      // Géén drag (of nauwelijks): default 60-min block.
+      if (!createSel.moved || hi - lo < 15) {
+        startMin = createSel.startMin
+        endMin   = Math.min(HOUR_END * 60, startMin + 60)
+      }
+      const startTime = fmtMin(startMin)
+      const endTime   = fmtMin(endMin)
+      onCreateAt(memberId, createSel.iso, startTime, endTime)
+      setCreateSel(null)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createSel])
+
   const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
 
   return (
@@ -1445,38 +1496,42 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           })}
         </div>
         <div ref={gridRef}
-          onClick={(ev) => {
-            // Klik op leeg uur-slot → nieuw item op die datum + tijd.
-            // Bars/handles bovenop hebben pointerEvents/stopPropagation
-            // zodat hun klik niet hier landt.
+          onMouseDown={(ev) => {
+            // Drag-to-create: muis ingedrukt op leeg uur-slot → start
+            // tijdvak-selectie. Bars/handles bovenop swallowen 'm via hun
+            // eigen onMouseDown + preventDefault zodat ze niet per
+            // ongeluk een nieuwe selectie starten.
             if (!onCreateAt || !memberId) return
             if (ev.target !== ev.currentTarget) return
+            if (ev.button !== 0) return
             const rect = ev.currentTarget.getBoundingClientRect()
             const x = ev.clientX - rect.left
             const y = ev.clientY - rect.top
-            // Welke kolom (dag) zit deze x in?
             let acc = 0
             let col: Col | null = null
+            let colLeft = 0
             for (const c of cols) {
-              if (x >= acc && x < acc + c.widthPx) { col = c; break }
+              if (x >= acc && x < acc + c.widthPx) { col = c; colLeft = acc; break }
               acc += c.widthPx
             }
             if (!col) return
-            // Welk uur op de y-as?
-            const hourFloat = HOUR_START + (y / HOUR_H)
-            const hour = Math.max(HOUR_START, Math.min(HOUR_END - 1, Math.floor(hourFloat)))
-            const minRaw = Math.round((hourFloat - Math.floor(hourFloat)) * 60 / 15) * 15
-            const min = Math.min(45, Math.max(0, minRaw))
-            const startTime = `${pad2(hour)}:${pad2(min)}`
-            const endHour = hour + 1 > HOUR_END ? HOUR_END : hour + 1
-            const endTime = `${pad2(endHour)}:${pad2(min)}`
-            const dateIso = col.rangeStart.toISOString().slice(0, 10)
-            onCreateAt(memberId, dateIso, startTime, endTime)
+            const rawMin = y / HOUR_H * 60 + HOUR_START * 60
+            const snapped = Math.round(rawMin / 15) * 15
+            const clamped = Math.max(HOUR_START * 60, Math.min(HOUR_END * 60, snapped))
+            const dateIso = localIso(col.rangeStart)
+            ev.preventDefault()
+            setCreateSel({
+              iso: dateIso, left: colLeft, widthPx: col.widthPx,
+              startMin: clamped, endMin: clamped + 60,
+              mouseStartX: ev.clientX, mouseStartY: ev.clientY,
+              moved: false,
+            })
           }}
           style={{ position: 'relative', width: totalWidth, height: timeGridH, background: stickyBg,
           // Events buiten 09:00–18:00 worden geclipt — geen visuele
           // overspill onder/boven het raster.
-          overflow: 'hidden', cursor: onCreateAt && memberId ? 'cell' : 'default' }}>
+          overflow: 'hidden', cursor: onCreateAt && memberId ? 'cell' : 'default',
+          userSelect: createSel ? 'none' : undefined }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => (
             <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: HOUR_H,
               borderBottom: '1px solid var(--border)', pointerEvents: 'none' }} />
@@ -1501,6 +1556,26 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
               }} />
             )
           })}
+          {/* Drag-to-create ghost — visuele preview van 't tijdvak dat
+              de gebruiker selecteert. Verdwijnt op mouseup en wordt
+              vervangen door 't echte item via NewItemPopup. */}
+          {createSel && (() => {
+            const lo = Math.min(createSel.startMin, createSel.endMin)
+            const hi = Math.max(createSel.startMin, createSel.endMin)
+            const top = (lo - HOUR_START * 60) / 60 * HOUR_H
+            const h   = Math.max(18, (hi - lo) / 60 * HOUR_H)
+            return (
+              <div style={{ position: 'absolute',
+                left: createSel.left + 2, top, width: createSel.widthPx - 4, height: h,
+                background: 'rgba(0,154,255,0.22)',
+                border: '2px dashed rgba(0,154,255,0.85)',
+                borderRadius: 6, pointerEvents: 'none', zIndex: 4,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--text-primary)', fontSize: 12, fontWeight: 700,
+                textShadow: '0 1px 2px rgba(255,255,255,0.6)',
+              }}>{fmtMin(lo)} – {fmtMin(hi)}</div>
+            )
+          })()}
           {(() => {
             // Rode 'nu'-lijn op vandaag
             const now = new Date()
