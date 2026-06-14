@@ -83,8 +83,11 @@ type Col = {
 // ─── Static layout constants ──────────────────────────────────────────────────
 const NAME_W   = 196
 const NAME_PAD = 28
-const BAR_H    = 30
-const BAR_GAP  = 4
+// Bar-hoogte (in px) standaard. Schaalbaar via rowZoomPct in PlanningPage —
+// die scale wordt als prop doorgegeven aan TimelineBars / WeekTimeGrid /
+// DraggableBar zodat de gebruiker live verticaal kan in/uitzoomen.
+const BAR_H    = 32
+const BAR_GAP  = 5
 const HANDLE_W = 8
 
 // ─── View-size presets ────────────────────────────────────────────────────────
@@ -571,7 +574,10 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
 }) {
   const FULL_DAY_HOURS = 8
   const availH = (laneH ?? BAR_H + BAR_GAP) - BAR_GAP
-  const baseH  = small ? 10 : BAR_H
+  // Bar-hoogte volgt nu de lane-hoogte (laneH - gap) i.p.v. de vaste
+  // BAR_H-constante, zodat verticale zoom (rowScale op TimelineBars) ook
+  // in dag-zoom doorwerkt. Meeting-pills blijven 10px.
+  const baseH  = small ? 10 : Math.max(14, availH)
   // Hoogte schaalt op uren-PER-DAG, niet op het totaal van het project.
   // Een 20u project dat 2.5 maanden loopt is ~16 minuten/dag, niet een
   // volle werkdag. Eerder gebruikten we project.estHours direct,
@@ -900,7 +906,7 @@ function localIso(d: Date): string {
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
 }
 
-function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, onSelect, onTimedDrag, onDateDragEnd, onReassign, onCreateAt }: {
+function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, rowScale, onSelect, onTimedDrag, onDateDragEnd, onReassign, onCreateAt }: {
   cols: Col[]
   projects: Project[]
   // Wanneer memberId niet gezet is, gebruiken we deze predicate om te
@@ -923,6 +929,9 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   onDateDragEnd?: (p: Project, ns: string | null, ne: string | null) => void
   // Sleep een pill naar een ander persoon-row → reassign owner.
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
+  // Verticale zoom-schaal (1.0 = default) — schaalt HOUR_H zodat
+  // gebruiker langere uren-blokken kan zien.
+  rowScale?: number
   // Klik op leeg uur-slot → nieuw item op die exacte datum + tijd
   // (Google-Calendar-stijl).
   onCreateAt?: (memberId: string, dateIso: string, startTime: string, endTime: string) => void
@@ -933,7 +942,8 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // verschijnen i.p.v. eraf te lopen.
   const HOUR_START = 9
   const HOUR_END   = 18
-  const HOUR_H     = 44
+  const HOUR_RS    = rowScale ?? 1
+  const HOUR_H     = Math.round(44 * HOUR_RS)
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -949,6 +959,16 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     //   resize-start  → alleen startDate schuift (linker grens)
     //   resize-end    → alleen endDate schuift   (rechter grens)
     mode: 'move' | 'resize-start' | 'resize-end'
+  }>(null)
+  // Drag-to-create: gebruiker drukt muis in op leeg uur-slot en sleept
+  // verticaal tot eind-tijd → opent nieuw-item-popup met dat tijdvak.
+  // Google-Calendar-stijl. Zonder slepen (< 8px) telt 't als klik en
+  // wordt 'n default 60-min block aangemaakt.
+  const [createSel, setCreateSel] = useState<null | {
+    iso: string; left: number; widthPx: number;
+    startMin: number; endMin: number;
+    mouseStartX: number; mouseStartY: number;
+    moved: boolean;
   }>(null)
   // ScrollLeft van de buitenste horizontaal-scrollende container houden we
   // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
@@ -1310,6 +1330,47 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayDrag])
 
+  // Drag-to-create: tijdens muis-ingedrukt updaten we de eind-minuut zodat
+  // de gebruiker visueel ziet welk tijdvak 'r geselecteerd wordt. Op
+  // mouse-up bepalen we klik-vs-sleep en roepen onCreateAt aan.
+  useEffect(() => {
+    if (!createSel || !onCreateAt || !memberId) return
+    function onMove(ev: MouseEvent) {
+      const el = gridRef.current; if (!el || !createSel) return
+      const rect = el.getBoundingClientRect()
+      const y = ev.clientY - rect.top
+      const rawMin = y / HOUR_H * 60 + HOUR_START * 60
+      const snapped = Math.round(rawMin / 15) * 15
+      const clamped = Math.max(HOUR_START * 60, Math.min(HOUR_END * 60, snapped))
+      const dx = ev.clientX - createSel.mouseStartX
+      const dy = ev.clientY - createSel.mouseStartY
+      const moved = createSel.moved || Math.abs(dx) >= 8 || Math.abs(dy) >= 8
+      setCreateSel(s => s ? { ...s, endMin: clamped, moved } : s)
+    }
+    function onUp() {
+      if (!createSel || !onCreateAt || !memberId) { setCreateSel(null); return }
+      const lo = Math.min(createSel.startMin, createSel.endMin)
+      const hi = Math.max(createSel.startMin, createSel.endMin)
+      let startMin = lo, endMin = hi
+      // Géén drag (of nauwelijks): default 60-min block.
+      if (!createSel.moved || hi - lo < 15) {
+        startMin = createSel.startMin
+        endMin   = Math.min(HOUR_END * 60, startMin + 60)
+      }
+      const startTime = fmtMin(startMin)
+      const endTime   = fmtMin(endMin)
+      onCreateAt(memberId, createSel.iso, startTime, endTime)
+      setCreateSel(null)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createSel])
+
   const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
 
   return (
@@ -1445,38 +1506,42 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           })}
         </div>
         <div ref={gridRef}
-          onClick={(ev) => {
-            // Klik op leeg uur-slot → nieuw item op die datum + tijd.
-            // Bars/handles bovenop hebben pointerEvents/stopPropagation
-            // zodat hun klik niet hier landt.
+          onMouseDown={(ev) => {
+            // Drag-to-create: muis ingedrukt op leeg uur-slot → start
+            // tijdvak-selectie. Bars/handles bovenop swallowen 'm via hun
+            // eigen onMouseDown + preventDefault zodat ze niet per
+            // ongeluk een nieuwe selectie starten.
             if (!onCreateAt || !memberId) return
             if (ev.target !== ev.currentTarget) return
+            if (ev.button !== 0) return
             const rect = ev.currentTarget.getBoundingClientRect()
             const x = ev.clientX - rect.left
             const y = ev.clientY - rect.top
-            // Welke kolom (dag) zit deze x in?
             let acc = 0
             let col: Col | null = null
+            let colLeft = 0
             for (const c of cols) {
-              if (x >= acc && x < acc + c.widthPx) { col = c; break }
+              if (x >= acc && x < acc + c.widthPx) { col = c; colLeft = acc; break }
               acc += c.widthPx
             }
             if (!col) return
-            // Welk uur op de y-as?
-            const hourFloat = HOUR_START + (y / HOUR_H)
-            const hour = Math.max(HOUR_START, Math.min(HOUR_END - 1, Math.floor(hourFloat)))
-            const minRaw = Math.round((hourFloat - Math.floor(hourFloat)) * 60 / 15) * 15
-            const min = Math.min(45, Math.max(0, minRaw))
-            const startTime = `${pad2(hour)}:${pad2(min)}`
-            const endHour = hour + 1 > HOUR_END ? HOUR_END : hour + 1
-            const endTime = `${pad2(endHour)}:${pad2(min)}`
-            const dateIso = col.rangeStart.toISOString().slice(0, 10)
-            onCreateAt(memberId, dateIso, startTime, endTime)
+            const rawMin = y / HOUR_H * 60 + HOUR_START * 60
+            const snapped = Math.round(rawMin / 15) * 15
+            const clamped = Math.max(HOUR_START * 60, Math.min(HOUR_END * 60, snapped))
+            const dateIso = localIso(col.rangeStart)
+            ev.preventDefault()
+            setCreateSel({
+              iso: dateIso, left: colLeft, widthPx: col.widthPx,
+              startMin: clamped, endMin: clamped + 60,
+              mouseStartX: ev.clientX, mouseStartY: ev.clientY,
+              moved: false,
+            })
           }}
           style={{ position: 'relative', width: totalWidth, height: timeGridH, background: stickyBg,
           // Events buiten 09:00–18:00 worden geclipt — geen visuele
           // overspill onder/boven het raster.
-          overflow: 'hidden', cursor: onCreateAt && memberId ? 'cell' : 'default' }}>
+          overflow: 'hidden', cursor: onCreateAt && memberId ? 'cell' : 'default',
+          userSelect: createSel ? 'none' : undefined }}>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => (
             <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: HOUR_H,
               borderBottom: '1px solid var(--border)', pointerEvents: 'none' }} />
@@ -1501,6 +1566,26 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
               }} />
             )
           })}
+          {/* Drag-to-create ghost — visuele preview van 't tijdvak dat
+              de gebruiker selecteert. Verdwijnt op mouseup en wordt
+              vervangen door 't echte item via NewItemPopup. */}
+          {createSel && (() => {
+            const lo = Math.min(createSel.startMin, createSel.endMin)
+            const hi = Math.max(createSel.startMin, createSel.endMin)
+            const top = (lo - HOUR_START * 60) / 60 * HOUR_H
+            const h   = Math.max(18, (hi - lo) / 60 * HOUR_H)
+            return (
+              <div style={{ position: 'absolute',
+                left: createSel.left + 2, top, width: createSel.widthPx - 4, height: h,
+                background: 'rgba(0,154,255,0.22)',
+                border: '2px dashed rgba(0,154,255,0.85)',
+                borderRadius: 6, pointerEvents: 'none', zIndex: 4,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--text-primary)', fontSize: 12, fontWeight: 700,
+                textShadow: '0 1px 2px rgba(255,255,255,0.6)',
+              }}>{fmtMin(lo)} – {fmtMin(hi)}</div>
+            )
+          })()}
           {(() => {
             // Rode 'nu'-lijn op vandaag
             const now = new Date()
@@ -1631,15 +1716,20 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   )
 }
 
-function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDragMove, onDragEnd, onBarClick, onReassign }: {
+function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, rowScale, onDragMove, onDragEnd, onBarClick, onReassign }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   zoom: ZoomLevel
   hideMeetings?: boolean
+  // Verticale zoom-schaal (1.0 = default). Schaalt BAR_H/BAR_GAP/PROJECT_LANE_H
+  // zodat bars hoger/lager worden zonder dat de lane-pack logic verandert.
+  rowScale?: number
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
+  const RS = rowScale ?? 1
+  const BAR_GAP_S = Math.max(2, Math.round(BAR_GAP * RS))
   // Overrides voor workload-categorieën meedoen: items die de gebruiker
   // expliciet als 'meeting' heeft gemarkeerd moeten zich ook gedragen als
   // meeting (cluster + verbergbaar via 'Verberg Meetings'-toggle).
@@ -1807,9 +1897,9 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   // In Overzicht (week-zoom) maken we de lane wat hoger zodat events als
   // mini-staafdiagram per dag kunnen renderen.
-  const PROJECT_LANE_H = zoom === 'week' ? 38 : (BAR_H + BAR_GAP)
+  const PROJECT_LANE_H = Math.round((zoom === 'week' ? 38 : (BAR_H + BAR_GAP)) * RS)
 
-  function projectLaneTop(lane: number) { return BAR_GAP + lane * PROJECT_LANE_H }
+  function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
   const bars: Single[] = projectPacked.items.map(b => ({
@@ -1818,8 +1908,8 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, onDr
 
   if (bars.length === 0 && vrijBars.length === 0 && fullDayBars.length === 0) return null
   const projectStack = projectLanes * PROJECT_LANE_H
-  const baseHeight = BAR_GAP + projectStack + 6
-  const height = bars.length === 0 ? Math.max(36, baseHeight) : baseHeight
+  const baseHeight = BAR_GAP_S + projectStack + 6
+  const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
 
   return (
     <div style={{ position: 'relative', height, overflow: 'hidden' }}>
@@ -3511,6 +3601,17 @@ export default function PlanningPage() {
     return Number.isFinite(v) ? Math.max(50, Math.min(300, v)) : 100
   })
   useEffect(() => { localStorage.setItem('planning-colW-zoom', String(colWZoom)) }, [colWZoom])
+  // Verticale zoom: schaalt bar-hoogte (BAR_H), bar-gap en HOUR_H zodat de
+  // gebruiker langere events makkelijker leesbaar krijgt. 70 = compact,
+  // 100 = standaard, 180 = ruim. Wordt als prop doorgegeven aan
+  // TimelineBars/WeekTimeGrid/DraggableBar.
+  const [rowZoomPct, setRowZoomPct] = useState<number>(() => {
+    if (typeof window === 'undefined') return 100
+    const v = parseFloat(localStorage.getItem('planning-row-zoom') ?? '100')
+    return Number.isFinite(v) ? Math.max(70, Math.min(180, v)) : 100
+  })
+  useEffect(() => { localStorage.setItem('planning-row-zoom', String(rowZoomPct)) }, [rowZoomPct])
+  const rowScale = rowZoomPct / 100
   const [hideMeetings, setHideMeetings] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('planning-hide-meetings') === '1'
@@ -4979,6 +5080,24 @@ export default function PlanningPage() {
                   }}>
                     {zoom === 'dag' ? 'Week-planner' : 'Overzicht'}
                   </span>
+                  {/* Verticale zoom: schaalt bar-hoogte zodat lange events
+                      leesbaarder worden. Compacte controls naast de
+                      horizontale zoom. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8,
+                    padding: '2px 8px 2px 6px', borderRadius: 999,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
+                    <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
+                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
+                      title="Lagere balken"
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                    <input type="range" min={70} max={180} step={5}
+                      value={rowZoomPct} onChange={e => setRowZoomPct(parseInt(e.target.value))}
+                      title={`Balk-hoogte ${rowZoomPct}%`}
+                      style={{ width: 80, accentColor: 'var(--accent)' }} />
+                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
+                      title="Hogere balken"
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -5094,6 +5213,7 @@ export default function PlanningPage() {
                     stickyBg={stickyBg}
                     leftHeader={header}
                     expanded={isExp}
+                    rowScale={rowScale}
                     onSelect={p => openDetail(p)}
                     onTimedDrag={(p, ns, ne, nst, net) => handleTimedDragEnd(p, ns, ne, nst, net)}
                     onDateDragEnd={(p, ns, ne) => handleDragEnd(p, ns, ne)}
@@ -5268,6 +5388,7 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
+                        rowScale={rowScale}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
                         onReassign={handleReassignOwner} />
                     </div>
