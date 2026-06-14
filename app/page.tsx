@@ -400,8 +400,20 @@ export default function HomePage() {
     function onStorage(e: StorageEvent) {
       if (e.key === 'yoko-profile-days-off') bump()
     }
+    // Dag-wissel-detectie: wanneer de gebruiker 't tabblad vrijdag opent
+    // en zondag terugkomt zonder hard-refresh blijft statusFor op de
+    // vrijdag-todayIso hangen — visibilitychange + focus geeft 'm een
+    // re-render zodat 'weekend' / 'beschikbaar' meteen klopt.
+    function onWake() { bump() }
     window.addEventListener('storage', onStorage)
-    return () => { off(); window.removeEventListener('storage', onStorage) }
+    window.addEventListener('focus', onWake)
+    document.addEventListener('visibilitychange', onWake)
+    return () => {
+      off()
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('focus', onWake)
+      document.removeEventListener('visibilitychange', onWake)
+    }
   }, [])
   const [profilesById, setProfilesById] = useState<Record<string, RemoteProfile>>({})
   const [allProjects,  setAllProjects]  = useState<Project[]>([])
