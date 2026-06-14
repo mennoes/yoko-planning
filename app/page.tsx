@@ -706,6 +706,12 @@ export default function HomePage() {
     const localOff = lookupDaysOff(memberIdLocal, memberName)
     if (localOff.includes(todayIso)) return { kind: 'free', detail: 'vrij vandaag' }
     if (p?.days_off?.includes(todayCode)) return { kind: 'free', detail: 'vrij vandaag' }
+    // Weekend (za=6, zo=7) is impliciet vrij — /team toggelt alleen
+    // Mon-Fri, dus za/zo staan nooit in days_off maar zijn standaard
+    // wel vrije dagen. Anders zou iedereen op zaterdag/zondag als
+    // 'beschikbaar' getoond worden.
+    if (todayIso === 6) return { kind: 'free', detail: 'weekend' }
+    if (todayIso === 7) return { kind: 'free', detail: 'weekend' }
     return { kind: 'available' }
   }
 
