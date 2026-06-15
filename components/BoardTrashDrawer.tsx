@@ -95,6 +95,55 @@ function memberColor(id: string): string {
   return teamData.members.find(m => m.id === id)?.color ?? '#9aa3ad'
 }
 
+// Wanneer meta.field/meta.before niet bestaan (oude entries van vóór
+// migratie 0020, of als de column nog niet bestaat) proberen we 't af
+// te leiden uit action+detail-tekst. Pakt: 'zette uren' + '72u → 24u',
+// 'zette status' + 'X → Y', 'wees iemand toe' + naam (no undo, want
+// before-list onbekend).
+function inferFieldFromAction(action: string): ActivityField | null {
+  const a = action.toLowerCase()
+  if (a.includes('uren')) return 'estHours'
+  if (a.includes('status')) return 'status'
+  if (a.includes('timeline') || a.includes('datum') || a.includes('deadline')) return 'startDate'
+  if (a.includes('notes') || a.includes('notitie')) return 'notes'
+  if (a.includes('naam') && a.includes('item')) return 'name'
+  if (a.includes('wees iemand toe') || a.includes('owner')) return 'ownerIds'
+  return null
+}
+function parseBeforeFromDetail(field: ActivityField, detail: string): unknown | null {
+  // Detail-formats die we kennen:
+  //   estHours: '72u → 24u'
+  //   status:   'Working on it → Done'  (of '— → Done')
+  //   timeline: '2025-01-01 – 2025-02-01  →  2025-01-15 – 2025-02-15'
+  if (!detail) return null
+  const sepRe = /\s*→\s*/
+  if (!sepRe.test(detail)) return null
+  const [beforeRaw] = detail.split(sepRe)
+  if (field === 'estHours') {
+    const m = beforeRaw.match(/(-?\d+(?:\.\d+)?)/)
+    return m ? Number(m[1]) : null
+  }
+  if (field === 'status') {
+    const s = beforeRaw.trim()
+    return s === '—' || s === '' ? '' : s
+  }
+  if (field === 'startDate') {
+    // 'YYYY-MM-DD – YYYY-MM-DD'
+    const m = beforeRaw.match(/(\d{4}-\d{2}-\d{2}|—)\s*[–-]\s*(\d{4}-\d{2}-\d{2}|—)/)
+    if (m) {
+      return {
+        startDate: m[1] === '—' ? null : m[1],
+        endDate:   m[2] === '—' ? null : m[2],
+      }
+    }
+    return null
+  }
+  if (field === 'notes' || field === 'name' || field === 'deadline') {
+    return beforeRaw.trim()
+  }
+  return null
+}
+
 // Undo helper voor item-level wijzigingen. Spiegel van applyUndo in
 // BoardActivityDrawer. Werkt voor alle velden waarvoor meta.before
 // gestructureerd is opgeslagen (estHours, ownerIds, status, datums,
@@ -327,8 +376,19 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
                 onUndo={async (act) => {
                   const itemId = itemIdFromTarget(act.target)
                   const bid    = (act.meta?.boardId as string | undefined) ?? boardId
-                  if (!itemId || !bid || !act.meta?.field || act.meta.before === undefined) return
-                  const ok = applyTrashUndo(bid, itemId, act.meta.field as ActivityField, act.meta.before)
+                  if (!itemId || !bid) return
+                  const metaField = act.meta?.field as ActivityField | undefined
+                  const field = metaField ?? inferFieldFromAction(act.action ?? '')
+                  if (!field) { window.alert('Geen veld bekend voor deze actie — kan niet ongedaan maken.'); return }
+                  let before: unknown = act.meta?.before
+                  if (before === undefined) {
+                    before = parseBeforeFromDetail(field, act.detail ?? '')
+                  }
+                  if (before === null || before === undefined) {
+                    window.alert('Vorige waarde niet beschikbaar voor deze entry — undo niet mogelijk.')
+                    return
+                  }
+                  const ok = applyTrashUndo(bid, itemId, field, before)
                   if (!ok) { window.alert('Kon niet ongedaan maken — item is niet meer aanwezig.'); return }
                   setBusy(`undo:${act.id}`)
                   setBusy(null)
@@ -437,9 +497,16 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
         const itemId = itemIdFromTarget(e.target)
         const itemName = e.meta?.itemName ?? (itemId ? itemNameById[itemId] : null) ?? null
         const boardForLink = (e.meta?.boardId as string | undefined) ?? null
-        const field = e.meta?.field as ActivityField | undefined
+        const metaField = e.meta?.field as ActivityField | undefined
+        // Fallback: leid field af uit action-tekst wanneer meta ontbreekt
+        // (oude entries / migratie 0020 niet gedraaid).
+        const inferredField = metaField ?? inferFieldFromAction(e.action ?? '')
+        const field = inferredField ?? undefined
         const isOwnerChange = field === 'ownerIds'
-        const canUndo = !!(field && e.meta?.before !== undefined && (e.meta?.boardId ?? null))
+        const hasMetaBefore = e.meta?.before !== undefined
+        const hasDetailBefore = !!field && field !== 'ownerIds' && field !== 'ownerHours' &&
+          parseBeforeFromDetail(field, e.detail ?? '') !== null
+        const canUndo = !!field && (hasMetaBefore || hasDetailBefore)
         function openItem() {
           if (!itemId || !boardForLink) return
           const url = `/projects/${boardForLink}?focus=${encodeURIComponent(itemId)}&drawer=${encodeURIComponent(itemId)}`
