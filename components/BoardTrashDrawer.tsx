@@ -8,11 +8,12 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  loadTrash, restoreTrashItem, purgeTrashItem, pullBoardFromRemote, type TrashItem,
+  loadTrash, restoreTrashItem, purgeTrashItem, pullBoardFromRemote, loadGroups, saveGroups, type TrashItem,
 } from '@/lib/boardStore'
 import { loadBoardActivity, itemIdFromTarget, type ItemActivity, type ActivityField } from '@/lib/itemActivity'
 import { supabase } from '@/lib/supabase'
 import teamData from '@/data/team.json'
+import type { BoardItem, BoardGroup } from '@/lib/boards'
 import { useTeamPhotos } from './TeamPhotosContext'
 
 type Profile = { user_id: string; name: string | null; member_id: string | null }
@@ -72,6 +73,72 @@ function dayKey(iso: string): string {
   return iso.slice(0, 10) // YYYY-MM-DD
 }
 
+function relTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  if (ms < 0) return 'zojuist'
+  const min = Math.floor(ms / 60000)
+  if (min < 1)    return 'zojuist'
+  if (min < 60)   return `${min}m geleden`
+  if (min < 1440) return `${Math.floor(min / 60)}u geleden`
+  const d = Math.floor(min / 1440)
+  return `${d}d geleden`
+}
+
+// Member-naam-lookup voor de owner-pill render. Pakt eerst de live
+// team.json + extends met liveTeam zou ideaal zijn, maar voor de
+// activity-feed is teamData voldoende — bij ontbreken val terug op de
+// id zelf.
+function memberName(id: string): string {
+  return teamData.members.find(m => m.id === id)?.name ?? id
+}
+function memberColor(id: string): string {
+  return teamData.members.find(m => m.id === id)?.color ?? '#9aa3ad'
+}
+
+// Undo helper voor item-level wijzigingen. Spiegel van applyUndo in
+// BoardActivityDrawer. Werkt voor alle velden waarvoor meta.before
+// gestructureerd is opgeslagen (estHours, ownerIds, status, datums,
+// notes, name, deadline, ownerHours).
+function applyTrashUndo(boardId: string, itemId: string, field: ActivityField, before: unknown): boolean {
+  const groups = loadGroups(boardId, [])
+  if (groups.length === 0) return false
+  const next: BoardGroup[] = groups.map(g => ({
+    ...g,
+    items: g.items.map(i => {
+      if (i.id !== itemId) return i
+      const patch: Partial<BoardItem> = {}
+      if (field === 'startDate' && before && typeof before === 'object') {
+        const b = before as { startDate?: string | null; endDate?: string | null }
+        patch.startDate = b.startDate ?? null
+        patch.endDate   = b.endDate   ?? null
+      } else if (field === 'endDate' && before && typeof before === 'object') {
+        const b = before as { startDate?: string | null; endDate?: string | null }
+        patch.startDate = b.startDate ?? null
+        patch.endDate   = b.endDate   ?? null
+      } else if (field === 'estHours') {
+        patch.estHours = Number(before) || 0
+      } else if (field === 'status') {
+        patch.status = String(before ?? '')
+      } else if (field === 'ownerIds') {
+        patch.ownerIds = Array.isArray(before) ? (before as string[]) : []
+      } else if (field === 'ownerHours') {
+        patch.ownerHours = (before ?? {}) as Record<string, number>
+      } else if (field === 'name') {
+        patch.name = String(before ?? '')
+      } else if (field === 'notes') {
+        patch.notes = String(before ?? '')
+      } else if (field === 'deadline') {
+        patch.deadline = (before as string | null) ?? null
+      } else {
+        return i
+      }
+      return { ...i, ...patch }
+    }),
+  }))
+  saveGroups(boardId, next)
+  return true
+}
+
 export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog }: {
   boardId:    string
   boardTitle: string
@@ -86,6 +153,17 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState<string | null>(null)
   const [detailItem, setDetailItem] = useState<TrashItem | null>(null)
+  // Live item-namen voor de fallback van '(item zonder naam)' wanneer
+  // meta.itemName ontbreekt op oude entries. Wordt opnieuw geladen bij
+  // open en wanneer de board-state lokaal verandert (na undo).
+  const [itemNameById, setItemNameById] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!open) return
+    const groups = loadGroups(boardId, [])
+    const map: Record<string, string> = {}
+    for (const g of groups) for (const i of g.items) if (i?.id) map[i.id] = (i.name as string) ?? ''
+    setItemNameById(map)
+  }, [open, boardId, busy])
   const { getPhoto } = useTeamPhotos()
 
   useEffect(() => {
@@ -242,9 +320,19 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
                 defaultOpen={idx === 0}
                 profiles={profiles}
                 getPhoto={getPhoto}
+                itemNameById={itemNameById}
                 onPickItem={setDetailItem}
                 onRestore={onRestore} onPurge={onPurge}
-                onRestoreAll={() => onRestoreAll(dayEvents.filter(ev => ev.kind === 'delete').map(ev => (ev as { t: TrashItem }).t))} />
+                onRestoreAll={() => onRestoreAll(dayEvents.filter(ev => ev.kind === 'delete').map(ev => (ev as { t: TrashItem }).t))}
+                onUndo={async (act) => {
+                  const itemId = itemIdFromTarget(act.target)
+                  const bid    = (act.meta?.boardId as string | undefined) ?? boardId
+                  if (!itemId || !bid || !act.meta?.field || act.meta.before === undefined) return
+                  const ok = applyTrashUndo(bid, itemId, act.meta.field as ActivityField, act.meta.before)
+                  if (!ok) { window.alert('Kon niet ongedaan maken — item is niet meer aanwezig.'); return }
+                  setBusy(`undo:${act.id}`)
+                  setBusy(null)
+                }} />
             ))
           })()}
         </div>
@@ -262,17 +350,19 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
 
 // Eén dag-groep in de Geschiedenis. Inklapbare header met telling +
 // 'Herstel alle' bulk-knop; daaronder de individuele items.
-function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, onPickItem, onRestore, onPurge, onRestoreAll }: {
+function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, itemNameById, onPickItem, onRestore, onPurge, onRestoreAll, onUndo }: {
   day: string
   dayEvents: ({ kind: 'delete'; ts: string; t: TrashItem } | { kind: 'change'; ts: string; e: ItemActivity })[]
   busyId: string | null
   defaultOpen?: boolean
   profiles: Record<string, Profile>
   getPhoto: (memberId: string) => string | null
+  itemNameById: Record<string, string>
   onPickItem: (t: TrashItem) => void
   onRestore: (t: TrashItem) => void
   onPurge:   (t: TrashItem) => void
   onRestoreAll: () => void
+  onUndo: (e: ItemActivity) => void
 }) {
   const [open, setOpen] = useState(!!defaultOpen)
   const deletedCount = dayEvents.filter(ev => ev.kind === 'delete').length
@@ -333,18 +423,23 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, onP
             </div>
           )
         }
-        // Change-event
+        // Change-event — compacte 2-regel layout:
+        //   [avatar+badge] Itemnaam — Menno zette uren · [72u → 24u]   [Ongedaan]
+        //                   2m geleden
         const e = ev.e
         const p = e.user_id ? profiles[e.user_id] : null
         const name = p?.name ?? 'Iemand'
-        const memberId = p?.member_id ?? null
-        const photo = memberId ? getPhoto(memberId) : null
-        const memberColor = teamData.members.find(m => m.id === memberId)?.color ?? '#9aa3ad'
+        const actorMemberId = p?.member_id ?? null
+        const photo = actorMemberId ? getPhoto(actorMemberId) : null
+        const actorColor = memberColor(actorMemberId ?? '')
         const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
         const iconKind = iconTypeFor(e)
         const itemId = itemIdFromTarget(e.target)
-        const itemName = e.meta?.itemName ?? null
+        const itemName = e.meta?.itemName ?? (itemId ? itemNameById[itemId] : null) ?? null
         const boardForLink = (e.meta?.boardId as string | undefined) ?? null
+        const field = e.meta?.field as ActivityField | undefined
+        const isOwnerChange = field === 'ownerIds'
+        const canUndo = !!(field && e.meta?.before !== undefined && (e.meta?.boardId ?? null))
         function openItem() {
           if (!itemId || !boardForLink) return
           const url = `/projects/${boardForLink}?focus=${encodeURIComponent(itemId)}&drawer=${encodeURIComponent(itemId)}`
@@ -353,63 +448,129 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, onP
         return (
           <div key={`a_${e.id}`}
             onClick={openItem}
-            style={{ padding: '12px 18px', borderTop: '1px solid var(--border-light)',
-              display: 'flex', gap: 12, alignItems: 'flex-start',
+            style={{ padding: '8px 18px', borderTop: '1px solid var(--border-light)',
+              display: 'flex', gap: 10, alignItems: 'center',
               cursor: itemId ? 'pointer' : 'default',
               background: 'var(--bg-base)',
               transition: 'background 0.1s' }}
             onMouseEnter={ev2 => { if (itemId) (ev2.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
             onMouseLeave={ev2 => { (ev2.currentTarget as HTMLElement).style.background = 'var(--bg-base)' }}>
-            {/* Avatar van actor met klein action-icon-badge in de hoek
-                (zoals Monday's activity-log). */}
+            {/* Actor-avatar met action-icoon-badge */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
               {photo ? (
-                <img src={photo} alt={name} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={photo} alt={name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                <span style={{ width: 34, height: 34, borderRadius: '50%',
+                <span style={{ width: 28, height: 28, borderRadius: '50%',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  background: memberColor + '22', color: memberColor, fontSize: 12, fontWeight: 700 }}>
+                  background: actorColor + '22', color: actorColor, fontSize: 10.5, fontWeight: 700 }}>
                   {initials}
                 </span>
               )}
-              <span style={{ position: 'absolute', right: -3, bottom: -3,
-                width: 18, height: 18, borderRadius: '50%',
-                background: 'var(--bg-card)', border: '2px solid var(--bg-base)',
+              <span style={{ position: 'absolute', right: -2, bottom: -2,
+                width: 14, height: 14, borderRadius: '50%',
+                background: 'var(--bg-card)', border: '1.5px solid var(--bg-base)',
                 color: 'var(--text-primary)',
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ActionIcon type={iconKind} />
+                <span style={{ transform: 'scale(0.72)' }}><ActionIcon type={iconKind} /></span>
               </span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Lijn 1: ITEM-naam dik bovenaan (waar de wijziging op is). */}
-              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                marginBottom: 2 }}>
-                {itemName ?? <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 500 }}>(item zonder naam)</span>}
+              {/* Lijn 1: 'Item · Wie deed wat — change-summary' */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                  {itemName && itemName.trim().length > 0
+                    ? itemName
+                    : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 500 }}>(naamloos)</span>}
+                </span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>·</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>{' '}{e.action}
+                </span>
+                {(e.meta?.before !== undefined || e.meta?.after !== undefined) && (
+                  isOwnerChange ? (
+                    <OwnerChangePill before={e.meta?.before} after={e.meta?.after} getPhoto={getPhoto} />
+                  ) : (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span style={pillStyle(false)}>{fmtSimple(e.meta?.before)}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
+                      <span style={pillStyle(true)}>{fmtSimple(e.meta?.after)}</span>
+                    </span>
+                  )
+                )}
               </div>
-              {/* Lijn 2: WIE + WAT. */}
-              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>{' '}{e.action}
-              </div>
-              {/* Lijn 3: before -> after via duidelijke pills. */}
-              {(e.meta?.before !== undefined || e.meta?.after !== undefined) ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                  <span style={pillStyle(false)}>{fmtSimple(e.meta?.before)}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
-                  <span style={pillStyle(true)}>{fmtSimple(e.meta?.after)}</span>
-                </div>
-              ) : e.detail ? (
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{e.detail}</div>
-              ) : null}
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 5 }}>
-                {fmtDate(e.ts)}
-                {itemId && boardForLink && <span style={{ marginLeft: 6, color: 'var(--accent)' }}>· klik om item te openen ↗</span>}
+              {/* Lijn 2: tijd (klein) */}
+              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                {relTime(e.ts)} · {fmtDate(e.ts)}
               </div>
             </div>
+            {canUndo && (
+              <button onClick={ev2 => { ev2.stopPropagation(); onUndo(e) }}
+                title="Zet terug naar de vorige waarde"
+                style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'var(--bg-card)', color: 'var(--text-primary)',
+                  fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                ↩ Ongedaan
+              </button>
+            )}
           </div>
         )
       })}
     </div>
+  )
+}
+
+// Owner-change pill: rendert before/after-owners als avatars+naam
+// (klein) i.p.v. losse member-id-strings. Daardoor zie je in één
+// oogopslag WIE er was toegewezen en wie er nu staat.
+function OwnerChangePill({ before, after, getPhoto }: {
+  before: unknown
+  after:  unknown
+  getPhoto: (memberId: string) => string | null
+}) {
+  function toIds(v: unknown): string[] {
+    if (Array.isArray(v)) return (v as unknown[]).filter((x): x is string => typeof x === 'string')
+    return []
+  }
+  function OwnerAvatar({ id }: { id: string }) {
+    const ph  = getPhoto(id)
+    const col = memberColor(id)
+    const nm  = memberName(id)
+    const init = nm.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+    return (
+      <span title={nm} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {ph ? (
+          <img src={ph} alt={nm} style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <span style={{ width: 16, height: 16, borderRadius: '50%',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: col + '22', color: col, fontSize: 8.5, fontWeight: 700 }}>{init || '?'}</span>
+        )}
+        <span style={{ fontSize: 11.5, color: 'var(--text-primary)' }}>{nm.split(' ')[0]}</span>
+      </span>
+    )
+  }
+  const beforeIds = toIds(before)
+  const afterIds  = toIds(after)
+  const renderList = (ids: string[], positive: boolean) => {
+    if (ids.length === 0) return <span style={pillStyle(positive)}>—</span>
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '2px 8px', borderRadius: 999,
+        background: positive ? 'rgba(46, 175, 90, 0.14)' : 'rgba(196, 69, 58, 0.10)',
+        border: `1px solid ${positive ? 'rgba(46, 175, 90, 0.35)' : 'var(--border)'}`,
+      }}>
+        {ids.map(id => <OwnerAvatar key={id} id={id} />)}
+      </span>
+    )
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {renderList(beforeIds, false)}
+      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
+      {renderList(afterIds, true)}
+    </span>
   )
 }
 
