@@ -613,36 +613,47 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     : (small ? '#D8B62E' : (BOARD_COLORS[project.board] ?? '#888'))
   // Multi-owner-visualisatie: bij meerdere eigenaars splitsen we de
   // bar-fill in horizontale segmenten naar verhouding van ownerHours.
-  // Een 'Np'-pill rechts toont 't aantal mensen — zo zie je in één
-  // oogopslag dat 'r meerdere mensen aan werken én wie hoeveel.
+  // 't deel WAT JIJ moet doen krijgt de volle item-kleur, andermans
+  // deel staat faded. Outline om de hele bar zodat je de volle extent
+  // nog steeds ziet. Een 'Np'-pill rechts toont 't aantal mensen.
   const realOwners = project.ownerIds.filter(id => id !== 'unassigned')
   const ownerCount = realOwners.length
   const isMultiOwner = !isVrij && !small && ownerCount > 1
-  const ownerSegments: { color: string; pct: number }[] = (() => {
+  const ownerSegments: { isMe: boolean; pct: number }[] = (() => {
     if (!isMultiOwner) return []
     const oh = project.ownerHours ?? {}
     const totalAssigned = realOwners.reduce((s, id) => s + (Number(oh[id]) || 0), 0)
     const fallback = (project.estHours || ownerCount) / ownerCount
     const list = realOwners.map(id => ({
-      color: (team ?? []).find(t => t.id === id)?.color ?? color,
+      isMe: id === memberId,
       hours: totalAssigned > 0 ? (Number(oh[id]) || 0) : fallback,
     }))
     const sum = list.reduce((s, x) => s + x.hours, 0) || 1
-    return list.map(x => ({ color: x.color, pct: (x.hours / sum) * 100 }))
+    return list.map(x => ({ isMe: x.isMe, pct: (x.hours / sum) * 100 }))
   })()
   const multiOwnerGradient = isMultiOwner && ownerSegments.length > 1
     ? (() => {
+        // Item-kleur op volle sterkte voor 'mijn' deel, 30%-alpha voor
+        // andermans deel (vergelijkbaar met de Done-fade). 8-char hex
+        // suffix '4d' = 30% alpha, 'ff' = volledig.
+        const mineCss   = color + 'ff'
+        const fadedCss  = color + '4d'
         let acc = 0
         const stops: string[] = []
         for (const s of ownerSegments) {
+          const c = s.isMe ? mineCss : fadedCss
           const start = acc
           const end = acc + s.pct
-          stops.push(`${s.color} ${start}% ${end}%`)
+          stops.push(`${c} ${start}% ${end}%`)
           acc = end
         }
         return `linear-gradient(to right, ${stops.join(', ')})`
       })()
     : null
+  // Outline rond multi-owner bars zodat je de volle bar-extent ook door
+  // de faded segmenten heen ziet — anders zou de faded helft visueel
+  // 'wegvallen' tegen achtergronden van andere bars.
+  const multiOwnerBorder = multiOwnerGradient ? `1px solid ${color}` : undefined
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
   const reassignRef = useRef<string | null>(null)
@@ -841,6 +852,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 500, color: '#fff',
           cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
           pointerEvents: 'auto',
+          border: multiOwnerBorder,
           boxShadow: hoverBar ? '0 4px 12px rgba(0,0,0,0.4)' : '0 1px 2px rgba(0,0,0,0.18)',
           // Done-items faden naar 45% zodat actief werk visueel pop't.
           opacity: project.status === 'done' ? 0.45 : 1,
