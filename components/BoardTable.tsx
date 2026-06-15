@@ -602,6 +602,56 @@ const navBtnStyle: React.CSSProperties = {
 }
 
 // ─── Kalender range picker ────────────────────────────────────────────────────
+// Recent gekozen periodes (max 6) blijven persistent in localStorage zodat
+// 'n gebruiker met één klik een vaak gebruikte range terug kan halen.
+const RECENT_PERIODS_KEY = 'yoko:recentPeriods'
+type RecentPeriod = { from: string; until: string; at: number }
+function loadRecentPeriods(): RecentPeriod[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(RECENT_PERIODS_KEY)
+    if (!raw) return []
+    return JSON.parse(raw) as RecentPeriod[]
+  } catch { return [] }
+}
+function pushRecentPeriod(from: string, until: string) {
+  if (typeof window === 'undefined') return
+  if (!from || !until) return
+  const list = loadRecentPeriods().filter(r => !(r.from === from && r.until === until))
+  list.unshift({ from, until, at: Date.now() })
+  window.localStorage.setItem(RECENT_PERIODS_KEY, JSON.stringify(list.slice(0, 6)))
+  window.dispatchEvent(new CustomEvent('yoko-recent-periods-update'))
+}
+function RecentPeriodsRow({ color, onPick }: { color: string; onPick: (from: string, until: string) => void }) {
+  const [recents, setRecents] = useState<RecentPeriod[]>([])
+  useEffect(() => {
+    const refresh = () => setRecents(loadRecentPeriods())
+    refresh()
+    window.addEventListener('yoko-recent-periods-update', refresh)
+    return () => window.removeEventListener('yoko-recent-periods-update', refresh)
+  }, [])
+  if (recents.length === 0) return null
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+        Recent
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+        {recents.map(r => (
+          <button key={`${r.from}_${r.until}`} onClick={() => onPick(r.from, r.until)}
+            style={{ padding: '4px 9px', borderRadius: 999,
+              border: '1px solid var(--border-light)', background: 'var(--bg-card)',
+              color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.color = color }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.color = 'var(--text-secondary)' }}>
+            {fmtRange(r.from, r.until)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function RangeCalendar({
   startDate, endDate, color, onChange,
 }: {
@@ -699,6 +749,15 @@ function RangeCalendar({
           </button>
         ))}
       </div>
+
+      {/* Recent gebruikte periodes — bewaard in localStorage onder
+          yoko:recentPeriods. Tot 4 chips zodat 'n veelgebruikte range
+          met 1 klik herstelbaar is zonder opnieuw te kiezen. */}
+      <RecentPeriodsRow color={color} onPick={(s, e) => {
+        setSelA(s); setSelB(e); setPhase('A')
+        const d = new Date(s); setVy(d.getFullYear()); setVm(d.getMonth())
+        onChange(s, e)
+      }} />
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <button onClick={prevMonth} style={navBtnStyle}>◀</button>
@@ -1381,6 +1440,25 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           justCreatedSubId={justCreatedSubId}
           colWidths={colWidths} onResizeCol={onResizeCol}
           updateOne={updateOne} deleteOne={deleteOne} />
+        {/* Som-rij voor de subitems van dit item — dezelfde stijl als de
+            groep-som onderaan de hoofdtabel. Toont alleen wanneer 'r
+            ten minste 1 subitem is. */}
+        {subitems.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, borderTop: '1px solid var(--border)', background: 'var(--overlay-faint)' }}>
+            <div />
+            <div style={{ padding: '5px 14px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Som</div>
+            {cols.map(col => {
+              const sumHours = subitems.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+              const sumDagen = Math.round(sumHours / 8 * 10) / 10
+              return (
+                <div key={col.key} style={{ padding: '5px 8px', fontSize: 11, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', fontWeight: 600 }}>
+                  {col.key === 'estHours' ? `${sumHours}u` : col.key === 'dagen' ? sumDagen : ''}
+                </div>
+              )
+            })}
+            <div style={{ borderLeft: '1px solid var(--border)' }} />
+          </div>
+        )}
         <div style={{ padding: '8px 12px 8px 56px' }}>
           <button onClick={addOne} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12.5, padding: 0 }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
@@ -3239,6 +3317,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         window.localStorage.removeItem(periodKey)
       }
     } catch {}
+    if (filterFrom && filterUntil) pushRecentPeriod(filterFrom, filterUntil)
   }, [periodKey, filterFrom, filterUntil])
   const [editingTitle,  setEditingTitle] = useState(false)
   const [selectedIds,   setSelectedIds]  = useState<Set<string>>(new Set())
