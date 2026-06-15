@@ -1357,7 +1357,28 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           <div />
           <div style={{ padding: '8px 12px', fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
           {cols.map(c => (
-            <div key={c.key} style={hdrCell}>{headerLabelFor(c.key, c.label)}</div>
+            <div key={c.key} style={{ ...hdrCell, position: 'relative' }}>
+              {headerLabelFor(c.key, c.label)}
+              {onResizeCol && (
+                <div
+                  title="Kolom breder/smaller slepen"
+                  style={{ position: 'absolute', top: 0, right: -3, width: 6, height: '100%', cursor: 'col-resize', zIndex: 3 }}
+                  onClick={e => e.stopPropagation()}
+                  onMouseDown={e => {
+                    e.preventDefault(); e.stopPropagation()
+                    const startX = e.clientX
+                    const startW = (colWidths && colWidths[c.key]) ?? c.width
+                    function onMove(ev: MouseEvent) { onResizeCol!(c.key, startW + ev.clientX - startX) }
+                    function onUp() {
+                      document.removeEventListener('mousemove', onMove)
+                      document.removeEventListener('mouseup', onUp)
+                    }
+                    document.addEventListener('mousemove', onMove)
+                    document.addEventListener('mouseup', onUp)
+                  }}
+                />
+              )}
+            </div>
           ))}
           <div style={{ borderLeft: '1px solid var(--border)' }} />
         </div>
