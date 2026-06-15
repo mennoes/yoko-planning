@@ -588,12 +588,8 @@ function SettingsPopup({ onClose, profile, openEdit, theme, setTheme, signOut }:
         {/* Profile header */}
         <button onClick={openEdit}
           style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', textAlign: 'left' }}>
-          {profile?.photo ? (
-            <img src={profile.photo} alt="" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
-          ) : profile ? (
-            <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: profile.color + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: profile.color }}>
-              {profile.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-            </span>
+          {profile ? (
+            <UserAvatar memberId={profile.memberId} size={32} />
           ) : (
             <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: 'var(--overlay-medium)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: 'var(--text-muted)' }}>?</span>
           )}
