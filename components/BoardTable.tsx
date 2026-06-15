@@ -4206,20 +4206,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             style={{ padding: '9px 12px 9px 32px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', width: 220, boxSizing: 'border-box' }} />
         </div>
 
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: filterStatus ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none' }}>
-          <option value="">Alle statussen</option>
-          {STATUS_OPTIONS.filter(o => o.label).map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
-        </select>
-
-        <select value={filterOwner} onChange={e => setFilterOwner(e.target.value)}
-          style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: filterOwner ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none' }}>
-          <option value="">Alle personen</option>
-          {yokoOwners.map(id => {
-            const m = teamData.members.find(t => t.id === id)
-            return m ? <option key={id} value={id}>{m.name}</option> : null
-          })}
-        </select>
+        {/* Status- en persoon-dropdowns weggehaald — filteren kan via de
+            owner-chips boven de tabel + status-pills in de rijen. */}
 
         {/* Periode-filter: items waarvan de timeline OVERLAPT met
             [van, tot]. Leeg laten = geen ondergrens / bovengrens. */}
