@@ -7,6 +7,7 @@ export type SubItem = {
   status:       string
   startDate:    string | null
   endDate:      string | null
+  deadline?:    string | null
   // HH:MM-strings — alleen ingevuld bij Google-events met dateTime; bij
   // all-day events of handmatige subitems blijft 't null.
   startTime?:   string | null
