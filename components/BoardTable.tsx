@@ -3318,50 +3318,23 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           return true
         })
         .map(item => {
-          // Geen periode-filter actief → niets aanpassen aan uren.
+          // Periode-filter: alleen visibility-filter, GEEN pro-rate van uren.
+          // Pro-raten leverde verwarrende getallen op bij bewerken (een
+          // 24u-subitem toonde 4.4u, terwijl invullen wél de echte 24u
+          // overschreef). Nu blijven de waarden gewoon de echte uren —
+          // sum/totaal = werkelijke som. Pro-rate-logica is verwijderd.
           if (from === null && until === null) return item
-          // Items met subitems: filter onzichtbare subitems weg én pro-rateer
-          // de zichtbare op hun eigen span. De parent.estHours wordt door
-          // effectiveHours() automatisch de som van de pro-rated subitems.
-          // We taggen het item met __prorated zodat Cell de uren-kolom
-          // als read-only kan renderen — bewerken zou de pro-rated waarde
-          // anders als echte estHours wegschrijven.
           if (item.subitems && item.subitems.length > 0) {
-            let subs = item.subitems.filter(s => overlapsRange(s.startDate, s.endDate))
-            if (subs.length === 0) subs = item.subitems
-            const prorated = subs.map(s => {
-              const origHours = Number(s.estHours) || 0
-              return {
-                ...s,
-                estHours: prorate(origHours, s.startDate, s.endDate),
-                __originalEstHours: origHours,
-              }
-            })
-            return { ...item, subitems: prorated, __prorated: true } as BoardItem
+            // Subitems die buiten de periode vallen filteren we weg uit
+            // de weergave; binnen-periode-subs blijven onveranderd.
+            const visible = item.subitems.filter(s => overlapsRange(s.startDate, s.endDate))
+            return { ...item, subitems: visible.length > 0 ? visible : item.subitems } as BoardItem
           }
-          // Top-level item zonder subs: schaal zowel estHours ALS ownerHours
-          // met dezelfde overlap-factor zodat de verdeling-pie en de
-          // uren-cel synchroon blijven bij periode-filter. Anders toont
-          // de pie de volledige owner-shares (bv. 21u + 3u = 24u) terwijl
-          // de cel pro-rated 8u laat zien — inconsistent.
-          const newHours = prorate(Number(item.estHours) || 0, item.startDate, item.endDate)
-          let proOwnerHours = item.ownerHours
-          if (item.ownerHours && Object.keys(item.ownerHours).length > 0) {
-            const oldHours = Number(item.estHours) || 0
-            if (oldHours > 0) {
-              const factor = newHours / oldHours
-              const scaled: Record<string, number> = {}
-              for (const [k, v] of Object.entries(item.ownerHours)) {
-                scaled[k] = Math.round((Number(v) || 0) * factor * 10) / 10
-              }
-              proOwnerHours = scaled
-            }
-          }
+          // Top-level items zonder subs: gewoon doorlaten met echte uren.
           return {
             ...item,
-            estHours: newHours,
-            ownerHours: proOwnerHours,
-            __prorated: true,
+            estHours: Number(item.estHours) || 0,
+            ownerHours: item.ownerHours,
           } as BoardItem
         }),
     })).filter(g => g.items.length > 0)
