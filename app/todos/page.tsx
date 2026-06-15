@@ -87,16 +87,34 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
-        const parentOwns = Array.isArray(item.ownerIds) && item.ownerIds.includes(memberId)
+        const parentOwnerIds = Array.isArray(item.ownerIds) ? item.ownerIds : []
+        const parentOwns = parentOwnerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
         const parentExpired = end && end < today
         // Parent zelf als todo wanneer ik eigenaar ben én 'm nog niet voorbij is.
         if (parentOwns && !parentExpired) {
-          out.push({ board, itemId: item.id, name: item.name })
+          out.push({ board, itemId: item.id, name: item.name,
+            startDate: (item.startDate as string | null) ?? null,
+            endDate:   (item.endDate   as string | null) ?? null })
         }
-        // Subitems NIET als losse todo's tonen — gaf te veel ruis (vrij-
-        // herhalingen, episode-instances, etc.). De parent-item dekt 't.
-        // Open je 'm in de agenda dan zie je daar de subitem-lijst.
+        // Subitem-todos: alleen wanneer 't subitem EXPLICIET aan deze
+        // member is toegewezen ÉN de parent niet (anders dekt de
+        // parent-entry 't al). Voorkomt de oude lawine van automatische
+        // subitem-todos, terwijl wie écht een specifieke deeltaak heeft
+        // 'm nog steeds ziet (bv. Manuel met een boekomslag-subitem).
+        if (parentOwns) continue
+        const subs = (item.subitems as Array<{ id?: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+        subs.forEach((si, idx) => {
+          const subOwners = Array.isArray(si.ownerIds) ? si.ownerIds : []
+          if (!subOwners.includes(memberId)) return
+          if ((si.status ?? '').toLowerCase() === 'done') return
+          const subEnd = si.endDate ?? si.startDate
+          if (subEnd && subEnd < today) return
+          const subName = si.name && si.name.trim().length > 0 ? si.name : item.name
+          out.push({ board, itemId: `${item.id}__si${idx}`, name: `${subName} (in ${item.name})`,
+            startDate: si.startDate ?? null,
+            endDate:   si.endDate ?? si.startDate ?? null })
+        })
       }
     }
   }
