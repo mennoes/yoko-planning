@@ -112,6 +112,18 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: true, status: 'nothing_to_restore', usedSnapshot: snap.snapshot_at, touchedItems: 0, restoredSubs: 0 })
   }
 
+  // Pre-restore snapshot zodat deze actie ook omkeerbaar is via
+  // /geschiedenis → de gegenereerde 'restore'-snapshot. Snapshotten
+  // alleen wanneer er ook echt wat verandert (toUpsert > 0).
+  const { data: curGroupsForSnap } = await supabaseAdmin
+    .from('board_groups').select('*').eq('board_id', boardId).is('deleted_at', null)
+  await supabaseAdmin.from('board_snapshots').insert({
+    board_id:  boardId,
+    trigger:   'restore',
+    data:      { groups: curGroupsForSnap ?? [], items: currentItems, capturedAt: new Date().toISOString() },
+    size_bytes: JSON.stringify({ groups: curGroupsForSnap, items: currentItems }).length,
+  })
+
   const { error: upErr } = await supabaseAdmin
     .from('board_items')
     .upsert(toUpsert, { onConflict: 'id' })

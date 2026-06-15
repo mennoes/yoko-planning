@@ -116,6 +116,36 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
     }
   }
 
+  async function herstelEst(snap: Snapshot) {
+    if (!supabase) return
+    if (!window.confirm(
+      `Est-uren terugzetten op alle items/subitems vanuit ${fmtDate(snap.snapshot_at)}?\n\n` +
+      `Alleen est_hours wordt overschreven — naam, status, owners, datums blijven ongemoeid. ` +
+      `Bedoeld voor het terugdraaien van de oude 'autofill werkdagen × 8'-inflatie.`,
+    )) return
+    const sess = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token
+    if (!token) { window.alert('Niet ingelogd.'); return }
+    setBusy(snap.id); setMsg(null)
+    try {
+      const res = await fetch('/api/snapshots/restore-est', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId, since: snap.snapshot_at }),
+      })
+      const json = await res.json() as { ok: boolean; error?: string; touchedItems?: number; changedItemEst?: number; changedSubEst?: number; status?: string }
+      if (!json.ok) { setMsg(`Est-rollback mislukt: ${json.error ?? 'onbekend'}`); return }
+      await pullBoardFromRemote(boardId).catch(() => {})
+      if (json.status === 'nothing_to_restore') {
+        setMsg(`Niets te wijzigen — est-uren staan al gelijk aan deze snapshot.`)
+      } else {
+        setMsg(`✓ Est-uren teruggezet: ${json.changedItemEst ?? 0} items + ${json.changedSubEst ?? 0} subs op ${json.touchedItems ?? 0} rijen.`)
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
   if (!open || typeof document === 'undefined') return null
   return createPortal(
     <div style={{
@@ -172,6 +202,13 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
                 background: 'var(--accent-light, rgba(88,150,255,0.18))', color: 'var(--text-primary)',
                 fontSize: 12, fontWeight: 700, cursor: busy === s.id ? 'wait' : 'pointer', flexShrink: 0 }}>
               {busy === s.id ? 'Bezig…' : 'Herstel subs'}
+            </button>
+            <button onClick={() => herstelEst(s)} disabled={busy === s.id}
+              title="Zet alleen est-uren terug naar de waarden uit deze snapshot. Verandert verder niets."
+              style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)',
+                background: 'transparent', color: 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 700, cursor: busy === s.id ? 'wait' : 'pointer', flexShrink: 0 }}>
+              Herstel uren
             </button>
           </div>
         ))}
