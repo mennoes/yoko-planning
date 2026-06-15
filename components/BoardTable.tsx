@@ -894,34 +894,18 @@ function Cell({ item, col, onUpdate }: {
   const hasSubs = (item.subitems?.length ?? 0) > 0
   const isProrated = Boolean((item as unknown as { __prorated?: boolean }).__prorated)
 
-  // estHours: ook bij subitems is 't veld bewerkbaar. Een handmatige
-  // waarde (> 0) wint over de subitem-som; lege/0 valt terug op de som
-  // (zie effectiveHours). Onder de input tonen we ter info de som
-  // wanneer 'ie afwijkt van wat hier staat.
-  if (col.key === 'estHours' && hasSubs) {
-    const sum  = (item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)
-    const own  = Number(item.estHours) || 0
-    const hint = own > 0 && Math.abs(own - sum) > 0.01 ? `som van subs: ${sum}u` : null
+  // estHours: ook bij subitems én bij actief periode-filter is 't veld
+  // bewerkbaar. Een handmatige item.estHours > 0 wint over de subitem-
+  // som (zie effectiveHours). Pro-rated mode toont nog steeds de volle
+  // ingevulde waarde — die kun je dan ook gewoon overschrijven.
+  if (col.key === 'estHours' && (hasSubs || isProrated)) {
     return (
-      <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, width: '100%' }}>
-        <EditableCell
-          value={item.estHours as number | null}
-          inputType="number"
-          onChange={v => onUpdate({ estHours: Number(v) || 0 })}
-        />
-        {hint && (
-          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 2 }}>
-            {hint}
-          </span>
-        )}
-      </span>
+      <EditableCell
+        value={item.estHours as number | null}
+        inputType="number"
+        onChange={v => onUpdate({ estHours: Number(v) || 0 })}
+      />
     )
-  }
-  // Pro-rated naar een periode-filter: read-only tonen zodat een edit niet
-  // de gedeeltelijke waarde als 'echte' estHours wegschrijft.
-  if (col.key === 'estHours' && isProrated) {
-    const v = Number(item.estHours) || 0
-    return <span title="Pro-rated naar het periode-filter — wis filter om te bewerken" style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>{v}u</span>
   }
   // dagen: always computed from estHours (or sum of subs), read-only.
   if (col.key === 'dagen') {
