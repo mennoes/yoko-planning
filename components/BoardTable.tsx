@@ -2028,7 +2028,7 @@ function DedupModal({ groups, onClose, onDelete }: {
   if (typeof document === 'undefined') return null
   return createPortal(
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9000, backdropFilter: 'blur(4px)' }} />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 9000 }} />
       <div onClick={e => e.stopPropagation()} style={{
         position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
         width: 'min(620px, 92vw)', maxHeight: '85vh', zIndex: 9001,
@@ -2276,7 +2276,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
   if (typeof document === 'undefined') return null
   return createPortal(
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, backdropFilter: 'blur(3px)' }} />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 9000 }} />
       <div onClick={e => e.stopPropagation()} style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(760px, 96vw)', zIndex: 9001,
