@@ -36,6 +36,7 @@ import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
   effectiveCategory,
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
+  isVrijTitle,
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
 import { loadProfileDaysOff, lookupDaysOff, onProfileDaysOffChange } from '@/lib/profileDaysOff'
@@ -688,8 +689,20 @@ export default function HomePage() {
   const hour      = new Date().getHours()
   const greeting  = hour < 12 ? 'Goedemorgen' : hour < 18 ? 'Goedemiddag' : 'Goedenavond'
   const firstName = profile?.name?.split(' ')[0] ?? ''
-  const openTodos = myTodos.filter(t => !t.done)
-  const doneTodos = myTodos.filter(t => t.done)
+  // Vrij/vakantie-todos uitfilteren — kunnen blijven hangen vanuit
+  // oude auto-seeds (voordat de filter erin zat). Check op naam-pattern
+  // én category-override; toepassen op zowel projectRef-name als text.
+  const isVrijTodo = (t: TodoStoreItem): boolean => {
+    if (t.projectRef) {
+      const refId = `${t.projectRef.board}__${t.projectRef.itemId}`
+      if (categoryOverrides[refId] === 'vrij') return true
+      if (isVrijTitle(t.projectRef.name ?? '')) return true
+    }
+    const firstLine = (t.text ?? '').split('\n')[0] ?? ''
+    return isVrijTitle(firstLine)
+  }
+  const openTodos = myTodos.filter(t => !t.done && !isVrijTodo(t))
+  const doneTodos = myTodos.filter(t => t.done && !isVrijTodo(t))
   const pct       = weekCapacity > 0 ? Math.min(weekHours / weekCapacity, 1) : 0
   const barColor  = pct > 0.9 ? '#e2445c' : pct > 0.6 ? 'var(--accent)' : '#00c875'
 

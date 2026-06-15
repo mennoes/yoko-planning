@@ -3844,9 +3844,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
       {/* Groepen — wrapped in een dropzone zodat hele groepen via header-
           handle naar een andere positie gesleept kunnen worden. */}
-      {/* Geen eigen kader meer — elke groep is z'n eigen 'card' met rondingen.
-          Dat geeft visueel meer rust dan een dubbele rand. */}
-      <div style={{ overflow: 'visible' }}>
+      {/* Op mobile maken we de table-area horizontaal scrollbaar — anders
+          scroll je de hele pagina mee (header + sidebar + alles) wanneer
+          de kolommen breder zijn dan 't scherm. Op desktop blijft 't
+          gewoon overflow: visible zodat popovers er niet door geclipt
+          worden. */}
+      <div style={isMobile
+        ? { overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' as const, margin: '0 -16px', padding: '0 16px' }
+        : { overflow: 'visible' }}>
+        <div style={isMobile ? { minWidth: 720 } : undefined}>
         {filteredGroups.map((group, gIdx) => {
           const isDraggingMe = groupDragging === group.id
           const showLineBefore = groupDrop?.groupId === group.id && groupDrop.side === 'before'
@@ -3980,6 +3986,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             </div>
           )
         })()}
+        </div>
       </div>
 
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
