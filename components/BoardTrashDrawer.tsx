@@ -212,6 +212,23 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
     const map: Record<string, string> = {}
     for (const g of groups) for (const i of g.items) if (i?.id) map[i.id] = (i.name as string) ?? ''
     setItemNameById(map)
+    // Aanvullen vanuit Supabase voor 't geval localStorage leeg is OF
+    // entries verwijzen naar items die we niet meer lokaal hebben.
+    if (supabase) {
+      supabase.from('board_items')
+        .select('id, name')
+        .eq('board_id', boardId)
+        .then(({ data }) => {
+          if (!data) return
+          setItemNameById(prev => {
+            const next = { ...prev }
+            for (const row of data as { id: string; name: string | null }[]) {
+              if (row.id && !next[row.id]) next[row.id] = row.name ?? ''
+            }
+            return next
+          })
+        })
+    }
   }, [open, boardId, busy])
   const { getPhoto } = useTeamPhotos()
 
@@ -489,7 +506,13 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
         const e = ev.e
         const p = e.user_id ? profiles[e.user_id] : null
         const name = p?.name ?? 'Iemand'
-        const actorMemberId = p?.member_id ?? null
+        // Fallback: match profile.name → teamData.members.name wanneer
+        // de profile-row geen member_id heeft. Voorkomt dat avatars
+        // alleen 'M'-initials tonen omdat 't profiel niet aan een
+        // team-lid is gelinkt.
+        const actorMemberId = p?.member_id
+          ?? teamData.members.find(m => m.name && p?.name && m.name.toLowerCase() === p.name.toLowerCase())?.id
+          ?? null
         const photo = actorMemberId ? getPhoto(actorMemberId) : null
         const actorColor = memberColor(actorMemberId ?? '')
         const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
