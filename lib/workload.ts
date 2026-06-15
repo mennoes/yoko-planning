@@ -55,15 +55,6 @@ export const BOARD_COLORS = new Proxy({} as Record<string, string>, {
 export function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
   return groups.flatMap(g =>
     g.items
-      .filter(i => {
-        // Toon óók als de parent zelf geen owners heeft maar er subitems met
-        // owners onder hangen — anders verdwijnt een net-genest project uit
-        // de planning omdat de zojuist-aangemaakte parent leeg is.
-        const ownOwners = Array.isArray(i.ownerIds) && (i.ownerIds as string[]).length > 0
-        if (ownOwners) return true
-        const subs = (i.subitems as Array<{ ownerIds?: string[] }> | undefined)
-        return !!(subs && subs.some(s => Array.isArray(s.ownerIds) && s.ownerIds.length > 0))
-      })
       .flatMap((i): Project[] => {
         const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string }> | undefined) ?? []
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
@@ -80,9 +71,13 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
             // wel iemand als verantwoordelijke heeft staan. Bug die zorgde
             // dat items met onbenoemde subitems uit Home/Werkdruk vielen.
             const subOwners = (si.ownerIds ?? []).filter(o => o && o !== 'unassigned')
+            const parentOwners = (Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : [])
+              .filter(o => o && o !== 'unassigned')
             const owners = subOwners.length > 0
               ? (si.ownerIds as string[])
-              : (i.ownerIds as string[])
+              : parentOwners.length > 0
+                ? (i.ownerIds as string[])
+                : ['unassigned']  // valt door naar de Unassigned-rij in /planning
             return {
               id:        `${boardName}__${i.id}__si${idx}`,
               // Subitem-bar toont alleen de subitem-naam — niet "Parent ·
@@ -118,12 +113,17 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         const hours = activeSubs.length > 0
           ? activeSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
           : (Number(i.estHours) || 0)
+        // Owners zonder eigenaar landen op 'unassigned' zodat ze in de
+        // planning onder de Unassigned-rij verschijnen i.p.v. uit beeld
+        // te verdwijnen.
+        const rawOwners = (Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : []).filter(o => o && o !== 'unassigned')
+        const ownerIds = rawOwners.length > 0 ? (i.ownerIds as string[]) : ['unassigned']
         return [{
           id: `${boardName}__${i.id}`,
           name: i.name as string,
           board: boardName,
           group: g.name,
-          ownerIds:  i.ownerIds  as string[],
+          ownerIds,
           startDate: i.startDate as string | null,
           endDate:   i.endDate   as string | null,
           startTime: (i.startTime as string | null | undefined) ?? null,
