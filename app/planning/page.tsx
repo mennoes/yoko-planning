@@ -15,6 +15,7 @@ import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscrib
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
+import { loadOwnerExcludes, excludeOwner, onOwnerExcludesChange } from '@/lib/ownerOverrides'
 
 // Helper voor synchrone off-day-check binnen render. Leest dezelfde
 // localStorage-cache als countWorkdaysMs, plus 'n Vrij-event-check.
@@ -2783,6 +2784,18 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
                       title="Verwijder owner"
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px', marginLeft: 2 }}>×</button>
                   )}
+                  {isGoogle && (
+                    <button onClick={() => {
+                        // Google-event attendees zijn read-only; we slaan
+                        // de exclude lokaal op zodat 'ie uit /planning verdwijnt
+                        // zonder Google Calendar aan te raken.
+                        excludeOwner(project.id, m.id)
+                        const next = ownerIds.filter(x => x !== m.id)
+                        setOwnerIds(next)
+                      }}
+                      title="Verberg deze owner voor dit item (Google-event blijft ongewijzigd)"
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px', marginLeft: 2 }}>×</button>
+                  )}
                 </span>
               )
             })}
@@ -4063,6 +4076,13 @@ export default function PlanningPage() {
     return s
   }, [allGroups])
 
+  // Owner-excludes: per-item overrides die specifieke owners uit een
+  // project filteren (vooral nuttig voor Google-events waar de attendee-
+  // lijst uit Google komt — bv. Marieke staat als attendee maar werkt niet
+  // aan 't item). Cross-tab synced via storage events.
+  const [ownerExcludesTick, setOwnerExcludesTick] = useState(0)
+  useEffect(() => onOwnerExcludesChange(() => setOwnerExcludesTick(t => t + 1)), [])
+
   const effectiveProjects = useMemo(() => {
     let next = projects
     if (shadowDrag) {
@@ -4079,8 +4099,47 @@ export default function PlanningPage() {
     if (hiddenIds.size > 0) {
       next = next.filter(p => !hiddenIds.has(p.id))
     }
+    // Owner-excludes toepassen: filtert per-project owners uit de
+    // ownerIds-array. Lege owners (na exclude) blijven netjes als
+    // 'unassigned' in de planning verschijnen.
+    void ownerExcludesTick
+    const excludes = loadOwnerExcludes()
+    if (Object.keys(excludes).length > 0) {
+      next = next.map(p => {
+        const excl = excludes[p.id]
+        if (!excl || excl.length === 0) return p
+        const filtered = p.ownerIds.filter(id => !excl.includes(id))
+        const finalOwners = filtered.length === 0 ? ['unassigned'] : filtered
+        if (finalOwners.length === p.ownerIds.length) return p
+        const oh = p.ownerHours
+        const nextOh = oh ? Object.fromEntries(Object.entries(oh).filter(([k]) => !excl.includes(k))) : oh
+        return { ...p, ownerIds: finalOwners, ownerHours: nextOh }
+      })
+    }
     return next
-  }, [projects, shadowDrag, zoom, hiddenIds])
+  }, [projects, shadowDrag, zoom, hiddenIds, ownerExcludesTick])
+
+  // Inactieve freelancers: freelancers zonder activiteit in de afgelopen
+  // 2 maanden EN zonder activiteit in de komende 3 maanden zijn waar-
+  // schijnlijk niet relevant voor de huidige planning. We laten ze
+  // standaard weg zodat de lijst overzichtelijk blijft. Een freelancer
+  // kan altijd zichtbaar gemaakt worden via de filter-UI.
+  const activeFreelancerIds = useMemo(() => {
+    const now = Date.now()
+    const winStart = now - 60 * 86400000   // 2 maanden terug
+    const winEnd   = now + 90 * 86400000   // 3 maanden vooruit
+    const active = new Set<string>()
+    for (const p of effectiveProjects) {
+      if (!p.startDate && !p.endDate) continue
+      const s = p.startDate ? new Date(p.startDate).getTime() : (p.endDate ? new Date(p.endDate).getTime() : NaN)
+      const e = p.endDate   ? new Date(p.endDate).getTime() + 86400000 : (p.startDate ? new Date(p.startDate).getTime() + 86400000 : NaN)
+      if (isNaN(s) || isNaN(e)) continue
+      if (e < winStart || s > winEnd) continue
+      for (const oid of p.ownerIds) active.add(oid)
+    }
+    return active
+  }, [effectiveProjects])
+  const isFreelancerActive = (id: string) => activeFreelancerIds.has(id)
 
   // Compute view constants
   const { cs, or, hh, av } = vc(viewSize)
@@ -5251,7 +5310,10 @@ export default function PlanningPage() {
               .filter(m => isYokoCrew(m.id) && isMemberVisible(m.id))
               .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
             const unassignedVisible = team.filter(m => m.id === 'unassigned' && isMemberVisible(m.id))
-            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id))
+            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id)
+              // Verberg freelancers zonder activiteit in [-2mnd, +3mnd]
+              // tenzij de gebruiker 'm expliciet via 't filter aanzet.
+              && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
             // Focus-mode: zelfde gedrag als in Overzicht — wanneer iemand
             // is uitgeklapt dempen we de andere rijen zodat de uitgevouwen
@@ -5384,7 +5446,10 @@ export default function PlanningPage() {
                 return 0
               })
             const unassigned   = visible.filter(m => m.id === 'unassigned')
-            const freelancers  = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned')
+            const freelancers  = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned'
+              // Verberg inactieve freelancers (geen werk in [-2mnd, +3mnd])
+              // tenzij gebruiker 'm expliciet via 't filter aanzet.
+              && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
             const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; isOpen?: boolean }) => (
               <div onClick={opts?.onClick}
