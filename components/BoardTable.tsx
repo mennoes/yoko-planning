@@ -172,36 +172,75 @@ function PortalDropdown({ anchor, onClose, children }: {
 // totaal (own + subs) in displaymodus, opent een input met alléén de
 // 'own'-waarde in editmodus zodat de gebruiker z'n extra-uren los van
 // de rollup kan invullen. Geen tekstuele hint — de display IS de som.
-function EstHoursSummedCell({ own, subsSum, onChange }: {
-  own:     number
-  subsSum: number
+function EstHoursSummedCell({ own, ownEdit, subsSum, isProrated, onChange }: {
+  own:        number    // huidige display-waarde van item.estHours (kan pro-rated zijn)
+  ownEdit?:   number    // waarde die in de input verschijnt (= origineel)
+  subsSum:    number    // som van subitem.estHours (kan pro-rated zijn)
+  isProrated?: boolean
   onChange: (v: number) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
-  function start() { setDraft(own ? String(own) : ''); setEditing(true) }
+  const editV = ownEdit ?? own
+  function start() { setDraft(editV ? String(editV) : ''); setEditing(true) }
   function save()  { onChange(parseFloat(draft) || 0); setEditing(false) }
-  const total = own + subsSum
+  const round = (n: number) => Math.round(n * 10) / 10
+  const total = round(own + subsSum)
   if (editing) return (
-    <input autoFocus
-      type="number"
-      value={draft}
+    <input autoFocus type="number" value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={save}
       onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-      style={editInput}
-    />
+      style={editInput} />
   )
   return (
     <div onClick={start}
-      title={own > 0 ? `Eigen ${own}u + ${subsSum}u uit subs = ${total}u` : `${subsSum}u uit subs`}
+      title={isProrated
+        ? `Periode-fractie · klik om de echte item-uren te wijzigen (${editV}u)`
+        : (own > 0 ? `Eigen ${own}u + ${subsSum}u uit subs = ${total}u` : `${subsSum}u uit subs`)}
       style={{
         padding: '0 4px', cursor: 'pointer', fontSize: 13,
         color: total > 0 ? 'var(--text-secondary)' : 'var(--text-muted)',
+        fontStyle: isProrated ? 'italic' : 'normal',
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         userSelect: 'none', width: '100%',
       }}>
       {total > 0 ? total : '—'}
+    </div>
+  )
+}
+
+// Cell die in pro-rated mode 't eerlijk-verdeelde display-getal toont,
+// maar bij klik de ECHTE (originele) waarde in de input zet zodat de
+// gebruiker tegen z'n eigen invoer schrijft en niet tegen de
+// pro-rated-fractie. Buiten pro-rated mode = gewone numeric cell.
+function ProRatableNumberCell({ displayValue, editValue, isProrated, onChange }: {
+  displayValue: number
+  editValue:    number
+  isProrated:   boolean
+  onChange: (v: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft,   setDraft]   = useState('')
+  function start() { setDraft(editValue ? String(editValue) : ''); setEditing(true) }
+  function save()  { onChange(parseFloat(draft) || 0); setEditing(false) }
+  const round = (n: number) => Math.round(n * 10) / 10
+  if (editing) return (
+    <input autoFocus type="number" value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={save}
+      onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+      style={editInput} />
+  )
+  return (
+    <div onClick={start}
+      title={isProrated ? `Periode-fractie van ${editValue}u — klik om de echte uren te wijzigen` : undefined}
+      style={{ padding: '0 4px', cursor: 'pointer', fontSize: 13,
+        color: displayValue ? 'var(--text-secondary)' : 'var(--text-muted)',
+        fontStyle: isProrated ? 'italic' : 'normal',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        userSelect: 'none', width: '100%' }}>
+      {displayValue ? round(displayValue) : '—'}
     </div>
   )
 }
@@ -1043,10 +1082,21 @@ function Cell({ item, col, onUpdate }: {
   // Bij klik op de cel komt de eigen waarde van item.estHours in een
   // input zodat de gebruiker die kan aanpassen — totaal beweegt mee.
   if (col.key === 'estHours' && hasSubs) {
+    // Bij actief periode-filter zijn item.estHours en subitem.estHours
+    // pro-rated. We tonen 't pro-rated totaal in de cel maar geven de
+    // edit-input de ECHTE eigen waarde uit __originalEstHours zodat
+    // typen tegen de echte uren werkt, niet tegen de fractie.
+    const ownOrig = (item as { __originalEstHours?: number }).__originalEstHours
+    const isProrated = typeof ownOrig === 'number'
+    const ownEditValue = isProrated ? ownOrig! : (Number(item.estHours) || 0)
+    const subsDisplaySum = (item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+    const ownDisplay = Number(item.estHours) || 0
     return (
       <EstHoursSummedCell
-        own={Number(item.estHours) || 0}
-        subsSum={(item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)}
+        own={ownDisplay}
+        ownEdit={ownEditValue}
+        subsSum={subsDisplaySum}
+        isProrated={isProrated}
         onChange={v => onUpdate({ estHours: v })}
       />
     )
@@ -1141,8 +1191,24 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         </div>
       case 'timeline':
         return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
-      case 'estHours':
-        return <div style={cellBorder}><EditableCell value={subitem.estHours ?? null} inputType="number" onChange={v => onUpdate({ estHours: Number(v) || 0 })} /></div>
+      case 'estHours': {
+        // Pro-rated mode: cel toont eerlijk-verdeelde uren (subitem.estHours
+        // is dan al pro-rated door de filter-map). Bij klik krijgt de
+        // gebruiker een input met de ECHTE waarde (__originalEstHours)
+        // zodat 'r ie die kan aanpassen — geen pro-rated overschrijf-bug.
+        const orig = (subitem as { __originalEstHours?: number }).__originalEstHours
+        const isProrated = typeof orig === 'number'
+        return (
+          <div style={cellBorder}>
+            <ProRatableNumberCell
+              displayValue={subitem.estHours ?? 0}
+              editValue={isProrated ? orig! : (subitem.estHours ?? 0)}
+              isProrated={isProrated}
+              onChange={v => onUpdate({ estHours: Number(v) || 0 })}
+            />
+          </div>
+        )
+      }
       case 'echtGewerkt':
         return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
       default:
@@ -3409,23 +3475,52 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           return true
         })
         .map(item => {
-          // Periode-filter: alleen visibility-filter, GEEN pro-rate van uren.
-          // Pro-raten leverde verwarrende getallen op bij bewerken (een
-          // 24u-subitem toonde 4.4u, terwijl invullen wél de echte 24u
-          // overschreef). Nu blijven de waarden gewoon de echte uren —
-          // sum/totaal = werkelijke som. Pro-rate-logica is verwijderd.
           if (from === null && until === null) return item
+          // Pro-rate: bij actief periode-filter schalen we uren naar
+          // het deel dat ECHT in de range valt. Display (cel + Som +
+          // Totaal) toont de eerlijk-verdeelde uren; bewerken werkt
+          // tegen de ECHTE estHours via __originalEstHours.
           if (item.subitems && item.subitems.length > 0) {
-            // Subitems die buiten de periode vallen filteren we weg uit
-            // de weergave; binnen-periode-subs blijven onveranderd.
             const visible = item.subitems.filter(s => overlapsRange(s.startDate, s.endDate))
-            return { ...item, subitems: visible.length > 0 ? visible : item.subitems } as BoardItem
+            const subs = visible.length > 0 ? visible : item.subitems
+            const prorated = subs.map(s => {
+              const orig = Number(s.estHours) || 0
+              return {
+                ...s,
+                estHours: prorate(orig, s.startDate, s.endDate),
+                __originalEstHours: orig,
+              }
+            })
+            const ownOrig = Number(item.estHours) || 0
+            const ownPro  = prorate(ownOrig, item.startDate, item.endDate)
+            return {
+              ...item,
+              subitems: prorated,
+              estHours: ownPro,
+              __originalEstHours: ownOrig,
+              __prorated: true,
+            } as BoardItem
           }
-          // Top-level items zonder subs: gewoon doorlaten met echte uren.
+          // Top-level zonder subs: zelfde aanpak.
+          const newHours = prorate(Number(item.estHours) || 0, item.startDate, item.endDate)
+          let proOwnerHours = item.ownerHours
+          if (item.ownerHours && Object.keys(item.ownerHours).length > 0) {
+            const oldHours = Number(item.estHours) || 0
+            if (oldHours > 0) {
+              const factor = newHours / oldHours
+              const scaled: Record<string, number> = {}
+              for (const [k, v] of Object.entries(item.ownerHours)) {
+                scaled[k] = Math.round((Number(v) || 0) * factor * 10) / 10
+              }
+              proOwnerHours = scaled
+            }
+          }
           return {
             ...item,
-            estHours: Number(item.estHours) || 0,
-            ownerHours: item.ownerHours,
+            estHours: newHours,
+            ownerHours: proOwnerHours,
+            __originalEstHours: Number(item.estHours) || 0,
+            __prorated: true,
           } as BoardItem
         }),
     })).filter(g => g.items.length > 0)
