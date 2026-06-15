@@ -557,8 +557,9 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
 type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; startY: number; origStart: string | null; origEnd: string | null }
 
-function DraggableBar({ project, memberId, left, width, colW, small, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
+function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
+  team?: TeamMember[]
   left: number; width: number; colW: number
   small?: boolean
   // Wanneer scaleByHours=true (week/overzicht zoom) schaalt de bar-hoogte mee
@@ -610,6 +611,38 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
   const color   = isVrij
     ? CAT_COLOR.vrij
     : (small ? '#D8B62E' : (BOARD_COLORS[project.board] ?? '#888'))
+  // Multi-owner-visualisatie: bij meerdere eigenaars splitsen we de
+  // bar-fill in horizontale segmenten naar verhouding van ownerHours.
+  // Een 'Np'-pill rechts toont 't aantal mensen — zo zie je in één
+  // oogopslag dat 'r meerdere mensen aan werken én wie hoeveel.
+  const realOwners = project.ownerIds.filter(id => id !== 'unassigned')
+  const ownerCount = realOwners.length
+  const isMultiOwner = !isVrij && !small && ownerCount > 1
+  const ownerSegments: { color: string; pct: number }[] = (() => {
+    if (!isMultiOwner) return []
+    const oh = project.ownerHours ?? {}
+    const totalAssigned = realOwners.reduce((s, id) => s + (Number(oh[id]) || 0), 0)
+    const fallback = (project.estHours || ownerCount) / ownerCount
+    const list = realOwners.map(id => ({
+      color: (team ?? []).find(t => t.id === id)?.color ?? color,
+      hours: totalAssigned > 0 ? (Number(oh[id]) || 0) : fallback,
+    }))
+    const sum = list.reduce((s, x) => s + x.hours, 0) || 1
+    return list.map(x => ({ color: x.color, pct: (x.hours / sum) * 100 }))
+  })()
+  const multiOwnerGradient = isMultiOwner && ownerSegments.length > 1
+    ? (() => {
+        let acc = 0
+        const stops: string[] = []
+        for (const s of ownerSegments) {
+          const start = acc
+          const end = acc + s.pct
+          stops.push(`${s.color} ${start}% ${end}%`)
+          acc = end
+        }
+        return `linear-gradient(to right, ${stops.join(', ')})`
+      })()
+    : null
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
   const reassignRef = useRef<string | null>(null)
@@ -804,7 +837,7 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
         onMouseEnter={() => setHoverBar(true)}
         onMouseLeave={() => setHoverBar(false)}
         style={{ position: 'absolute', top: barTop, left: g.left + 2, width: g.width, height: barH,
-          background: color, borderRadius: 4, display: 'flex', alignItems: 'center',
+          background: multiOwnerGradient ?? color, borderRadius: 4, display: 'flex', alignItems: 'center',
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 500, color: '#fff',
           cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
           pointerEvents: 'auto',
@@ -827,6 +860,17 @@ function DraggableBar({ project, memberId, left, width, colW, small, laneH, scal
               {project.name}{project.group ? ` | ${project.group}` : ''}
             </span>
             {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
+            {isMultiOwner && (
+              <span aria-label={`${ownerCount} mensen`} title={`${ownerCount} mensen werken aan dit item`}
+                style={{
+                  flexShrink: 0, marginLeft: project.source === 'google' ? 4 : 'auto',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 18, height: 14, padding: '0 5px',
+                  borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: '#fff',
+                  fontSize: 9, fontWeight: 800, letterSpacing: '0.02em',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
+                }}>{ownerCount}p</span>
+            )}
           </span>
           {/* Parent-context: tweede regel met pijltje + parent-naam zodra
               project een subitem-afgeleide is. Geeft visueel meteen
@@ -1721,8 +1765,9 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   )
 }
 
-function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, rowScale, onDragMove, onDragEnd, onBarClick, onReassign }: {
+function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, onDragMove, onDragEnd, onBarClick, onReassign }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
+  team?: TeamMember[]
   zoom: ZoomLevel
   hideMeetings?: boolean
   // Verticale zoom-schaal (1.0 = default). Schaalt BAR_H/BAR_GAP/PROJECT_LANE_H
@@ -2076,7 +2121,7 @@ function TimelineBars({ memberId, projects, cols, colW, zoom, hideMeetings, rowS
         // Google-events. scaleByHours actief in week-zoom voor projecten.
         return (
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
-            <MeetingHoverBar project={b.p} memberId={memberId} left={b.left} width={b.width} colW={colW}
+            <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
               laneH={wrapperH}
               scaleByHours={b.track !== 'meeting' && zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
@@ -2099,9 +2144,10 @@ const MEETING_BAR_H = 18
 // Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
 // gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
 // met naam, tijd, uren en link naar Google Calendar.
-function MeetingHoverBar({ project, memberId, left, width, colW, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
+function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project
   memberId: string
+  team?: TeamMember[]
   left: number
   width: number
   colW: number
@@ -2146,7 +2192,7 @@ function MeetingHoverBar({ project, memberId, left, width, colW, laneH, scaleByH
       onMouseEnter={openPopover}
       onMouseLeave={schedule}
       style={{ position: 'absolute', top: 0, left: 0, right: 0, height: laneH, pointerEvents: 'none' }}>
-      <DraggableBar project={project} memberId={memberId} left={left} width={width} colW={colW} small={false}
+      <DraggableBar project={project} memberId={memberId} team={team} left={left} width={width} colW={colW} small={false}
         laneH={laneH} scaleByHours={scaleByHours ?? false}
         onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
@@ -5439,7 +5485,7 @@ export default function PlanningPage() {
                   <div style={{ display: 'flex' }}>
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
-                      <TimelineBars memberId={member.id} projects={effectiveProjects} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
+                      <TimelineBars memberId={member.id} projects={effectiveProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         rowScale={rowScale}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
                         onReassign={handleReassignOwner} />
