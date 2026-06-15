@@ -5238,9 +5238,8 @@ export default function PlanningPage() {
                       const handleEmptyClick = (ev: React.MouseEvent) => {
                         if (ev.target !== ev.currentTarget) return  // niet op de bol
                         const startIso = col.rangeStart.toISOString().slice(0, 10)
-                        const endIso   = (zoom === 'week'
-                          ? new Date(col.rangeStart.getTime() + 4 * 86400000) // ma-vr blok
-                          : col.rangeStart).toISOString().slice(0, 10)
+                        // Dag-zoom: één-dags item op de geklikte kolom.
+                        const endIso   = startIso
                         openNewItemAt({ memberId: m.id, startDate: startIso, endDate: endIso })
                       }
                       return (
