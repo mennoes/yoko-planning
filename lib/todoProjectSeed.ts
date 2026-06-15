@@ -13,7 +13,7 @@
 
 import { loadGroups } from './boardStore'
 import type { BoardGroup } from './boards'
-import { isVrijTitle } from './workloadCategory'
+import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -38,6 +38,7 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
   if (typeof window === 'undefined') return []
   const today = new Date().toISOString().slice(0, 10)
   const out: ProjectSeedLink[] = []
+  const catOverrides = loadCategoryOverrides()
   for (const [board, raw] of Object.entries(RAW)) {
     const groups = loadGroups(board, raw.groups)
     for (const g of groups) {
@@ -48,7 +49,11 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
         // Vrij/vakantie items horen niet in todos — geen actie nodig.
+        // Check zowel naam-pattern als category-override (gebruiker kan
+        // 'm via planning-popup expliciet op 'vrij' zetten).
+        const projectId = `${board}__${item.id}`
         if (isVrijTitle(item.name as string)) continue
+        if (catOverrides[projectId] === 'vrij') continue
         const parentOwnerIds = Array.isArray(item.ownerIds) ? item.ownerIds : []
         const parentOwns = parentOwnerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
@@ -56,11 +61,6 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
         if (parentOwns && !parentExpired) {
           out.push({ board, itemId: item.id, name: item.name })
         }
-        // Subitem-todos: alleen wanneer 't subitem EXPLICIET aan deze
-        // member is toegewezen ÉN de parent niet (anders dekt de parent-
-        // entry 't al). Voorkomt de oude lawine van automatische
-        // subitem-todos terwijl iemand wel hun specifieke subitem
-        // ziet zoals 'n boekomslag of episode.
         const subs = (item.subitems as Array<{ id?: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
         if (parentOwns) continue
         subs.forEach((si, idx) => {
@@ -71,6 +71,8 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
           if (subEnd && subEnd < today) return
           const subName = si.name && si.name.trim().length > 0 ? si.name : item.name
           if (isVrijTitle(subName as string)) return
+          const subProjectId = `${board}__${item.id}__si${idx}`
+          if (catOverrides[subProjectId] === 'vrij') return
           // Parent-context op tweede regel — renderer splits op '\n'.
           out.push({ board, itemId: `${item.id}__si${idx}`,
             name: `${subName}\n↳ ${item.name}` })

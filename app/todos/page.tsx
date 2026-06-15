@@ -19,7 +19,7 @@ import vlaanderenRaw from '@/data/boards/vlaanderen.json'
 import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import { loadGroups } from '@/lib/boardStore'
 import { BOARD_COLORS } from '@/lib/workload'
-import { isVrijTitle } from '@/lib/workloadCategory'
+import { isVrijTitle, loadCategoryOverrides } from '@/lib/workloadCategory'
 import { TextWithItemRefs } from '@/components/ItemRefChip'
 import type { BoardGroup } from '@/lib/boards'
 import {
@@ -79,6 +79,7 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
   if (typeof window === 'undefined') return []
   const today = new Date().toISOString().slice(0, 10)
   const out: ProjectLink[] = []
+  const catOverrides = loadCategoryOverrides()
   for (const [board, raw] of Object.entries(RAW)) {
     const groups = loadGroups(board, raw.groups as BoardGroup[])
     for (const g of groups) {
@@ -88,8 +89,12 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
-        // Vrij/vakantie items horen niet in todos.
+        // Vrij/vakantie items horen niet in todos — check zowel naam-
+        // pattern als category-override (gebruiker kan 'm via planning-
+        // popup expliciet op 'vrij' zetten).
+        const projectId = `${board}__${item.id}`
         if (isVrijTitle(item.name as string)) continue
+        if (catOverrides[projectId] === 'vrij') continue
         const parentOwnerIds = Array.isArray(item.ownerIds) ? item.ownerIds : []
         const parentOwns = parentOwnerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
@@ -115,6 +120,8 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
           if (subEnd && subEnd < today) return
           const subName = si.name && si.name.trim().length > 0 ? si.name : item.name
           if (isVrijTitle(subName as string)) return
+          const subProjectId = `${board}__${item.id}__si${idx}`
+          if (catOverrides[subProjectId] === 'vrij') return
           // Parent-context op tweede regel via '\n' + pijltje, zelfde
           // patroon als de subitem-bars in /planning. Renderer splits 'm
           // op '\n' en maakt de tweede regel kleiner.

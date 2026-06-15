@@ -5329,17 +5329,39 @@ export default function PlanningPage() {
             const renderPerson = (m: TeamMember) => {
               const isExp = expanded.has(m.id)
               const dim = dagFocusMode && !isExp
+              const realIdx = team.findIndex(t => t.id === m.id)
+              const isFirst = realIdx === 0
+              const isLast  = realIdx === team.length - 1
               const header = (
-                <button onClick={() => toggleExpand(m.id)}
-                  title={isExp ? 'Inklappen' : 'Uitvouwen'}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer',
-                    width: '100%', height: '100%', minWidth: 0, padding: `0 12px 0 ${namePad}px`, textAlign: 'left' }}>
-                  <span style={{ fontSize: 9, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)',
-                    display: 'inline-block', width: 10, transform: isExp ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▼</span>
-                  <MemberAvatar member={m} size={av} />
-                  <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', minWidth: 0, paddingLeft: editOrder ? namePad - 4 : namePad, paddingRight: 6, gap: 6 }}>
+                  <button onClick={() => { if (!editOrder) toggleExpand(m.id) }}
+                    title={editOrder ? '' : (isExp ? 'Inklappen' : 'Uitvouwen')}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none',
+                      cursor: editOrder ? 'default' : 'pointer',
+                      flex: 1, height: '100%', minWidth: 0, padding: 0, textAlign: 'left' }}>
+                    <span style={{ fontSize: 9, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)',
+                      display: 'inline-block', width: 10, transform: isExp ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▼</span>
+                    <MemberAvatar member={m} size={av} />
+                    <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                  </button>
+                  {editOrder && (
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                      <button onClick={() => moveTeamMember(realIdx, -1)} disabled={isFirst} title="Omhoog"
+                        style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                          color: isFirst ? 'var(--text-muted)' : 'var(--text-primary)',
+                          cursor: isFirst ? 'not-allowed' : 'pointer',
+                          fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                          opacity: isFirst ? 0.4 : 1, minHeight: 22, minWidth: 22 }}>↑</button>
+                      <button onClick={() => moveTeamMember(realIdx, 1)} disabled={isLast} title="Omlaag"
+                        style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                          color: isLast ? 'var(--text-muted)' : 'var(--text-primary)',
+                          cursor: isLast ? 'not-allowed' : 'pointer',
+                          fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                          opacity: isLast ? 0.4 : 1, minHeight: 22, minWidth: 22 }}>↓</button>
+                    </div>
+                  )}
+                </div>
               )
               // Workload-bollen per dag, bovenop het Google-Cal raster.
               // Zelfde bol-stijl als Overzicht zodat de visuele continuïteit
