@@ -978,13 +978,12 @@ function Cell({ item, col, onUpdate }: {
   if (col.type === 'url')       return <UrlCell       value={(item[col.key] as string) ?? ''} onChange={v => onUpdate({ [col.key]: v })} />
 
   const hasSubs = (item.subitems?.length ?? 0) > 0
-  const isProrated = Boolean((item as unknown as { __prorated?: boolean }).__prorated)
 
   // estHours: ook bij subitems én bij actief periode-filter is 't veld
   // bewerkbaar. We tonen 't TOTAAL = item.estHours + som-van-subs.
   // Bij klik op de cel komt de eigen waarde van item.estHours in een
   // input zodat de gebruiker die kan aanpassen — totaal beweegt mee.
-  if (col.key === 'estHours' && (hasSubs || isProrated)) {
+  if (col.key === 'estHours' && hasSubs) {
     return (
       <EstHoursSummedCell
         own={Number(item.estHours) || 0}
@@ -1083,16 +1082,8 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         </div>
       case 'timeline':
         return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
-      case 'estHours': {
-        // In pro-rated mode (actief periode-filter) is subitem.estHours
-        // de pro-rated weergave (bv. 4.4 i.p.v. 24). Toon dan de
-        // originele waarde uit __originalEstHours zodat de gebruiker
-        // niet z'n echte uren overschrijft door de pro-rated som over
-        // te typen.
-        const orig = (subitem as { __originalEstHours?: number }).__originalEstHours
-        const shown = typeof orig === 'number' ? orig : (subitem.estHours ?? 0)
-        return <div style={cellBorder}><EditableCell value={shown || null} inputType="number" onChange={v => onUpdate({ estHours: (v as number) ?? 0 })} /></div>
-      }
+      case 'estHours':
+        return <div style={cellBorder}><EditableCell value={subitem.estHours ?? null} inputType="number" onChange={v => onUpdate({ estHours: Number(v) || 0 })} /></div>
       case 'echtGewerkt':
         return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
       default:
