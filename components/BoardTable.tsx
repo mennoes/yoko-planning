@@ -252,6 +252,7 @@ function EditableCell({
 // ─── Status cel ───────────────────────────────────────────────────────────────
 function StatusCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [hover, setHover] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
   const opt = STATUS_OPTIONS.find(s => s.label === value) ?? STATUS_OPTIONS[0]
 
@@ -260,16 +261,30 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
       {/* Vol-cel status-tag: vult de hele rij-cel met de status-kleur
           zodat de kolom in één oogopslag visueel scant. Geen rond pilletje
           meer met witruimte eromheen. */}
-      <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
-        width: '100%', height: '100%',
-        padding: '0 10px', borderRadius: 0, cursor: 'pointer', border: 'none',
-        background: opt.color || 'var(--overlay-medium)',
-        color: opt.color ? '#fff' : 'var(--text-muted)',
-        fontSize: 12.5, fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
-        whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden', textOverflow: 'ellipsis',
-      }}>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          position: 'relative',
+          width: '100%', height: '100%',
+          padding: '0 10px', borderRadius: 0, cursor: 'pointer', border: 'none',
+          background: opt.color || 'var(--overlay-medium)',
+          color: opt.color ? '#fff' : 'var(--text-muted)',
+          fontSize: 12.5, fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
+          whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
         {value || '—'}
+        {/* Monday-stijl hover-driehoekje in de rechterbovenhoek: signaleert
+            'klikbaar — verander mij'. CSS-driehoek via transparente borders. */}
+        {hover && (
+          <span aria-hidden style={{
+            position: 'absolute', top: 0, right: 0,
+            width: 0, height: 0, pointerEvents: 'none',
+            borderTop: '10px solid rgba(255,255,255,0.55)',
+            borderLeft: '10px solid transparent',
+          }} />
+        )}
       </button>
 
       {open && (
@@ -753,13 +768,29 @@ function DateRangeCell({
   onChange: (s: string | null, e: string | null) => void
 }) {
   const { color } = useContext(GroupCtx)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]   = useState(false)
+  const [hover, setHover] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
 
   const today   = new Date().toISOString().split('T')[0]
   const isLate  = !!endDate && endDate < today
   const hasAny  = startDate || endDate
   const pillClr = isLate ? '#e2445c' : color
+
+  // Inclusieve dagen tussen start en eind. Monday-stijl toont 'Xd' bij
+  // hover. Voor week+ groeperen we naar 'Yw Zd' zodat lange ranges
+  // niet als '83d' verschijnen.
+  function durationLabel(): string | null {
+    if (!startDate) return null
+    const s = new Date(startDate).getTime()
+    const e = new Date(endDate ?? startDate).getTime()
+    const days = Math.round((e - s) / 86400000) + 1
+    if (days <= 0) return null
+    if (days < 7)   return `${days}d`
+    const w = Math.floor(days / 7)
+    const d = days - w * 7
+    return d === 0 ? `${w}w` : `${w}w ${d}d`
+  }
 
   // Progress bar: how far we are through the project's timeline.
   // 0% = before start, 100% = at/past end. Late items fill 100% in red.
@@ -774,16 +805,22 @@ function DateRangeCell({
   }
   const progressPct = Math.round(progress * 100)
 
+  const dur = durationLabel()
+  const showDuration = hover && hasAny && !!dur
+
   return (
     <div style={{ width: '100%' }}>
-      <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
-        position: 'relative', overflow: 'hidden',
-        width: '100%', textAlign: 'left', cursor: 'pointer',
-        border: hasAny ? `1px solid ${pillClr}55` : 'none',
-        borderRadius: 999, padding: '5px 14px',
-        background: hasAny ? pillClr + '22' : 'transparent',
-        display: 'flex', alignItems: 'center', gap: 5, minHeight: 30,
-      }}>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          position: 'relative', overflow: 'hidden',
+          width: '100%', textAlign: 'left', cursor: 'pointer',
+          border: hasAny ? `1px solid ${pillClr}55` : 'none',
+          borderRadius: 999, padding: '5px 14px',
+          background: hasAny ? pillClr + '22' : 'transparent',
+          display: 'flex', alignItems: 'center', gap: 5, minHeight: 30,
+        }}>
         {hasAny && (
           <span style={{
             position: 'absolute', inset: 0, width: `${progressPct}%`,
@@ -793,7 +830,7 @@ function DateRangeCell({
         )}
         {hasAny ? (
           <>
-            {isLate && (
+            {isLate && !showDuration && (
               <span style={{
                 position: 'relative', zIndex: 1,
                 width: 14, height: 14, borderRadius: 3, flexShrink: 0,
@@ -802,13 +839,26 @@ function DateRangeCell({
                 fontSize: 9, fontWeight: 900, color: '#fff',
               }}>!</span>
             )}
-            <span title={`${progressPct}% verstreken`}
+            <span title={`${progressPct}% verstreken · ${dur ?? ''}`}
               style={{ position: 'relative', zIndex: 1, fontSize: 13, fontWeight: 600,
                 color: progressPct > 35 ? '#fff' : 'var(--text-primary)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                flex: 1, textAlign: 'center',
                 textShadow: progressPct > 35 ? '0 1px 1px rgba(0,0,0,0.2)' : 'none' }}>
-              {fmtRange(startDate, endDate)}
+              {showDuration ? dur : fmtRange(startDate, endDate)}
             </span>
+            {showDuration && (
+              <span onClick={ev => { ev.stopPropagation(); onChange(null, null) }}
+                title="Datums wissen"
+                style={{ position: 'relative', zIndex: 2,
+                  width: 18, height: 18, borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.35)', color: '#fff',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  marginLeft: 2 }}>
+                ×
+              </span>
+            )}
           </>
         ) : (
           <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>
