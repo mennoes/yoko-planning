@@ -13,6 +13,7 @@
 
 import { loadGroups } from './boardStore'
 import type { BoardGroup } from './boards'
+import { isVrijTitle } from './workloadCategory'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -46,6 +47,8 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
+        // Vrij/vakantie items horen niet in todos — geen actie nodig.
+        if (isVrijTitle(item.name as string)) continue
         const parentOwnerIds = Array.isArray(item.ownerIds) ? item.ownerIds : []
         const parentOwns = parentOwnerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
@@ -67,7 +70,10 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
           const subEnd = si.endDate ?? si.startDate
           if (subEnd && subEnd < today) return
           const subName = si.name && si.name.trim().length > 0 ? si.name : item.name
-          out.push({ board, itemId: `${item.id}__si${idx}`, name: `${subName} (in ${item.name})` })
+          if (isVrijTitle(subName as string)) return
+          // Parent-context op tweede regel — renderer splits op '\n'.
+          out.push({ board, itemId: `${item.id}__si${idx}`,
+            name: `${subName}\n↳ ${item.name}` })
         })
       }
     }

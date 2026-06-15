@@ -19,6 +19,7 @@ import vlaanderenRaw from '@/data/boards/vlaanderen.json'
 import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import { loadGroups } from '@/lib/boardStore'
 import { BOARD_COLORS } from '@/lib/workload'
+import { isVrijTitle } from '@/lib/workloadCategory'
 import { TextWithItemRefs } from '@/components/ItemRefChip'
 import type { BoardGroup } from '@/lib/boards'
 import {
@@ -87,6 +88,8 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
+        // Vrij/vakantie items horen niet in todos.
+        if (isVrijTitle(item.name as string)) continue
         const parentOwnerIds = Array.isArray(item.ownerIds) ? item.ownerIds : []
         const parentOwns = parentOwnerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
@@ -111,7 +114,12 @@ function loadMyOpenProjects(memberId: string): ProjectLink[] {
           const subEnd = si.endDate ?? si.startDate
           if (subEnd && subEnd < today) return
           const subName = si.name && si.name.trim().length > 0 ? si.name : item.name
-          out.push({ board, itemId: `${item.id}__si${idx}`, name: `${subName} (in ${item.name})`,
+          if (isVrijTitle(subName as string)) return
+          // Parent-context op tweede regel via '\n' + pijltje, zelfde
+          // patroon als de subitem-bars in /planning. Renderer splits 'm
+          // op '\n' en maakt de tweede regel kleiner.
+          out.push({ board, itemId: `${item.id}__si${idx}`,
+            name: `${subName}\n↳ ${item.name}`,
             startDate: si.startDate ?? null,
             endDate:   si.endDate ?? si.startDate ?? null })
         })
@@ -767,8 +775,20 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
             onClick={editOrder ? undefined : onEditStart}
             onDoubleClick={editOrder ? undefined : onEditStart}
             title={editOrder ? undefined : 'Klik om te bewerken'}
-            style={{ fontSize: 16, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0 }}>
-            <TextWithItemRefs text={item.text} compact />
+            style={{ fontSize: 16, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {(() => {
+              const lines = (item.text ?? '').split('\n')
+              const main = lines[0] ?? ''
+              const rest = lines.slice(1)
+              return (
+                <>
+                  <TextWithItemRefs text={main} compact />
+                  {rest.map((line, i) => (
+                    <span key={i} style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, lineHeight: 1.2 }}>{line}</span>
+                  ))}
+                </>
+              )
+            })()}
           </span>
         )}
         {item.projectRef && (
