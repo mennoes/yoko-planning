@@ -3112,8 +3112,31 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const [search,        setSearch]       = useState('')
   const [filterOwner,   setFilterOwner]  = useState('')
   const [filterStatus,  setFilterStatus] = useState('')
+  // Periode-filter blijft persistent per bord in localStorage zodat
+  // de gebruiker bij terugkeer niet opnieuw datums hoeft te tikken.
+  const periodKey = `yoko:periodFilter:${boardId}`
   const [filterFrom,    setFilterFrom]   = useState('')  // YYYY-MM-DD
   const [filterUntil,   setFilterUntil]  = useState('')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(periodKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { from?: string; until?: string }
+      if (parsed.from)  setFilterFrom(parsed.from)
+      if (parsed.until) setFilterUntil(parsed.until)
+    } catch {}
+  }, [periodKey])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      if (filterFrom || filterUntil) {
+        window.localStorage.setItem(periodKey, JSON.stringify({ from: filterFrom, until: filterUntil }))
+      } else {
+        window.localStorage.removeItem(periodKey)
+      }
+    } catch {}
+  }, [periodKey, filterFrom, filterUntil])
   const [editingTitle,  setEditingTitle] = useState(false)
   const [selectedIds,   setSelectedIds]  = useState<Set<string>>(new Set())
   // Default sort: timeline-asc — items met vroegste startdatum komen
