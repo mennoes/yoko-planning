@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom'
 // veilig.
 import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
+import { setBoardColumns } from '@/lib/boardsRegistry'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { useTeam }        from './TeamContext'
@@ -3241,6 +3242,113 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
 // Auto-move Done items → de helper-functie zit nu in lib/doneAutoMove.ts
 // zodat zowel deze UI-laag als de auto-status sweep 'm gebruiken.
 
+// ─── Kolom-manager knop ─ popup om kolommen te (de)activeren, herordenen, toevoegen ──
+const AVAILABLE_COLUMNS: ColumnDef[] = [
+  { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
+  { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
+  { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
+  { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
+  { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
+  { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
+  { key: 'notes',          label: 'Notes',          type: 'text',      width: 160 },
+  { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
+  { key: 'framelink',      label: 'Frame link',     type: 'url',       width: 110 },
+  { key: 'uitzenddag',     label: 'Uitzenddag',     type: 'date',      width: 105 },
+  { key: 'nummers',        label: 'Nummers',        type: 'currency',  width: 110 },
+]
+
+function ColumnManagerButton({ boardId, columns, color }: {
+  boardId: string
+  columns: ColumnDef[]
+  color:   string
+}) {
+  const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  // Lokale werk-set, gesynchroniseerd met de prop. Mutaties commit'ten
+  // direct naar setBoardColumns zodat de tabel meteen meebeweegt en de
+  // wijziging via Supabase rondgaat.
+  const [list, setList] = useState<ColumnDef[]>(columns)
+  useEffect(() => { setList(columns) }, [columns])
+
+  function commit(next: ColumnDef[]) {
+    setList(next)
+    setBoardColumns(boardId, next)
+  }
+  function remove(key: string)   { commit(list.filter(c => c.key !== key)) }
+  function moveUp(idx: number)   { if (idx <= 0) return; const n = [...list]; [n[idx-1], n[idx]] = [n[idx], n[idx-1]]; commit(n) }
+  function moveDown(idx: number) { if (idx >= list.length - 1) return; const n = [...list]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; commit(n) }
+  function add(col: ColumnDef)   { commit([...list, col]) }
+
+  const usedKeys = new Set(list.map(c => c.key))
+  const addable  = AVAILABLE_COLUMNS.filter(c => !usedKeys.has(c.key))
+
+  return (
+    <>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+        title="Kolommen beheren — toevoegen, verwijderen, herordenen"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '9px 14px', borderRadius: 8,
+          border: '1px solid var(--border)', background: 'var(--bg-card)',
+          color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none',
+        }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3"  y="4" width="5" height="16" rx="1" />
+          <rect x="9.5" y="4" width="5" height="16" rx="1" />
+          <rect x="16" y="4" width="5" height="16" rx="1" />
+        </svg>
+        Kolommen
+      </button>
+      {open && (
+        <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: 12, minWidth: 280,
+            boxShadow: '0 10px 36px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+              Kolommen
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {list.map((c, idx) => (
+                <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 7px', borderRadius: 6, background: 'var(--overlay-faint)' }}>
+                  <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-secondary)' }}>{c.label}</span>
+                  <button onClick={() => moveUp(idx)}   disabled={idx === 0}
+                    title="Naar links"
+                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'not-allowed' : 'pointer', color: idx === 0 ? 'var(--text-muted)' : color, padding: '2px 5px', fontSize: 13 }}>◀</button>
+                  <button onClick={() => moveDown(idx)} disabled={idx === list.length - 1}
+                    title="Naar rechts"
+                    style={{ background: 'none', border: 'none', cursor: idx === list.length - 1 ? 'not-allowed' : 'pointer', color: idx === list.length - 1 ? 'var(--text-muted)' : color, padding: '2px 5px', fontSize: 13 }}>▶</button>
+                  <button onClick={() => { if (window.confirm(`Kolom '${c.label}' verbergen?`)) remove(c.key) }}
+                    title="Verwijderen"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e2445c', padding: '2px 5px', fontSize: 13 }}>×</button>
+                </div>
+              ))}
+            </div>
+            {addable.length > 0 && (
+              <>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '12px 0 5px' }}>
+                  Toevoegen
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {addable.map(c => (
+                    <button key={c.key} onClick={() => add(c)}
+                      style={{ padding: '4px 9px', borderRadius: 999,
+                        border: '1px solid var(--border-light)', background: 'var(--bg-card)',
+                        color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                      + {c.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </PortalDropdown>
+      )}
+    </>
+  )
+}
+
 // ─── Periode-filter knop ─ chic pill die RangeCalendar opent ─────────────────
 function PeriodFilterButton({ from, until, color, onChange }: {
   from: string; until: string; color: string
@@ -4079,6 +4187,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             [van, tot]. Leeg laten = geen ondergrens / bovengrens. */}
         <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
           onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
+
+        <ColumnManagerButton boardId={boardId} columns={columns} color={color} />
 
         {hasFilter && (
           <>

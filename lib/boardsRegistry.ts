@@ -86,6 +86,18 @@ function writeCache(boards: BoardConfig[]): void {
   window.dispatchEvent(new CustomEvent(UPDATE_EVENT))
 }
 
+// Schrijft een nieuwe kolom-set voor één bord lokaal + pusht naar Supabase
+// zodat de wijziging bij alle gebruikers terugkomt. Heeft geen effect op
+// andere borden of overige board-config-velden.
+export async function setBoardColumns(boardId: string, columns: ColumnDef[]): Promise<void> {
+  const current = readCache()
+  const idx = current.findIndex(b => b.id === boardId)
+  if (idx < 0) return
+  const next = current.map((b, i) => i === idx ? { ...b, columns } : b)
+  writeCache(next)
+  upsertBoard(next[idx], idx).catch(() => {})
+}
+
 export function getBoards(): BoardConfig[] { return readCache() }
 export function getBoardConfig(id: string): BoardConfig | null {
   return readCache().find(b => b.id === id) ?? null
