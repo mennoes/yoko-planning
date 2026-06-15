@@ -820,9 +820,15 @@ function UrlCell({ value, onChange }: { value: string; onChange: (v: string) => 
 // When subitems exist they are the source of truth; the parent's stored
 // estHours is ignored. Days are always derived from hours at 8h/day.
 export function effectiveHours(item: BoardItem): number {
+  // Explicit item.estHours wint wanneer 'ie > 0 staat (handmatige
+  // override door de gebruiker). Pas op een leeg/0 veld vallen we
+  // terug op de som van subitems. Zo kan een gebruiker een rolup
+  // gewoon overschrijven door 'n eigen totaal in te tikken.
+  const own = Number(item.estHours) || 0
+  if (own > 0) return own
   const subs = item.subitems ?? []
   if (subs.length > 0) return subs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
-  return Number(item.estHours) || 0
+  return 0
 }
 export function effectiveDays(item: BoardItem): number {
   return Math.round((effectiveHours(item) / 8) * 10) / 10
@@ -888,11 +894,28 @@ function Cell({ item, col, onUpdate }: {
   const hasSubs = (item.subitems?.length ?? 0) > 0
   const isProrated = Boolean((item as unknown as { __prorated?: boolean }).__prorated)
 
-  // estHours: when subitems exist, show their sum (read-only).
+  // estHours: ook bij subitems is 't veld bewerkbaar. Een handmatige
+  // waarde (> 0) wint over de subitem-som; lege/0 valt terug op de som
+  // (zie effectiveHours). Onder de input tonen we ter info de som
+  // wanneer 'ie afwijkt van wat hier staat.
   if (col.key === 'estHours' && hasSubs) {
-    const sum = effectiveHours(item)
-    const tip = isProrated ? 'Som van subitems · pro-rated naar het periode-filter' : 'Som van subitems'
-    return <span title={tip} style={{ fontSize: 13, color: 'var(--text-muted)' }}>{sum}u</span>
+    const sum  = (item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+    const own  = Number(item.estHours) || 0
+    const hint = own > 0 && Math.abs(own - sum) > 0.01 ? `som van subs: ${sum}u` : null
+    return (
+      <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, width: '100%' }}>
+        <EditableCell
+          value={item.estHours as number | null}
+          inputType="number"
+          onChange={v => onUpdate({ estHours: Number(v) || 0 })}
+        />
+        {hint && (
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 2 }}>
+            {hint}
+          </span>
+        )}
+      </span>
+    )
   }
   // Pro-rated naar een periode-filter: read-only tonen zodat een edit niet
   // de gedeeltelijke waarde als 'echte' estHours wegschrijft.
