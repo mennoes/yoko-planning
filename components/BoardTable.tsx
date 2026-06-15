@@ -168,6 +168,44 @@ function PortalDropdown({ anchor, onClose, children }: {
 }
 
 // ─── Generieke bewerkbare cel (single-click) ──────────────────────────────────
+// Custom est-cel voor items met subitems (of pro-rated). Toont 't
+// totaal (own + subs) in displaymodus, opent een input met alléén de
+// 'own'-waarde in editmodus zodat de gebruiker z'n extra-uren los van
+// de rollup kan invullen. Geen tekstuele hint — de display IS de som.
+function EstHoursSummedCell({ own, subsSum, onChange }: {
+  own:     number
+  subsSum: number
+  onChange: (v: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft,   setDraft]   = useState('')
+  function start() { setDraft(own ? String(own) : ''); setEditing(true) }
+  function save()  { onChange(parseFloat(draft) || 0); setEditing(false) }
+  const total = own + subsSum
+  if (editing) return (
+    <input autoFocus
+      type="number"
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={save}
+      onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+      style={editInput}
+    />
+  )
+  return (
+    <div onClick={start}
+      title={own > 0 ? `Eigen ${own}u + ${subsSum}u uit subs = ${total}u` : `${subsSum}u uit subs`}
+      style={{
+        padding: '0 4px', cursor: 'pointer', fontSize: 13,
+        color: total > 0 ? 'var(--text-secondary)' : 'var(--text-muted)',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        userSelect: 'none', width: '100%',
+      }}>
+      {total > 0 ? total : '—'}
+    </div>
+  )
+}
+
 function EditableCell({
   value, inputType, onChange,
 }: {
@@ -820,15 +858,13 @@ function UrlCell({ value, onChange }: { value: string; onChange: (v: string) => 
 // When subitems exist they are the source of truth; the parent's stored
 // estHours is ignored. Days are always derived from hours at 8h/day.
 export function effectiveHours(item: BoardItem): number {
-  // Explicit item.estHours wint wanneer 'ie > 0 staat (handmatige
-  // override door de gebruiker). Pas op een leeg/0 veld vallen we
-  // terug op de som van subitems. Zo kan een gebruiker een rolup
-  // gewoon overschrijven door 'n eigen totaal in te tikken.
-  const own = Number(item.estHours) || 0
-  if (own > 0) return own
-  const subs = item.subitems ?? []
-  if (subs.length > 0) return subs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
-  return 0
+  // Totaal van 't item = de eigen ingevulde uren PLUS de som van alle
+  // subitem-uren. Het item zelf kan dus extra werk hebben naast wat 'r
+  // in de subs is opgesplitst. Bij geen subs (subs.length=0) telt
+  // alleen item.estHours.
+  const own  = Number(item.estHours) || 0
+  const subs = (item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  return own + subs
 }
 export function effectiveDays(item: BoardItem): number {
   return Math.round((effectiveHours(item) / 8) * 10) / 10
@@ -895,18 +931,15 @@ function Cell({ item, col, onUpdate }: {
   const isProrated = Boolean((item as unknown as { __prorated?: boolean }).__prorated)
 
   // estHours: ook bij subitems én bij actief periode-filter is 't veld
-  // bewerkbaar. Standaard tonen we effectiveHours (= handmatige
-  // item.estHours wint; lege/0 valt terug op de som van subs) zodat
-  // de gebruiker direct 't totaal ziet, óók wanneer 't alleen uit
-  // de subitem-rollup komt. Bij typen schrijven we naar item.estHours;
-  // '0' tikken = terug naar de auto-som.
+  // bewerkbaar. We tonen 't TOTAAL = item.estHours + som-van-subs.
+  // Bij klik op de cel komt de eigen waarde van item.estHours in een
+  // input zodat de gebruiker die kan aanpassen — totaal beweegt mee.
   if (col.key === 'estHours' && (hasSubs || isProrated)) {
-    const display = effectiveHours(item)
     return (
-      <EditableCell
-        value={display > 0 ? display : null}
-        inputType="number"
-        onChange={v => onUpdate({ estHours: Number(v) || 0 })}
+      <EstHoursSummedCell
+        own={Number(item.estHours) || 0}
+        subsSum={(item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)}
+        onChange={v => onUpdate({ estHours: v })}
       />
     )
   }
