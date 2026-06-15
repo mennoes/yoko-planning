@@ -625,7 +625,14 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     const oh = project.ownerHours ?? {}
     const totalAssigned = realOwners.reduce((s, id) => s + (Number(oh[id]) || 0), 0)
     const fallback = (project.estHours || ownerCount) / ownerCount
-    const list = realOwners.map(id => ({
+    // Sorteer 'mijn' aandeel altijd helemaal links — dan zie je in één
+    // oogopslag jouw stuk zonder visueel te hoeven zoeken.
+    const sorted = [...realOwners].sort((a, b) => {
+      if (a === memberId && b !== memberId) return -1
+      if (b === memberId && a !== memberId) return 1
+      return 0
+    })
+    const list = sorted.map(id => ({
       isMe: id === memberId,
       hours: totalAssigned > 0 ? (Number(oh[id]) || 0) : fallback,
     }))
