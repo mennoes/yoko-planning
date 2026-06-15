@@ -46,12 +46,29 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
         if (!item.name) continue
         if (item.source === 'google') continue
         if ((item.status ?? '').toLowerCase() === 'done') continue
-        const parentOwns = Array.isArray(item.ownerIds) && item.ownerIds.includes(memberId)
+        const parentOwnerIds = Array.isArray(item.ownerIds) ? item.ownerIds : []
+        const parentOwns = parentOwnerIds.includes(memberId)
         const end = item.endDate ?? item.startDate
         const parentExpired = end && end < today
         if (parentOwns && !parentExpired) {
           out.push({ board, itemId: item.id, name: item.name })
         }
+        // Subitem-todos: alleen wanneer 't subitem EXPLICIET aan deze
+        // member is toegewezen ÉN de parent niet (anders dekt de parent-
+        // entry 't al). Voorkomt de oude lawine van automatische
+        // subitem-todos terwijl iemand wel hun specifieke subitem
+        // ziet zoals 'n boekomslag of episode.
+        const subs = (item.subitems as Array<{ id?: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+        if (parentOwns) continue
+        subs.forEach((si, idx) => {
+          const subOwners = Array.isArray(si.ownerIds) ? si.ownerIds : []
+          if (!subOwners.includes(memberId)) return
+          if ((si.status ?? '').toLowerCase() === 'done') return
+          const subEnd = si.endDate ?? si.startDate
+          if (subEnd && subEnd < today) return
+          const subName = si.name && si.name.trim().length > 0 ? si.name : item.name
+          out.push({ board, itemId: `${item.id}__si${idx}`, name: `${subName} (in ${item.name})` })
+        })
       }
     }
   }
