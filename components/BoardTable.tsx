@@ -3898,13 +3898,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }
 
   const nameW = colWidths['name'] ?? 200
-  // Eerste kolom (checkbox) iets breder zodat er meer ademruimte zit
-  // tussen het drag-handle (⠿ links) en de checkbox die erin staat.
-  const gridTemplate = `48px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
+  // afstand tussen die controls en de itemnaam korter.
+  const gridTemplate = `32px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
   // Subitem-tabel mag eigen breedtes hebben. Fallback per kolom op de
   // parent-breedte zodat ongetoete kolommen 'meeschalen' totdat de
   // gebruiker ze expliciet apart resized.
-  const subGridTemplate = `48px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const subGridTemplate = `32px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
 
