@@ -4580,8 +4580,8 @@ export default function PlanningPage() {
     }, `'${cloneName}' gedupliceerd`)
   }
 
-  const nameW       = isMobile ? 130 : NAME_W
-  const namePad     = isMobile ? 14 : NAME_PAD
+  const nameW       = isMobile ? 70  : NAME_W
+  const namePad     = isMobile ? 6   : NAME_PAD
   const totalWidth  = nameW + namePad + cols.reduce((s, c) => s + c.widthPx, 0)
   const monthGroups = zoom !== 'maand' ? getMonthGroupsFromCols(cols) : null
   const stickyBg    = 'var(--bg-base)'
@@ -4695,29 +4695,31 @@ export default function PlanningPage() {
       <header style={{ flexShrink: 0, padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
 
         {/* Title + nav */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 10 : 16 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 12 : 24, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 8 : 16 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 10 : 24, flex: 1 }}>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: isMobile ? 28 : 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
+              <h1 style={{ fontSize: isMobile ? 22 : 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
                 Planning
               </h1>
-              <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                {todayLabel}
-              </div>
+              {!isMobile && (
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                  {todayLabel}
+                </div>
+              )}
             </div>
-            {!isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 4, fontSize: 13, color: 'var(--text-secondary)' }}>
-                <span>
-                  <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
-                  <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>cap · {kpis.totalHours}/{kpis.totalCap}u</span>
-                </span>
-                <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
-                <span>
-                  <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
-                  <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>deadlines</span>
-                </span>
-              </div>
-            )}
+            {/* KPIs inline naast de titel — ook op mobiel zodat 'r een aparte
+                KPI-balk weg kan en de header binnen 2 regels blijft. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 14, paddingBottom: isMobile ? 1 : 4, fontSize: isMobile ? 11 : 13, color: 'var(--text-secondary)' }}>
+              <span>
+                <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: isMobile ? 13 : 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
+                <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>{kpis.totalHours}/{kpis.totalCap}u</span>
+              </span>
+              <span style={{ width: 1, height: 12, background: 'var(--border)' }} />
+              <span>
+                <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: isMobile ? 13 : 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+                <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>deadl.</span>
+              </span>
+            </div>
           </div>
           {!isMobile && (
             <div style={segGroup}>
@@ -4880,26 +4882,8 @@ export default function PlanningPage() {
           )}
         </div>
 
-        {/* Mobile-only KPI bar (desktop has it inline next to title) */}
-        {isMobile && (
-          <div style={{
-            display: 'flex', gap: 14, alignItems: 'center',
-            padding: '6px 0 10px', marginBottom: 4,
-            borderBottom: '1px solid var(--border-light)',
-            fontSize: 13, color: 'var(--text-secondary)',
-            flexWrap: 'wrap',
-          }}>
-            <span>
-              <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
-              <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>cap · {kpis.totalHours}/{kpis.totalCap}u</span>
-            </span>
-            <span style={{ width: 1, height: 14, background: 'var(--border)' }} />
-            <span>
-              <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
-              <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>deadlines</span>
-            </span>
-          </div>
-        )}
+        {/* Mobile-only KPI bar: weggehaald — KPIs staan nu inline naast
+            de titel zodat de header max 2 regels gebruikt. */}
       </header>
 
       {/* ── Mobile overflow menu ── */}
@@ -5338,18 +5322,32 @@ export default function PlanningPage() {
               const realIdx = team.findIndex(t => t.id === m.id)
               const isFirst = realIdx === 0
               const isLast  = realIdx === team.length - 1
+              // Op mobiel naam ONDER de avatar — bespaart horizontale
+              // ruimte zodat de timeline meer kolommen kwijt kan. Avatar
+              // ietsje kleiner zodat-ie + naam onder elkaar passen.
+              const mobileAv = Math.min(av, 36)
               const header = (
                 <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', minWidth: 0, paddingLeft: editOrder ? namePad - 4 : namePad, paddingRight: 6, gap: 6 }}>
                   <button onClick={() => { if (!editOrder) toggleExpand(m.id) }}
                     title={editOrder ? '' : (isExp ? 'Inklappen' : 'Uitvouwen')}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none',
+                    style={{ display: 'flex', alignItems: 'center',
+                      flexDirection: isMobile ? 'column' : 'row',
+                      gap: isMobile ? 2 : 8, background: 'none', border: 'none',
                       cursor: editOrder ? 'default' : 'pointer',
-                      flex: 1, height: '100%', minWidth: 0, padding: 0, textAlign: 'left' }}>
-                    <span style={{ fontSize: 9, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)',
-                      display: 'inline-block', width: 10, transform: isExp ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▼</span>
-                    <MemberAvatar member={m} size={av} />
-                    <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                      flex: 1, height: '100%', minWidth: 0, padding: 0, textAlign: 'left',
+                      justifyContent: isMobile ? 'center' : 'flex-start' }}>
+                    {!isMobile && (
+                      <span style={{ fontSize: 9, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)',
+                        display: 'inline-block', width: 10, transform: isExp ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}>▼</span>
+                    )}
+                    <MemberAvatar member={m} size={isMobile ? mobileAv : av} />
+                    <span style={{
+                      fontSize: isMobile ? 10.5 : (viewSize === 'large' ? 14 : 13),
+                      fontWeight: 600, color: 'var(--text-primary)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      maxWidth: '100%', textAlign: isMobile ? 'center' : 'left' }}>
+                      {isMobile ? m.name.split(' ')[0] : m.name}
+                    </span>
                   </button>
                   {editOrder && (
                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
