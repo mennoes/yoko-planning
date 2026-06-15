@@ -12,8 +12,7 @@ import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
-import Link from 'next/link'
-import { IconMenu, IconSearch, IconHome, IconHistory } from './Icon'
+import { IconMenu, IconSearch } from './Icon'
 import { NotificationBell } from './NotificationBell'
 import { FeedbackBubble } from './FeedbackBubble'
 import { requiresAuth } from '@/lib/supabase'
@@ -320,16 +319,6 @@ function Inner({ children }: { children: ReactNode }) {
               }}>
               <IconMenu size={20} />
             </button>
-            <Link href="/" aria-label="Home"
-              style={{
-                width: 38, height: 38, borderRadius: 9,
-                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                color: 'var(--text-primary)', textDecoration: 'none',
-              }}>
-              <IconHome size={20} />
-            </Link>
           </div>
           {/* Notificaties + papierbak + zoeken rechtsboven. */}
           <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
