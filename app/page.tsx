@@ -889,7 +889,17 @@ export default function HomePage() {
             ) : openTodos.slice(0, 5).map(t => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 20px' }}>
                 <div style={{ width: 14, height: 14, borderRadius: 4, border: '2px solid var(--border)', flexShrink: 0, marginTop: 3 }} />
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{t.text}</span>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                  {(() => {
+                    const lines = (t.text ?? '').split('\n')
+                    return <>
+                      <span>{lines[0]}</span>
+                      {lines.slice(1).map((l, i) => (
+                        <span key={i} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 500, lineHeight: 1.2 }}>{l}</span>
+                      ))}
+                    </>
+                  })()}
+                </span>
                 {/* Bron-agenda badge: zelfde stijl als op /todos zodat in
                     één oogopslag duidelijk is uit welk bord deze todo
                     komt (Yoko / PNP / Nederland / etc.). */}
