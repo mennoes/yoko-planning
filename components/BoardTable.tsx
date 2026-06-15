@@ -1212,8 +1212,16 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       }
       case 'echtGewerkt':
         return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
+      case 'deadline':
+        return <div style={cellBorder}><EditableCell value={subitem.deadline ?? null} inputType="date" onChange={v => onUpdate({ deadline: (v as string) || null })} /></div>
       default:
-        return <div style={cellBorder} />
+        // Generieke fallback voor custom kolommen (text/url/date/number)
+        // op subitems — schrijft naar dezelfde key zodat 't keysynced
+        // is met top-level items en de Column-manager.
+        if (c.type === 'date')   return <div style={cellBorder}><EditableCell value={(subitem as Record<string, unknown>)[c.key] as string | null ?? null} inputType="date"   onChange={v => onUpdate({ [c.key]: (v as string) || null } as Partial<SubItem>)} /></div>
+        if (c.type === 'number') return <div style={cellBorder}><EditableCell value={(subitem as Record<string, unknown>)[c.key] as number | null ?? null} inputType="number" onChange={v => onUpdate({ [c.key]: v as number } as Partial<SubItem>)} /></div>
+        if (c.type === 'url')    return <div style={cellBorder}><UrlCell      value={(subitem as Record<string, unknown>)[c.key] as string ?? ''}                  onChange={v => onUpdate({ [c.key]: v } as Partial<SubItem>)} /></div>
+        return <div style={cellBorder}><EditableCell value={(subitem as Record<string, unknown>)[c.key] as string ?? ''} inputType="text" onChange={v => onUpdate({ [c.key]: v } as Partial<SubItem>)} /></div>
     }
   }
 
@@ -1663,8 +1671,13 @@ function NotesPreview({ value, onOpen }: { value: string; onOpen: () => void }) 
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName }: {
+function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
+  // Subitem-tabel gebruikt eigen breedtes zodat resizen daar de parent-
+  // rij niet meeverandert.
+  subGridTemplate?: string
+  subColWidths?:    Record<string, number>
+  onResizeSubCol?:  (key: string, width: number) => void
   selected: boolean
   accentColor?: string
   selectedIds?: Set<string>
@@ -2008,14 +2021,14 @@ function BoardRow({ item, cols, gridTemplate, selected, accentColor, onToggleSel
       </div>
 
       {expanded && (
-        <SubItemsSection subitems={subitems} cols={cols} gridTemplate={gridTemplate}
+        <SubItemsSection subitems={subitems} cols={cols} gridTemplate={subGridTemplate ?? gridTemplate}
           accentColor={accentColor}
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
           parentItemId={item.id} fromGroupId={groupId}
           parentExternalLink={item.externalLink ?? null}
           onOpenDetail={sub => setOpenSub(sub)}
-          colWidths={colWidths} onResizeCol={onResizeCol}
+          colWidths={subColWidths ?? colWidths} onResizeCol={onResizeSubCol ?? onResizeCol}
           onUpdate={updated => onUpdate({ subitems: updated })} />
       )}
       {showDetail && (
@@ -2522,9 +2535,12 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
   boardId: string
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
+  subGridTemplate?: string
+  subColWidths?:    Record<string, number>
+  onResizeSubCol?:  (key: string, width: number) => void
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
   onSelectGroup: (groupId: string, allSelected: boolean) => void
@@ -3195,6 +3211,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, sele
                     }}>⠿</span>
                 )}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
+                  subGridTemplate={subGridTemplate}
+                  subColWidths={subColWidths}
+                  onResizeSubCol={onResizeSubCol}
                   selected={selectedIds.has(item.id)}
                   accentColor={group.color}
                   onToggleSelect={() => onToggleSelect(item.id)}
@@ -3464,6 +3483,21 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }
 
   const [colWidths,     setColWidths]    = useState<Record<string, number>>(initWidths)
+  // Subitem-tabel mag z'n eigen kolombreedtes hebben — anders bewegen
+  // parent-items mee wanneer de gebruiker een subitem-kolom smaller maakt.
+  const subStorageKey = `board-sub-col-widths-${title}`
+  function initSubWidths(): Record<string, number> {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem(subStorageKey) : null
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return {}
+  }
+  const [subColWidths,  setSubColWidths] = useState<Record<string, number>>(initSubWidths)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(subStorageKey, JSON.stringify(subColWidths)) } catch {}
+  }, [subStorageKey, subColWidths])
   const [search,        setSearch]       = useState('')
   const [filterOwner,   setFilterOwner]  = useState('')
   const [filterStatus,  setFilterStatus] = useState('')
@@ -3867,6 +3901,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // Eerste kolom (checkbox) iets breder zodat er meer ademruimte zit
   // tussen het drag-handle (⠿ links) en de checkbox die erin staat.
   const gridTemplate = `48px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  // Subitem-tabel mag eigen breedtes hebben. Fallback per kolom op de
+  // parent-breedte zodat ongetoete kolommen 'meeschalen' totdat de
+  // gebruiker ze expliciet apart resized.
+  const subGridTemplate = `48px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
 
@@ -4325,6 +4363,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             )}
             <BoardGroupSection boardId={boardId} group={group} cols={columns}
               colWidths={colWidths} gridTemplate={gridTemplate}
+              subGridTemplate={subGridTemplate}
+              subColWidths={subColWidths}
+              onResizeSubCol={(key, width) => setSubColWidths(prev => ({ ...prev, [key]: Math.max(40, width) }))}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
               onSelectGroup={selectGroup}
