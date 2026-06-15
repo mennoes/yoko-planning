@@ -2434,9 +2434,14 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   // timeline kiest. Overschrijft ALTIJD bij datum-wijziging — user wil
   // dit als principe. Manueel aanpassen blijft mogelijk, maar bij een
   // volgende datum-edit gaat 't terug naar werkdagen×8.
-  function autofillEstFromDates(s: string, e: string, _currentEst: string): { estHours?: number } {
-    void _currentEst
+  function autofillEstFromDates(s: string, e: string, currentEst: string): { estHours?: number } {
+    // Auto-fill werkdagen × 8 ALLEEN wanneer 't est-veld nog geen
+    // waarde heeft. Bestaande hand-ingevulde uren overschrijven we
+    // NOOIT — dat is wat de gebruiker bedoelde met 'aanname bij
+    // nieuwe items'. Voor een nieuw item is currentEst leeg/0.
     if (!s || !e) return {}
+    const cur = parseFloat(currentEst)
+    if (Number.isFinite(cur) && cur > 0) return {}
     const sd = new Date(s); const ed = new Date(e)
     if (isNaN(sd.getTime()) || isNaN(ed.getTime()) || ed < sd) return {}
     let workdays = 0
@@ -4292,12 +4297,13 @@ export default function PlanningPage() {
     const rawId      = project.id.slice(boardName.length + 2)
     const prevStart  = project.startDate
     const prevEnd    = project.endDate
-    const prevEst    = project.estHours
-    const autoHours  = workdaysHours(newStart, newEnd)
+    // Auto-fill van werkdagen × 8 doen we ALLEEN bij item-creatie, niet
+    // bij drag/resize. Bestaande Est-uren overschrijven we hier nooit;
+    // dat zorgde dat lange-kalender-spans plotseling 440u kregen.
     // Subitem-afgeleide project? Id-vorm = `${parentId}__si${idx}`. Schrijf
     // de date-update dan op de juiste subitem, niet op de parent.
     const subMatch = rawId.match(/^(.+)__si(\d+)$/)
-    const apply = (s: string | null, e: string | null, est?: number | null) => {
+    const apply = (s: string | null, e: string | null) => {
       const groups = (allGroups[boardName] ?? []).map(g => ({
         ...g,
         items: g.items.map(i => {
@@ -4305,23 +4311,23 @@ export default function PlanningPage() {
             if (i.id !== subMatch[1]) return i
             const subs = (i.subitems ?? []).map((sub, idx) =>
               idx === Number(subMatch[2])
-                ? { ...sub, startDate: s, endDate: e, ...(est != null ? { estHours: est } : {}) }
+                ? { ...sub, startDate: s, endDate: e }
                 : sub,
             )
             return { ...i, subitems: subs }
           }
-          return i.id === rawId ? { ...i, startDate: s, endDate: e, ...(est != null ? { estHours: est } : {}) } : i
+          return i.id === rawId ? { ...i, startDate: s, endDate: e } : i
         }),
       }))
       saveGroups(boardName, groups)
       setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     }
-    apply(newStart, newEnd, autoHours)
+    apply(newStart, newEnd)
     logActivity('Datums bijgewerkt', project.name, `${prevStart ?? '—'} → ${newStart ?? '—'} / ${prevEnd ?? '—'} → ${newEnd ?? '—'}`)
     if (detailProject?.id === project.id) {
-      setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd, ...(autoHours != null ? { estHours: autoHours } : {}) })
+      setDetailProject({ ...detailProject, startDate: newStart, endDate: newEnd })
     }
-    pushUndo(() => apply(prevStart, prevEnd, prevEst), `Datums bijgewerkt op '${project.name}'`)
+    pushUndo(() => apply(prevStart, prevEnd), `Datums bijgewerkt op '${project.name}'`)
   }
 
   // Drag-end voor de uur-positionering in de Week-zoom: zet zowel datum
