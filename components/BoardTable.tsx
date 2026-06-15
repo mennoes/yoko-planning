@@ -1083,8 +1083,16 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         </div>
       case 'timeline':
         return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
-      case 'estHours':
-        return <div style={cellBorder}><EditableCell value={subitem.estHours || null} inputType="number" onChange={v => onUpdate({ estHours: (v as number) ?? 0 })} /></div>
+      case 'estHours': {
+        // In pro-rated mode (actief periode-filter) is subitem.estHours
+        // de pro-rated weergave (bv. 4.4 i.p.v. 24). Toon dan de
+        // originele waarde uit __originalEstHours zodat de gebruiker
+        // niet z'n echte uren overschrijft door de pro-rated som over
+        // te typen.
+        const orig = (subitem as { __originalEstHours?: number }).__originalEstHours
+        const shown = typeof orig === 'number' ? orig : (subitem.estHours ?? 0)
+        return <div style={cellBorder}><EditableCell value={shown || null} inputType="number" onChange={v => onUpdate({ estHours: (v as number) ?? 0 })} /></div>
+      }
       case 'echtGewerkt':
         return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
       default:
@@ -3321,10 +3329,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           if (item.subitems && item.subitems.length > 0) {
             let subs = item.subitems.filter(s => overlapsRange(s.startDate, s.endDate))
             if (subs.length === 0) subs = item.subitems
-            const prorated = subs.map(s => ({
-              ...s,
-              estHours: prorate(Number(s.estHours) || 0, s.startDate, s.endDate),
-            }))
+            const prorated = subs.map(s => {
+              const origHours = Number(s.estHours) || 0
+              return {
+                ...s,
+                estHours: prorate(origHours, s.startDate, s.endDate),
+                __originalEstHours: origHours,
+              }
+            })
             return { ...item, subitems: prorated, __prorated: true } as BoardItem
           }
           // Top-level item zonder subs: schaal zowel estHours ALS ownerHours
