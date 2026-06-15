@@ -5015,6 +5015,15 @@ export default function PlanningPage() {
 
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
+        onWheel={(ev) => {
+          // Cmd/Ctrl + wheel → verticale zoom (bar-hoogte). Trackpad-pinch
+          // op macOS stuurt 'n wheel-event met ctrlKey=true, dus pinch
+          // zoomt ook in. Anders gewoon scrollen.
+          if (!(ev.ctrlKey || ev.metaKey)) return
+          ev.preventDefault()
+          const delta = ev.deltaY > 0 ? -5 : 5
+          setRowZoomPct(p => Math.max(70, Math.min(180, p + delta)))
+        }}
         style={{ flex: 1, overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
         <div style={{ minWidth: totalWidth, position: 'relative' }}>
 
@@ -5023,16 +5032,17 @@ export default function PlanningPage() {
               to miss when scrolling through time. */}
           {nowOffset !== null && (
             <>
-              {/* De lijn zelf: z=14 zodat 'ie BOVEN de kolom-headers (z=11)
-                  én maand-groep (z=12) door loopt — visueel ononderbroken
-                  van pill naar tijdlijn. Sticky naam-cellen worden hieronder
-                  naar z=20 gebumpt zodat ze nog steeds bovenop hangen. */}
+              {/* De lijn zelf: hoge z-index zodat 'ie BOVEN ALLES doorloopt
+                  (kolom-headers, maand-groepen, en zelfs de sticky naam-
+                  kolommen). Eerder z=14: dan bleef de lijn ergens achter
+                  een sticky achtergrond hangen en zag de gebruiker een
+                  gat in 't midden. z=30 trekt 'm door tot aan de pill (z=50). */}
               <div aria-hidden data-today-marker style={{
                 position: 'absolute', top: 0, bottom: 0,
                 left: nowOffset, width: 0,
                 borderLeft: '2px solid var(--yellow)',
                 pointerEvents: 'none',
-                zIndex: 14,
+                zIndex: 30,
                 boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
               }} />
               {/* VANDAAG-pill als SEPARATE sibling — eigen sticky-top, hoge
@@ -5122,21 +5132,24 @@ export default function PlanningPage() {
                   </span>
                   {/* Verticale zoom: schaalt bar-hoogte zodat lange events
                       leesbaarder worden. Compacte controls naast de
-                      horizontale zoom. */}
+                      horizontale zoom. Ook bedienbaar via Cmd/Ctrl+scroll
+                      en trackpad-pinch op de planner. */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8,
-                    padding: '2px 8px 2px 6px', borderRadius: 999,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
-                    <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
+                    padding: '2px 8px 2px 8px', borderRadius: 999,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
+                    title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
+                    <span aria-hidden style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
                     <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
                       title="Lagere balken"
-                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                      style={{ width: 20, height: 20, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                     <input type="range" min={70} max={180} step={5}
                       value={rowZoomPct} onChange={e => setRowZoomPct(parseInt(e.target.value))}
                       title={`Balk-hoogte ${rowZoomPct}%`}
                       style={{ width: 80, accentColor: 'var(--accent)' }} />
                     <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
                       title="Hogere balken"
-                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                      style={{ width: 20, height: 20, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.04em', minWidth: 28, textAlign: 'right' }}>{rowZoomPct}%</span>
                   </div>
                 </div>
               )}
