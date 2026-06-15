@@ -510,8 +510,15 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
         // de profile-row geen member_id heeft. Voorkomt dat avatars
         // alleen 'M'-initials tonen omdat 't profiel niet aan een
         // team-lid is gelinkt.
+        // Avatar-fallback chain: profile.member_id → exacte name-match
+        // op teamData → eerste-voornaam-match (zodat 'Menno Stoffels'
+        // matcht met team-entry 'Menno') → e.detail bevat soms een naam
+        // bij owner-assignments (vangnet).
+        const pname = (p?.name ?? '').toLowerCase().trim()
+        const pfirst = pname.split(/\s+/)[0]
         const actorMemberId = p?.member_id
-          ?? teamData.members.find(m => m.name && p?.name && m.name.toLowerCase() === p.name.toLowerCase())?.id
+          ?? teamData.members.find(m => m.name && pname && m.name.toLowerCase() === pname)?.id
+          ?? teamData.members.find(m => m.name && pfirst && m.name.toLowerCase().split(/\s+/)[0] === pfirst)?.id
           ?? null
         const photo = actorMemberId ? getPhoto(actorMemberId) : null
         const actorColor = memberColor(actorMemberId ?? '')
@@ -565,34 +572,39 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
               </span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Lijn 1: 'Item · Wie deed wat — change-summary' */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+              {/* Lijn 1: Itemnaam dik + tijd ernaast (Monday-stijl). */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                   {itemName && itemName.trim().length > 0
                     ? itemName
                     : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 500 }}>(naamloos)</span>}
                 </span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>·</span>
-                <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                  <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>{' '}{e.action}
+                <span style={{ fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>
+                  {relTime(e.ts)}
                 </span>
-                {(e.meta?.before !== undefined || e.meta?.after !== undefined) && (
-                  isOwnerChange ? (
+              </div>
+              {/* Lijn 2: 'Wie + actie' — voor owner-changes mergen we
+                  de assignee-naam(en) in de actie zodat 'iemand' weg is. */}
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>
+                {' '}
+                {isOwnerChange ? renderOwnerActionText(e) : e.action}
+              </div>
+              {/* Lijn 3: change-pills */}
+              {(e.meta?.before !== undefined || e.meta?.after !== undefined) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                  {isOwnerChange ? (
                     <OwnerChangePill before={e.meta?.before} after={e.meta?.after} getPhoto={getPhoto} />
                   ) : (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <>
                       <span style={pillStyle(false)}>{fmtSimple(e.meta?.before)}</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
                       <span style={pillStyle(true)}>{fmtSimple(e.meta?.after)}</span>
-                    </span>
-                  )
-                )}
-              </div>
-              {/* Lijn 2: tijd (klein) */}
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                {relTime(e.ts)} · {fmtDate(e.ts)}
-              </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             {canUndo && (
               <button onClick={ev2 => { ev2.stopPropagation(); onUndo(e) }}
@@ -608,6 +620,29 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
       })}
     </div>
   )
+}
+
+// Bouwt de actie-tekst voor owner-toewijzing zonder het generieke
+// 'iemand' — pakt de assignee-naam uit meta.detail (waar 't logboek
+// 'm neerzet) of uit de eerste new-owner-id in meta.after.
+function renderOwnerActionText(e: ItemActivity): string {
+  const detail = (e.detail ?? '').trim()
+  if (detail && !/iemand|onbekend/i.test(detail)) {
+    return `wees ${detail} toe`
+  }
+  const after = Array.isArray(e.meta?.after) ? (e.meta!.after as unknown[]).filter((x): x is string => typeof x === 'string') : []
+  const before = Array.isArray(e.meta?.before) ? (e.meta!.before as unknown[]).filter((x): x is string => typeof x === 'string') : []
+  const added = after.filter(id => !before.includes(id))
+  if (added.length > 0) {
+    const names = added.map(id => memberName(id))
+    return `wees ${names.join(' + ')} toe`
+  }
+  const removed = before.filter(id => !after.includes(id))
+  if (removed.length > 0) {
+    const names = removed.map(id => memberName(id))
+    return `haalde ${names.join(' + ')} weg`
+  }
+  return e.action ?? ''
 }
 
 // Owner-change pill: rendert before/after-owners als avatars+naam
