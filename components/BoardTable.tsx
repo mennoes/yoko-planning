@@ -895,13 +895,16 @@ function Cell({ item, col, onUpdate }: {
   const isProrated = Boolean((item as unknown as { __prorated?: boolean }).__prorated)
 
   // estHours: ook bij subitems én bij actief periode-filter is 't veld
-  // bewerkbaar. Een handmatige item.estHours > 0 wint over de subitem-
-  // som (zie effectiveHours). Pro-rated mode toont nog steeds de volle
-  // ingevulde waarde — die kun je dan ook gewoon overschrijven.
+  // bewerkbaar. Standaard tonen we effectiveHours (= handmatige
+  // item.estHours wint; lege/0 valt terug op de som van subs) zodat
+  // de gebruiker direct 't totaal ziet, óók wanneer 't alleen uit
+  // de subitem-rollup komt. Bij typen schrijven we naar item.estHours;
+  // '0' tikken = terug naar de auto-som.
   if (col.key === 'estHours' && (hasSubs || isProrated)) {
+    const display = effectiveHours(item)
     return (
       <EditableCell
-        value={item.estHours as number | null}
+        value={display > 0 ? display : null}
         inputType="number"
         onChange={v => onUpdate({ estHours: Number(v) || 0 })}
       />
