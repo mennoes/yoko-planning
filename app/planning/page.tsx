@@ -5277,11 +5277,11 @@ export default function PlanningPage() {
                   {expanded.size >= team.length ? '▾' : '▸'} Alles
                 </button>
               )}
-              {!isMobile && (
+              {!isMobile && !monthGroups && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                  {/* Horizontale kolom-zoom — onder de Alles-knop. Strekt
-                      mee met de breedte van de cel zodat 'ie netjes
-                      onder de Alles-knop uitgelijnd staat. */}
+                  {/* Horizontale kolom-zoom — alleen tonen in 'maand'-zoom
+                      (geen monthGroups), anders staat-ie boven in de
+                      monthGroups-toolbar al. */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1,
                     padding: '2px 8px', borderRadius: 999,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
@@ -5298,23 +5298,20 @@ export default function PlanningPage() {
                       title="Breder (sneltoets: +)"
                       style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>+</button>
                   </div>
-                  {/* Verticale balk-hoogte zoom — alleen tonen wanneer er
-                      géén monthGroups-rij is (anders staat die al boven). */}
-                  {!monthGroups && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
-                      padding: '2px 6px', borderRadius: 999,
-                      background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
-                      title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
-                      <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1, marginRight: 2 }}>↕</span>
-                      <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
-                        title="Lagere balken"
-                        style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', minWidth: 22, textAlign: 'center' }}>{rowZoomPct}%</span>
-                      <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
-                        title="Hogere balken"
+                  {/* Verticale balk-hoogte zoom — fallback voor 'maand'-zoom. */}
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
+                    padding: '2px 6px', borderRadius: 999,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
+                    title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
+                    <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1, marginRight: 2 }}>↕</span>
+                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
+                      title="Lagere balken"
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', minWidth: 22, textAlign: 'center' }}>{rowZoomPct}%</span>
+                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
+                      title="Hogere balken"
                       style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
                   </div>
-                  )}
                 </div>
               )}
             </div>
