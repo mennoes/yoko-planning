@@ -610,6 +610,42 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
                 </div>
               )
             })()}
+
+            {/* Onbekende owners (id's in value die niet in team-lijst zitten,
+                bv. Google-meeting-attendees) — toon ze hier expliciet zodat
+                de gebruiker ze kan verwijderen. Anders 'plakken' ze in de
+                cel zonder dat 'r een uncheck-mogelijkheid is. */}
+            {(() => {
+              const known = new Set(team.map(m => m.id))
+              const orphans = value.filter(id => id && id !== 'unassigned' && !known.has(id))
+              if (orphans.length === 0) return null
+              return (
+                <>
+                  <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 4px 4px' }} />
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
+                    textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 8px' }}>
+                    Toegewezen (onbekend)
+                  </div>
+                  {orphans.map(id => (
+                    <button key={id} onClick={() => toggle(id)}
+                      title={`Verwijder '${id}' als owner`}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        width: '100%', padding: '6px 8px', borderRadius: 6,
+                        background: 'rgba(226,68,92,0.10)', border: 'none', cursor: 'pointer',
+                        color: 'var(--text-secondary)', fontSize: 13, textAlign: 'left',
+                      }}>
+                      <span style={{ width: 24, height: 24, borderRadius: '50%',
+                        background: '#e2445c22', color: '#e2445c',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 700 }}>{id.slice(0, 2).toUpperCase()}</span>
+                      <span>{id}</span>
+                      <span style={{ marginLeft: 'auto', color: '#e2445c', fontSize: 14, fontWeight: 700 }}>×</span>
+                    </button>
+                  ))}
+                </>
+              )
+            })()}
           </div>
         </PortalDropdown>
       )}

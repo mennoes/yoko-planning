@@ -5191,7 +5191,28 @@ export default function PlanningPage() {
           {/* Month grouping row (only for week/day zoom) */}
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
-              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg }} />
+              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'center', paddingLeft: namePad }}>
+                {/* Alles-knop verhuist naar deze monthGroups-rij om
+                    de whitespace bovenin te benutten en hoger te
+                    landen — de col-header-rij eronder houdt alleen de
+                    zoom-pills over. */}
+                <button onClick={() => {
+                    if (expanded.size >= team.length) setExpanded(new Set())
+                    else setExpanded(new Set(team.map(m => m.id)))
+                  }}
+                  title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '4px 11px', borderRadius: 6,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                    color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
+                  {expanded.size >= team.length ? '▾' : '▸'} Alles
+                </button>
+              </div>
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
                   color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -5204,26 +5225,23 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', gap: 4, paddingLeft: namePad, paddingTop: 6, paddingBottom: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
-              <button onClick={() => {
-                  // Toggle: if all expanded → collapse all; otherwise expand all
-                  if (expanded.size >= team.length) setExpanded(new Set())
-                  else setExpanded(new Set(team.map(m => m.id)))
-                }}
-                title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '4px 11px', borderRadius: 6,
-                  background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                  color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-                {expanded.size >= team.length ? '▾' : '▸'} Alles
-              </button>
-              </div>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: namePad, paddingTop: 2, paddingBottom: 2 }}>
+              {!monthGroups && (
+                <button onClick={() => {
+                    if (expanded.size >= team.length) setExpanded(new Set())
+                    else setExpanded(new Set(team.map(m => m.id)))
+                  }}
+                  title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '4px 11px', borderRadius: 6,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                    color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
+                    cursor: 'pointer', marginRight: 6,
+                  }}>
+                  {expanded.size >= team.length ? '▾' : '▸'} Alles
+                </button>
+              )}
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {/* Horizontale kolom-zoom (compact) */}
