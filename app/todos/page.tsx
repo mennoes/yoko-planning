@@ -446,7 +446,8 @@ function TodoCard({
         onMouseEnter={() => setHeaderHover(true)}
         onMouseLeave={() => setHeaderHover(false)}
         style={{ padding: '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 9 }}>
-        {/* Drag-handle voor section-reorder */}
+        {/* Drag-handle voor section-reorder — altijd zichtbaar zodat
+            'ie ontdekbaar is. Subtiel grijs, sterker bij hover. */}
         {onDragStartCard && (
           <span
             draggable
@@ -457,9 +458,10 @@ function TodoCard({
             }}
             title="Sleep om volgorde van secties te wijzigen"
             style={{ cursor: 'grab', userSelect: 'none', flexShrink: 0,
-              color: 'var(--text-muted)', fontSize: 16, lineHeight: 1,
+              color: headerHover ? 'var(--text-primary)' : 'var(--text-muted)',
+              fontSize: 16, lineHeight: 1,
               padding: '2px 4px', borderRadius: 5,
-              opacity: headerHover ? 1 : 0.35, transition: 'opacity 0.12s' }}>⠿</span>
+              transition: 'color 0.12s' }}>⠿</span>
         )}
         {isMember && member ? (
           <MemberAvatar memberId={section.id} size={28} />
@@ -499,14 +501,28 @@ function TodoCard({
             </span>
           )}
         </h2>
-        {onDeleteSection && headerHover && !editOrder && (
+        {/* Verplaats-knoppen + delete: altijd zichtbaar zodat de gebruiker
+            ze niet hoeft te ontdekken via hover. */}
+        {!editOrder && !isFirstCard && (
+          <button onClick={() => onMoveCard(-1)} title="Verplaats naar links"
+            style={{ background: 'none', border: 'none', cursor: 'pointer',
+              color: headerHover ? 'var(--text-secondary)' : 'var(--text-muted)',
+              fontSize: 14, lineHeight: 1, padding: '4px 6px', borderRadius: 4, flexShrink: 0 }}>◀</button>
+        )}
+        {!editOrder && !isLastCard && (
+          <button onClick={() => onMoveCard(1)} title="Verplaats naar rechts"
+            style={{ background: 'none', border: 'none', cursor: 'pointer',
+              color: headerHover ? 'var(--text-secondary)' : 'var(--text-muted)',
+              fontSize: 14, lineHeight: 1, padding: '4px 6px', borderRadius: 4, flexShrink: 0 }}>▶</button>
+        )}
+        {onDeleteSection && !editOrder && (
           <button onClick={() => {
             if (confirm(`Sectie '${section.title}' verwijderen (incl. ${section.items.length} items)?`)) onDeleteSection()
           }} title="Sectie verwijderen"
             style={{ background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
+              color: headerHover ? '#e2445c' : 'var(--text-muted)',
+              fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 4, flexShrink: 0,
+              transition: 'color 0.12s' }}>×</button>
         )}
         {editOrder ? (
           <>
@@ -1423,6 +1439,20 @@ export default function TodosPage() {
                   onDragStartCard={() => { dragSectionRef.current = s.id }}
                   onDropOnCard={() => dropSectionOn(s.id)} />
               ))}
+              {/* Persistente '+ sectie'-knop aan 't einde van de rij —
+                  geen apart knopje boven nodig om te ontdekken. */}
+              <button onClick={addSection}
+                title="Nieuwe sectie aanmaken"
+                style={{ minWidth: 200, alignSelf: 'stretch',
+                  background: 'var(--bg-card)', border: '1.5px dashed var(--border)',
+                  borderRadius: 12, color: 'var(--text-muted)',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: 20, transition: 'all 0.12s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+                + Nieuwe sectie
+              </button>
             </div>
 
             {general.length > 0 && personal.length > 0 && (
