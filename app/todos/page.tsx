@@ -446,8 +446,8 @@ function TodoCard({
         onMouseEnter={() => setHeaderHover(true)}
         onMouseLeave={() => setHeaderHover(false)}
         style={{ padding: '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 9 }}>
-        {/* Drag-handle voor section-reorder — altijd zichtbaar zodat
-            'ie ontdekbaar is. Subtiel grijs, sterker bij hover. */}
+        {/* Drag-handle voor section-reorder — verschijnt bij hover op
+            de header zodat 't een rustige standaard-view blijft. */}
         {onDragStartCard && (
           <span
             draggable
@@ -458,10 +458,9 @@ function TodoCard({
             }}
             title="Sleep om volgorde van secties te wijzigen"
             style={{ cursor: 'grab', userSelect: 'none', flexShrink: 0,
-              color: headerHover ? 'var(--text-primary)' : 'var(--text-muted)',
-              fontSize: 16, lineHeight: 1,
+              color: 'var(--text-muted)', fontSize: 16, lineHeight: 1,
               padding: '2px 4px', borderRadius: 5,
-              transition: 'color 0.12s' }}>⠿</span>
+              opacity: headerHover ? 1 : 0, transition: 'opacity 0.12s' }}>⠿</span>
         )}
         {isMember && member ? (
           <MemberAvatar memberId={section.id} size={28} />
@@ -501,28 +500,27 @@ function TodoCard({
             </span>
           )}
         </h2>
-        {/* Verplaats-knoppen + delete: altijd zichtbaar zodat de gebruiker
-            ze niet hoeft te ontdekken via hover. */}
-        {!editOrder && !isFirstCard && (
+        {/* Verplaats-knoppen + delete: alleen bij hover op de header
+            zodat 'r geen UI-ruis is in de standaard-view. */}
+        {!editOrder && !isFirstCard && headerHover && (
           <button onClick={() => onMoveCard(-1)} title="Verplaats naar links"
             style={{ background: 'none', border: 'none', cursor: 'pointer',
-              color: headerHover ? 'var(--text-secondary)' : 'var(--text-muted)',
+              color: 'var(--text-secondary)',
               fontSize: 14, lineHeight: 1, padding: '4px 6px', borderRadius: 4, flexShrink: 0 }}>◀</button>
         )}
-        {!editOrder && !isLastCard && (
+        {!editOrder && !isLastCard && headerHover && (
           <button onClick={() => onMoveCard(1)} title="Verplaats naar rechts"
             style={{ background: 'none', border: 'none', cursor: 'pointer',
-              color: headerHover ? 'var(--text-secondary)' : 'var(--text-muted)',
+              color: 'var(--text-secondary)',
               fontSize: 14, lineHeight: 1, padding: '4px 6px', borderRadius: 4, flexShrink: 0 }}>▶</button>
         )}
-        {onDeleteSection && !editOrder && (
+        {onDeleteSection && !editOrder && headerHover && (
           <button onClick={() => {
             if (confirm(`Sectie '${section.title}' verwijderen (incl. ${section.items.length} items)?`)) onDeleteSection()
           }} title="Sectie verwijderen"
             style={{ background: 'none', border: 'none', cursor: 'pointer',
-              color: headerHover ? '#e2445c' : 'var(--text-muted)',
-              fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 4, flexShrink: 0,
-              transition: 'color 0.12s' }}>×</button>
+              color: '#e2445c',
+              fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 4, flexShrink: 0 }}>×</button>
         )}
         {editOrder ? (
           <>
@@ -531,7 +529,7 @@ function TodoCard({
             <button onClick={() => onMoveCard(1)} disabled={isLastCard} title="Omlaag"
               style={reorderArrowBtn(isLastCard)}>↓</button>
           </>
-        ) : open.length > 0 && (
+        ) : open.length > 0 && headerHover && (
           <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-hover)', borderRadius: 10, padding: '1px 7px' }}>{open.length}</span>
         )}
       </div>
