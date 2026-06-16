@@ -5202,7 +5202,7 @@ export default function PlanningPage() {
                 {!isMobile && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'space-between',
-                    position: 'absolute', left: 4, top: 4, bottom: -4, zIndex: 23,
+                    position: 'absolute', left: 4, top: 4, bottom: -40, zIndex: 23,
                     padding: '4px 4px', borderRadius: 8, width: 30,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
                     title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
