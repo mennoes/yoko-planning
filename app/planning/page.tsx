@@ -5204,7 +5204,8 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: namePad }}>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 4, paddingLeft: namePad, paddingTop: 4, paddingBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
               <button onClick={() => {
                   // Toggle: if all expanded → collapse all; otherwise expand all
                   if (expanded.size >= team.length) setExpanded(new Set())
@@ -5222,8 +5223,9 @@ export default function PlanningPage() {
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
                 {expanded.size >= team.length ? '▾' : '▸'} Alles
               </button>
+              </div>
               {!isMobile && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {/* Horizontale kolom-zoom (compact) */}
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
                     padding: '2px 6px', borderRadius: 999,
