@@ -5191,27 +5191,43 @@ export default function PlanningPage() {
           {/* Month grouping row (only for week/day zoom) */}
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
-              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'center', paddingLeft: namePad }}>
-                {/* Alles-knop verhuist naar deze monthGroups-rij om
-                    de whitespace bovenin te benutten en hoger te
-                    landen — de col-header-rij eronder houdt alleen de
-                    zoom-pills over. */}
-                <button onClick={() => {
-                    if (expanded.size >= team.length) setExpanded(new Set())
-                    else setExpanded(new Set(team.map(m => m.id)))
-                  }}
-                  title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '4px 11px', borderRadius: 6,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                    color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-                  {expanded.size >= team.length ? '▾' : '▸'} Alles
-                </button>
+              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', paddingLeft: 4, paddingRight: 8, gap: 8 }}>
+                {/* Verticale balk-hoogte zoom — staand links zodat de
+                    rechterkolom plek heeft voor Alles + horizontale slider. */}
+                {!isMobile && (
+                  <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                    padding: '3px 4px', borderRadius: 8,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
+                    title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
+                    <span aria-hidden style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
+                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
+                      title="Hogere balken"
+                      style={{ width: 16, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)' }}>{rowZoomPct}%</span>
+                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
+                      title="Lagere balken"
+                      style={{ width: 16, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                  </div>
+                )}
+                {/* Alles-knop — bovenin de cel, neemt resterende breedte. */}
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                  <button onClick={() => {
+                      if (expanded.size >= team.length) setExpanded(new Set())
+                      else setExpanded(new Set(team.map(m => m.id)))
+                    }}
+                    title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '6px 14px', borderRadius: 8,
+                      background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                      color: 'var(--text-secondary)', fontSize: 15, fontWeight: 700,
+                      cursor: 'pointer', width: '100%', justifyContent: 'flex-start',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
+                    {expanded.size >= team.length ? '▾' : '▸'} Alles
+                  </button>
+                </div>
               </div>
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
@@ -5225,7 +5241,7 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: namePad, paddingTop: 2, paddingBottom: 2 }}>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, paddingLeft: 4, paddingRight: 8, paddingTop: 2, paddingBottom: 2 }}>
               {!monthGroups && (
                 <button onClick={() => {
                     if (expanded.size >= team.length) setExpanded(new Set())
@@ -5244,7 +5260,8 @@ export default function PlanningPage() {
               )}
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {/* Horizontale kolom-zoom (compact) */}
+                  {/* Horizontale kolom-zoom — onder de Alles-knop, rechts
+                      uitgelijnd in de sticky-left cel. */}
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
                     padding: '2px 6px', borderRadius: 999,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
@@ -5255,10 +5272,10 @@ export default function PlanningPage() {
                       <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
                         value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                         title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                        style={{ width: 56, accentColor: 'var(--accent)' }} />
+                        style={{ width: 80, accentColor: 'var(--accent)' }} />
                       <span aria-hidden style={{
                         position: 'absolute',
-                        left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 56}px`,
+                        left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 80}px`,
                         top: '50%', transform: 'translate(-50%, -50%)',
                         width: 2, height: 10, background: 'var(--accent)', borderRadius: 1,
                         pointerEvents: 'none', opacity: 0.7,
@@ -5268,22 +5285,23 @@ export default function PlanningPage() {
                       title="Breder (sneltoets: +)"
                       style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
                   </div>
-                  {/* Verticale balk-hoogte zoom — compacte ±-knoppen zonder
-                      eigen slider, dat scheelt verticale ruimte. Cmd/Ctrl+
-                      scroll werkt nog steeds voor fine-tuning. */}
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
-                    padding: '2px 6px', borderRadius: 999,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
-                    title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
-                    <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1, marginRight: 2 }}>↕</span>
-                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
-                      title="Lagere balken"
-                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', minWidth: 22, textAlign: 'center' }}>{rowZoomPct}%</span>
-                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
-                      title="Hogere balken"
+                  {/* Verticale balk-hoogte zoom — alleen tonen wanneer er
+                      géén monthGroups-rij is (anders staat die al boven). */}
+                  {!monthGroups && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
+                      padding: '2px 6px', borderRadius: 999,
+                      background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
+                      title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
+                      <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1, marginRight: 2 }}>↕</span>
+                      <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
+                        title="Lagere balken"
+                        style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', minWidth: 22, textAlign: 'center' }}>{rowZoomPct}%</span>
+                      <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
+                        title="Hogere balken"
                       style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
                   </div>
+                  )}
                 </div>
               )}
             </div>
