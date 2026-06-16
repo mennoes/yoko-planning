@@ -4023,13 +4023,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }
 
   return (
-    <div style={{ padding: '32px 32px 64px' }}>
+    <div style={{ padding: isMobile ? '14px 14px 48px' : '32px 32px 64px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center' }}>
-          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Agenda</span>
-          <span style={{ color: 'var(--border)', margin: '0 8px' }}>/</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: isMobile ? 10 : 20, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: isMobile ? 16 : 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+          {!isMobile && <>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Agenda</span>
+            <span style={{ color: 'var(--border)', margin: '0 8px' }}>/</span>
+          </>}
           {editingTitle ? (
             <input autoFocus value={titleDraft}
               onChange={e => setTitleDraft(e.target.value)}
@@ -4197,13 +4199,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       )}
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: isMobile ? 6 : 10, marginBottom: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: isMobile ? '1 1 100%' : '0 0 auto' }}>
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', display: 'inline-flex' }}>
-            <IconSearch size={16} />
+            <IconSearch size={isMobile ? 14 : 16} />
           </span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoeken…"
-            style={{ padding: '9px 12px 9px 32px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', width: 220, boxSizing: 'border-box' }} />
+            style={{ padding: isMobile ? '6px 10px 6px 28px' : '9px 12px 9px 32px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: isMobile ? 13 : 14, outline: 'none', width: isMobile ? '100%' : 220, boxSizing: 'border-box' }} />
         </div>
 
         {/* Status- en persoon-dropdowns weggehaald — filteren kan via de
