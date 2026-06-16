@@ -3236,14 +3236,15 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       if (row) e.dataTransfer.setDragImage(row, 20, 12)
                     }}
                     style={{
-                      position: 'absolute', left: -18, top: '50%', transform: 'translateY(-50%)',
-                      width: 18, height: 32,
+                      position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+                      width: 14, height: 28,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'grab', userSelect: 'none',
-                      color: 'var(--text-secondary)', fontSize: 18, fontWeight: 700, lineHeight: 1,
+                      color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
                       opacity: 0, transition: 'opacity 0.12s',
                       zIndex: 5,
-                      background: 'transparent',
+                      background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
+                      pointerEvents: 'auto',
                     }}>⠿</span>
                 )}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
