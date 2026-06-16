@@ -5188,19 +5188,17 @@ export default function PlanningPage() {
             </>
           )}
 
-          {/* Month grouping row (only for week/day zoom) */}
+          {/* Month grouping row (only for week/day zoom) — sticky-left bevat
+              de complete zoom-toolbar (vertical pill + Alles + h-slider
+              stacked) zodat 't visueel één blok is. De col-header-rij
+              eronder houdt een lege sticky-left cell aan voor de border. */}
           {monthGroups && (
-            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
-              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', paddingLeft: 4, paddingRight: 8, gap: 8 }}>
-                {/* Verticale balk-hoogte zoom — staand links en absolute
-                    gepositioneerd zodat-ie OVER beide rijen (monthGroups
-                    + col-header) heen reikt en samen met de Alles+slider
-                    aan de rechterkant een nette 2-rij-look maakt. */}
+            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg, alignItems: 'stretch' }}>
+              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '4px 8px 4px 4px', gap: 4 }}>
                 {!isMobile && (
-                  <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'space-between',
-                    position: 'absolute', left: 4, top: 4, bottom: -34, zIndex: 23,
-                    padding: '4px 4px', borderRadius: 8, minWidth: 30,
+                    padding: '4px 4px', borderRadius: 8, width: 30, flexShrink: 0,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
                     title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
                     <span aria-hidden style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
@@ -5213,11 +5211,8 @@ export default function PlanningPage() {
                       style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                   </div>
                 )}
-                {/* Linker spacer-kolom met dezelfde breedte als de absolute
-                    vertical-zoom zodat de Alles-knop niet eronder verdwijnt. */}
-                {!isMobile && <div style={{ width: 32, flexShrink: 0 }} />}
-                {/* Alles-knop — bovenin de cel, neemt resterende breedte. */}
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                {/* Rechter kolom: Alles + horizontale slider gestapeld */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
                   <button onClick={() => {
                       if (expanded.size >= team.length) setExpanded(new Set())
                       else setExpanded(new Set(team.map(m => m.id)))
@@ -5227,19 +5222,36 @@ export default function PlanningPage() {
                       display: 'flex', alignItems: 'center', gap: 6,
                       padding: '6px 14px', borderRadius: 8,
                       background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                      color: 'var(--text-secondary)', fontSize: 15, fontWeight: 700,
+                      color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                       cursor: 'pointer', width: '100%', justifyContent: 'flex-start',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
                     onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
                     {expanded.size >= team.length ? '▾' : '▸'} Alles
                   </button>
+                  {!isMobile && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%',
+                      padding: '4px 10px', borderRadius: 8,
+                      background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
+                      <button onClick={() => anchoredColWZoom(z => z - 10)}
+                        title="Smaller (sneltoets: −)"
+                        style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>−</button>
+                      <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                        value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                        title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                        style={{ flex: 1, minWidth: 0, accentColor: 'var(--accent)' }} />
+                      <button onClick={() => anchoredColWZoom(z => z + 10)}
+                        title="Breder (sneltoets: +)"
+                        style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>+</button>
+                    </div>
+                  )}
                 </div>
               </div>
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
                   color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
-                  borderLeft: '1px solid var(--border-light)', background: stickyBg }}>
+                  borderLeft: '1px solid var(--border-light)', background: stickyBg,
+                  alignSelf: 'flex-start' }}>
                   {label}
                 </div>
               ))}
@@ -5248,7 +5260,7 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: monthGroups && !isMobile ? 44 : 4, paddingRight: 8, paddingTop: 2, paddingBottom: 2 }}>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: 4, paddingRight: 8, paddingTop: 2, paddingBottom: 2 }}>
               {!monthGroups && (
                 <button onClick={() => {
                     if (expanded.size >= team.length) setExpanded(new Set())
