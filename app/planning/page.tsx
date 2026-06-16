@@ -5223,7 +5223,7 @@ export default function PlanningPage() {
                       padding: '6px 14px', borderRadius: 8,
                       background: 'var(--bg-card)', border: '1px solid var(--border-light)',
                       color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
-                      cursor: 'pointer', width: '100%', justifyContent: 'flex-start',
+                      cursor: 'pointer', width: '100%', justifyContent: 'center',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
                     onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
