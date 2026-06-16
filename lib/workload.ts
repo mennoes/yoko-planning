@@ -61,9 +61,16 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         // erbij maar krijgt status='done' zodat 'ie in de planning faded
         // wordt i.p.v. te verdwijnen (anders 'verdwijnen items zomaar' bij
         // een Done-tik).
-        const subsWithDates = subs.filter(si => (si.startDate || si.endDate))
+        //
+        // BELANGRIJK: we gebruiken hier de index uit de ORIGINELE subs-
+        // array (origIdx), niet uit de gefilterde lijst. Anders verwijst
+        // project.id = '__siN' naar de verkeerde subitem in handleDetail
+        // Update / handleDragEnd (die kijken naar subs[N] direct).
+        const subsWithDates = subs
+          .map((si, origIdx) => ({ si, origIdx }))
+          .filter(({ si }) => si.startDate || si.endDate)
         if (subsWithDates.length > 0) {
-          return subsWithDates.map((si, idx): Project => {
+          return subsWithDates.map(({ si, origIdx }): Project => {
             // Subitem-ownerIds gebruiken we alleen als 't ECHT toegewezen is
             // (niet leeg en niet alleen 'unassigned'). Anders valt-ie terug
             // op de parent-owners — anders telt een 'unassigned'-subitem 0u
@@ -79,7 +86,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
                 ? (i.ownerIds as string[])
                 : ['unassigned']  // valt door naar de Unassigned-rij in /planning
             return {
-              id:        `${boardName}__${i.id}__si${idx}`,
+              id:        `${boardName}__${i.id}__si${origIdx}`,
               // Subitem-bar toont alleen de subitem-naam — niet "Parent ·
               // Subitem". User vond 't dubbel: "het hoofditem staat er nu
               // ook". Subitem-naam is meestal duidelijk genoeg op zichzelf
