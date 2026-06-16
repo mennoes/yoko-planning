@@ -5204,7 +5204,7 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 4, paddingLeft: namePad, paddingTop: 4, paddingBottom: 4 }}>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', gap: 4, paddingLeft: namePad, paddingTop: 6, paddingBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
               <button onClick={() => {
                   // Toggle: if all expanded → collapse all; otherwise expand all
@@ -5214,9 +5214,9 @@ export default function PlanningPage() {
                 title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '4px 9px', borderRadius: 6,
+                  padding: '4px 11px', borderRadius: 6,
                   background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                  color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600,
+                  color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   cursor: 'pointer',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
@@ -5237,10 +5237,10 @@ export default function PlanningPage() {
                       <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
                         value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                         title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                        style={{ width: 80, accentColor: 'var(--accent)' }} />
+                        style={{ width: 56, accentColor: 'var(--accent)' }} />
                       <span aria-hidden style={{
                         position: 'absolute',
-                        left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 80}px`,
+                        left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 56}px`,
                         top: '50%', transform: 'translate(-50%, -50%)',
                         width: 2, height: 10, background: 'var(--accent)', borderRadius: 1,
                         pointerEvents: 'none', opacity: 0.7,
@@ -5249,13 +5249,6 @@ export default function PlanningPage() {
                     <button onClick={() => anchoredColWZoom(z => z + 10)}
                       title="Breder (sneltoets: +)"
                       style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
-                    <span style={{
-                      fontSize: 9, fontWeight: 700, color: 'var(--text-muted)',
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                      marginLeft: 2,
-                    }}>
-                      {zoom === 'dag' ? 'Week' : 'Overz.'}
-                    </span>
                   </div>
                   {/* Verticale balk-hoogte zoom — compacte ±-knoppen zonder
                       eigen slider, dat scheelt verticale ruimte. Cmd/Ctrl+
@@ -5661,15 +5654,13 @@ export default function PlanningPage() {
 
         </div>
 
-        {/* Footer info — sticky-left zodat de tekst altijd zichtbaar
-            blijft bij horizontaal scrollen, en wat groter font ipv 11. */}
-        <div style={{ padding: isMobile ? '10px 0 24px' : '12px 0 24px' }}>
-          <div style={{ position: 'sticky', left: 0, width: 'max-content',
-            padding: isMobile ? '0 14px' : '0 32px',
-            fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
-            {projects.length} items · {team.length} teamleden · {Object.keys(BOARD_COLORS).length} agenda&apos;s
-            {!isMobile && <> · sleep een balk om datums te verschuiven · klik voor details</>}
-          </div>
+        {/* Footer info — buiten de scroll-container zodat 't altijd
+            zichtbaar blijft onder de timeline, ongeacht zoom-niveau. */}
+        <div style={{ padding: isMobile ? '10px 14px 18px' : '12px 32px 24px',
+          fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.02em',
+          background: 'var(--bg-base)' }}>
+          {projects.length} items · {team.length} teamleden · {Object.keys(BOARD_COLORS).length} agenda&apos;s
+          {!isMobile && <> · sleep een balk om datums te verschuiven · klik voor details</>}
         </div>
       </div>
 
