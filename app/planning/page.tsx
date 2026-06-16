@@ -5241,7 +5241,7 @@ export default function PlanningPage() {
 
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
-            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, paddingLeft: 4, paddingRight: 8, paddingTop: 2, paddingBottom: 2 }}>
+            <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: monthGroups && !isMobile ? 44 : 4, paddingRight: 8, paddingTop: 2, paddingBottom: 2 }}>
               {!monthGroups && (
                 <button onClick={() => {
                     if (expanded.size >= team.length) setExpanded(new Set())
@@ -5259,31 +5259,25 @@ export default function PlanningPage() {
                 </button>
               )}
               {!isMobile && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {/* Horizontale kolom-zoom — onder de Alles-knop, rechts
-                      uitgelijnd in de sticky-left cel. */}
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '2px 6px', borderRadius: 999,
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                  {/* Horizontale kolom-zoom — onder de Alles-knop. Strekt
+                      mee met de breedte van de cel zodat 'ie netjes
+                      onder de Alles-knop uitgelijnd staat. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1,
+                    padding: '2px 8px', borderRadius: 999,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
                     <button onClick={() => anchoredColWZoom(z => z - 10)}
                       title="Smaller (sneltoets: −)"
-                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>−</button>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
                       <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
                         value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                         title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                        style={{ width: 80, accentColor: 'var(--accent)' }} />
-                      <span aria-hidden style={{
-                        position: 'absolute',
-                        left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 80}px`,
-                        top: '50%', transform: 'translate(-50%, -50%)',
-                        width: 2, height: 10, background: 'var(--accent)', borderRadius: 1,
-                        pointerEvents: 'none', opacity: 0.7,
-                      }} />
+                        style={{ width: '100%', accentColor: 'var(--accent)' }} />
                     </div>
                     <button onClick={() => anchoredColWZoom(z => z + 10)}
                       title="Breder (sneltoets: +)"
-                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>+</button>
                   </div>
                   {/* Verticale balk-hoogte zoom — alleen tonen wanneer er
                       géén monthGroups-rij is (anders staat die al boven). */}
