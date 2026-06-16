@@ -2185,19 +2185,27 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, sc
   const cancel = () => { if (hoverTimer.current != null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null } }
   const schedule = () => { cancel(); hoverTimer.current = window.setTimeout(() => setHovered(false), 120) }
 
-  function openPopover() {
+  function openPopover(ev?: React.MouseEvent) {
     cancel()
     if (wrapRef.current) {
-      // wrapRef spant de hele row-breedte (left:0, right:0), dus
-      // getBoundingClientRect().left geeft de row-rand. De daadwerkelijke
-      // bar zit op +`left` binnen die row — daar willen we de popover.
       const r = wrapRef.current.getBoundingClientRect()
       const popW = 280
-      const barScreenX = r.left + left
-      const lx = Math.min(barScreenX, window.innerWidth - popW - 8)
+      // Lange balken kunnen vér uitsteken; positie 'm onder de muis i.p.v.
+      // bij de bar-start zodat de popover altijd in 't zicht is.
+      const mouseX = ev?.clientX
+      const baseX  = typeof mouseX === 'number' ? mouseX - popW / 2 : r.left + left
+      const lx = Math.min(baseX, window.innerWidth - popW - 8)
       setPopPos({ top: r.top + laneH + 4, left: Math.max(8, lx) })
     }
     setHovered(true)
+  }
+  function movePopover(ev: React.MouseEvent) {
+    if (!hovered || !wrapRef.current) return
+    const r = wrapRef.current.getBoundingClientRect()
+    const popW = 280
+    const baseX = ev.clientX - popW / 2
+    const lx = Math.min(baseX, window.innerWidth - popW - 8)
+    setPopPos({ top: r.top + laneH + 4, left: Math.max(8, lx) })
   }
 
   const hours = project.estHours || 0
@@ -2210,6 +2218,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, sc
   return (
     <div ref={wrapRef}
       onMouseEnter={openPopover}
+      onMouseMove={movePopover}
       onMouseLeave={schedule}
       style={{ position: 'absolute', top: 0, left: 0, right: 0, height: laneH, pointerEvents: 'none' }}>
       <DraggableBar project={project} memberId={memberId} team={team} left={left} width={width} colW={colW} small={false}

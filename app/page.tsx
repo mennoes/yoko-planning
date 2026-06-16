@@ -647,6 +647,20 @@ export default function HomePage() {
     if (mine) setMyTodos(mine.items as TodoStoreItem[])
   }
 
+  // Tikt een todo op de eigen sectie aan/uit vanuit de home-widget zodat
+  // 'r een checkbox-klik direct opslaat in dezelfde store als /todos.
+  function toggleHomeTodo(id: string) {
+    if (!memberId) return
+    const fallback: TodoSection[] = todosData.sections as TodoSection[]
+    const sections = loadTodoSectionsStore(fallback)
+    const next = sections.map(s => s.id === memberId
+      ? { ...s, items: s.items.map(i => i.id === id ? { ...i, done: !i.done } : i) }
+      : s)
+    saveTodoSectionsStore(next)
+    const mine = next.find(s => s.id === memberId)
+    if (mine) setMyTodos(mine.items as TodoStoreItem[])
+  }
+
   // Tick een workload-item Done (of un-Done): laadt het juiste bord, zet
   // Lokaal-only afvinken: de werkdruk-widget krijgt een strike-through
   // maar de agenda blijft ONGEMOEID. Eerder zetten we de agenda-status
@@ -901,7 +915,17 @@ export default function HomePage() {
               <p style={{ padding: '10px 20px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen open taken 🎉</p>
             ) : openTodos.slice(0, 5).map(t => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 20px' }}>
-                <div style={{ width: 14, height: 14, borderRadius: 4, border: '2px solid var(--border)', flexShrink: 0, marginTop: 3 }} />
+                <button onClick={() => toggleHomeTodo(t.id)}
+                  title={t.done ? 'Markeer als open' : 'Markeer als afgerond'}
+                  style={{
+                    width: 18, height: 18, borderRadius: 4,
+                    border: '2px solid var(--border)',
+                    background: t.done ? 'var(--accent)' : 'transparent',
+                    flexShrink: 0, marginTop: 1, padding: 0,
+                    cursor: 'pointer', display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: 11, lineHeight: 1,
+                  }}>{t.done ? '✓' : ''}</button>
                 <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
                   {(() => {
                     const lines = (t.text ?? '').split('\n')
