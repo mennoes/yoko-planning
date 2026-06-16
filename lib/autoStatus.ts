@@ -7,6 +7,7 @@ import { loadGroups, saveGroups, pushBoardToRemote } from './boardStore'
 import { getBoardIds } from './boardsRegistry'
 import { createNotification } from './notificationsStore'
 import { autoMoveDoneItems } from './doneAutoMove'
+import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 
 const WORKING = 'Working on...'
 const DONE    = 'Done'
@@ -34,10 +35,19 @@ function needsAuto(status: string | undefined | null): boolean {
 // wil zelf bepalen wanneer een eigen project Done is. Voor overdue manual
 // items sturen we een 'klaar?'-notificatie via notifyOverdueItems, zonder
 // status te muteren.
-function shouldAutoDone(status: string | undefined | null, end: string | null | undefined, today: string, source: 'manual' | 'google' | undefined | null): boolean {
+function shouldAutoDone(
+  status: string | undefined | null,
+  end: string | null | undefined,
+  today: string,
+  source: 'manual' | 'google' | undefined | null,
+  isVrij: boolean,
+): boolean {
   const s = (status ?? '').trim()
   if (s === DONE || s === 'Stuck') return false
-  if (source !== 'google') return false   // manual items: nooit auto-Done
+  // Vrij/vakantie-items mogen óók auto-Done worden zodra de dag erna
+  // is — net als Google-events. Een 'vrij'-item dat geweest is heeft
+  // immers geen open-status meer nodig.
+  if (source !== 'google' && !isVrij) return false
   if (!end) return false
   const endTs   = Date.parse(end)
   const todayTs = Date.parse(today)
@@ -50,6 +60,12 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
   const boardIds = getBoardIds()
   let changed = 0
   const dirty = new Set<string>()
+  // Category-overrides lokaal lezen zodat ook items waarvan de naam
+  // niet matcht maar die handmatig op 'vrij' zijn gezet via de planning-
+  // popup óók als vrij gelden voor auto-Done.
+  const catOverrides = loadCategoryOverrides()
+  const isItemVrij = (id: string, name: string | undefined | null) =>
+    catOverrides[id] === 'vrij' || isVrijTitle(name)
 
   for (const boardId of boardIds) {
     const groups = loadGroups(boardId, [])
@@ -71,7 +87,8 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
           const subSource: 'manual' | 'google' | undefined = item.source === 'google' ? 'google' : undefined
           const subs: SubItem[] = item.subitems.map(sub => {
             const effSource = subSource ?? (sub as { source?: 'manual' | 'google' }).source
-            if (shouldAutoDone(sub.status, sub.endDate ?? sub.startDate, today, effSource)) {
+            const subVrij   = isItemVrij(sub.id, sub.name) || isItemVrij(item.id, item.name)
+            if (shouldAutoDone(sub.status, sub.endDate ?? sub.startDate, today, effSource, subVrij)) {
               subChanged = true
               return { ...sub, status: DONE }
             }
@@ -91,7 +108,7 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
         // waarvan de laatste instance gepasseerd is) op Done; live items
         // krijgen Working on…; handmatige items vallen alleen onder de
         // 3-dagen-regel zodat zelf-aangemaakt werk niet ongezien wegglijdt.
-        if (shouldAutoDone(mutated.status, mutated.endDate ?? mutated.startDate, today, mutated.source)) {
+        if (shouldAutoDone(mutated.status, mutated.endDate ?? mutated.startDate, today, mutated.source, isItemVrij(mutated.id, mutated.name))) {
           mutated = { ...mutated, status: DONE }
           changed++
           boardChanged = true
