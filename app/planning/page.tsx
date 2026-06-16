@@ -5192,23 +5192,30 @@ export default function PlanningPage() {
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg }}>
               <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', paddingLeft: 4, paddingRight: 8, gap: 8 }}>
-                {/* Verticale balk-hoogte zoom — staand links zodat de
-                    rechterkolom plek heeft voor Alles + horizontale slider. */}
+                {/* Verticale balk-hoogte zoom — staand links en absolute
+                    gepositioneerd zodat-ie OVER beide rijen (monthGroups
+                    + col-header) heen reikt en samen met de Alles+slider
+                    aan de rechterkant een nette 2-rij-look maakt. */}
                 {!isMobile && (
-                  <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-                    padding: '3px 4px', borderRadius: 8,
+                  <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+                    justifyContent: 'space-between',
+                    position: 'absolute', left: 4, top: 4, bottom: -34, zIndex: 23,
+                    padding: '4px 4px', borderRadius: 8, minWidth: 30,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
                     title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
                     <span aria-hidden style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
                     <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
                       title="Hogere balken"
-                      style={{ width: 16, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)' }}>{rowZoomPct}%</span>
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)' }}>{rowZoomPct}%</span>
                     <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
                       title="Lagere balken"
-                      style={{ width: 16, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                   </div>
                 )}
+                {/* Linker spacer-kolom met dezelfde breedte als de absolute
+                    vertical-zoom zodat de Alles-knop niet eronder verdwijnt. */}
+                {!isMobile && <div style={{ width: 32, flexShrink: 0 }} />}
                 {/* Alles-knop — bovenin de cel, neemt resterende breedte. */}
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
                   <button onClick={() => {
