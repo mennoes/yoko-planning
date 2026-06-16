@@ -5194,7 +5194,7 @@ export default function PlanningPage() {
               eronder houdt een lege sticky-left cell aan voor de border. */}
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg, alignItems: 'stretch' }}>
-              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '8px 8px 8px 4px', gap: 4 }}>
+              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '4px 8px 4px 4px', gap: 4 }}>
                 {!isMobile && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'space-between',
@@ -5220,7 +5220,7 @@ export default function PlanningPage() {
                     title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '10px 14px', borderRadius: 8,
+                      padding: '6px 14px', borderRadius: 8,
                       background: 'var(--bg-card)', border: '1px solid var(--border-light)',
                       color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                       cursor: 'pointer', width: '100%', justifyContent: 'center',
@@ -5231,7 +5231,7 @@ export default function PlanningPage() {
                   </button>
                   {!isMobile && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%',
-                      padding: '8px 10px', borderRadius: 8,
+                      padding: '4px 10px', borderRadius: 8,
                       background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
                       <button onClick={() => anchoredColWZoom(z => z - 10)}
                         title="Smaller (sneltoets: −)"
