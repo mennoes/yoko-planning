@@ -5223,7 +5223,7 @@ export default function PlanningPage() {
                 {expanded.size >= team.length ? '▾' : '▸'} Alles
               </button>
               {!isMobile && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 22, height: 22, background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
@@ -5253,26 +5253,30 @@ export default function PlanningPage() {
                   }}>
                     {zoom === 'dag' ? 'Week-planner' : 'Overzicht'}
                   </span>
-                  {/* Verticale zoom: schaalt bar-hoogte zodat lange events
-                      leesbaarder worden. Compacte controls naast de
-                      horizontale zoom. Ook bedienbaar via Cmd/Ctrl+scroll
-                      en trackpad-pinch op de planner. */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8,
-                    padding: '2px 8px 2px 8px', borderRadius: 999,
+                  {/* Verticale zoom (balk-hoogte): de slider zelf is nu
+                      verticaal georiënteerd zodat 'ie geen horizontale
+                      ruimte opslokt en niet over de horizontale zoom of
+                      label-tekst heen schuift. ± buttons stapelen
+                      eronder/erboven. */}
+                  <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginLeft: 8,
+                    padding: '4px 4px', borderRadius: 8,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
                     title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
-                    <span aria-hidden style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
-                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
-                      title="Lagere balken"
-                      style={{ width: 20, height: 20, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
+                      title="Hogere balken"
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
                     <input type="range" min={70} max={180} step={5}
                       value={rowZoomPct} onChange={e => setRowZoomPct(parseInt(e.target.value))}
                       title={`Balk-hoogte ${rowZoomPct}%`}
-                      style={{ width: 80, accentColor: 'var(--accent)' }} />
-                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
-                      title="Hogere balken"
-                      style={{ width: 20, height: 20, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.04em', minWidth: 28, textAlign: 'right' }}>{rowZoomPct}%</span>
+                      style={{
+                        WebkitAppearance: 'slider-vertical',
+                        writingMode: 'vertical-lr' as React.CSSProperties['writingMode'],
+                        direction: 'rtl',
+                        width: 16, height: 60, accentColor: 'var(--accent)', padding: 0, margin: 0,
+                      } as unknown as React.CSSProperties} />
+                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
+                      title="Lagere balken"
+                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                   </div>
                 </div>
               )}
