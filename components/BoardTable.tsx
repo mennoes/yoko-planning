@@ -1887,7 +1887,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               opacity: selected || hover ? 1 : 0.5, transition: 'opacity 0.15s' }} />
         </div>
 
-        <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, cursor: 'pointer' }}
+        <div style={{ padding: '6px 14px 6px 4px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, cursor: 'pointer' }}
           onClick={e => {
             // Klik op een 'leeg' deel van de title-cel (tussen checkbox en
             // titel of net naast de pill-knoppen) opent 't detail-drawer.
@@ -3236,14 +3236,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       if (row) e.dataTransfer.setDragImage(row, 20, 12)
                     }}
                     style={{
-                      position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+                      position: 'absolute', left: -18, top: '50%', transform: 'translateY(-50%)',
                       width: 18, height: 32,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       cursor: 'grab', userSelect: 'none',
                       color: 'var(--text-secondary)', fontSize: 18, fontWeight: 700, lineHeight: 1,
                       opacity: 0, transition: 'opacity 0.12s',
                       zIndex: 5,
-                      background: 'linear-gradient(to right, var(--bg-card) 70%, transparent)',
+                      background: 'transparent',
                     }}>⠿</span>
                 )}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
