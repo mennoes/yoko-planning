@@ -2206,25 +2206,26 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, sc
 
   function openPopover(ev?: React.MouseEvent) {
     cancel()
-    if (wrapRef.current) {
-      const r = wrapRef.current.getBoundingClientRect()
-      const popW = 280
-      // Lange balken kunnen vér uitsteken; positie 'm onder de muis i.p.v.
-      // bij de bar-start zodat de popover altijd in 't zicht is.
-      const mouseX = ev?.clientX
-      const baseX  = typeof mouseX === 'number' ? mouseX - popW / 2 : r.left + left
-      const lx = Math.min(baseX, window.innerWidth - popW - 8)
-      setPopPos({ top: r.top + laneH + 4, left: Math.max(8, lx) })
-    }
+    const popW = 280
+    // Posities baseren op de muis-coordinaat zodat 't kaartje altijd
+    // dichtbij de bar verschijnt. De wrapRef beslaat de hele row-hoogte
+    // dus die kunnen we niet gebruiken — anders landt 't kaartje ver
+    // onder de daadwerkelijke bar.
+    const mouseY = ev?.clientY
+    const mouseX = ev?.clientX
+    const baseX  = typeof mouseX === 'number' ? mouseX - popW / 2 : 8
+    const baseY  = typeof mouseY === 'number' ? mouseY + 14 : 100
+    const lx = Math.min(baseX, window.innerWidth - popW - 8)
+    setPopPos({ top: baseY, left: Math.max(8, lx) })
     setHovered(true)
   }
   function movePopover(ev: React.MouseEvent) {
-    if (!hovered || !wrapRef.current) return
-    const r = wrapRef.current.getBoundingClientRect()
+    if (!hovered) return
     const popW = 280
     const baseX = ev.clientX - popW / 2
+    const baseY = ev.clientY + 14
     const lx = Math.min(baseX, window.innerWidth - popW - 8)
-    setPopPos({ top: r.top + laneH + 4, left: Math.max(8, lx) })
+    setPopPos({ top: baseY, left: Math.max(8, lx) })
   }
 
   const hours = project.estHours || 0
