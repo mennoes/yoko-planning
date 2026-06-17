@@ -2089,7 +2089,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
             onClick={isReadOnly ? () => onBarClick(b.p) : undefined}
             title={isReadOnly ? `${b.p.name} · bewerk in Google Calendar` : `${b.p.name} · sleep om te verplaatsen`}
             style={{
-              position: 'absolute', top: 2, bottom: 2,
+              // Vrij-blok zit op de eerste project-lane zodat 'ie precies
+              // dezelfde hoogte heeft als een 8u/dag-project. Daarmee
+              // klopt de verhouding: een 4u/dag project is écht 50% van
+              // een Vrij-dag.
+              position: 'absolute', top: BAR_GAP_S, height: PROJECT_LANE_H - BAR_GAP_S,
               left: b.left + 2, width: Math.max(20, b.width - 4),
               background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
               border: '2px solid rgba(72,130,82,1)',
