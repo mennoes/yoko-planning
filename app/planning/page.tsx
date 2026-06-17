@@ -901,7 +901,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           // VANDAAG-lijn (z=3) wint ook nog.
           zIndex: ghost ? 2 : (hoverBar ? 2 : (projectDays <= 1 ? 1 : 'auto')) }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
-        <span style={{ flex: 1, overflow: 'hidden', paddingLeft: 6, paddingRight: 4, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, marginLeft: titleShift }}>
+        <span style={{ flex: 1, overflow: 'hidden', paddingLeft: 6, paddingRight: 4, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', paddingTop: scaleByHours ? 2 : 0, minWidth: 0, marginLeft: titleShift }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.15 }}>
