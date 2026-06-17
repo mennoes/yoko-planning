@@ -2022,7 +2022,9 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // PROJECT_LANE_H halved t.o.v. eerdere 60px zodat 100%-bars niet de
   // hele schermhoogte beslaan. 30px is een goede balans tussen
   // leesbaarheid en compactheid.
-  const PROJECT_LANE_H = Math.round((zoom === 'week' ? 30 : (BAR_H + BAR_GAP)) * RS)
+  // Maand/kwartaal: kleinere lane zodat veel kolommen overzichtelijk
+  // blijven; week: 30; dag: BAR_H + BAR_GAP.
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 22 : zoom === 'week' ? 30 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
@@ -2176,7 +2178,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
               laneH={wrapperH}
               laneIdx={b.lane}
-              scaleByHours={zoom === 'week'}
+              scaleByHours={zoom === 'week' || zoom === 'maand'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
@@ -3993,6 +3995,16 @@ export default function PlanningPage() {
 
   function setZoomLevel(level: ZoomLevel, colW = 100) {
     const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
+    // Anker bij vandaag-marker zodat na de zoom-switch het 'nu'-streepje
+    // op dezelfde X-positie in het viewport blijft — anders springt
+    // de timeline ergens onverwacht heen.
+    const el = gridRef.current
+    if (el && typeof window !== 'undefined') {
+      const todayEl = el.querySelector<HTMLElement>('[data-today-marker]')
+      if (todayEl) {
+        pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
+      }
+    }
     if (zoom === level) { setColWZoom(colW); return }
     const currentDays = colOffset * daysPerCol[zoom]
     setZoom(level)
