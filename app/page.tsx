@@ -793,6 +793,25 @@ export default function HomePage() {
     .filter(x => x.hours > x.cap)
     .sort((a, b) => b.pct - a.pct)
 
+  // Team-totaal KPIs deze week (zelfde getal als bovenin /planning) zodat
+  // je op één plek kunt zien hoeveel het team al volgepland staat.
+  const teamKpis = (() => {
+    let totalHours = 0
+    let totalCap = 0
+    for (const m of yokoMembers) {
+      const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const hrs = memberHoursThisWeek[m.id] ?? 0
+      totalHours += hrs
+      totalCap += cap
+    }
+    const pctUsed = totalCap > 0 ? Math.round((totalHours / totalCap) * 100) : 0
+    return {
+      totalHours: Math.round(totalHours * 10) / 10,
+      totalCap,
+      pctUsed,
+    }
+  })()
+
   const myLastWeekStart = new Date(weekStartTeam); myLastWeekStart.setDate(myLastWeekStart.getDate() - 7)
   const myNextWeekStart = new Date(weekStartTeam); myNextWeekStart.setDate(myNextWeekStart.getDate() + 7)
   const myThisContribs = memberId
@@ -1224,6 +1243,14 @@ export default function HomePage() {
       <div style={card}>
         <div style={cardHeader}>
           <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconAlert size={isMobile ? 17 : 15} />Overbelast deze week</h2>
+          {/* Team-totaal KPI bij de Overbelast-widget zodat je in 1 oogopslag
+              ziet hoe het team ervoor staat, niet alleen wie 't drukst heeft. */}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <strong style={{ color: teamKpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 14, fontWeight: 800 }}>
+              {teamKpis.pctUsed}%
+            </strong>
+            <span style={{ color: 'var(--text-muted)' }}>{teamKpis.totalHours}/{teamKpis.totalCap}u</span>
+          </span>
         </div>
         <div style={{ padding: '6px 0 10px' }}>
           {overloaded.length === 0 ? (
