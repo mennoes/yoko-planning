@@ -2665,14 +2665,15 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 
   // Bereken een anker-positie naast de klik zodat de rest van de planning
   // zichtbaar blijft. Valt bij ontbreken van anchor terug op gecentreerd.
-  const POP_W = 460
-  const POP_H_MAX = Math.min(700, typeof window !== 'undefined' ? window.innerHeight * 0.85 : 700)
-  const MARGIN = 12
   const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const isMobile = vw < 740
+  const POP_W = isMobile ? Math.min(vw - 16, 420) : 460
+  const POP_H_MAX = Math.min(700, vh * (isMobile ? 0.9 : 0.85))
+  const MARGIN = 12
   let popLeft = (vw - POP_W) / 2
   let popTop  = (vh - POP_H_MAX) / 2
-  if (anchor) {
+  if (anchor && !isMobile) {
     // Extra-marge tussen klik en popup zodat het workload-bolletje en de
     // omliggende tijdlijn-bars zichtbaar blijven naast de popup. 16px voelde
     // te dicht — 120px laat de werklast goed in beeld.
@@ -2725,9 +2726,19 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               </div>
             )}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', lineHeight: 1, padding: '2px 4px', borderRadius: 4 }}
+          <button onClick={onClose} aria-label="Sluiten"
+            style={{
+              background: isMobile ? 'var(--bg-base)' : 'none',
+              border: isMobile ? '1px solid var(--border)' : 'none',
+              cursor: 'pointer',
+              fontSize: isMobile ? 22 : 18, color: 'var(--text-primary)', lineHeight: 1,
+              padding: isMobile ? '6px 12px' : '2px 4px',
+              borderRadius: isMobile ? 8 : 4, flexShrink: 0,
+              minWidth: isMobile ? 38 : undefined, minHeight: isMobile ? 38 : undefined,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
+            onMouseLeave={e => (e.currentTarget.style.color = isMobile ? 'var(--text-primary)' : 'var(--text-muted)')}>×</button>
         </div>
       </div>
       {isMerged && (
