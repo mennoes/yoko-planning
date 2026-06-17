@@ -4711,46 +4711,45 @@ export default function PlanningPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-      {/* ── Fixed header (never scrolls) ── */}
+      {/* ── Fixed header — bevat alleen nog de toolbar. Titel + KPIs zijn
+            naar de scrollable grid verhuisd zodat ze meescrollen i.p.v.
+            vaste vertical-space op te slokken. ── */}
       <header style={{ flexShrink: 0, padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
 
-        {/* Title + nav */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: isMobile ? 6 : 16 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 24, flex: 1 }}>
+        {/* Title + nav — desktop only; op mobiel scrollt 't mee bovenin de
+            grid (zie title-row in de scrollable area). */}
+        {!isMobile && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: isMobile ? 13 : 36, fontWeight: isMobile ? 700 : 900, color: isMobile ? 'var(--text-muted)' : 'var(--text-primary)', margin: 0, letterSpacing: isMobile ? '0.05em' : '-0.04em', lineHeight: 1, textTransform: isMobile ? 'uppercase' : 'none' }}>
+              <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
                 Planning
               </h1>
-              {!isMobile && (
-                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                  {todayLabel}
-                </div>
-              )}
+              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                {todayLabel}
+              </div>
             </div>
-            {/* KPIs inline naast de titel — ook op mobiel zodat 'r een aparte
-                KPI-balk weg kan en de header binnen 2 regels blijft. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 14, paddingBottom: isMobile ? 0 : 4, fontSize: isMobile ? 11 : 13, color: 'var(--text-secondary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 4, fontSize: 13, color: 'var(--text-secondary)' }}>
               <span>
-                <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: isMobile ? 12 : 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
+                <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
                 <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>{kpis.totalHours}/{kpis.totalCap}u</span>
               </span>
               <span style={{ width: 1, height: 12, background: 'var(--border)' }} />
               <span>
-                <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: isMobile ? 12 : 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+                <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
                 <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>deadl.</span>
               </span>
             </div>
           </div>
-          {!isMobile && (
-            <div style={segGroup}>
-              <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
-              <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
-              <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
-              <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
-              <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
-            </div>
-          )}
+          <div style={segGroup}>
+            <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
+            <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
+            <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
+            <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
+            <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
+          </div>
         </div>
+        )}
 
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: isMobile ? 'nowrap' : 'wrap', marginBottom: isMobile ? 6 : 16 }}>
@@ -5160,6 +5159,33 @@ export default function PlanningPage() {
         }}
         style={{ flex: 1, overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
         <div style={{ minWidth: totalWidth, position: 'relative' }}>
+
+          {/* Mobile title-rij — staat IN de scrollable area zodat 'ie
+              meescrolt en geen vaste verticale ruimte opslokt boven de
+              tijdlijn. position:sticky left zodat-ie blijft hangen bij
+              horizontaal scrollen door de tijdlijn. */}
+          {isMobile && (
+            <div style={{
+              position: 'sticky', left: 0, width: 'max-content', zIndex: 4,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '6px 14px 4px',
+            }}>
+              <h1 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', margin: 0, letterSpacing: '0.05em', lineHeight: 1, textTransform: 'uppercase' }}>
+                Planning
+              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
+                <span>
+                  <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 12, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
+                  <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>{kpis.totalHours}/{kpis.totalCap}u</span>
+                </span>
+                <span style={{ width: 1, height: 12, background: 'var(--border)' }} />
+                <span>
+                  <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 12, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+                  <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>deadl.</span>
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* "Now" indicator — yoko-yellow vertical line at today's exact
               position with a VANDAAG pill at the top so the marker is hard
