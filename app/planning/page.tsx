@@ -1963,13 +1963,14 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     return false
   }
   const vrijBars     = projectAllSingles.filter(isVrijBar)
-  const fullDayBars  = projectAllSingles.filter(b => !isVrijBar(b) && isFullDayBar(b))
-  const fullDayIds   = new Set(fullDayBars.map(b => b.p.id))
+  // Hele-dag-flag is alleen nog nodig voor isVrijBar; full-day-projecten
+  // gaan nu via de gewone bar-packing zodat hun hoogte proportioneel is.
+  void isFullDayBar
   // Meetings + reguliere projecten DELEN nu één lane-stack. Vroeger kreeg
   // elke meeting een eigen rij boven de projecten — dat blies de hoogte
   // op zodra je 'Meetings tonen' aanzette. Nu fitten ze in dezelfde
   // gap-aware packing en blijft 't compact.
-  const projectItems = projectAllSingles.filter(b => !isVrijBar(b) && !fullDayIds.has(b.p.id))
+  const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
@@ -1984,7 +1985,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
   }))
 
-  if (bars.length === 0 && vrijBars.length === 0 && fullDayBars.length === 0) return null
+  if (bars.length === 0 && vrijBars.length === 0) return null
   const projectStack = projectLanes * PROJECT_LANE_H
   const baseHeight = BAR_GAP_S + projectStack + 6
   const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
@@ -2117,33 +2118,10 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
           </div>
         )
       })}
-      {/* Hele-dag-blokken: single-day items van ~8u worden full-height
-          gerenderd, met de board-kleur als subtiele tint. Zo zie je in één
-          oogopslag welke dagen volledig 'op slot' zitten. */}
-      {fullDayBars.map(b => {
-        const color = BOARD_COLORS[b.p.board] ?? '#888'
-        const isDone = b.p.status === 'done'
-        return (
-          <div key={`fd_${b.p.id}`}
-            onClick={() => onBarClick(b.p)}
-            title={`${b.p.name} · hele dag`}
-            style={{
-              position: 'absolute', top: 2, bottom: 2,
-              left: b.left + 2, width: Math.max(20, b.width - 4),
-              background: color + '33',
-              border: `1.5px solid ${color}`,
-              borderRadius: 8,
-              display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
-              padding: '4px 8px', gap: 6,
-              cursor: 'pointer', zIndex: 0,
-              fontSize: 12, fontWeight: 600, color: '#fff',
-              opacity: isDone ? 0.45 : 1,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.p.name}</span>
-          </div>
-        )
-      })}
+      {/* Hele-dag-blokken werden voorheen apart gerenderd als full-height
+          tile. Nu gaan ze via dezelfde lane-packing als gewone project-
+          bars zodat 'n 8u/dag bar overal even hoog oogt en proportioneel
+          is met 4u/dag, 2u/dag, etc. */}
       {bars.map(b => {
         const top = projectLaneTop(b.lane)
         const wrapperH = PROJECT_LANE_H
