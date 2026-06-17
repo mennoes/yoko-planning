@@ -3866,19 +3866,17 @@ export default function PlanningPage() {
   // vastlegt zodat we daar na de re-render weer op anker'en — voorkomt
   // dat een zoom vanuit linker-rand werkt i.p.v. vanuit de today-line.
   // Eén virtuele zoom-slider over twee zoom-modes:
-  //   50–150  → maand-zoom (kwartaal-overzicht, hele maanden als cols)
-  //   150–300 → week-zoom (Overzicht)
+  //   50–300 → week-zoom (Overzicht)
   //   300–550 → dag-zoom (Week-view)
-  // Twee crossovers (150 en 300) zodat de slider één doorlopende
-  // zoom-as is: van kwartaal helemaal links tot dag-niveau rechts.
+  // Maand/kwartaal-niveau zit op een aparte dropdown (zie ZoomLevelDropdown
+  // hieronder) zodat de slider niet één giga-as is van kwartaal tot dag.
   const VIRTUAL_MIN = 50
   const VIRTUAL_MAX = 550
-  const VIRTUAL_CROSS_LOW  = 150
   const VIRTUAL_CROSS = 300
-  const virtualZoom = zoom === 'maand'
+  const virtualZoom = zoom === 'week'
     ? colWZoom
-    : zoom === 'week'
-      ? VIRTUAL_CROSS_LOW + (colWZoom - 50)
+    : zoom === 'maand'
+      ? 100  // slider doet niets bij maand-zoom; dropdown stuurt 't
       : VIRTUAL_CROSS + (colWZoom - 50)
 
   function anchoredColWZoom(updater: (z: number) => number) {
@@ -3892,24 +3890,19 @@ export default function PlanningPage() {
     const raw = updater(virtualZoom)
     const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_MAX, raw))
     const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-    if (clamped <= VIRTUAL_CROSS_LOW) {
-      // Maand-zoom helft (kwartaal-overzicht)
-      if (zoom !== 'maand') {
-        const currentDays = colOffset * daysPerCol[zoom]
-        setZoom('maand')
-        setColOffset(Math.round(currentDays / daysPerCol.maand))
-      }
-      setColWZoom(Math.max(50, Math.min(300, clamped)))
-    } else if (clamped <= VIRTUAL_CROSS) {
-      // Week-zoom helft
+    if (zoom === 'maand') {
+      // In maand-zoom werkt de slider niet — gebruik de dropdown om
+      // terug te schakelen naar week of dag.
+      return
+    }
+    if (clamped <= VIRTUAL_CROSS) {
       if (zoom !== 'week') {
         const currentDays = colOffset * daysPerCol[zoom]
         setZoom('week')
         setColOffset(Math.round(currentDays / daysPerCol.week))
       }
-      setColWZoom(Math.max(50, Math.min(300, clamped - 100)))
+      setColWZoom(Math.max(50, Math.min(300, clamped)))
     } else {
-      // Dag-zoom helft
       if (zoom !== 'dag') {
         const currentDays = colOffset * daysPerCol[zoom]
         setZoom('dag')
@@ -3917,6 +3910,15 @@ export default function PlanningPage() {
       }
       setColWZoom(Math.max(50, Math.min(300, clamped - 250)))
     }
+  }
+
+  function setZoomLevel(level: ZoomLevel, colW = 100) {
+    const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
+    if (zoom === level) { setColWZoom(colW); return }
+    const currentDays = colOffset * daysPerCol[zoom]
+    setZoom(level)
+    setColOffset(Math.round(currentDays / daysPerCol[level]))
+    setColWZoom(colW)
   }
 
   useEffect(() => {
@@ -5338,6 +5340,28 @@ export default function PlanningPage() {
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
                   {expanded.size >= team.length ? '▾' : '▸'} Alles
                 </button>
+                {/* Zoom-level dropdown: Dag/Week/Maand/Kwartaal — directer
+                    dan de slider voor grof-niveau switches. Slider blijft
+                    voor fine-tuning binnen Week of Dag. */}
+                <select value={zoom === 'maand' ? (colWZoom >= 200 ? 'kwartaal' : 'maand') : zoom}
+                  onChange={e => {
+                    const v = e.target.value
+                    if (v === 'dag') setZoomLevel('dag', 100)
+                    else if (v === 'week') setZoomLevel('week', 100)
+                    else if (v === 'maand') setZoomLevel('maand', 100)
+                    else if (v === 'kwartaal') setZoomLevel('maand', 220)
+                  }}
+                  style={{
+                    padding: '4px 6px', borderRadius: 6, marginLeft: 4,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                    color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600,
+                    cursor: 'pointer', flexShrink: 0,
+                  }}>
+                  <option value="dag">Dag</option>
+                  <option value="week">Week</option>
+                  <option value="maand">Maand</option>
+                  <option value="kwartaal">Kwartaal</option>
+                </select>
               </div>
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
