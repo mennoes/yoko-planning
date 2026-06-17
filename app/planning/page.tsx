@@ -4314,7 +4314,12 @@ export default function PlanningPage() {
   function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
     setShadowDrag(null)
     const boardName  = project.board
-    const rawId      = project.id.slice(boardName.length + 2)
+    let rawId        = project.id.slice(boardName.length + 2)
+    // Vrij-items worden per-dag gesynthetiseerd met __vrij_YYYY-MM-DD-
+    // suffix; de echte board_items-row heeft die niet. Strip zodat
+    // drag op een vrij-blok ook de echte item-row update.
+    const vrijMatch = rawId.match(/^(.+)__vrij_\d{4}-\d{2}-\d{2}$/)
+    if (vrijMatch) rawId = vrijMatch[1]
     const prevStart  = project.startDate
     const prevEnd    = project.endDate
     // Auto-fill van werkdagen × 8 doen we ALLEEN bij item-creatie, niet
@@ -4460,7 +4465,13 @@ export default function PlanningPage() {
   }
   function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
     const boardName  = project.board
-    const rawIdPart  = project.id.slice(boardName.length + 2)
+    let rawIdPart    = project.id.slice(boardName.length + 2)
+    // Vrij-events worden per-dag gesynthetiseerd met suffix '__vrij_YYYY-
+    // MM-DD'. De daadwerkelijke board_items-row heeft die suffix niet,
+    // dus zonder strippen vindt de update z'n target nooit — daardoor
+    // leek 'n date-change in de detail-popup niets te doen op de bar.
+    const vrijMatch = rawIdPart.match(/^(.+)__vrij_\d{4}-\d{2}-\d{2}$/)
+    if (vrijMatch) rawIdPart = vrijMatch[1]
     // Recurring instance? Dan zit het project gemodelleerd als subitem van
     // een board-item, met id-vorm '{itemId}__siN'. We splitsen 'm op zodat
     // de update op de juiste plek landt (subitem-object i.p.v. top-level).
