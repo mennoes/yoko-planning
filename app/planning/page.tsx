@@ -595,8 +595,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
+  // Schaal van 20% (uitgesmeerd, weinig per dag) tot 100% (volle werkdag)
+  // zodat 'n project dat 0.3u/dag is duidelijk lager oogt dan een dagvullend
+  // ding. Lineair zodat 't verschil tussen 1u/dag en 4u/dag óók zichtbaar
+  // is, niet alleen tussen 0 en 8.
   const scaledH = scaleByHours
-    ? Math.max(6, Math.round(availH * (0.8 + Math.sqrt(ratio) * 0.2)))
+    ? Math.max(6, Math.round(availH * (0.2 + 0.8 * ratio)))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
