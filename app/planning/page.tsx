@@ -5332,18 +5332,25 @@ export default function PlanningPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     padding: isMobile ? '3px 8px' : '6px 14px', borderRadius: 8,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                    color: 'var(--text-secondary)', fontSize: isMobile ? 11 : 14, fontWeight: 700,
+                    background: expanded.size >= team.length ? 'var(--accent-mid)' : 'var(--bg-card)',
+                    border: expanded.size >= team.length ? '1px solid var(--accent)' : '1px solid var(--border-light)',
+                    color: expanded.size >= team.length ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: isMobile ? 11 : 14, fontWeight: 700,
                     cursor: 'pointer', flex: 1, justifyContent: 'center',
+                    transition: 'background 0.12s, border-color 0.12s, color 0.12s',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-                  {expanded.size >= team.length ? '▾' : '▸'} Alles
+                  onMouseEnter={e => { if (expanded.size < team.length) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { if (expanded.size < team.length) e.currentTarget.style.background = 'var(--bg-card)' }}>
+                  <span style={{ fontSize: isMobile ? 12 : 16, lineHeight: 1, color: expanded.size >= team.length ? 'var(--accent)' : 'var(--text-muted)' }}>
+                    {expanded.size >= team.length ? '▾' : '▸'}
+                  </span>
+                  Alles
                 </button>
                 {/* Zoom-level dropdown: Dag/Week/Maand/Kwartaal — directer
                     dan de slider voor grof-niveau switches. Slider blijft
                     voor fine-tuning binnen Week of Dag. */}
                 <select value={zoom === 'maand' ? (colWZoom >= 200 ? 'kwartaal' : 'maand') : zoom}
+                  onClick={e => e.stopPropagation()}
                   onChange={e => {
                     const v = e.target.value
                     if (v === 'dag') setZoomLevel('dag', 100)
@@ -5352,10 +5359,11 @@ export default function PlanningPage() {
                     else if (v === 'kwartaal') setZoomLevel('maand', 220)
                   }}
                   style={{
-                    padding: '4px 6px', borderRadius: 6, marginLeft: 4,
+                    padding: '4px 8px', borderRadius: 6, marginLeft: 4,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                    color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600,
-                    cursor: 'pointer', flexShrink: 0,
+                    color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
+                    cursor: 'pointer', flexShrink: 0, position: 'relative', zIndex: 30,
+                    appearance: 'auto',
                   }}>
                   <option value="dag">Dag</option>
                   <option value="week">Week</option>
@@ -5392,6 +5400,28 @@ export default function PlanningPage() {
                   }}>
                   {expanded.size >= team.length ? '▾' : '▸'} Alles
                 </button>
+              )}
+              {!monthGroups && (
+                <select value={zoom === 'maand' ? (colWZoom >= 200 ? 'kwartaal' : 'maand') : zoom}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => {
+                    const v = e.target.value
+                    if (v === 'dag') setZoomLevel('dag', 100)
+                    else if (v === 'week') setZoomLevel('week', 100)
+                    else if (v === 'maand') setZoomLevel('maand', 100)
+                    else if (v === 'kwartaal') setZoomLevel('maand', 220)
+                  }}
+                  style={{
+                    padding: '4px 8px', borderRadius: 6, marginRight: 6,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+                    color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
+                    cursor: 'pointer', flexShrink: 0, position: 'relative', zIndex: 30,
+                  }}>
+                  <option value="dag">Dag</option>
+                  <option value="week">Week</option>
+                  <option value="maand">Maand</option>
+                  <option value="kwartaal">Kwartaal</option>
+                </select>
               )}
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%',
