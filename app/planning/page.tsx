@@ -3924,10 +3924,14 @@ export default function PlanningPage() {
       if (w.__yokoDetailOpen) return
       for (const name of BOARD_NAMES) pullBoardFromRemote(name).catch(() => {})
     }
+    // Polling is alleen vangnet voor als de Supabase-realtime websocket
+    // hapert; primair komen updates direct via subscribeRemoteBoard binnen.
+    // 4 sec was egress-zwaar (~7200 calls/dag/user) — 60 sec is genoeg
+    // als safety-net en bespaart ~93% Supabase-bandwidth.
     const pollTimer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       pullAll()
-    }, 4000)
+    }, 60000)
     function onFocus() { pullAll() }
     function onVisibility() { if (document.visibilityState === 'visible') pullAll() }
     function onPushFail(e: Event) {
