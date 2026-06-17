@@ -108,8 +108,8 @@ const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 
 // Column counts per zoom
 // Week-zoom: 21 dagen = 7 dagen historie + vandaag + 13 dagen vooruit (zie
 // HISTORY_BACK). Overzicht (week-zoom) en maand-fallback hun bredere range.
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 56, week: 70, maand: 24 }
-const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 28, week: 14, maand: 6 }
+const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 56, week: 104, maand: 48 }
+const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 28, week: 26, maand: 18 }
 const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
@@ -3866,14 +3866,20 @@ export default function PlanningPage() {
   // vastlegt zodat we daar na de re-render weer op anker'en — voorkomt
   // dat een zoom vanuit linker-rand werkt i.p.v. vanuit de today-line.
   // Eén virtuele zoom-slider over twee zoom-modes:
-  //   50–300  → week-zoom (Overzicht), colWZoom = waarde
-  //   300–550 → dag-zoom (Week-view),  colWZoom = waarde − 250
-  // Crossover bij 300 is naadloos: week@300% en dag@50% zijn de twee
-  // kanten van dezelfde overgang.
+  //   50–150  → maand-zoom (kwartaal-overzicht, hele maanden als cols)
+  //   150–300 → week-zoom (Overzicht)
+  //   300–550 → dag-zoom (Week-view)
+  // Twee crossovers (150 en 300) zodat de slider één doorlopende
+  // zoom-as is: van kwartaal helemaal links tot dag-niveau rechts.
   const VIRTUAL_MIN = 50
   const VIRTUAL_MAX = 550
+  const VIRTUAL_CROSS_LOW  = 150
   const VIRTUAL_CROSS = 300
-  const virtualZoom = zoom === 'week' ? colWZoom : VIRTUAL_CROSS + (colWZoom - 50)
+  const virtualZoom = zoom === 'maand'
+    ? colWZoom
+    : zoom === 'week'
+      ? VIRTUAL_CROSS_LOW + (colWZoom - 50)
+      : VIRTUAL_CROSS + (colWZoom - 50)
 
   function anchoredColWZoom(updater: (z: number) => number) {
     const el = gridRef.current
@@ -3886,14 +3892,22 @@ export default function PlanningPage() {
     const raw = updater(virtualZoom)
     const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_MAX, raw))
     const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-    if (clamped <= VIRTUAL_CROSS) {
+    if (clamped <= VIRTUAL_CROSS_LOW) {
+      // Maand-zoom helft (kwartaal-overzicht)
+      if (zoom !== 'maand') {
+        const currentDays = colOffset * daysPerCol[zoom]
+        setZoom('maand')
+        setColOffset(Math.round(currentDays / daysPerCol.maand))
+      }
+      setColWZoom(Math.max(50, Math.min(300, clamped)))
+    } else if (clamped <= VIRTUAL_CROSS) {
       // Week-zoom helft
       if (zoom !== 'week') {
         const currentDays = colOffset * daysPerCol[zoom]
         setZoom('week')
         setColOffset(Math.round(currentDays / daysPerCol.week))
       }
-      setColWZoom(Math.max(50, Math.min(300, clamped)))
+      setColWZoom(Math.max(50, Math.min(300, clamped - 100)))
     } else {
       // Dag-zoom helft
       if (zoom !== 'dag') {
