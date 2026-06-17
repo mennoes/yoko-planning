@@ -5224,9 +5224,9 @@ export default function PlanningPage() {
                   title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '6px 14px', borderRadius: 8,
+                    padding: isMobile ? '3px 8px' : '6px 14px', borderRadius: 8,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                    color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
+                    color: 'var(--text-secondary)', fontSize: isMobile ? 11 : 14, fontWeight: 700,
                     cursor: 'pointer', flex: 1, justifyContent: 'center',
                   }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
@@ -5759,9 +5759,10 @@ const segGroup: React.CSSProperties = {
   borderRadius: 8, overflow: 'hidden',
 }
 function segBtn(active: boolean, color?: string, weight?: number): React.CSSProperties {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 740
   return {
-    padding: '6px 12px',
-    fontSize: 12.5, fontWeight: weight ?? (active ? 600 : 500),
+    padding: isMobile ? '3px 9px' : '6px 12px',
+    fontSize: isMobile ? 11.5 : 12.5, fontWeight: weight ?? (active ? 600 : 500),
     border: 'none', cursor: 'pointer',
     background: active ? 'var(--text-primary)' : 'transparent',
     color: active ? 'var(--bg-base)' : (color ?? 'var(--text-secondary)'),
