@@ -850,14 +850,15 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     return h + (m || 0) / 60
   })()
   const totalAvail = (laneH ?? BAR_H + BAR_GAP)
-  // Untimed items krijgen een kleine lane-based offset (6px per lane)
-  // zodat overlappende items zichtbaar gestapeld zijn i.p.v. allemaal
-  // op top: 0.
-  const untimedOffset = (laneIdx ?? 0) * 6
+  // Untimed items krijgen een grotere lane-based offset (~18px per lane)
+  // zodat de titels van overlappende items boven elkaar uitsteken i.p.v.
+  // door elkaar lopen. Cap op totalAvail - 18 zodat de offset 'm niet
+  // helemaal uit beeld duwt.
+  const untimedOffset = Math.min(totalAvail - 18, (laneIdx ?? 0) * 18)
   const barTop = scaleByHours
     ? (startHour !== null
         ? Math.max(0, Math.min(totalAvail - barH, Math.round(((startHour - dayStartH) / dayLengthH) * totalAvail)))
-        : Math.min(totalAvail - barH, untimedOffset))
+        : Math.max(0, untimedOffset))
     : BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
   // Titel-shift: schuif de tekst met de scroll mee zolang de bar nog (deels)
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
