@@ -2151,7 +2151,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
               laneH={wrapperH}
-              scaleByHours={b.track !== 'meeting' && zoom === 'week'}
+              scaleByHours={zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
