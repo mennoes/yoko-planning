@@ -3679,6 +3679,85 @@ function Popup({ title, onClose, children }: {
   )
 }
 
+// ─── Zoom-level dropdown ──────────────────────────────────────────────────────
+// Eigen popover ipv native <select> omdat de native dropdown niet
+// betrouwbaar opent in alle browsers binnen sticky-cells. Knop opent
+// een portal-menu rechts/onder de knop.
+function ZoomDropdown({ zoom, colWZoom, setZoomLevel }: {
+  zoom: ZoomLevel
+  colWZoom: number
+  setZoomLevel: (level: ZoomLevel, colW?: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const currentValue: 'dag' | 'week' | 'maand' | 'kwartaal' =
+    zoom === 'maand' ? (colWZoom >= 200 ? 'kwartaal' : 'maand') : zoom
+  const labels = { dag: 'Dag', week: 'Week', maand: 'Maand', kwartaal: 'Kwartaal' } as const
+
+  function toggle() {
+    if (!open) {
+      const r = btnRef.current?.getBoundingClientRect()
+      if (r) setPos({ top: r.bottom + 4, left: r.left })
+    }
+    setOpen(o => !o)
+  }
+
+  function pick(v: 'dag' | 'week' | 'maand' | 'kwartaal') {
+    if (v === 'dag') setZoomLevel('dag', 100)
+    else if (v === 'week') setZoomLevel('week', 100)
+    else if (v === 'maand') setZoomLevel('maand', 100)
+    else if (v === 'kwartaal') setZoomLevel('maand', 220)
+    setOpen(false)
+  }
+
+  return (
+    <>
+      <button ref={btnRef} onClick={toggle}
+        title="Zoom-niveau wisselen"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '4px 10px', borderRadius: 6, marginLeft: 4, marginRight: 6,
+          background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+          color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
+          cursor: 'pointer', flexShrink: 0,
+        }}>
+        {labels[currentValue]}
+        <span style={{ fontSize: 9, opacity: 0.6, marginLeft: 2 }}>▾</span>
+      </button>
+      {open && typeof document !== 'undefined' && pos && createPortal(
+        <>
+          <div onClick={() => setOpen(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 9000 }} />
+          <div style={{
+            position: 'fixed', top: pos.top, left: pos.left, zIndex: 9001,
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: 4, minWidth: 120,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          }}>
+            {(['dag', 'week', 'maand', 'kwartaal'] as const).map(opt => (
+              <button key={opt} onClick={() => pick(opt)}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '6px 10px', borderRadius: 4, border: 'none',
+                  background: opt === currentValue ? 'var(--accent-mid)' : 'transparent',
+                  color: opt === currentValue ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: opt === currentValue ? 700 : 500,
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={e => { if (opt !== currentValue) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                onMouseLeave={e => { if (opt !== currentValue) e.currentTarget.style.background = 'transparent' }}>
+                {labels[opt]}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
+      )}
+    </>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function PlanningPage() {
   const { pushUndo, showToast } = useUndo()
@@ -5348,28 +5427,11 @@ export default function PlanningPage() {
                 </button>
                 {/* Zoom-level dropdown: Dag/Week/Maand/Kwartaal — directer
                     dan de slider voor grof-niveau switches. Slider blijft
-                    voor fine-tuning binnen Week of Dag. */}
-                <select value={zoom === 'maand' ? (colWZoom >= 200 ? 'kwartaal' : 'maand') : zoom}
-                  onClick={e => e.stopPropagation()}
-                  onChange={e => {
-                    const v = e.target.value
-                    if (v === 'dag') setZoomLevel('dag', 100)
-                    else if (v === 'week') setZoomLevel('week', 100)
-                    else if (v === 'maand') setZoomLevel('maand', 100)
-                    else if (v === 'kwartaal') setZoomLevel('maand', 220)
-                  }}
-                  style={{
-                    padding: '4px 8px', borderRadius: 6, marginLeft: 4,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                    color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
-                    cursor: 'pointer', flexShrink: 0, position: 'relative', zIndex: 30,
-                    appearance: 'auto',
-                  }}>
-                  <option value="dag">Dag</option>
-                  <option value="week">Week</option>
-                  <option value="maand">Maand</option>
-                  <option value="kwartaal">Kwartaal</option>
-                </select>
+                    voor fine-tuning binnen Week of Dag.
+                    Custom button + popover ipv native <select> omdat de
+                    native dropdown niet betrouwbaar opent binnen sticky
+                    parents in alle browsers. */}
+                <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
               </div>
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
@@ -5402,26 +5464,7 @@ export default function PlanningPage() {
                 </button>
               )}
               {!monthGroups && (
-                <select value={zoom === 'maand' ? (colWZoom >= 200 ? 'kwartaal' : 'maand') : zoom}
-                  onClick={e => e.stopPropagation()}
-                  onChange={e => {
-                    const v = e.target.value
-                    if (v === 'dag') setZoomLevel('dag', 100)
-                    else if (v === 'week') setZoomLevel('week', 100)
-                    else if (v === 'maand') setZoomLevel('maand', 100)
-                    else if (v === 'kwartaal') setZoomLevel('maand', 220)
-                  }}
-                  style={{
-                    padding: '4px 8px', borderRadius: 6, marginRight: 6,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                    color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
-                    cursor: 'pointer', flexShrink: 0, position: 'relative', zIndex: 30,
-                  }}>
-                  <option value="dag">Dag</option>
-                  <option value="week">Week</option>
-                  <option value="maand">Maand</option>
-                  <option value="kwartaal">Kwartaal</option>
-                </select>
+                <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
               )}
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%',
