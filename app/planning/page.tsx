@@ -2233,9 +2233,13 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, sc
         laneH={laneH} scaleByHours={scaleByHours ?? false}
         onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
-        <div onMouseEnter={cancel} onMouseLeave={schedule}
+        // pointer-events: none op de buitenkant zodat de muis door 't
+        // kaartje heen kan om de balk eronder te bereiken. Eventuele
+        // klikbare elementen binnenin (zoals de Google-link) krijgen
+        // expliciet pointer-events: auto.
+        <div
           style={{ position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9000,
-            width: 280,
+            width: 280, pointerEvents: 'none',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
             padding: '10px 12px',
             boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.12)' }}>
@@ -2265,7 +2269,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, sc
             <a href={project.externalLink} target="_blank" rel="noopener noreferrer"
               onClick={ev => ev.stopPropagation()}
               style={{ display: 'inline-block', marginTop: 8, fontSize: 11, color: 'var(--accent)',
-                textDecoration: 'none', fontWeight: 600 }}>
+                textDecoration: 'none', fontWeight: 600, pointerEvents: 'auto' }}>
               {project.source === 'google' ? 'Open in Google Calendar ↗' : 'Open bron ↗'}
             </a>
           )}
