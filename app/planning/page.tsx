@@ -875,11 +875,11 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           // Hover-bar én actieve-drag krijgen hoge z-index zodat 'ie ALTIJD
           // bovenop overlappende balken zichtbaar is. Anders kan een short
           // event onder een langere balk verstopt blijven.
-          // Hover-bar én actieve-drag krijgen iets hogere z dan andere bars
-          // (z=auto/0), maar BLIJVEN ONDER de sticky naam-kolom (z=4–6) zodat
-          // 'ie niet door de avatars heen schiet wanneer je horizontaal
-          // gescrold hebt. VANDAAG-lijn (z=3) wint ook nog.
-          zIndex: ghost ? 2 : (hoverBar ? 2 : 'auto') }}
+          // 1-dag-items krijgen altijd een hogere baseline z-index dan
+          // multi-day balken zodat ze niet onder een langere balk
+          // verdwijnen (en de resize-handles bereikbaar blijven).
+          // VANDAAG-lijn (z=3) wint ook nog.
+          zIndex: ghost ? 2 : (hoverBar ? 2 : (projectDays <= 1 ? 1 : 'auto')) }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
         <span style={{ flex: 1, overflow: 'hidden', paddingLeft: 6, paddingRight: 4, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, marginLeft: titleShift }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
