@@ -558,7 +558,7 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
 type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; startY: number; origStart: string | null; origEnd: string | null }
 
-function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
+function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, laneIdx, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   team?: TeamMember[]
   left: number; width: number; colW: number
@@ -568,6 +568,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dan bottom-anchored gerenderd zodat de korte bovenkant van langere
   // events zichtbaar uitsteekt — een mini-staafdiagram per dag.
   laneH?: number
+  // laneIdx wordt gebruikt om items zonder startTime een kleine
+  // verticale offset te geven zodat ze niet allemaal bovenop elkaar
+  // landen — net iets gestackt voor leesbaarheid.
+  laneIdx?: number
   scaleByHours?: boolean
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
@@ -846,10 +850,14 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     return h + (m || 0) / 60
   })()
   const totalAvail = (laneH ?? BAR_H + BAR_GAP)
+  // Untimed items krijgen een kleine lane-based offset (6px per lane)
+  // zodat overlappende items zichtbaar gestapeld zijn i.p.v. allemaal
+  // op top: 0.
+  const untimedOffset = (laneIdx ?? 0) * 6
   const barTop = scaleByHours
     ? (startHour !== null
         ? Math.max(0, Math.min(totalAvail - barH, Math.round(((startHour - dayStartH) / dayLengthH) * totalAvail)))
-        : 0)
+        : Math.min(totalAvail - barH, untimedOffset))
     : BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
   // Titel-shift: schuif de tekst met de scroll mee zolang de bar nog (deels)
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
@@ -2150,18 +2158,13 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
           bars zodat 'n 8u/dag bar overal even hoog oogt en proportioneel
           is met 4u/dag, 2u/dag, etc. */}
       {bars.map(b => {
-        // Alle bars gebruiken de VOLLE row-hoogte als 100%-referentie:
-        // 'n 8u/dag-bar = full row, 4u/dag = halve row, etc. Bars worden
-        // bottom-aligned binnen die hoogte (via scaleByHours) zodat ze
-        // gestapeld bovenop elkaar lezen als 'staafdiagram per dag'.
-        // Time-overlap tussen items in dezelfde rij toont visueel dat
-        // er een conflict is — wat ook de bedoeling is op /planning.
         const top = 0
         const wrapperH = projectStack
         return (
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
               laneH={wrapperH}
+              laneIdx={b.lane}
               scaleByHours={zoom === 'week'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
@@ -2183,7 +2186,7 @@ const MEETING_BAR_H = 18
 // Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
 // gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
 // met naam, tijd, uren en link naar Google Calendar.
-function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
+function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, laneIdx, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project
   memberId: string
   team?: TeamMember[]
@@ -2191,6 +2194,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, sc
   width: number
   colW: number
   laneH: number
+  laneIdx?: number
   scaleByHours?: boolean
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
@@ -2242,7 +2246,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, sc
       onMouseLeave={schedule}
       style={{ position: 'absolute', top: 0, left: 0, right: 0, height: laneH, pointerEvents: 'none' }}>
       <DraggableBar project={project} memberId={memberId} team={team} left={left} width={width} colW={colW} small={false}
-        laneH={laneH} scaleByHours={scaleByHours ?? false}
+        laneH={laneH} laneIdx={laneIdx} scaleByHours={scaleByHours ?? false}
         onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
         // pointer-events: none op de buitenkant zodat de muis door 't
