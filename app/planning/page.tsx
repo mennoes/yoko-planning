@@ -590,7 +590,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     const e = new Date(project.endDate).getTime()
     return Math.max(1, Math.round((e - s) / 86400000) + 1)
   })()
-  const hoursPerDay = (project.estHours || 0) / projectDays
+  // Vrij = inherent een volle werkdag vrij (8u/dag). Sommige vrij-items
+  // hebben estHours=0 in de data; we forceren 'm dan op FULL_DAY_HOURS
+  // zodat de bar visueel 100% wordt — gelijk aan een 8u/dag project.
+  const isVrijForScale = isVrijTitle(project.name)
+  const rawHoursPerDay = (project.estHours || 0) / projectDays
+  const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
   // Bar-hoogte schalen op uren-per-dag met sqrt + 80% baseline zodat
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
@@ -1962,7 +1967,9 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     if (p.source === 'google' && !p.startTime && !p.endTime) return true
     return false
   }
-  const vrijBars     = projectAllSingles.filter(isVrijBar)
+  // (vrijBars werd vroeger apart full-height gerenderd; nu door gewone
+  // bar-packing met geforceerde 8u/dag → 100% lane-hoogte.)
+  void projectAllSingles
   // Hele-dag-flag is alleen nog nodig voor isVrijBar; full-day-projecten
   // gaan nu via de gewone bar-packing zodat hun hoogte proportioneel is.
   void isFullDayBar
@@ -1970,7 +1977,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // elke meeting een eigen rij boven de projecten — dat blies de hoogte
   // op zodra je 'Meetings tonen' aanzette. Nu fitten ze in dezelfde
   // gap-aware packing en blijft 't compact.
-  const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
+  const projectItems = projectAllSingles
+  void isVrijBar
+  // vrij wordt nu ook via de gewone bar-packing gerenderd zodat 'ie
+  // visueel 100% lane = 8u/dag is, gelijk aan een dagvullend project.
+  const vrijBars: SingleBar[] = []
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
