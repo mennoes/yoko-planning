@@ -914,7 +914,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.15 }}>
-              {project.name}{project.group ? ` | ${project.group}` : ''}
+              {project.name}{(!scaleByHours || barH < 28) && project.board ? ` | ${project.board}` : ''}
             </span>
             {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
             {isMultiOwner && (
@@ -939,6 +939,16 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               opacity: 0.78, lineHeight: 1.1, marginTop: 1,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>↳ {project.parentName}</span>
+          )}
+          {/* Board-naam (bord van herkomst) als tweede regel zodra de
+              bar hoog genoeg is — anders staat 'ie inline achter de
+              titel via de | separator. */}
+          {scaleByHours && barH >= 28 && project.board && (
+            <span style={{
+              fontSize: 9.5, fontWeight: 500, textTransform: 'capitalize',
+              opacity: 0.78, lineHeight: 1.1, marginTop: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{project.board}</span>
           )}
         </span>
       </div>
