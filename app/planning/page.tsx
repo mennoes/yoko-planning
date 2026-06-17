@@ -4704,10 +4704,10 @@ export default function PlanningPage() {
       <header style={{ flexShrink: 0, padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
 
         {/* Title + nav */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: isMobile ? 8 : 16 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'flex-end', gap: isMobile ? 10 : 24, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: isMobile ? 6 : 16 }}>
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 24, flex: 1 }}>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: isMobile ? 22 : 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
+              <h1 style={{ fontSize: isMobile ? 13 : 36, fontWeight: isMobile ? 700 : 900, color: isMobile ? 'var(--text-muted)' : 'var(--text-primary)', margin: 0, letterSpacing: isMobile ? '0.05em' : '-0.04em', lineHeight: 1, textTransform: isMobile ? 'uppercase' : 'none' }}>
                 Planning
               </h1>
               {!isMobile && (
@@ -4718,14 +4718,14 @@ export default function PlanningPage() {
             </div>
             {/* KPIs inline naast de titel — ook op mobiel zodat 'r een aparte
                 KPI-balk weg kan en de header binnen 2 regels blijft. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 14, paddingBottom: isMobile ? 1 : 4, fontSize: isMobile ? 11 : 13, color: 'var(--text-secondary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 14, paddingBottom: isMobile ? 0 : 4, fontSize: isMobile ? 11 : 13, color: 'var(--text-secondary)' }}>
               <span>
-                <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: isMobile ? 13 : 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
+                <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: isMobile ? 12 : 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
                 <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>{kpis.totalHours}/{kpis.totalCap}u</span>
               </span>
               <span style={{ width: 1, height: 12, background: 'var(--border)' }} />
               <span>
-                <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: isMobile ? 13 : 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+                <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: isMobile ? 12 : 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
                 <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>deadl.</span>
               </span>
             </div>
@@ -4742,7 +4742,7 @@ export default function PlanningPage() {
         </div>
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: 'wrap', marginBottom: isMobile ? 10 : 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: isMobile ? 'nowrap' : 'wrap', marginBottom: isMobile ? 6 : 16 }}>
           {/* Overzicht en Week zijn samengesmolten in één continue zoom:
               de kolom-breedte-slider stuurt zowel kolommen als zoom-niveau.
               Voorbij de bovengrens van de week-zoom-slider klapt 'ie auto-
