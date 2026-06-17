@@ -1985,9 +1985,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // In Overzicht (week-zoom) maken we de lane wat hoger zodat events als
-  // mini-staafdiagram per dag kunnen renderen.
-  const PROJECT_LANE_H = Math.round((zoom === 'week' ? 38 : (BAR_H + BAR_GAP)) * RS)
+  // In Overzicht (week-zoom) maken we de lane stevig groot zodat een
+  // 100%-bar (8u/dag) écht visueel de volle hoogte heeft — niet een
+  // mini 38px-strip naast veel witruimte. Proporties (50% = 4u/dag,
+  // etc.) blijven kloppen omdat we lineair scalen tegen deze hoogte.
+  const PROJECT_LANE_H = Math.round((zoom === 'week' ? 60 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
@@ -2134,12 +2136,14 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
           bars zodat 'n 8u/dag bar overal even hoog oogt en proportioneel
           is met 4u/dag, 2u/dag, etc. */}
       {bars.map(b => {
-        const top = projectLaneTop(b.lane)
-        const wrapperH = PROJECT_LANE_H
-        // Alle bars (meetings én reguliere projecten) gaan door dezelfde
-        // MeetingHoverBar-wrapper: hover-popover met naam/tijd/uren/board/
-        // parent-context werkt zo overal in de planning, niet alleen op
-        // Google-events. scaleByHours actief in week-zoom voor projecten.
+        // Alle bars gebruiken de VOLLE row-hoogte als 100%-referentie:
+        // 'n 8u/dag-bar = full row, 4u/dag = halve row, etc. Bars worden
+        // bottom-aligned binnen die hoogte (via scaleByHours) zodat ze
+        // gestapeld bovenop elkaar lezen als 'staafdiagram per dag'.
+        // Time-overlap tussen items in dezelfde rij toont visueel dat
+        // er een conflict is — wat ook de bedoeling is op /planning.
+        const top = 0
+        const wrapperH = projectStack
         return (
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
