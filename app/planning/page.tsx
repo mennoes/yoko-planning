@@ -831,10 +831,25 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
 
   const g = ghost ?? { left, width }
   const [hoverBar, setHoverBar] = useState(false)
-  // In hour-scale mode (week-overzicht) anker'en we onderaan zodat langere
-  // events bovenuit steken — vrij (8u) vult volledig, 4u half, etc.
+  // In hour-scale mode (Overzicht) plaatsen we de bar verticaal op
+  // basis van startTime in een fictief 09:00-17:30 venster (8.5u). Zo
+  // valt een meeting van 10:00 bovenaan, een meeting van 16:00 onderaan.
+  // Items zonder concrete startTime krijgen top=0 (top-aligned, 'start
+  // van de dag').
+  const dayStartH  = 9
+  const dayLengthH = 8.5
+  const startHour = (() => {
+    const t = project.startTime
+    if (!t) return null
+    const [h, m] = t.split(':').map(n => parseInt(n, 10))
+    if (Number.isNaN(h)) return null
+    return h + (m || 0) / 60
+  })()
+  const totalAvail = (laneH ?? BAR_H + BAR_GAP)
   const barTop = scaleByHours
-    ? (laneH ?? BAR_H + BAR_GAP) - barH - 1
+    ? (startHour !== null
+        ? Math.max(0, Math.min(totalAvail - barH, Math.round(((startHour - dayStartH) / dayLengthH) * totalAvail)))
+        : 0)
     : BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
   // Titel-shift: schuif de tekst met de scroll mee zolang de bar nog (deels)
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
@@ -1985,11 +2000,10 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // In Overzicht (week-zoom) maken we de lane stevig groot zodat een
-  // 100%-bar (8u/dag) écht visueel de volle hoogte heeft — niet een
-  // mini 38px-strip naast veel witruimte. Proporties (50% = 4u/dag,
-  // etc.) blijven kloppen omdat we lineair scalen tegen deze hoogte.
-  const PROJECT_LANE_H = Math.round((zoom === 'week' ? 60 : (BAR_H + BAR_GAP)) * RS)
+  // PROJECT_LANE_H halved t.o.v. eerdere 60px zodat 100%-bars niet de
+  // hele schermhoogte beslaan. 30px is een goede balans tussen
+  // leesbaarheid en compactheid.
+  const PROJECT_LANE_H = Math.round((zoom === 'week' ? 30 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
