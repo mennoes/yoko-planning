@@ -607,6 +607,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     loadCategoryOverrides()[project.id] ?? null,
   )
   const isVrij = category === 'vrij'
+  const isMeeting = category === 'meeting'
   // Meetings (small=true) get the yellow accent so they stand apart from
   // real project bars in the timeline at a glance.
   const color   = isVrij
@@ -617,9 +618,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // 't deel WAT JIJ moet doen krijgt de volle item-kleur, andermans
   // deel staat faded. Outline om de hele bar zodat je de volle extent
   // nog steeds ziet. Een 'Np'-pill rechts toont 't aantal mensen.
+  // Meetings overslaan: voor meetings telt 'wie er bij is' niet als
+  // werklast-verdeling — iedereen die in de meeting zit doet de hele
+  // meeting, geen gesplitste uren. Geen Np-pill, geen gradient.
   const realOwners = project.ownerIds.filter(id => id !== 'unassigned')
   const ownerCount = realOwners.length
-  const isMultiOwner = !isVrij && !small && ownerCount > 1
+  const isMultiOwner = !isVrij && !isMeeting && !small && ownerCount > 1
   const ownerSegments: { isMe: boolean; pct: number }[] = (() => {
     if (!isMultiOwner) return []
     const oh = project.ownerHours ?? {}
