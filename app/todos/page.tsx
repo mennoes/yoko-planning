@@ -191,6 +191,27 @@ function markProjectRemoved(board: string, itemId: string): void {
 // gooit deze key weg, zodat alle huidige non-Google projecten weer
 // vanzelf in je todo-lijst verschijnen.
 const LEGACY_SEEDED_KEY = 'yoko-todos-seeded-projects'
+
+// Onthoud welke seed-text-items de gebruiker heeft verwijderd zodat de
+// seed-restore-effect ze niet meteen weer terugschuift. Per device, op
+// `${sectionId}|${normText}`. Geldt voor de gehardcodeerde items in
+// socials/reminders/kansen — zonder dit komt 'Polarsteps (renderbot)'
+// terug elke render.
+const REMOVED_SEED_KEY = 'yoko-todos-removed-seed-items'
+function normSeedText(text: string): string { return text.trim().toLowerCase() }
+function loadRemovedSeedItems(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(REMOVED_SEED_KEY)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch { return new Set() }
+}
+function markSeedItemRemoved(sectionId: string, text: string): void {
+  if (typeof window === 'undefined') return
+  const s = loadRemovedSeedItems()
+  s.add(`${sectionId}|${normSeedText(text)}`)
+  try { localStorage.setItem(REMOVED_SEED_KEY, JSON.stringify([...s])) } catch {}
+}
 function fmtRelative(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
   if (diff < 1)    return 'zojuist'
@@ -361,6 +382,10 @@ function TodoCard({
     // we dat zodat de auto-seed 'm niet bij elke pageload terugbrengt.
     const target = section.items.find(i => i.id === id)
     if (target?.projectRef) markProjectRemoved(target.projectRef.board, target.projectRef.itemId)
+    // Plain-text items uit de gehardcodeerde seed (socials/reminders/
+    // kansen) tracken we ook — anders schuift de seed-restore-effect
+    // ze direct weer terug. Geldt ook voor menno's e.a. seed-items.
+    if (target && !target.projectRef) markSeedItemRemoved(section.id, target.text)
     const prev = { ...section, items: [...section.items] }
     onUpdate({ ...section, items: section.items.filter(i => i.id !== id) }, prev)
   }
@@ -1182,24 +1207,37 @@ export default function TodosPage() {
     const wantedIds = ['socials', 'reminders', 'kansen']
     let changed = false
     let next = sections.slice()
+    const removedSeeds = loadRemovedSeedItems()
 
     for (const wantedId of wantedIds) {
       const seed = seedSections.find(s => s.id === wantedId)
       if (!seed) continue
       const existing = next.find(s => s.id === wantedId)
       if (!existing) {
-        // Hele sectie ontbreekt → toevoegen na 'ideeen' (of aan het eind).
+        // Hele sectie ontbreekt → toevoegen, maar alleen items die de
+        // user niet eerder verwijderd heeft. Anders herhaalt 't 'Polarsteps
+        // verschijnt opnieuw' patroon ook bij een complete sectie-reset.
+        const filtered: Section = {
+          ...seed,
+          items: seed.items.filter(i => !removedSeeds.has(`${wantedId}|${normSeedText(i.text)}`)),
+        }
         const ideeenIdx = next.findIndex(s => s.id === 'ideeen')
         const insertAt  = ideeenIdx >= 0 ? ideeenIdx + 1 : next.length
-        next = [...next.slice(0, insertAt), seed, ...next.slice(insertAt)]
+        next = [...next.slice(0, insertAt), filtered, ...next.slice(insertAt)]
         changed = true
         continue
       }
       // Sectie bestaat — voeg missende items toe (vergelijken op normalisatie
       // van tekst zodat 'HEY U' en 'hey u' niet allebei verschijnen).
-      const norm = (s: string) => s.trim().toLowerCase()
-      const existingTexts = new Set(existing.items.map(i => norm(i.text)))
-      const missingItems = seed.items.filter(i => !existingTexts.has(norm(i.text)))
+      // Skip items die de gebruiker expliciet heeft verwijderd zodat ze
+      // niet bij elke render terugkomen.
+      const existingTexts = new Set(existing.items.map(i => normSeedText(i.text)))
+      const missingItems = seed.items.filter(i => {
+        const n = normSeedText(i.text)
+        if (existingTexts.has(n)) return false
+        if (removedSeeds.has(`${wantedId}|${n}`)) return false
+        return true
+      })
       if (missingItems.length === 0) continue
       next = next.map(s => s.id === wantedId ? { ...s, items: [...s.items, ...missingItems] } : s)
       changed = true
