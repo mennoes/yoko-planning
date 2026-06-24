@@ -1060,7 +1060,8 @@ export default function HomePage() {
                 const meetingHours  = weekItems.filter(i => catOf(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
                 const overheadHours = weekItems.filter(i => catOf(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
                 const makenHours    = weekItems.filter(i => catOf(i) === 'maken').reduce((s, i) => s + i.hours, 0)
-                const total = meetingHours + overheadHours + makenHours
+                const vrijHours     = weekItems.filter(i => catOf(i) === 'vrij').reduce((s, i) => s + i.hours, 0)
+                const total = meetingHours + overheadHours + makenHours + vrijHours
                 const r = (n: number) => Math.round(n * 10) / 10
                 const cap = Math.max(weekCapacity, total)  // bar is at least the total so overflow stays visible
                 return (
@@ -1071,6 +1072,7 @@ export default function HomePage() {
                       <div style={{ width: cap > 0 ? `${(makenHours/cap)*100}%` : 0, background: '#5fa06e', transition: 'width 0.4s ease' }} />
                       <div style={{ width: cap > 0 ? `${(overheadHours/cap)*100}%` : 0, background: '#9aadbd', transition: 'width 0.4s ease' }} />
                       <div style={{ width: cap > 0 ? `${(meetingHours/cap)*100}%` : 0, background: '#D8B62E', transition: 'width 0.4s ease' }} />
+                      <div style={{ width: cap > 0 ? `${(vrijHours/cap)*100}%` : 0, background: '#3db883', transition: 'width 0.4s ease' }} />
                     </div>
                     <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -1085,6 +1087,12 @@ export default function HomePage() {
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#D8B62E' }} />
                         <strong style={{ color: 'var(--text-primary)' }}>{r(meetingHours)}u</strong> meetings
                       </span>
+                      {vrijHours > 0 && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3db883' }} />
+                          <strong style={{ color: 'var(--text-primary)' }}>{r(vrijHours)}u</strong> vrij
+                        </span>
+                      )}
                     </div>
                   </div>
                   {(['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'] as const).map((dayLabel, dayIdx) => {
