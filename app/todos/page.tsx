@@ -381,11 +381,30 @@ function TodoCard({
     // Verwijdert de user een aan-een-project-gekoppelde todo, dan onthouden
     // we dat zodat de auto-seed 'm niet bij elke pageload terugbrengt.
     const target = section.items.find(i => i.id === id)
-    if (target?.projectRef) markProjectRemoved(target.projectRef.board, target.projectRef.itemId)
-    // Plain-text items uit de gehardcodeerde seed (socials/reminders/
-    // kansen) tracken we ook — anders schuift de seed-restore-effect
-    // ze direct weer terug. Geldt ook voor menno's e.a. seed-items.
-    if (target && !target.projectRef) markSeedItemRemoved(section.id, target.text)
+    if (!target) return
+    if (target.projectRef) {
+      markProjectRemoved(target.projectRef.board, target.projectRef.itemId)
+    } else {
+      // Plain-text items uit de gehardcodeerde seed (socials/reminders/
+      // kansen) tracken we ook — anders schuift de seed-restore-effect
+      // ze direct weer terug. Geldt ook voor menno's e.a. seed-items.
+      markSeedItemRemoved(section.id, target.text)
+      // Belangrijk: als de plain-text per ongeluk dezelfde naam heeft
+      // als een board-project waar de eigenaar van deze sectie aan
+      // gekoppeld is, zou de auto-seed 'm meteen als project-versie
+      // terugbrengen. Mark ook alle matchende projecten als verwijderd
+      // zodat dat niet gebeurt. Case-insensitive vergelijking op de
+      // volledige tekst; partial matches negeren we (anders frustreert
+      // een gedeelde naam-fragment per ongeluk andere projecten).
+      const txt = target.text.trim().toLowerCase()
+      if (txt) {
+        for (const p of allProjects) {
+          if (p.name.trim().toLowerCase() === txt) {
+            markProjectRemoved(p.board, p.itemId)
+          }
+        }
+      }
+    }
     const prev = { ...section, items: [...section.items] }
     onUpdate({ ...section, items: section.items.filter(i => i.id !== id) }, prev)
   }
