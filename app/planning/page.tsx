@@ -3936,7 +3936,7 @@ export default function PlanningPage() {
   const initialScrollDoneRef = useRef(false)
   // Pending scroll-anker — wanneer ingesteld voor een re-render past de
   // useEffect onderaan scrollLeft aan zodat de today-line op screenX blijft.
-  const pendingAnchorRef = useRef<{ screenX: number } | null>(null)
+  const pendingAnchorRef = useRef<{ colIdx: number } | null>(null)
   // Opgeslagen scrollLeft uit localStorage — bij eerste mount restoren we
   // 'm zodat een refresh op exact dezelfde positie terugkomt. We restoren
   // ALLEEN als de laatste scroll-actie < 15 min geleden was; anders
@@ -3970,11 +3970,13 @@ export default function PlanningPage() {
   function anchoredColWZoom(updater: (z: number) => number) {
     const el = gridRef.current
     if (el && typeof window !== 'undefined') {
-      // Anker bij de LINKERKANT van het viewport zodat de gebruiker
-      // visueel niet wegspringt naar elders bij het zoomen — wat ze
-      // links zien blijft links staan. Voorheen anker op today, maar
-      // dat sloeg de focus weg als 'vandaag' niet in beeld is.
-      pendingAnchorRef.current = { screenX: el.scrollLeft }
+      // Anker op de eerste zichtbare kolom (= de week-kolom direct
+      // naast de naam van de gebruiker). Bewaren als COLUMN-INDEX zodat
+      // 't ook werkt na zoom-level switch waar colW én aantal cols
+      // wijzigen — de useEffect hieronder zet die index terug op de
+      // juiste scroll-positie.
+      const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
+      pendingAnchorRef.current = { colIdx: idx }
     }
     const raw = updater(virtualZoom)
     const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_MAX, raw))
@@ -4003,12 +4005,12 @@ export default function PlanningPage() {
 
   function setZoomLevel(level: ZoomLevel, colW = 100) {
     const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-    // Anker bij linkerkant viewport zodat dezelfde datum-range zichtbaar
-    // blijft na een zoom-switch — date-based zodat 't ook klopt als
-    // colOffset/baseFrom kantelen tussen niveaus.
+    // Anker op de eerste zichtbare kolom zodat de week/maand direct
+    // naast de naam blijft staan na de zoom-switch.
     const el = gridRef.current
     if (el && typeof window !== 'undefined') {
-      pendingAnchorRef.current = { screenX: el.scrollLeft }
+      const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
+      pendingAnchorRef.current = { colIdx: idx }
     }
     if (zoom === level) { setColWZoom(colW); return }
     const currentDays = colOffset * daysPerCol[zoom]
@@ -4390,13 +4392,12 @@ export default function PlanningPage() {
       pendingAnchorRef.current = null
       const el2 = gridRef.current
       if (!el2) return
-      // pending.screenX = oude scrollLeft. Zet 'm terug zodat de
-      // linkerkant van 't viewport op dezelfde positie blijft staan
-      // (zoals de gebruiker visueel verwacht bij zoomen). Voor zoom-
-      // level switches schaalt scrollLeft niet 1-op-1; we klampen 'm
-      // gewoon binnen de nieuwe scroll-range.
+      // pending.colIdx = de eerste zichtbare kolom voor de zoom-wissel.
+      // Vermenigvuldigd met de nieuwe colW geeft 't de juiste scrollLeft
+      // zodat dezelfde week-kolom (links naast de naam) blijft staan.
       const maxScroll = Math.max(0, el2.scrollWidth - el2.clientWidth)
-      el2.scrollLeft = Math.max(0, Math.min(maxScroll, pending.screenX))
+      const target = pending.colIdx * colW
+      el2.scrollLeft = Math.max(0, Math.min(maxScroll, target))
     })
   }, [zoom, colW, colOffset])
 
@@ -5016,9 +5017,9 @@ export default function PlanningPage() {
                       // Anker bij de today-line zodat een toggle compact <->
                       // standaard niet de hele timeline laat verspringen.
                       const el = gridRef.current
-                      const todayEl = el?.querySelector<HTMLElement>('[data-today-marker]')
-                      if (el && todayEl) {
-                        pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
+                      if (el) {
+                        const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
+                        pendingAnchorRef.current = { colIdx: idx }
                       }
                       setViewSize(v)
                     }} style={segBtn(viewSize === v)}>
