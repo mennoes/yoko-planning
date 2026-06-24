@@ -5455,7 +5455,7 @@ export default function PlanningPage() {
                   style={{
                     padding: '4px 10px', borderRadius: 6, marginLeft: 4,
                     background: 'var(--accent)', border: 'none',
-                    color: '#000', fontSize: 11.5, fontWeight: 800,
+                    color: '#000', fontSize: 11.5, fontWeight: 500,
                     cursor: 'pointer', flexShrink: 0,
                   }}>
                   Vandaag
@@ -5498,7 +5498,7 @@ export default function PlanningPage() {
                     style={{
                       padding: '4px 10px', borderRadius: 6, marginRight: 6,
                       background: 'var(--accent)', border: 'none',
-                      color: '#000', fontSize: 11.5, fontWeight: 800,
+                      color: '#000', fontSize: 11.5, fontWeight: 500,
                       cursor: 'pointer', flexShrink: 0,
                     }}>
                     Vandaag
