@@ -751,11 +751,11 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
         borderBottom: dropPos === 'after'  ? '3px solid var(--accent)' : '3px solid transparent',
         transition: 'border-color 0.08s' }}
       onMouseEnter={e => {
-        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '1'
+        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) { btn.style.opacity = '1'; btn.style.color = 'var(--red, #e2445c)' }
         const h   = e.currentTarget.querySelector<HTMLElement>('.drag-handle'); if (h) h.style.opacity = '1'
       }}
       onMouseLeave={e => {
-        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) btn.style.opacity = '0'
+        const btn = e.currentTarget.querySelector<HTMLElement>('.del-btn'); if (btn) { btn.style.opacity = '0.5'; btn.style.color = 'var(--text-muted)' }
         const h   = e.currentTarget.querySelector<HTMLElement>('.drag-handle'); if (h) h.style.opacity = '0.35'
       }}
     >
@@ -857,7 +857,13 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
           <button onClick={onMoveDown} disabled={isLastItem} title="Omlaag" style={reorderArrowBtn(isLastItem)}>↓</button>
         </>
       ) : (
-        <button className="del-btn" onClick={onRemove} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px', opacity: 0, flexShrink: 0 }}>×</button>
+        <button className="del-btn" onClick={onRemove}
+          aria-label="Verwijder"
+          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+            fontSize: 16, lineHeight: 1, padding: '4px 8px', borderRadius: 6,
+            opacity: 0.5, flexShrink: 0,
+            minWidth: 28, minHeight: 28,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
       )}
       {showComments && <TodoCommentModal todoId={item.id} todoText={item.text} onClose={() => setShowComments(false)} />}
     </li>
