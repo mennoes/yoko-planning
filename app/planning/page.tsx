@@ -3936,7 +3936,7 @@ export default function PlanningPage() {
   const initialScrollDoneRef = useRef(false)
   // Pending scroll-anker — wanneer ingesteld voor een re-render past de
   // useEffect onderaan scrollLeft aan zodat de today-line op screenX blijft.
-  const pendingAnchorRef = useRef<{ colIdx: number } | null>(null)
+  const pendingAnchorRef = useRef<{ colIdx: number } | { todayScreenX: number } | null>(null)
   // Opgeslagen scrollLeft uit localStorage — bij eerste mount restoren we
   // 'm zodat een refresh op exact dezelfde positie terugkomt. We restoren
   // ALLEEN als de laatste scroll-actie < 15 min geleden was; anders
@@ -4005,12 +4005,16 @@ export default function PlanningPage() {
 
   function setZoomLevel(level: ZoomLevel, colW = 100) {
     const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-    // Anker op de eerste zichtbare kolom zodat de week/maand direct
-    // naast de naam blijft staan na de zoom-switch.
+    // Bij niveau-switch (week/maand/kwartaal) ankeren we op de VANDAAG-
+    // marker zodat 'nu' op dezelfde schermpositie blijft. Voor slider-
+    // zooms (binnen één niveau) gebruiken we de eerste zichtbare kolom
+    // — zie anchoredColWZoom.
     const el = gridRef.current
     if (el && typeof window !== 'undefined') {
-      const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
-      pendingAnchorRef.current = { colIdx: idx }
+      const todayEl = el.querySelector<HTMLElement>('[data-today-marker]')
+      if (todayEl) {
+        pendingAnchorRef.current = { todayScreenX: todayEl.offsetLeft - el.scrollLeft }
+      }
     }
     if (zoom === level) { setColWZoom(colW); return }
     const currentDays = colOffset * daysPerCol[zoom]
@@ -4392,11 +4396,18 @@ export default function PlanningPage() {
       pendingAnchorRef.current = null
       const el2 = gridRef.current
       if (!el2) return
-      // pending.colIdx = de eerste zichtbare kolom voor de zoom-wissel.
-      // Vermenigvuldigd met de nieuwe colW geeft 't de juiste scrollLeft
-      // zodat dezelfde week-kolom (links naast de naam) blijft staan.
       const maxScroll = Math.max(0, el2.scrollWidth - el2.clientWidth)
-      const target = pending.colIdx * colW
+      let target = 0
+      if ('todayScreenX' in pending) {
+        // Niveau-switch: zorg dat de vandaag-marker op dezelfde
+        // schermpositie blijft (offsetLeft - scrollLeft == todayScreenX).
+        const todayEl = el2.querySelector<HTMLElement>('[data-today-marker]')
+        if (todayEl) target = todayEl.offsetLeft - pending.todayScreenX
+      } else {
+        // Slider-zoom binnen één niveau: bewaar de eerste zichtbare
+        // kolom op dezelfde positie.
+        target = pending.colIdx * colW
+      }
       el2.scrollLeft = Math.max(0, Math.min(maxScroll, target))
     })
   }, [zoom, colW, colOffset])
