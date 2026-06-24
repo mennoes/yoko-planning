@@ -1029,7 +1029,7 @@ function TodoCommentModal({ todoId, todoText, onClose }: {
         boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
       }}>
         <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Opmerkingen</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Notities</div>
           <div style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.3 }}>{todoText}</div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
