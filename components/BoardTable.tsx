@@ -3616,7 +3616,11 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const from = filterFrom ? new Date(filterFrom).getTime() : null
     const until = filterUntil ? new Date(filterUntil).getTime() + 86400000 - 1 : null
     const overlapsRange = (s: string | null | undefined, e: string | null | undefined) => {
-      if (!s) return false
+      // Items zonder datum laten we altijd door 't periode-filter heen
+      // glippen — anders verdwijnen net-aangemaakte items ('Voeg item
+      // toe' geeft geen datum mee) meteen uit beeld en lijkt 't alsof
+      // toevoegen niet werkt.
+      if (!s) return true
       const ms = new Date(s).getTime()
       const me = e ? new Date(e).getTime() + 86400000 - 1 : ms + 86400000 - 1
       if (from  !== null && me < from)  return false
