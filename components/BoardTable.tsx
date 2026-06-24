@@ -2869,9 +2869,44 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     const t = setTimeout(() => setJustCreatedId(null), 50)
     return () => clearTimeout(t)
   }, [justCreatedId])
+
+  // Detect een rij die in z'n geheel een 'Nieuw item'-placeholder is —
+  // geen door de user ingevulde data. Wordt gebruikt om stilletjes
+  // opgebouwde stapels lege rijen op te ruimen.
+  const isEmptyPlaceholder = (i: BoardItem) =>
+    (i.name ?? '').trim() === 'Nieuw item' &&
+    (!i.ownerIds || i.ownerIds.length === 0) &&
+    !(i.status ?? '').trim() &&
+    !i.startDate && !i.endDate && !i.deadline &&
+    !(Number(i.estHours) || 0) && !(Number(i.dagen) || 0) &&
+    !(i.notes ?? '').trim() &&
+    (!i.subitems || i.subitems.length === 0) &&
+    !i.source && !i.contactpersoon && !i.framelink
+
+  // Eén keer per group-mount: als er ≥3 volledig-lege 'Nieuw item'-rijen
+  // achter elkaar staan zijn dat per ongeluk opgebouwde placeholders.
+  // Auto-soft-delete in Supabase en filter ze lokaal weg zodat ze niet
+  // bij elke pull terugkomen. Drempel van 3 zodat een gebruiker die net
+  // 1-2 rijen aan 't invullen is niets verliest.
+  const prunedGroupsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (prunedGroupsRef.current.has(group.id)) return
+    const empties = group.items.filter(isEmptyPlaceholder)
+    if (empties.length < 3) return
+    prunedGroupsRef.current.add(group.id)
+    for (const it of empties) softDeleteItem(it.id).catch(() => {})
+    onUpdateGroup({ ...group, items: group.items.filter(i => !isEmptyPlaceholder(i)) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.id])
+
   function addItem() {
     const newId = Date.now().toString()
-    onUpdateGroup({ ...group, items: [...group.items, {
+    // Vóór 't aanmaken alle openstaande lege placeholders prunen zodat
+    // een onbedoelde dubbele klik niet een rits 'Nieuw item' rijen geeft.
+    const existingEmpties = group.items.filter(isEmptyPlaceholder)
+    for (const it of existingEmpties) softDeleteItem(it.id).catch(() => {})
+    const cleanedItems = group.items.filter(i => !isEmptyPlaceholder(i))
+    onUpdateGroup({ ...group, items: [...cleanedItems, {
       id: newId, name: 'Nieuw item', ownerIds: [], status: '',
       startDate: null, endDate: null, deadline: null, estHours: 0, dagen: 0,
     }] })
