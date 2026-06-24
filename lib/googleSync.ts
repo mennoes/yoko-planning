@@ -63,9 +63,11 @@ function resolveAttendeeEmailWith(memberKeys: MemberKey[], email: string): strin
 // komen automatisch binnen rollen zonder dat de gebruiker iets hoeft te
 // doen. 14 dagen geeft genoeg ruimte voor 'wat staat er deze + volgende
 // week'.
-const WINDOW_DAYS_FUTURE = 180  // 6 maanden vooruit — zodat save-the-dates,
-// uitnodigingen en kwartaal-plannen ook direct in de planner staan i.p.v.
-// pas wanneer ze dichter dan 2 weken weg zijn.
+const WINDOW_DAYS_FUTURE = 14   // 2 weken vooruit. Verder doortrekken
+// laat recurring meetings (zoals een wekelijkse Redactievergadering)
+// exploderen tot tientallen subitems — onleesbaar. Save-the-dates met
+// een datum verder dan 2 weken weg verschijnen vanzelf zodra ze
+// dichterbij komen; de sync draait elke 5 minuten.
 const WINDOW_DAYS_PAST   = 180  // 6 months back — zodat recurring meetings
                                  //   ook hun historische instances meenemen
 const AUTO_DONE_AFTER_DAYS = 3  // events waarvan de end-date > N dagen
