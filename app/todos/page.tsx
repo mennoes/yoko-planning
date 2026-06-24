@@ -379,32 +379,90 @@ function TodoCard({
   const open    = visible.filter(i => !i.done)
   const done    = visible.filter(i =>  i.done)
 
-  // Splits open-items in 'Deze week' (project loopt overlap met de
-  // komende 7 dagen) vs 'Daarna'. Voor losse todo's zonder projectRef
-  // landen ze op 'Deze week' (= prioritair). Alleen voor member-secties
-  // tonen we de kopjes — een algemene Ideeën-sectie hoeft geen
-  // tijds-indeling, daar zou 't visueel ruis worden.
-  const todayIso = new Date().toISOString().slice(0, 10)
-  const inSevenDaysIso = (() => {
-    const d = new Date(); d.setDate(d.getDate() + 7)
-    return d.toISOString().slice(0, 10)
-  })()
+  // Splits open-items per WEEK gebaseerd op de start-datum van 't
+  // gekoppelde project. Geen projectRef of geen datum → 'Deze week'
+  // (= prioritair, los werk). Andere items belanden in een bucket per
+  // ISO-week-startdatum. Alleen voor member-secties; een Ideeën-sectie
+  // hoeft geen week-indeling.
+  const todayDate = new Date()
+  todayDate.setHours(0, 0, 0, 0)
+  // ISO-weekstart helper (maandag 00:00 lokaal)
+  const weekStartOf = (d: Date): Date => {
+    const x = new Date(d); x.setHours(0, 0, 0, 0)
+    const dow = (x.getDay() + 6) % 7  // ma=0, zo=6
+    x.setDate(x.getDate() - dow)
+    return x
+  }
+  const isoWeekOf = (d: Date): number => {
+    const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+    const dayNum = (x.getUTCDay() + 6) % 7
+    x.setUTCDate(x.getUTCDate() - dayNum + 3)
+    const firstThursday = new Date(Date.UTC(x.getUTCFullYear(), 0, 4))
+    const diff = (x.getTime() - firstThursday.getTime()) / 86400000
+    return 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7)
+  }
+  const thisWeekStart = weekStartOf(todayDate)
   const projectDates = new Map<string, { start: string | null; end: string | null }>()
   for (const p of allProjects) {
     projectDates.set(`${p.board}:${p.itemId}`, { start: p.startDate ?? null, end: p.endDate ?? null })
   }
-  const isThisWeek = (i: TodoItem): boolean => {
-    if (!i.projectRef) return true
+  // Per item: welke week-start hoort 'ie bij?
+  // - geen projectRef of geen datum → deze week
+  // - start < deze week → loopt nog, dus deze week
+  // - anders → week van de startdatum
+  const weekStartIsoForItem = (i: TodoItem): string => {
+    const tIso = thisWeekStart.toISOString().slice(0, 10)
+    if (!i.projectRef) return tIso
     const d = projectDates.get(`${i.projectRef.board}:${i.projectRef.itemId}`)
-    if (!d) return true
-    const s = d.start; const e = d.end ?? s
-    if (!s) return true
-    // Overlap [s..e] met [today..today+7d]?
-    return s <= inSevenDaysIso && (e ?? s) >= todayIso
+    if (!d?.start) return tIso
+    const s = new Date(d.start)
+    if (Number.isNaN(s.getTime())) return tIso
+    const ws = weekStartOf(s)
+    return ws.getTime() < thisWeekStart.getTime() ? tIso : ws.toISOString().slice(0, 10)
   }
   const showWeekSplit = isMember
-  const openThisWeek = showWeekSplit ? open.filter(isThisWeek)  : open
-  const openLater    = showWeekSplit ? open.filter(i => !isThisWeek(i)) : []
+  type WeekBucket = { iso: string; label: string; items: TodoItem[] }
+  const weekBuckets: WeekBucket[] = (() => {
+    if (!showWeekSplit) return [{ iso: '', label: '', items: open }]
+    const map = new Map<string, TodoItem[]>()
+    for (const it of open) {
+      const k = weekStartIsoForItem(it)
+      const arr = map.get(k) ?? []
+      arr.push(it); map.set(k, arr)
+    }
+    const out: WeekBucket[] = []
+    const thisIso = thisWeekStart.toISOString().slice(0, 10)
+    const sorted = [...map.keys()].sort()
+    for (const iso of sorted) {
+      const d = new Date(iso)
+      const wk = isoWeekOf(d)
+      const mEnd = new Date(d); mEnd.setDate(mEnd.getDate() + 4)
+      const fmt = (x: Date) => x.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+      const label = iso === thisIso
+        ? `Deze week · W${wk}`
+        : `W${wk} · ${fmt(d)} – ${fmt(mEnd)}`
+      out.push({ iso, label, items: map.get(iso) ?? [] })
+    }
+    return out
+  })()
+  // Hoeveel weken vooruit zit een bucket? Wordt gebruikt voor de
+  // "default-collapsed"-regel: alles vanaf 2 weken vooruit klapt
+  // standaard in zodat de huidige week + volgende week direct zichtbaar
+  // zijn en de rest pas op klik openvouwt.
+  const weeksFromThis = (iso: string): number => {
+    if (!iso) return 0
+    const d = new Date(iso)
+    return Math.round((d.getTime() - thisWeekStart.getTime()) / (7 * 86400000))
+  }
+  // User-override per bucket-iso: false = expliciet ingeklapt door user,
+  // true = expliciet opengeklapt. Ontbreekt de iso, dan valt-ie terug op
+  // de default (open <2 weken, dicht ≥2 weken).
+  const [weekToggle, setWeekToggle] = useState<Record<string, boolean>>({})
+  const isBucketExpanded = (iso: string): boolean => {
+    const defaultCollapsed = weeksFromThis(iso) >= 2
+    const override = weekToggle[iso]
+    return override === undefined ? !defaultCollapsed : override
+  }
 
   // Editable header — handmatige (niet-member) secties: klik op emoji of
   // titel om te bewerken. Member-secties tonen avatar + member-naam zoals
@@ -534,13 +592,67 @@ function TodoCard({
         )}
       </div>
 
-      {/* Open items — optional 'Deze week' / 'Daarna' split voor persoonlijke
-          secties zodat de huidige werkdruk altijd bovenaan staat. */}
-      <ul style={{ listStyle: 'none', padding: '6px 0 0', margin: 0 }}>
-        {showWeekSplit && openLater.length > 0 && openThisWeek.length > 0 && (
-          <li style={weekHeaderStyle}>Deze week</li>
-        )}
-        {(showWeekSplit ? openThisWeek : open).map(item => {
+      {/* Open items — per-week buckets als compacte inline sub-headers.
+          Items renderen we als "subitems" onder hun week-label, met
+          krappere rij-padding zodat de lijst dicht op elkaar staat.
+          Buckets ≥2 weken vooruit klappen standaard in (clickable). */}
+      <ul style={{ listStyle: 'none', padding: '4px 0 0', margin: 0 }}>
+        {showWeekSplit ? weekBuckets.map(bucket => {
+          const collapsible = weeksFromThis(bucket.iso) >= 2
+          const expanded    = isBucketExpanded(bucket.iso)
+          return (
+            <li key={bucket.iso || 'now'} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              <div
+                onClick={collapsible ? () => setWeekToggle(t => ({ ...t, [bucket.iso]: !expanded })) : undefined}
+                style={{
+                  ...weekHeaderStyle,
+                  cursor: collapsible ? 'pointer' : 'default',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                {collapsible && (
+                  <span style={{ fontSize: 8, lineHeight: 1, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.12s', color: 'var(--text-muted)' }}>▶</span>
+                )}
+                <span>{bucket.label}</span>
+                <span style={{ fontWeight: 500, opacity: 0.7 }}>· {bucket.items.length}</span>
+              </div>
+              {expanded && (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {bucket.items.map(item => {
+                    const itemIdx = section.items.findIndex(i => i.id === item.id)
+                    const openIdx = open.findIndex(i => i.id === item.id)
+                    return (
+                      <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
+                        editing={editId === item.id} editTxt={editTxt}
+                        editOrder={editOrder}
+                        compact
+                        isFirstItem={openIdx === 0}
+                        isLastItem={openIdx === open.length - 1}
+                        onMoveUp={() => moveItem(itemIdx, -1)}
+                        onMoveDown={() => moveItem(itemIdx, 1)}
+                        onToggle={() => toggle(item.id)}
+                        onRemove={() => remove(item.id)}
+                        onEditStart={() => { setEditId(item.id); setEditTxt(item.text) }}
+                        onEditChange={setEditTxt}
+                        onEditSave={() => saveEdit(item.id)}
+                        onEditCancel={() => setEditId(null)}
+                        dragIdx={itemIdx}
+                        onDragStart={(from) => { dragFromRef.current = from }}
+                        onDropOnIdx={(target) => {
+                          const from = dragFromRef.current
+                          if (from == null) return
+                          dragFromRef.current = null
+                          moveItemTo(from, target)
+                        }}
+                        onDragEnd={() => { dragFromRef.current = null }}
+                      />
+                    )
+                  })}
+                </ul>
+              )}
+            </li>
+          )
+        }) : open.map(item => {
           const itemIdx = section.items.findIndex(i => i.id === item.id)
           const openIdx = open.findIndex(i => i.id === item.id)
           return (
@@ -569,40 +681,6 @@ function TodoCard({
             />
           )
         })}
-        {showWeekSplit && openLater.length > 0 && (
-          <>
-            <li style={weekHeaderStyle}>Daarna</li>
-            {openLater.map(item => {
-              const itemIdx = section.items.findIndex(i => i.id === item.id)
-              const openIdx = open.findIndex(i => i.id === item.id)
-              return (
-                <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
-                  editing={editId === item.id} editTxt={editTxt}
-                  editOrder={editOrder}
-                  isFirstItem={openIdx === 0}
-                  isLastItem={openIdx === open.length - 1}
-                  onMoveUp={() => moveItem(itemIdx, -1)}
-                  onMoveDown={() => moveItem(itemIdx, 1)}
-                  onToggle={() => toggle(item.id)}
-                  onRemove={() => remove(item.id)}
-                  onEditStart={() => { setEditId(item.id); setEditTxt(item.text) }}
-                  onEditChange={setEditTxt}
-                  onEditSave={() => saveEdit(item.id)}
-                  onEditCancel={() => setEditId(null)}
-                  dragIdx={itemIdx}
-                  onDragStart={(from) => { dragFromRef.current = from }}
-                  onDropOnIdx={(target) => {
-                    const from = dragFromRef.current
-                    if (from == null) return
-                    dragFromRef.current = null
-                    moveItemTo(from, target)
-                  }}
-                  onDragEnd={() => { dragFromRef.current = null }}
-                />
-              )
-            })}
-          </>
-        )}
       </ul>
 
       {/* Done items (collapsed) */}
@@ -680,12 +758,13 @@ function TodoCard({
 }
 
 const weekHeaderStyle: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
-  textTransform: 'uppercase', letterSpacing: '0.07em',
-  padding: '6px 14px 2px', listStyle: 'none',
+  fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
+  textTransform: 'uppercase', letterSpacing: '0.06em',
+  padding: '5px 14px 2px', listStyle: 'none',
+  userSelect: 'none',
 }
 
-function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirstItem, isLastItem, onMoveUp, onMoveDown, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel, dragIdx, onDragStart, onDropOnIdx, onDragEnd }: {
+function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirstItem, isLastItem, onMoveUp, onMoveDown, onToggle, onRemove, onEditStart, onEditChange, onEditSave, onEditCancel, dragIdx, onDragStart, onDropOnIdx, onDragEnd, compact }: {
   item: TodoItem; isMember: boolean; memberId: string
   editing: boolean; editTxt: string
   editOrder: boolean
@@ -700,6 +779,9 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
   onDragStart?: (idx: number) => void
   onDropOnIdx?: (targetIdx: number) => void
   onDragEnd?:   () => void
+  // Compact: tightere rij-padding voor de week-bucket-weergave waarin
+  // items als "subitems" onder een week-header staan.
+  compact?: boolean
 }) {
   const { members: liveForRow } = useTeam()
   const member = liveForRow.find(m => m.id === memberId) ?? teamData.members.find(m => m.id === memberId)
@@ -746,7 +828,8 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
         onDropOnIdx(dp === 'after' ? dragIdx + 1 : dragIdx)
       }}
       onDragEnd={() => { setDropPos(null); onDragEnd?.() }}
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 14px', position: 'relative',
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 6,
+        padding: compact ? '2px 14px 2px 22px' : '5px 14px', position: 'relative',
         borderTop:    dropPos === 'before' ? '3px solid var(--accent)' : '3px solid transparent',
         borderBottom: dropPos === 'after'  ? '3px solid var(--accent)' : '3px solid transparent',
         transition: 'border-color 0.08s' }}
