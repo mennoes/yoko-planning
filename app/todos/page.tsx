@@ -61,6 +61,20 @@ function loadAllProjects(): ProjectLink[] {
       out.push({ board, itemId: item.id, name: item.name,
         startDate: (item.startDate as string | null) ?? null,
         endDate:   (item.endDate   as string | null) ?? null })
+      // Subitems ook toevoegen met hun __si{idx}-id zodat de week-bucket
+      // in /todos hun eigen start-datum gebruikt i.p.v. terug te vallen
+      // op die van de parent. loadMyOpenProjects pusht subitem-todos met
+      // datzelfde id-patroon, dus de projectDates-lookup matcht direct.
+      const subs = (item.subitems as Array<{ id?: string; name?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+      subs.forEach((si, idx) => {
+        out.push({
+          board,
+          itemId: `${item.id}__si${idx}`,
+          name: si.name ?? item.name,
+          startDate: si.startDate ?? null,
+          endDate:   si.endDate   ?? si.startDate ?? null,
+        })
+      })
     }
   }
   return out
