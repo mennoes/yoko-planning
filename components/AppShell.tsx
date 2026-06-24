@@ -276,7 +276,9 @@ function Inner({ children }: { children: ReactNode }) {
       } catch {}
     }
     tick()
-    const id = setInterval(tick, 5 * 60 * 1000)
+    // Google sync interval — was 5 min, verlaagd naar 2 min op verzoek
+    // zodat nieuwe meetings sneller verschijnen in de planner.
+    const id = setInterval(tick, 2 * 60 * 1000)
     const offAuth = onAuthChange(() => { tick() })
     return () => { cancelled = true; clearInterval(id); offAuth() }
   }, [])
