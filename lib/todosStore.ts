@@ -25,6 +25,10 @@ function writeCache(sections: Section[]) {
 }
 
 export function saveSections(sections: Section[]): void {
+  // Zet de lokale-write-lock zodat realtime pulls die hierna binnenkomen
+  // (door onze eigen pushToRemote) niet de ongedeleted/ongepushte
+  // staat terugplakken bovenop wat we net lokaal wijzigden.
+  lastLocalWriteAt = Date.now()
   writeCache(sections)
   pushToRemote(sections).catch(() => {})
 }
@@ -133,11 +137,18 @@ export async function pushToRemote(sections: Section[]): Promise<boolean> {
 
 let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
 let pullTimer: ReturnType<typeof setTimeout> | null = null
+// Lokale-mutatie-lock: tijdens en 3s na een eigen push negeren we
+// realtime pulls. Anders haalt een schedulePull die binnen 400ms na
+// de delete fired de oude (ongedeleted) state op, voor de DELETE in
+// Supabase is doorgevoerd — en plopt 't verwijderde item terug.
+let lastLocalWriteAt = 0
+const LOCAL_WRITE_LOCK_MS = 3000
 
 function schedulePull() {
   if (pullTimer) return
   pullTimer = setTimeout(async () => {
     pullTimer = null
+    if (Date.now() - lastLocalWriteAt < LOCAL_WRITE_LOCK_MS) return
     const remote = await pullFromRemote()
     if (remote) writeCache(remote)
   }, 400)
