@@ -1678,10 +1678,15 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
 }
 
 // ─── Notes preview cel ──────────────────────────────────────────────────────
-// Klik opent het item-detail-drawer met een echt textarea. Strippen we de
-// HTML-tags die uit oudere imports (Google-beschrijvingen) kunnen komen,
-// anders zie je <p>…</p> letterlijk in de cel.
-function NotesPreview({ value, onOpen }: { value: string; onOpen: () => void }) {
+// Klik → inline-textarea om de notitie direct in de kolom te bewerken.
+// Klik op het '↗'-pijltje rechts opent alsnog het detail-drawer voor lange
+// notities. Strippen we de HTML-tags die uit oudere imports (Google-
+// beschrijvingen) kunnen komen, anders zie je <p>…</p> letterlijk in de cel.
+function NotesPreview({ value, onOpen, onSave }: {
+  value: string
+  onOpen: () => void
+  onSave: (next: string) => void
+}) {
   const plain = (value ?? '')
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<\/p>\s*<p[^>]*>/gi, ' · ')
@@ -1692,16 +1697,66 @@ function NotesPreview({ value, onOpen }: { value: string; onOpen: () => void }) 
     .replace(/&gt;/gi, '>')
     .replace(/\s+/g, ' ')
     .trim()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft]     = useState(plain)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { if (editing) setDraft(plain) }, [editing, plain])
+  function commit() {
+    setEditing(false)
+    const next = draft.trim()
+    if (next !== plain) onSave(next)
+  }
+  function cancel() {
+    setEditing(false)
+    setDraft(plain)
+  }
+  if (editing) {
+    return (
+      <textarea
+        ref={taRef}
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => {
+          if (e.key === 'Escape') { e.preventDefault(); cancel() }
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit() }
+        }}
+        rows={2}
+        placeholder="Notitie…"
+        style={{
+          width: '100%', resize: 'none', border: '1px solid var(--accent)',
+          borderRadius: 4, background: 'var(--bg-base)', color: 'var(--text-primary)',
+          fontSize: 13, padding: '3px 5px', outline: 'none', fontFamily: 'inherit',
+          lineHeight: 1.35,
+        }}
+      />
+    )
+  }
   return (
-    <div onClick={e => { e.stopPropagation(); onOpen() }}
-      title={plain || 'Klik om notitie toe te voegen'}
-      style={{
-        cursor: 'pointer', fontSize: 13, padding: '0 4px',
-        color: plain ? 'var(--text-secondary)' : 'var(--text-muted)',
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        width: '100%', userSelect: 'none',
-      }}>
-      {plain || '—'}
+    <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+      <div onClick={e => { e.stopPropagation(); setEditing(true) }}
+        title={plain || 'Klik om notitie toe te voegen'}
+        style={{
+          cursor: 'text', fontSize: 13, padding: '0 4px',
+          color: plain ? 'var(--text-secondary)' : 'var(--text-muted)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          flex: 1, minWidth: 0, userSelect: 'none',
+        }}>
+        {plain || '—'}
+      </div>
+      <button
+        onClick={e => { e.stopPropagation(); onOpen() }}
+        title="Open in detail-paneel"
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text-muted)', fontSize: 12, lineHeight: 1,
+          padding: '2px 4px', borderRadius: 3, flexShrink: 0, opacity: 0.6,
+        }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+        onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
+      >↗</button>
     </div>
   )
 }
@@ -2032,10 +2087,12 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         {cols.map(col => (
           <div key={col.key} style={{ padding: '4px 8px', borderLeft: '1px solid var(--border-strong)', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
             {col.key === 'notes' ? (
-              // Notes is een vrije-tekst-veld dat al snel niet meer in één
-              // cel past. Klikken opent het detail-drawer met een groot
-              // textarea + eventuele opmerkingen ernaast.
-              <NotesPreview value={item.notes ?? ''} onOpen={() => setShowDetail(true)} />
+              // Notes is een vrije-tekst-veld. Inline-editable via klik op
+              // de tekst; '↗' opent het detail-drawer met een groot
+              // textarea + eventuele opmerkingen ernaast voor lange teksten.
+              <NotesPreview value={item.notes ?? ''}
+                onOpen={() => setShowDetail(true)}
+                onSave={next => onUpdate({ notes: next })} />
             ) : (
               <Cell item={effectiveItem} col={col} onUpdate={onUpdate} />
             )}
@@ -2459,20 +2516,20 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
             return <OwnerDistributionSection item={item} owners={owners} total={total} onUpdate={onUpdate} />
           })()}
 
-          {/* Notes */}
+          {/* Notities = vroeger "Opmerkingen"-thread. Inline-textarea bovenin
+              voor een snelle losse notitie (item.notes), daaronder de
+              threaded variant voor reactions/mentions. Eén concept,
+              twee invoer-modi. */}
           {(typeof item.notes === 'string' || item.notes === undefined) && (
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                Notities
-              </div>
+            <div style={{ marginBottom: 14 }}>
               <textarea
                 defaultValue={item.notes ?? ''}
                 onBlur={e => { if (e.target.value !== (item.notes ?? '')) onUpdate({ notes: e.target.value }) }}
-                placeholder="Voeg notities toe…"
-                rows={3}
+                placeholder="Snelle notitie…"
+                rows={2}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  padding: '10px 12px', borderRadius: 8,
+                  padding: '8px 11px', borderRadius: 8,
                   border: '1px solid var(--border)', background: 'var(--bg-card)',
                   color: 'var(--text-primary)', fontSize: 13.5, fontFamily: 'inherit',
                   resize: 'vertical', outline: 'none',
@@ -2480,11 +2537,11 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
             </div>
           )}
 
-          {/* Comments */}
+          {/* Notities-thread (voorheen "Opmerkingen") */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Opmerkingen
+                Notities
               </div>
               <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
               <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
@@ -2812,9 +2869,44 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     const t = setTimeout(() => setJustCreatedId(null), 50)
     return () => clearTimeout(t)
   }, [justCreatedId])
+
+  // Detect een rij die in z'n geheel een 'Nieuw item'-placeholder is —
+  // geen door de user ingevulde data. Wordt gebruikt om stilletjes
+  // opgebouwde stapels lege rijen op te ruimen.
+  const isEmptyPlaceholder = (i: BoardItem) =>
+    (i.name ?? '').trim() === 'Nieuw item' &&
+    (!i.ownerIds || i.ownerIds.length === 0) &&
+    !(i.status ?? '').trim() &&
+    !i.startDate && !i.endDate && !i.deadline &&
+    !(Number(i.estHours) || 0) && !(Number(i.dagen) || 0) &&
+    !(i.notes ?? '').trim() &&
+    (!i.subitems || i.subitems.length === 0) &&
+    !i.source && !i.contactpersoon && !i.framelink
+
+  // Eén keer per group-mount: als er ≥3 volledig-lege 'Nieuw item'-rijen
+  // achter elkaar staan zijn dat per ongeluk opgebouwde placeholders.
+  // Auto-soft-delete in Supabase en filter ze lokaal weg zodat ze niet
+  // bij elke pull terugkomen. Drempel van 3 zodat een gebruiker die net
+  // 1-2 rijen aan 't invullen is niets verliest.
+  const prunedGroupsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (prunedGroupsRef.current.has(group.id)) return
+    const empties = group.items.filter(isEmptyPlaceholder)
+    if (empties.length < 3) return
+    prunedGroupsRef.current.add(group.id)
+    for (const it of empties) softDeleteItem(it.id).catch(() => {})
+    onUpdateGroup({ ...group, items: group.items.filter(i => !isEmptyPlaceholder(i)) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.id])
+
   function addItem() {
     const newId = Date.now().toString()
-    onUpdateGroup({ ...group, items: [...group.items, {
+    // Vóór 't aanmaken alle openstaande lege placeholders prunen zodat
+    // een onbedoelde dubbele klik niet een rits 'Nieuw item' rijen geeft.
+    const existingEmpties = group.items.filter(isEmptyPlaceholder)
+    for (const it of existingEmpties) softDeleteItem(it.id).catch(() => {})
+    const cleanedItems = group.items.filter(i => !isEmptyPlaceholder(i))
+    onUpdateGroup({ ...group, items: [...cleanedItems, {
       id: newId, name: 'Nieuw item', ownerIds: [], status: '',
       startDate: null, endDate: null, deadline: null, estHours: 0, dagen: 0,
     }] })
@@ -3306,7 +3398,7 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
   { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
   { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
-  { key: 'notes',          label: 'Notes',          type: 'text',      width: 160 },
+  { key: 'notes',          label: 'Notities',       type: 'text',      width: 160 },
   { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
   { key: 'framelink',      label: 'Frame link',     type: 'url',       width: 110 },
   { key: 'uitzenddag',     label: 'Uitzenddag',     type: 'date',      width: 105 },
