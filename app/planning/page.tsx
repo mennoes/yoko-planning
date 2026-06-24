@@ -3029,13 +3029,20 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               onChange={e => {
                 const v = e.target.value
                 setStartDate(v)
-                const patch = autofillEstFromDates(v, endDate, estHours)
-                commit({ startDate: v || null, ...patch })
+                // Geen endDate? Vul 'm dan automatisch met startDate aan
+                // i.p.v. de browser default 'vandaag' bij 't openen van
+                // de tweede picker te tonen. Voorkomt dat de gebruiker
+                // per ongeluk 'n meerdaagse range maakt van begin → nu.
+                const nextEnd = endDate || v
+                if (!endDate && v) setEndDate(v)
+                const patch = autofillEstFromDates(v, nextEnd, estHours)
+                commit({ startDate: v || null, endDate: nextEnd || null, ...patch })
                 if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
               }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
             <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
             <input type="date" value={endDate} disabled={isGoogle}
+              min={startDate || undefined}
               onChange={e => {
                 const v = e.target.value
                 setEndDate(v)
@@ -3963,10 +3970,11 @@ export default function PlanningPage() {
   function anchoredColWZoom(updater: (z: number) => number) {
     const el = gridRef.current
     if (el && typeof window !== 'undefined') {
-      const todayEl = el.querySelector<HTMLElement>('[data-today-marker]')
-      if (todayEl) {
-        pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
-      }
+      // Anker bij de LINKERKANT van het viewport zodat de gebruiker
+      // visueel niet wegspringt naar elders bij het zoomen — wat ze
+      // links zien blijft links staan. Voorheen anker op today, maar
+      // dat sloeg de focus weg als 'vandaag' niet in beeld is.
+      pendingAnchorRef.current = { screenX: el.scrollLeft }
     }
     const raw = updater(virtualZoom)
     const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_MAX, raw))
@@ -3995,15 +4003,12 @@ export default function PlanningPage() {
 
   function setZoomLevel(level: ZoomLevel, colW = 100) {
     const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
-    // Anker bij vandaag-marker zodat na de zoom-switch het 'nu'-streepje
-    // op dezelfde X-positie in het viewport blijft — anders springt
-    // de timeline ergens onverwacht heen.
+    // Anker bij linkerkant viewport zodat dezelfde datum-range zichtbaar
+    // blijft na een zoom-switch — date-based zodat 't ook klopt als
+    // colOffset/baseFrom kantelen tussen niveaus.
     const el = gridRef.current
     if (el && typeof window !== 'undefined') {
-      const todayEl = el.querySelector<HTMLElement>('[data-today-marker]')
-      if (todayEl) {
-        pendingAnchorRef.current = { screenX: todayEl.offsetLeft - el.scrollLeft }
-      }
+      pendingAnchorRef.current = { screenX: el.scrollLeft }
     }
     if (zoom === level) { setColWZoom(colW); return }
     const currentDays = colOffset * daysPerCol[zoom]
@@ -4385,13 +4390,13 @@ export default function PlanningPage() {
       pendingAnchorRef.current = null
       const el2 = gridRef.current
       if (!el2) return
-      // nowOffset is via useMemo herberekend bij elke render — pak 'm uit
-      // de closure van de useEffect runtime (niet beschikbaar hier), dus
-      // we lezen de huidige today-marker via de DOM querySelector.
-      const todayEl = el2.querySelector<HTMLElement>('[data-today-marker]')
-      if (!todayEl) return
-      const todayLeft = todayEl.offsetLeft
-      el2.scrollLeft = Math.max(0, todayLeft - pending.screenX)
+      // pending.screenX = oude scrollLeft. Zet 'm terug zodat de
+      // linkerkant van 't viewport op dezelfde positie blijft staan
+      // (zoals de gebruiker visueel verwacht bij zoomen). Voor zoom-
+      // level switches schaalt scrollLeft niet 1-op-1; we klampen 'm
+      // gewoon binnen de nieuwe scroll-range.
+      const maxScroll = Math.max(0, el2.scrollWidth - el2.clientWidth)
+      el2.scrollLeft = Math.max(0, Math.min(maxScroll, pending.screenX))
     })
   }, [zoom, colW, colOffset])
 
@@ -5444,6 +5449,17 @@ export default function PlanningPage() {
                     native dropdown niet betrouwbaar opent binnen sticky
                     parents in alle browsers. */}
                 <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
+                {/* 'Vandaag' verhuisd naar links boven, naast de zoom-
+                    controls — meer logisch dan helemaal rechtsboven. */}
+                <button onClick={goToday} title="Spring naar vandaag"
+                  style={{
+                    padding: '4px 10px', borderRadius: 6, marginLeft: 4,
+                    background: 'var(--accent)', border: 'none',
+                    color: '#000', fontSize: 11.5, fontWeight: 800,
+                    cursor: 'pointer', flexShrink: 0,
+                  }}>
+                  Vandaag
+                </button>
               </div>
               {monthGroups.map(({ label, widthPx }) => (
                 <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
@@ -5476,7 +5492,18 @@ export default function PlanningPage() {
                 </button>
               )}
               {!monthGroups && (
-                <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
+                <>
+                  <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
+                  <button onClick={goToday} title="Spring naar vandaag"
+                    style={{
+                      padding: '4px 10px', borderRadius: 6, marginRight: 6,
+                      background: 'var(--accent)', border: 'none',
+                      color: '#000', fontSize: 11.5, fontWeight: 800,
+                      cursor: 'pointer', flexShrink: 0,
+                    }}>
+                    Vandaag
+                  </button>
+                </>
               )}
               {!isMobile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%',
