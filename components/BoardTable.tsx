@@ -24,7 +24,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, pullBoardFromRemote } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, pullBoardFromRemote } from '@/lib/boardStore'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
@@ -2883,28 +2883,41 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     (!i.subitems || i.subitems.length === 0) &&
     !i.source && !i.contactpersoon && !i.framelink
 
-  // Eén keer per group-mount: als er ≥3 volledig-lege 'Nieuw item'-rijen
-  // achter elkaar staan zijn dat per ongeluk opgebouwde placeholders.
-  // Auto-soft-delete in Supabase en filter ze lokaal weg zodat ze niet
-  // bij elke pull terugkomen. Drempel van 3 zodat een gebruiker die net
-  // 1-2 rijen aan 't invullen is niets verliest.
-  const prunedGroupsRef = useRef<Set<string>>(new Set())
+  // Als er ≥3 volledig-lege 'Nieuw item'-rijen achter elkaar staan zijn
+  // dat per ongeluk opgebouwde placeholders. Hard-delete (geen prullenbak —
+  // er staat geen data in) zodat ze atomair uit Supabase verdwijnen. We
+  // wachten op de delete vóór we lokaal filteren, anders kan de defensieve
+  // AppShell-pull op mount nog de niet-deleted rijen ophalen en terug-
+  // schuiven. Drempel van 3 zodat een user die net 1-2 rijen invult niets
+  // verliest. Re-fired wanneer items wijzigen — een latere pull die de
+  // lege rijen alsnog binnenhaalt wordt zo óók opgeruimd.
+  const pruningRef = useRef(false)
   useEffect(() => {
-    if (prunedGroupsRef.current.has(group.id)) return
+    if (pruningRef.current) return
     const empties = group.items.filter(isEmptyPlaceholder)
     if (empties.length < 3) return
-    prunedGroupsRef.current.add(group.id)
-    for (const it of empties) softDeleteItem(it.id).catch(() => {})
-    onUpdateGroup({ ...group, items: group.items.filter(i => !isEmptyPlaceholder(i)) })
+    pruningRef.current = true
+    const ids = empties.map(it => it.id)
+    ;(async () => {
+      try {
+        await hardDeleteItems(ids)
+        onUpdateGroup({ ...group, items: group.items.filter(i => !isEmptyPlaceholder(i)) })
+      } finally {
+        pruningRef.current = false
+      }
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.id])
+  }, [group.items])
 
   function addItem() {
     const newId = Date.now().toString()
-    // Vóór 't aanmaken alle openstaande lege placeholders prunen zodat
-    // een onbedoelde dubbele klik niet een rits 'Nieuw item' rijen geeft.
+    // Vóór 't aanmaken alle openstaande lege placeholders hard-deleten
+    // zodat een onbedoelde dubbele klik niet een rits 'Nieuw item' rijen
+    // geeft. Fire-and-forget hier — de UI hoeft niet te wachten.
     const existingEmpties = group.items.filter(isEmptyPlaceholder)
-    for (const it of existingEmpties) softDeleteItem(it.id).catch(() => {})
+    if (existingEmpties.length > 0) {
+      hardDeleteItems(existingEmpties.map(it => it.id)).catch(() => {})
+    }
     const cleanedItems = group.items.filter(i => !isEmptyPlaceholder(i))
     onUpdateGroup({ ...group, items: [...cleanedItems, {
       id: newId, name: 'Nieuw item', ownerIds: [], status: '',
