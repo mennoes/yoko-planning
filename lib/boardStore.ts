@@ -599,6 +599,19 @@ export async function purgeTrashItem(itemId: string): Promise<boolean> {
   return !error
 }
 
+// Hard-delete één of meerdere items in één batch-call. Atomair: na
+// terugkeer is de row weg uit Supabase. Gebruikt voor truly-lege
+// 'Nieuw item' placeholders die geen herstel-waarde hebben — een
+// soft-delete is daar overkill en geeft race-conditions met de
+// realtime pull (pull haalt de row terug vóór deleted_at gezet is).
+export async function hardDeleteItems(itemIds: string[]): Promise<boolean> {
+  if (!supabase) return false
+  if (itemIds.length === 0) return true
+  if (!await getCurrentUserId()) return false
+  const { error } = await supabase.from('board_items').delete().in('id', itemIds)
+  return !error
+}
+
 // Verwijder een specifiek item uit een bord (soft-delete). Gebruikt
 // bv. wanneer een item als subitem wordt genest onder een ander item
 // — de top-level row moet dan ook in Supabase verdwijnen, want
