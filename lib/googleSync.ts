@@ -860,7 +860,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         endDate:   end ?? start,
         startTime,
         endTime,
-        estHours:  eventHours(ev) * finalOwners.length,
+        // estHours: door-gebruiker-ingevulde waarde bewaren. Anders
+        // overschrijft elke sync de handmatig gezette uren (bv. 24u op
+        // 'n boekomslag-subitem) met de event-duur * owners. Alleen
+        // berekenen als er nog niks stond.
+        estHours:  (typeof prev?.estHours === 'number' && prev.estHours > 0)
+                     ? prev.estHours
+                     : eventHours(ev) * finalOwners.length,
         // Per-instance Meet-link — sommige reeksen verschillen per moment.
         meetLink:  ev.hangoutLink ?? prev?.meetLink ?? null,
         // Per-instance Google-Calendar-link — zo kan de UI naar de juiste

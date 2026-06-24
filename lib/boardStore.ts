@@ -101,6 +101,7 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
   if (prev === next) return            // no-op: breaks the realtime ping-pong loop
   localStorage.setItem(key(boardName), next)
   localStorage.setItem(dirtyKey(boardName), Date.now().toString())
+  lastLocalWriteAt[boardName] = Date.now()
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
   pushBoardToRemote(boardName, groups).then(ok => {
     if (!ok) return
@@ -641,10 +642,21 @@ const channelByBoard: Record<string, ReturnType<NonNullable<typeof supabase>['ch
 // voor een enkele timeline-edit. Eerder stond dit op 600ms — dat voelde
 // na elke collega-edit traag.
 const pullTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+// Per-bord write-lock: na een lokale save (delete, edit, prune) blokkeren
+// we realtime-pulls 3 seconden lang. Anders kan een pull binnen 150ms een
+// item-rij ophalen vlak voordat softDeleteItem de deleted_at heeft gezet
+// — de rij komt dan even terug en verdwijnt pas na de volgende sync.
+// Vooral merkbaar bij batch-deletes (pruning van lege 'Nieuw item' rijen).
+const lastLocalWriteAt: Record<string, number> = {}
+const LOCAL_WRITE_LOCK_MS = 3000
+export function markBoardLocalWrite(boardName: string): void {
+  lastLocalWriteAt[boardName] = Date.now()
+}
 function schedulePull(boardName: string) {
   if (pullTimers[boardName]) return
   pullTimers[boardName] = setTimeout(() => {
     delete pullTimers[boardName]
+    if (Date.now() - (lastLocalWriteAt[boardName] ?? 0) < LOCAL_WRITE_LOCK_MS) return
     pullBoardFromRemote(boardName).catch(() => {})
   }, 150)
 }
