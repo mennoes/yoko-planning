@@ -522,17 +522,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   //    'needsAction' wel staan als die persoon zelf de organizer is.
   const validEvents = events.filter(ev => {
     if (ev.status === 'cancelled') return false
-    if (ev.transparency === 'transparent') return false
     const self = ev.attendees?.find(a => a.self)
     if (self?.responseStatus === 'declined') return false
     const { start } = eventDates(ev)
     if (!start) return false
+    const attendeeCount = (ev.attendees ?? []).length
+    // 'transparent' (Free in Google) skippen we alleen voor solo-events.
+    // Save-the-dates met veel attendees zijn vaak transparent gezet door
+    // de organizer zodat 't de dag niet blokkeert, maar we willen ze
+    // nog steeds in de planner zien als team-event.
+    if (ev.transparency === 'transparent' && attendeeCount < 2) return false
     // FILTER: alleen meetings (2+ attendees) en Vrij/vakantie-events
     // komen in het systeem. Solo blok-events ('Tijd voor mezelf',
     // 'Focus tijd', etc.) zijn niet zinvol voor team-planning en
     // maken het overzicht alleen vol. Vrij-events blijven omdat ze
     // afwezigheid signaleren.
-    const attendeeCount = (ev.attendees ?? []).length
     if (attendeeCount >= 2) return true
     if (isVrijTitle(ev.summary ?? '')) return true
     return false
