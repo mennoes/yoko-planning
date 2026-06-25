@@ -87,20 +87,39 @@ export const BOARD_NAMES: string[] = new Proxy([] as string[], {
 export type BoardName = string
 
 // ─── Load / save ──────────────────────────────────────────────────────────────
-// Detect een 'Nieuw item'-rij zonder enige door-gebruiker-ingevulde data —
-// per ongeluk via '+ Voeg item toe' opgebouwde placeholder. Wordt zowel
-// uit localStorage (loadGroups) als uit pull-resultaten (pullBoardFromRemote)
-// gefilterd zodat ze nergens visueel terugkomen, ook al sneuvelt 'n hard-
-// delete door auth/RLS/timing.
+// Detect een 'Nieuw item'-rij — minimaal-strict: ALLEEN op naam. Een
+// rij die nog steeds 'Nieuw item' heet is praktisch altijd een vergeten
+// placeholder (zou anders een echte titel hebben). Edge-case: een
+// gebruiker noemt bewust z'n item 'Nieuw item' → die wordt eveneens
+// opgeruimd. Acceptabel gezien de impact van de bug.
 function isEmptyNieuwItem(i: BoardItem): boolean {
-  if ((i.name ?? '').trim() !== 'Nieuw item') return false
-  return (!i.ownerIds || i.ownerIds.length === 0) &&
-    !(i.status ?? '').trim() &&
-    !i.startDate && !i.endDate && !i.deadline &&
-    !(Number(i.estHours) || 0) && !(Number(i.dagen) || 0) &&
-    !(i.notes ?? '').trim() &&
-    (!i.subitems || i.subitems.length === 0) &&
-    !i.source && !i.contactpersoon && !i.framelink
+  return (i.name ?? '').trim() === 'Nieuw item'
+}
+
+// One-shot cleanup: verwijder ALLE 'Nieuw item'-rijen in een bord rechtstreeks
+// in Supabase (hard delete). Wordt aangeroepen vanuit BoardTable bij mount —
+// laat lage-level filters de UI dan ook vanzelf kloppen. Net-aangemaakte rijen
+// (inProgressNewItems) blijven gespaard zodat addItem niet kapot gaat.
+export async function purgeNieuwItemPlaceholders(boardName: string): Promise<number> {
+  if (!supabase) return 0
+  if (!await getCurrentUserId()) return 0
+  const protectedIds = Array.from(inProgressNewItems)
+  // Eerst de matchende ids ophalen zodat we weten of er iets te doen is
+  // én protected ids kunnen excluden. (Supabase JS heeft geen helder count
+  // returnen via delete; deze twee-stap is robuust.)
+  const { data: rows, error: selErr } = await supabase
+    .from('board_items').select('id')
+    .eq('board_id', boardName).eq('name', 'Nieuw item').is('deleted_at', null)
+  if (selErr || !rows) return 0
+  const targets = (rows as { id: string }[]).map(r => r.id).filter(id => !protectedIds.includes(id))
+  if (targets.length === 0) return 0
+  const { error: delErr } = await supabase.from('board_items').delete().in('id', targets)
+  if (delErr) {
+    // eslint-disable-next-line no-console
+    console.warn(`[boardStore] purgeNieuwItemPlaceholders('${boardName}') failed:`, delErr.message)
+    return 0
+  }
+  return targets.length
 }
 
 // In-progress 'Nieuw item'-IDs die deze tab net heeft aangemaakt. Worden
