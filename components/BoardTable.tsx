@@ -24,7 +24,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, pullBoardFromRemote } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, pullBoardFromRemote, markItemInProgress } from '@/lib/boardStore'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
@@ -2913,6 +2913,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
 
   function addItem() {
     const newId = Date.now().toString()
+    // Bescherm de net-aangemaakte rij tegen de loadGroups-filter (die
+    // standaard lege 'Nieuw item'-rijen uitfiltert). Anders verdwijnt
+    // de zojuist gemaakte rij na de yoko-board-update event-roundtrip.
+    markItemInProgress(newId)
     // Vóór 't aanmaken alle openstaande lege placeholders hard-deleten
     // zodat een onbedoelde dubbele klik niet een rits 'Nieuw item' rijen
     // geeft. Fire-and-forget hier — de UI hoeft niet te wachten.
