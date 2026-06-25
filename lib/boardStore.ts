@@ -288,15 +288,14 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     items:     itemsByGroup.get(String(r.id)) ?? [],
   }))
 
-  // Filter volledig-lege 'Nieuw item' placeholder-rijen uit (en hard-delete
-  // ze in de achtergrond). Onafhankelijk van UI-delete-pad zodat ze
-  // permanent uit Supabase verdwijnen ook al sneuvelt een individuele
-  // delete-call door auth/RLS/timing.
+  // Filter 'Nieuw item' placeholder-rijen uit + hard-delete async. NIET
+  // verwijderen wat deze tab net heeft aangemaakt (inProgressNewItems)
+  // — anders sloopt de pull addItem direct na de eerste push.
   const orphanIds: string[] = []
   for (const g of groups) {
     const kept: BoardItem[] = []
     for (const i of g.items) {
-      if (isEmptyNieuwItem(i)) orphanIds.push(i.id)
+      if (isEmptyNieuwItem(i) && !inProgressNewItems.has(i.id)) orphanIds.push(i.id)
       else kept.push(i)
     }
     g.items = kept
