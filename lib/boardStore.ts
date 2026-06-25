@@ -383,10 +383,17 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   // sleepten leidde tot stale-overwrites (B pushte X-oud over A's
   // verse X-update). Door alleen diffs te pushen blijven andere users
   // hun edits behouden.
+  //
+  // Filter lege 'Nieuw item'-placeholders out: die mogen NIET naar
+  // Supabase gepusht worden. Anders re-inserteert deze upsert telkens
+  // de rij die door hard-delete net was verwijderd, waardoor de empties
+  // visueel terugkomen na elke refresh. inProgressNewItems-check zorgt
+  // dat een net-aangemaakte rij (waar de user nog typt) wél doorgaat.
   type ItemSnap = { groupId: string; idx: number; serialized: string; item: BoardItem }
   const localSnaps = new Map<string, ItemSnap>()
   for (const g of groups) {
     g.items.forEach((it, idx) => {
+      if (isEmptyNieuwItem(it) && !inProgressNewItems.has(it.id)) return
       localSnaps.set(it.id, { groupId: g.id, idx, serialized: JSON.stringify(it), item: it })
     })
   }
