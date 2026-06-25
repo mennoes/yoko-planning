@@ -87,6 +87,22 @@ export const BOARD_NAMES: string[] = new Proxy([] as string[], {
 export type BoardName = string
 
 // ─── Load / save ──────────────────────────────────────────────────────────────
+// Detect een 'Nieuw item'-rij zonder enige door-gebruiker-ingevulde data —
+// per ongeluk via '+ Voeg item toe' opgebouwde placeholder. Wordt zowel
+// uit localStorage (loadGroups) als uit pull-resultaten (pullBoardFromRemote)
+// gefilterd zodat ze nergens visueel terugkomen, ook al sneuvelt 'n hard-
+// delete door auth/RLS/timing.
+function isEmptyNieuwItem(i: BoardItem): boolean {
+  if ((i.name ?? '').trim() !== 'Nieuw item') return false
+  return (!i.ownerIds || i.ownerIds.length === 0) &&
+    !(i.status ?? '').trim() &&
+    !i.startDate && !i.endDate && !i.deadline &&
+    !(Number(i.estHours) || 0) && !(Number(i.dagen) || 0) &&
+    !(i.notes ?? '').trim() &&
+    (!i.subitems || i.subitems.length === 0) &&
+    !i.source && !i.contactpersoon && !i.framelink
+}
+
 export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGroup[] {
   if (typeof window === 'undefined') return fallback
   try {
@@ -229,6 +245,23 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     collapsed: (r.collapsed as boolean) ?? false,
     items:     itemsByGroup.get(String(r.id)) ?? [],
   }))
+
+  // Filter volledig-lege 'Nieuw item' placeholder-rijen uit (en hard-delete
+  // ze in de achtergrond). Onafhankelijk van UI-delete-pad zodat ze
+  // permanent uit Supabase verdwijnen ook al sneuvelt een individuele
+  // delete-call door auth/RLS/timing.
+  const orphanIds: string[] = []
+  for (const g of groups) {
+    const kept: BoardItem[] = []
+    for (const i of g.items) {
+      if (isEmptyNieuwItem(i)) orphanIds.push(i.id)
+      else kept.push(i)
+    }
+    g.items = kept
+  }
+  if (orphanIds.length > 0) {
+    supabase.from('board_items').delete().in('id', orphanIds).then(() => {}, () => {})
+  }
 
   if (groups.length === 0) return false  // remote is empty — keep local fallback
   // Stempel de tijd waarop we de remote-staat hebben gezien. pushBoard-
