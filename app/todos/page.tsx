@@ -887,7 +887,7 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
       }}
       onDragEnd={() => { setDropPos(null); onDragEnd?.() }}
       style={{ display: 'flex', alignItems: 'flex-start', gap: 6,
-        padding: compact ? '2px 14px 2px 22px' : '5px 14px', position: 'relative',
+        padding: compact ? '1px 14px 1px 22px' : '2px 14px', position: 'relative',
         borderTop:    dropPos === 'before' ? '3px solid var(--accent)' : '3px solid transparent',
         borderBottom: dropPos === 'after'  ? '3px solid var(--accent)' : '3px solid transparent',
         transition: 'border-color 0.08s' }}
@@ -937,7 +937,7 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
             onClick={editOrder ? undefined : onEditStart}
             onDoubleClick={editOrder ? undefined : onEditStart}
             title={editOrder ? undefined : 'Klik om te bewerken'}
-            style={{ fontSize: 16, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.4, flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            style={{ fontSize: 16, color: item.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: item.done ? 'line-through' : 'none', cursor: editOrder ? 'default' : 'text', lineHeight: 1.25, flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
             {(() => {
               const lines = (item.text ?? '').split('\n')
               const main = lines[0] ?? ''
