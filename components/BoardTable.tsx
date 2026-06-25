@@ -2792,12 +2792,17 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     const idx = group.items.findIndex(i => i.id === itemId)
     const snapshot = { ...group, items: [...group.items] }
     onUpdateGroup({ ...group, items: group.items.filter(i => i.id !== itemId) })
-    // Expliciet soft-deleten in Supabase. pushBoardToRemote upsert
-    // alleen items die in de lokale staat staan; zonder deze call
-    // blijft de remote-rij hangen en komt het item bij de volgende
-    // pull terug. Soft-delete registreert óók deleted_by zodat /papierbak
-    // kan tonen wie 't heeft verwijderd.
-    softDeleteItem(itemId).catch(() => {})
+    // Lege 'Nieuw item' placeholders: hard-delete (atomair, geen prullenbak —
+    // er staat niks in om te herstellen). Echte items: soft-delete via de
+    // prullenbak zodat herstel mogelijk blijft. Het verschil is essentieel:
+    // soft-delete heeft een korte async-window waarin een realtime-pull de
+    // rij kan terughalen voor deleted_at gezet is; voor 'Nieuw item'-rijen
+    // was dat de oorzaak van 'blijft terugkomen'.
+    if (removed && isEmptyPlaceholder(removed)) {
+      hardDeleteItems([itemId]).catch(() => {})
+    } else {
+      softDeleteItem(itemId).catch(() => {})
+    }
     pushUndo(() => onUpdateGroup(snapshot), removed ? `'${removed.name}' verwijderd` : 'Item verwijderd')
     void idx
   }
@@ -2883,31 +2888,28 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     (!i.subitems || i.subitems.length === 0) &&
     !i.source && !i.contactpersoon && !i.framelink
 
-  // Als er ≥3 volledig-lege 'Nieuw item'-rijen achter elkaar staan zijn
-  // dat per ongeluk opgebouwde placeholders. Hard-delete (geen prullenbak —
-  // er staat geen data in) zodat ze atomair uit Supabase verdwijnen. We
-  // wachten op de delete vóór we lokaal filteren, anders kan de defensieve
-  // AppShell-pull op mount nog de niet-deleted rijen ophalen en terug-
-  // schuiven. Drempel van 3 zodat een user die net 1-2 rijen invult niets
-  // verliest. Re-fired wanneer items wijzigen — een latere pull die de
-  // lege rijen alsnog binnenhaalt wordt zo óók opgeruimd.
+  // Lege 'Nieuw item'-placeholders die niet net door deze user zijn
+  // aangemaakt (justCreatedId) zijn vergeten/ongebruikte rijen. Hard-
+  // delete ze atomair zodat ze niet terugkomen via een race tussen
+  // soft-delete en de defensieve pull op AppShell-mount. Effect re-fired
+  // op group.items zodat een late pull-back ook opgeruimd wordt.
   const pruningRef = useRef(false)
   useEffect(() => {
     if (pruningRef.current) return
-    const empties = group.items.filter(isEmptyPlaceholder)
-    if (empties.length < 3) return
+    const empties = group.items.filter(i => isEmptyPlaceholder(i) && i.id !== justCreatedId)
+    if (empties.length === 0) return
     pruningRef.current = true
     const ids = empties.map(it => it.id)
     ;(async () => {
       try {
         await hardDeleteItems(ids)
-        onUpdateGroup({ ...group, items: group.items.filter(i => !isEmptyPlaceholder(i)) })
+        onUpdateGroup({ ...group, items: group.items.filter(i => !ids.includes(i.id)) })
       } finally {
         pruningRef.current = false
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.items])
+  }, [group.items, justCreatedId])
 
   function addItem() {
     const newId = Date.now().toString()
