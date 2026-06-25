@@ -440,8 +440,19 @@ export default function HomePage() {
       const s = sections.find(x => x.id === memberId)
       const stored = (s?.items ?? []) as TodoStoreItem[]
       const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
+      // Lees de 'verwijderd door user'-set zodat extras die de user op
+      // /todos heeft weggekruist niet alsnog hier verschijnen — anders
+      // matchen home en /todos niet (zelfde key: 'yoko-todos-removed-projects').
+      let removedProjectKeys = new Set<string>()
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = window.localStorage.getItem('yoko-todos-removed-projects')
+          if (raw) removedProjectKeys = new Set(JSON.parse(raw) as string[])
+        } catch {}
+      }
       const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
         .filter(p => !existingIds.has(p.itemId))
+        .filter(p => !removedProjectKeys.has(`${p.board}:${p.itemId}`))
         .map((p, i) => ({
           id: `auto-${p.board}-${p.itemId}-${i}`,
           text: p.name, done: false,
@@ -455,8 +466,16 @@ export default function HomePage() {
         const s = remote.find(x => x.id === memberId)
         const stored = (s?.items ?? []) as TodoStoreItem[]
         const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
+        let removedProjectKeys = new Set<string>()
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = window.localStorage.getItem('yoko-todos-removed-projects')
+            if (raw) removedProjectKeys = new Set(JSON.parse(raw) as string[])
+          } catch {}
+        }
         const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
           .filter(p => !existingIds.has(p.itemId))
+          .filter(p => !removedProjectKeys.has(`${p.board}:${p.itemId}`))
           .map((p, i) => ({
             id: `auto-${p.board}-${p.itemId}-${i}`,
             text: p.name, done: false,
