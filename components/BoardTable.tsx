@@ -24,7 +24,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, pullBoardFromRemote, markItemInProgress } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, pullBoardFromRemote, markItemInProgress, purgeNieuwItemPlaceholders } from '@/lib/boardStore'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
@@ -3584,6 +3584,20 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const { profile } = useProfile()
   const { pushUndo } = useUndo()
   useEffect(() => { setCurrentActor(profile?.memberId ?? null) }, [profile?.memberId])
+
+  // Bij elke board-mount: hard-delete álle 'Nieuw item'-placeholder-rijen
+  // in Supabase. Bypassed alle race-conditions tussen push/pull/soft-
+  // delete door direct in de DB op naam te matchen. Eénmalig per mount.
+  // inProgressNewItems beschermt net-aangemaakte rijen.
+  useEffect(() => {
+    purgeNieuwItemPlaceholders(boardId).then(deleted => {
+      if (deleted > 0) {
+        // Pull verse staat zodat de UI 't ook ziet — anders blijft de
+        // gefilterde-maar-niet-geverifieerde localStorage even staan.
+        pullBoardFromRemote(boardId).catch(() => {})
+      }
+    })
+  }, [boardId])
 
   // Focus-from-link: een planning-popup of #item-mention kan linken naar
   // `?focus=<itemId>`. Klap de groep open als-ie dicht zit, scroll naar
