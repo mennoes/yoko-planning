@@ -103,11 +103,34 @@ function isEmptyNieuwItem(i: BoardItem): boolean {
     !i.source && !i.contactpersoon && !i.framelink
 }
 
+// In-progress 'Nieuw item'-IDs die deze tab net heeft aangemaakt. Worden
+// gespaard van de auto-filter zodat addItem niet z'n eigen rij wegfiltert
+// voor de user 'm een naam kan geven. Per-tab (geen localStorage) — een
+// refresh wist 'm, wat ook precies de bedoeling is: een achtergebleven
+// lege rij van vorige sessie verdient géén bescherming meer.
+const inProgressNewItems = new Set<string>()
+export function markItemInProgress(itemId: string): void {
+  inProgressNewItems.add(itemId)
+  // Na 60s vervalt de bescherming — meer dan voldoende om een naam te
+  // typen. Daarna wordt 'ie opgeruimd zoals elke andere lege placeholder.
+  setTimeout(() => inProgressNewItems.delete(itemId), 60000)
+}
+
 export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGroup[] {
   if (typeof window === 'undefined') return fallback
   try {
     const raw = localStorage.getItem(key(boardName))
-    return raw ? (JSON.parse(raw) as BoardGroup[]) : fallback
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as BoardGroup[]
+    // Filter lege 'Nieuw item'-placeholders uit, tenzij ze net door deze
+    // tab zijn aangemaakt (zie markItemInProgress in addItem). Anders
+    // brengt een stale localStorage van vorige sessies de lege rijen
+    // visueel terug — én een achtergrondpull cleant ze pas ná de eerste
+    // render op.
+    return parsed.map(g => ({
+      ...g,
+      items: g.items.filter(i => !isEmptyNieuwItem(i) || inProgressNewItems.has(i.id)),
+    }))
   } catch { return fallback }
 }
 
