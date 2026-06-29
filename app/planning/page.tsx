@@ -2231,7 +2231,27 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, la
   const wrapRef = useRef<HTMLDivElement>(null)
   const hoverTimer = useRef<number | null>(null)
   const cancel = () => { if (hoverTimer.current != null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null } }
-  const schedule = () => { cancel(); hoverTimer.current = window.setTimeout(() => setHovered(false), 120) }
+  // Korte close-delay (40ms i.p.v. 120) zodat de overgang van de ene bar
+  // naar de andere niet voelt alsof 't oude kaartje blijft hangen.
+  const schedule = () => { cancel(); hoverTimer.current = window.setTimeout(() => setHovered(false), 40) }
+
+  // Exclusieve hover: zodra ergens een ANDERE bar opent, sluiten we direct.
+  // Zo verschijnt de popup van een net-aangehoverde bar onmiddellijk en
+  // hoeft de gebruiker niet eerst te wachten op het 'wegfaden' van 't
+  // vorige kaartje. Window-event ipv shared context-state: lichter.
+  useEffect(() => {
+    function onOther(e: Event) {
+      const ce = e as CustomEvent<{ id: string }>
+      if (ce.detail?.id !== project.id) {
+        cancel()
+        setHovered(false)
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('yoko-bar-hover-open', onOther)
+      return () => window.removeEventListener('yoko-bar-hover-open', onOther)
+    }
+  }, [project.id])
 
   function openPopover(ev?: React.MouseEvent) {
     cancel()
@@ -2247,6 +2267,9 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, la
     const lx = Math.min(baseX, window.innerWidth - popW - 8)
     setPopPos({ top: baseY, left: Math.max(8, lx) })
     setHovered(true)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('yoko-bar-hover-open', { detail: { id: project.id } }))
+    }
   }
   function movePopover(ev: React.MouseEvent) {
     if (!hovered) return
