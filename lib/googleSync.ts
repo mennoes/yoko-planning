@@ -434,6 +434,22 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     return gid
   }
 
+  // Cache van groep-ids die we tijdens deze sync hebben gecontroleerd op
+  // "leeft 'ie nog?". Voorkomt dat we voor elk subitem/event opnieuw 'n
+  // DB-call doen om hetzelfde group_id te valideren.
+  const groupAliveCache = new Map<string, boolean>()
+  async function isGroupAlive(groupId: string | null | undefined): Promise<boolean> {
+    if (!groupId) return false
+    const cached = groupAliveCache.get(groupId)
+    if (cached !== undefined) return cached
+    const { data } = await admin
+      .from('board_groups').select('id, deleted_at').eq('id', groupId).limit(1)
+    const row = (data as { id: string; deleted_at: string | null }[] | null)?.[0]
+    const alive = !!row && !row.deleted_at
+    groupAliveCache.set(groupId, alive)
+    return alive
+  }
+
   // Vrij-groep cache: events met 'Vrij'/'Vakantie'/'Verlof'-achtige titels
   // landen hier i.p.v. tussen losse projecten.
   const vrijCache = new Map<string, string>()
@@ -728,12 +744,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // status/Vrij/Meetings-startpositie. Meetings (alle non-Vrij Google
       // events) gaan naar de 'Meetings & doorlopend'-groep zodat ze niet
       // versnipperd tussen echte projecten staan.
-      const keepGroup = existingRow?.group_id
-        ?? (newStatus === 'Done'
-              ? await getDoneGroupFor(keepBoard)
-              : (isVrij
-                  ? await getVrijGroupFor(keepBoard)
-                  : await getMeetingsGroupFor(keepBoard)))
+      const fallbackGroup = newStatus === 'Done'
+        ? await getDoneGroupFor(keepBoard)
+        : (isVrij ? await getVrijGroupFor(keepBoard) : await getMeetingsGroupFor(keepBoard))
+      // existingRow.group_id alleen gebruiken als die groep nog leeft —
+      // anders verwijst 't naar 'n verdwenen of soft-deleted groep en
+      // wordt 't item door pullBoardFromRemote in 't niets weggefilterd
+      // (de UI joint items op group_id en negeert orphans).
+      const existingGroupAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
+      const keepGroup = existingGroupAlive ? existingRow!.group_id : fallbackGroup
       const eventOwners = ownersForEvent(ev)
       // Vervang owner_ids met de VERSE set Yoko-attendees uit Google,
       // TENZIJ de gebruiker handmatig owners heeft aangepast via de UI —
@@ -956,12 +975,14 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // de gedeelde 'Meetings & doorlopend' bucket — daar landen óók
     // recurring meetings zodat losse en doorlopende meetings naast elkaar
     // staan i.p.v. in twee aparte groepen.
-    const keepGroup = existingRow?.group_id
-      ?? (newStatus === 'Done'
-            ? await getDoneGroupFor(keepBoard)
-            : (isVrij
-                  ? await getVrijGroupFor(keepBoard)
-                  : await getMeetingsGroupFor(keepBoard)))
+    const recFallback = newStatus === 'Done'
+      ? await getDoneGroupFor(keepBoard)
+      : (isVrij ? await getVrijGroupFor(keepBoard) : await getMeetingsGroupFor(keepBoard))
+    // Zelfde 'is groep nog levend?'-check als bij single-events — anders
+    // belandt 't recurring-item op een soft-deleted/verdwenen group_id
+    // en wordt 't door de UI-pull gefilterd.
+    const recExistingAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
+    const keepGroup = recExistingAlive ? existingRow!.group_id : recFallback
     upserts.push({
       id,
       group_id:           keepGroup,
