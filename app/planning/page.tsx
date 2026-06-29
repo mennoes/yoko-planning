@@ -598,7 +598,16 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // hebben estHours=0 in de data; we forceren 'm dan op FULL_DAY_HOURS
   // zodat de bar visueel 100% wordt — gelijk aan een 8u/dag project.
   const isVrijForScale = isVrijTitle(project.name)
-  const rawHoursPerDay = (project.estHours || 0) / projectDays
+  // Bar-hoogte gebruikt de uren-deel van DEZE persoon, niet het totaal.
+  // Vroeger: estHours / projectDays → iedereen kreeg dezelfde hoogte voor
+  // 'n shared project. Probleem: iemand die slechts 1u doet aan een 80u
+  // klus had alsnog een full-height bar. Nu pakken we ownerHours[memberId]
+  // (door radial chart gezet) of een gelijke verdeling als fallback.
+  const owners = Math.max(1, project.ownerIds.filter(id => id !== 'unassigned').length)
+  const memberHours = project.ownerHours && memberId in project.ownerHours
+    ? Number(project.ownerHours[memberId]) || 0
+    : (project.estHours || 0) / owners
+  const rawHoursPerDay = memberHours / projectDays
   const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
   // Bar-hoogte schalen op uren-per-dag met sqrt + 80% baseline zodat
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
