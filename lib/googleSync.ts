@@ -528,17 +528,19 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (self?.responseStatus === 'declined') return false
     const { start } = eventDates(ev)
     if (!start) return false
+    // De gebruiker staat zelf op de attendee-lijst → hij is uitgenodigd,
+    // door wie dan ook. ALTIJD doorlaten, ongeacht aantal andere
+    // attendees. Vangt o.a. externe 1-op-1's waar de organizer
+    // 'guests can see other guests' heeft uitgezet (Google retourneert
+    // dan alleen jezelf in de lijst → oude '≥2 attendees'-filter blokte
+    // ze stilzwijgend). Een transparent-event (Free) waar je ook
+    // expliciet aan deelneemt is óók een meeting.
+    if (self) return true
+    // Geen self → user is geen attendee. Block-events, focus-time of
+    // 'Tijd voor mezelf' van een collega. Toelaten op groepsgrootte
+    // of vrij/vakantie.
     const attendeeCount = (ev.attendees ?? []).length
-    // 'transparent' (Free in Google) skippen we alleen voor solo-events.
-    // Save-the-dates met veel attendees zijn vaak transparent gezet door
-    // de organizer zodat 't de dag niet blokkeert, maar we willen ze
-    // nog steeds in de planner zien als team-event.
     if (ev.transparency === 'transparent' && attendeeCount < 2) return false
-    // FILTER: alleen meetings (2+ attendees) en Vrij/vakantie-events
-    // komen in het systeem. Solo blok-events ('Tijd voor mezelf',
-    // 'Focus tijd', etc.) zijn niet zinvol voor team-planning en
-    // maken het overzicht alleen vol. Vrij-events blijven omdat ze
-    // afwezigheid signaleren.
     if (attendeeCount >= 2) return true
     if (isVrijTitle(ev.summary ?? '')) return true
     return false
