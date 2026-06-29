@@ -381,6 +381,10 @@ export default function HomePage() {
   const [recentPages,  setRecentPages]  = useState<PageDoc[]>([])
   const [myTodos,      setMyTodos]      = useState<TodoStoreItem[]>([])
   const [newTodoText,  setNewTodoText]  = useState('')
+  // Per-bucket-iso user-override voor de week-collapse op de home-widget.
+  // false=expliciet ingeklapt, true=expliciet open, missing=default (open
+  // voor <2 weken vooruit, dicht voor 2+ weken).
+  const [homeWeekToggle, setHomeWeekToggle] = useState<Record<string, boolean>>({})
   const [weekHours,    setWeekHours]    = useState(0)
   const [weekCapacity, setWeekCapacity] = useState(40)
   const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }[]>([])
@@ -736,6 +740,58 @@ export default function HomePage() {
   }
   const openTodos = myTodos.filter(t => !t.done && !isVrijTodo(t))
   const doneTodos = myTodos.filter(t => t.done && !isVrijTodo(t))
+
+  // Splits open-todos per week — zelfde logica als /todos zodat de
+  // home-widget dezelfde groepering toont. Geen projectRef of geen
+  // startDate → 'Deze week'. Anders: week van de startDate.
+  const homeWeekStartOf = (d: Date): Date => {
+    const x = new Date(d); x.setHours(0, 0, 0, 0)
+    const dow = (x.getDay() + 6) % 7
+    x.setDate(x.getDate() - dow); return x
+  }
+  const homeIsoWeekOf = (d: Date): number => {
+    const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+    const dayNum = (x.getUTCDay() + 6) % 7
+    x.setUTCDate(x.getUTCDate() - dayNum + 3)
+    const firstThursday = new Date(Date.UTC(x.getUTCFullYear(), 0, 4))
+    const diff = (x.getTime() - firstThursday.getTime()) / 86400000
+    return 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7)
+  }
+  const homeToday = new Date(); homeToday.setHours(0, 0, 0, 0)
+  const homeThisWeekStart = homeWeekStartOf(homeToday)
+  const homeProjectDates = new Map<string, string | null>()
+  for (const p of allProjects) homeProjectDates.set(`${p.board}:${p.id.startsWith(p.board + '__') ? p.id.slice(p.board.length + 2) : p.id}`, p.startDate ?? null)
+  const homeWeekStartIsoFor = (t: TodoStoreItem): string => {
+    const tIso = homeThisWeekStart.toISOString().slice(0, 10)
+    if (!t.projectRef) return tIso
+    const sd = homeProjectDates.get(`${t.projectRef.board}:${t.projectRef.itemId}`)
+    if (!sd) return tIso
+    const s = new Date(sd); if (Number.isNaN(s.getTime())) return tIso
+    const ws = homeWeekStartOf(s)
+    return ws.getTime() < homeThisWeekStart.getTime() ? tIso : ws.toISOString().slice(0, 10)
+  }
+  type HomeBucket = { iso: string; label: string; items: TodoStoreItem[] }
+  const homeBuckets: HomeBucket[] = (() => {
+    const map = new Map<string, TodoStoreItem[]>()
+    for (const t of openTodos) {
+      const k = homeWeekStartIsoFor(t); const arr = map.get(k) ?? []
+      arr.push(t); map.set(k, arr)
+    }
+    const out: HomeBucket[] = []
+    const thisIso = homeThisWeekStart.toISOString().slice(0, 10)
+    const fmt = (x: Date) => x.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+    for (const iso of [...map.keys()].sort()) {
+      const d = new Date(iso); const wk = homeIsoWeekOf(d)
+      const mEnd = new Date(d); mEnd.setDate(mEnd.getDate() + 4)
+      const label = iso === thisIso ? `Deze week · W${wk}` : `W${wk} · ${fmt(d)} – ${fmt(mEnd)}`
+      out.push({ iso, label, items: map.get(iso) ?? [] })
+    }
+    return out
+  })()
+  const homeWeeksFromThis = (iso: string): number => {
+    const d = new Date(iso)
+    return Math.round((d.getTime() - homeThisWeekStart.getTime()) / (7 * 86400000))
+  }
   const pct       = weekCapacity > 0 ? Math.min(weekHours / weekCapacity, 1) : 0
   const barColor  = pct > 0.9 ? '#e2445c' : pct > 0.6 ? 'var(--accent)' : '#00c875'
 
@@ -951,53 +1007,75 @@ export default function HomePage() {
           <div style={{ padding: '6px 0 10px' }}>
             {openTodos.length === 0 ? (
               <p style={{ padding: '10px 20px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen open taken 🎉</p>
-            ) : openTodos.slice(0, 5).map(t => (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 20px' }}>
-                <button onClick={() => toggleHomeTodo(t.id)}
-                  title={t.done ? 'Markeer als open' : 'Markeer als afgerond'}
-                  style={{
-                    width: 18, height: 18, borderRadius: 4,
-                    border: '2px solid var(--border)',
-                    background: t.done ? 'var(--accent)' : 'transparent',
-                    flexShrink: 0, marginTop: 1, padding: 0,
-                    cursor: 'pointer', display: 'inline-flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 11, lineHeight: 1,
-                  }}>{t.done ? '✓' : ''}</button>
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                  {(() => {
-                    const lines = (t.text ?? '').split('\n')
-                    return <>
-                      <span>{lines[0]}</span>
-                      {lines.slice(1).map((l, i) => (
-                        <span key={i} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 500, lineHeight: 1.2 }}>{l}</span>
-                      ))}
-                    </>
-                  })()}
-                </span>
-                {/* Bron-agenda badge: zelfde stijl als op /todos zodat in
-                    één oogopslag duidelijk is uit welk bord deze todo
-                    komt (Yoko / PNP / Nederland / etc.). */}
-                {t.projectRef && (
-                  <Link href={`/projects/${t.projectRef.board}`}
-                    title={`Open ${t.projectRef.board}-agenda`}
-                    onClick={e => e.stopPropagation()}
+            ) : homeBuckets.map(bucket => {
+              const weeksOut    = homeWeeksFromThis(bucket.iso)
+              const collapsible = weeksOut >= 2
+              const override    = homeWeekToggle[bucket.iso]
+              const expanded    = override === undefined ? !collapsible : override
+              return (
+                <div key={bucket.iso} style={{ marginBottom: 2 }}>
+                  <div
+                    onClick={collapsible ? () => setHomeWeekToggle(t => ({ ...t, [bucket.iso]: !expanded })) : undefined}
                     style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      flexShrink: 0, fontSize: 9.5, fontWeight: 700,
-                      letterSpacing: '0.05em', textTransform: 'uppercase',
-                      padding: '2px 6px', borderRadius: 10,
-                      background: (BOARD_COLORS[t.projectRef.board] ?? '#888') + '22',
-                      border: `1px solid ${BOARD_COLORS[t.projectRef.board] ?? '#888'}55`,
-                      color: BOARD_COLORS[t.projectRef.board] ?? 'var(--text-muted)',
-                      textDecoration: 'none', marginTop: 1,
+                      padding: '4px 20px 2px', fontSize: 10, fontWeight: 600,
+                      color: 'var(--text-muted)', textTransform: 'uppercase',
+                      letterSpacing: '0.06em', userSelect: 'none',
+                      cursor: collapsible ? 'pointer' : 'default',
+                      display: 'flex', alignItems: 'center', gap: 5,
                     }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 2, background: BOARD_COLORS[t.projectRef.board] ?? '#888' }} />
-                    {t.projectRef.board}
-                  </Link>
-                )}
-              </div>
-            ))}
+                    {collapsible && (
+                      <span style={{ fontSize: 8, lineHeight: 1, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.12s', color: 'var(--text-muted)' }}>▶</span>
+                    )}
+                    <span>{bucket.label}</span>
+                    <span style={{ fontWeight: 500, opacity: 0.7 }}>· {bucket.items.length}</span>
+                  </div>
+                  {expanded && bucket.items.map(t => (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '3px 20px 3px 26px' }}>
+                      <button onClick={() => toggleHomeTodo(t.id)}
+                        title={t.done ? 'Markeer als open' : 'Markeer als afgerond'}
+                        style={{
+                          width: 18, height: 18, borderRadius: 4,
+                          border: '2px solid var(--border)',
+                          background: t.done ? 'var(--accent)' : 'transparent',
+                          flexShrink: 0, marginTop: 1, padding: 0,
+                          cursor: 'pointer', display: 'inline-flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 11, lineHeight: 1,
+                        }}>{t.done ? '✓' : ''}</button>
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                        {(() => {
+                          const lines = (t.text ?? '').split('\n')
+                          return <>
+                            <span>{lines[0]}</span>
+                            {lines.slice(1).map((l, i) => (
+                              <span key={i} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 500, lineHeight: 1.2 }}>{l}</span>
+                            ))}
+                          </>
+                        })()}
+                      </span>
+                      {t.projectRef && (
+                        <Link href={`/projects/${t.projectRef.board}`}
+                          title={`Open ${t.projectRef.board}-agenda`}
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            flexShrink: 0, fontSize: 9.5, fontWeight: 700,
+                            letterSpacing: '0.05em', textTransform: 'uppercase',
+                            padding: '2px 6px', borderRadius: 10,
+                            background: (BOARD_COLORS[t.projectRef.board] ?? '#888') + '22',
+                            border: `1px solid ${BOARD_COLORS[t.projectRef.board] ?? '#888'}55`,
+                            color: BOARD_COLORS[t.projectRef.board] ?? 'var(--text-muted)',
+                            textDecoration: 'none', marginTop: 1,
+                          }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 2, background: BOARD_COLORS[t.projectRef.board] ?? '#888' }} />
+                          {t.projectRef.board}
+                        </Link>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
             {doneTodos.length > 0 && <div style={{ padding: '4px 20px', fontSize: 12, color: 'var(--text-muted)' }}>✓ {doneTodos.length} afgerond</div>}
             {/* Snelle invoer — direct vanuit home een taak aan jezelf
                 toewijzen, zelfde bron als /todos pagina. */}
