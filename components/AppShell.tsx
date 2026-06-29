@@ -276,9 +276,12 @@ function Inner({ children }: { children: ReactNode }) {
       } catch {}
     }
     tick()
-    // Google sync interval — was 5 min, verlaagd naar 2 min op verzoek
-    // zodat nieuwe meetings sneller verschijnen in de planner.
-    const id = setInterval(tick, 2 * 60 * 1000)
+    // Google sync interval — opgevoerd van 2 → 15 min om Supabase
+    // bandwidth te sparen. Realtime board-subscribe vangt directe collega-
+    // edits op; deze tick is voor Google-events (geen realtime). 15 min
+    // lag op nieuwe meetings is acceptabel en kan ook handmatig via
+    // 'Synchroniseer Google nu' in de sidebar.
+    const id = setInterval(tick, 15 * 60 * 1000)
     const offAuth = onAuthChange(() => { tick() })
     return () => { cancelled = true; clearInterval(id); offAuth() }
   }, [])
