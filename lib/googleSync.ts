@@ -735,14 +735,17 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
                   ? await getVrijGroupFor(keepBoard)
                   : await getMeetingsGroupFor(keepBoard)))
       const eventOwners = ownersForEvent(ev)
-      // Vervang owner_ids met de VERSE set Yoko-attendees uit Google.
-      // De eerdere 'union met bestaande'-strategie zorgde ervoor dat ooit
-      // toegevoegde owners (bv. iemand die ooit per ongeluk toegevoegd
-      // was, of die zelf 'declined' heeft sinds de vorige sync) eeuwig
-      // bleven hangen. Manuele toevoegingen vanuit de planning-UI worden
-      // hierdoor wel overschreven; user kan ze opnieuw toevoegen — beter
-      // dat dan dat random mensen onverklaard owner blijven.
-      const finalOwners = [...eventOwners.owners]
+      // Vervang owner_ids met de VERSE set Yoko-attendees uit Google,
+      // TENZIJ de gebruiker handmatig owners heeft aangepast via de UI —
+      // dan staat extra.ownerIdsLocked = true en respecteren we de huidige
+      // owner_ids. De eerdere 'union'-strategie liet declined-mensen
+      // eeuwig hangen, en pure overschrijving frustreerde mensen die per
+      // se een specifieke owner-set wilden. Lock-flag is de balans.
+      const exExtraSingle = (existingRow?.extra ?? {}) as Record<string, unknown>
+      const ownersLocked = exExtraSingle.ownerIdsLocked === true
+      const finalOwners = (ownersLocked && Array.isArray(existingRow?.owner_ids))
+        ? [...(existingRow!.owner_ids as string[])]
+        : [...eventOwners.owners]
       // per-persoon uren in ownerHours, totaal in est_hours zodat
       // workload-berekeningen per persoon kloppen.
       const ownerHoursMap: Record<string, number> = {}
@@ -836,8 +839,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const icalUid     = iCalKeyForGroup(sorted)
     const lookup      = findExistingFor(icalUid, groupKey, baseName, minStart)
     const existingRow = lookup.row
-    const ownerSet = new Set<string>(existingRow?.owner_ids ?? [])
-    for (const o of groupOwners.owners) ownerSet.add(o)
+    // ownerIdsLocked-flag respect: zie comment in single-event branch.
+    const exExtraRec = (existingRow?.extra ?? {}) as Record<string, unknown>
+    const ownersLocked = exExtraRec.ownerIdsLocked === true
+    const ownerSet = new Set<string>()
+    if (ownersLocked && Array.isArray(existingRow?.owner_ids)) {
+      for (const o of (existingRow!.owner_ids as string[])) ownerSet.add(o)
+    } else {
+      for (const o of (existingRow?.owner_ids ?? [])) ownerSet.add(o)
+      for (const o of groupOwners.owners) ownerSet.add(o)
+    }
     const finalOwners = [...ownerSet]
     const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0) * finalOwners.length
     const ownerHoursMap: Record<string, number> = {}
@@ -896,15 +907,25 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         source:    'google' as const,
       }
     })
-    // Behoud subitems die NIET uit de Google-sync komen of waarvan
-    // het Google-event buiten ons window valt. Voorheen verving deze
-    // sync de subitems-lijst volledig met wat in `sorted` zat, dus
-    // handmatig toegevoegde subs (zonder si_g_-prefix) ÉN Done-instances
-    // waarvan Google de instance op een gegeven moment dropt verdwenen
-    // stilletjes. Nu mergen we: nieuwe sync-output + alle prior subs die
-    // niet door deze sync overschreven werden.
+    // Behoud subitems die NIET uit de Google-sync komen (handmatige subs)
+    // OF waarvan het Google-event buiten ons window valt MAAR ze nog
+    // recent/relevant zijn. Prunen we wel agressief: alle preserved
+    // subitems waarvan startDate verder dan WINDOW_DAYS_FUTURE in de
+    // toekomst ligt verdwijnen — anders blijven oude '180 dagen vooruit'
+    // syncs voor altijd hangen. Past-instances behouden we (gebruiker
+    // kan terugkijken naar wat Done is).
     const syncedIds = new Set(subitems.map(s => s.id))
-    const preserved = priorSubs.filter(s => !syncedIds.has(s.id))
+    const cutoffIso = new Date(Date.now() + WINDOW_DAYS_FUTURE * 86400000).toISOString().slice(0, 10)
+    const preserved = priorSubs.filter(s => {
+      if (syncedIds.has(s.id)) return false  // vervangen door verse sync-data
+      // Handmatige (niet-Google) subs: altijd behouden — ID prefix verschilt.
+      if (!s.id?.startsWith('si_g_')) return true
+      // Google-sub buiten het window in de TOEKOMST → niet behouden.
+      // Past-Google-subs blijven (Done-historie).
+      const sd = s.startDate ?? ''
+      if (sd && sd > cutoffIso) return false
+      return true
+    })
     const mergedSubitems = [...subitems, ...preserved]
     // Sorteer chronologisch: zo blijft de Done-sectie onderaan in de UI
     // en houden gebruikers visueel hetzelfde beeld als voorheen.
