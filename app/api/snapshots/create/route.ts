@@ -24,15 +24,19 @@ export async function POST(req: NextRequest) {
   if (!boardId) return Response.json({ ok: false, error: 'invalid_board_id' }, { status: 400 })
   const trigger = body.trigger === 'manual' ? 'manual' : 'auto'
 
-  // Idempotent voor auto: skip als vandaag al een snapshot bestaat.
+  // Idempotent voor auto: skip als er deze week al een snapshot bestaat.
+  // Was daily — wekelijks is 7× minder storage en blijft een ruim
+  // recovery-net voor 'oeps, ik heb iets per ongeluk weggegooid'.
   if (trigger === 'auto') {
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
+    const startOfWeek = new Date()
+    startOfWeek.setHours(0, 0, 0, 0)
+    const dow = (startOfWeek.getDay() + 6) % 7  // ma=0
+    startOfWeek.setDate(startOfWeek.getDate() - dow)
     const { data: existing } = await supabaseAdmin
       .from('board_snapshots')
       .select('id')
       .eq('board_id', boardId)
-      .gte('snapshot_at', startOfDay.toISOString())
+      .gte('snapshot_at', startOfWeek.toISOString())
       .limit(1)
     if (existing && existing.length > 0) {
       return Response.json({ ok: true, status: 'already_exists' })
