@@ -310,31 +310,62 @@ async function ensureMeetingsGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
-  // Inclusief soft-deleted groepen ophalen — anders maken we per ongeluk
-  // 'n nieuwe groep terwijl er al eentje in de prullenbak staat met
-  // dezelfde naam, of (erger) krijgen de items een soft-deleted group_id
-  // toegewezen waardoor ze in de UI onzichtbaar worden (pull filtert
-  // soft-deleted groepen weg).
+  // Inclusief soft-deleted groepen — anders maken we per ongeluk 'n nieuwe
+  // groep terwijl er een in de prullenbak staat, of geven items een soft-
+  // deleted group_id (de UI filtert die weg → onzichtbare items).
   const { data: rows } = await admin
-    .from('board_groups').select('id, name, deleted_at')
+    .from('board_groups').select('id, name, deleted_at, position')
     .eq('board_id', boardId)
     .order('position', { ascending: true })
-  const groups = (rows as { id: string; name: string; deleted_at: string | null }[] | null) ?? []
+  const groups = (rows as { id: string; name: string; deleted_at: string | null; position: number | null }[] | null) ?? []
   const norm = (s: string) => s.toLowerCase().trim()
-  const target = groups.find(g => {
+  // Verzamel ALLE meeting-achtige groepen (kan in praktijk meerdere zijn na
+  // historische splits: 'Meetings' + 'Meetings & doorlopend' + 'Doorlopend'…).
+  const matches = groups.filter(g => {
     const n = norm(g.name)
     return n === 'meetings & doorlopend'
         || n === 'meetings en doorlopend'
         || n === 'meetings'
         || n === 'doorlopend'
   })
-  if (target) {
-    // Bestaande groep — als 'ie soft-deleted is, herleven we 'm. Anders
-    // belanden items op een group_id die de UI filtert.
-    if (target.deleted_at) {
-      await admin.from('board_groups').update({ deleted_at: null }).eq('id', target.id)
+  if (matches.length > 0) {
+    // Canonicale keuze: 'Meetings & doorlopend' wint van 'Meetings' wint
+    // van 'Doorlopend'. Bij gelijke prioriteit pakken we de eerste in
+    // position-volgorde. Active boven soft-deleted.
+    const rank = (n: string) =>
+      n === 'meetings & doorlopend' || n === 'meetings en doorlopend' ? 0
+      : n === 'meetings' ? 1
+      : n === 'doorlopend' ? 2 : 3
+    const sorted = matches.slice().sort((a, b) => {
+      // active eerst, daarna op rank, daarna position
+      const aDead = a.deleted_at ? 1 : 0
+      const bDead = b.deleted_at ? 1 : 0
+      if (aDead !== bDead) return aDead - bDead
+      const rA = rank(norm(a.name)); const rB = rank(norm(b.name))
+      if (rA !== rB) return rA - rB
+      return (a.position ?? 0) - (b.position ?? 0)
+    })
+    const canonical = sorted[0]
+    if (canonical.deleted_at) {
+      await admin.from('board_groups').update({ deleted_at: null }).eq('id', canonical.id)
     }
-    return target.id
+    // Items uit de óverige meeting-groepen migreren naar de canonical. Zo
+    // krimpt 't bord automatisch terug naar één meeting-bucket bij
+    // elke sync waarin er meerdere bestaan. De duplicate groepen worden
+    // soft-deleted zodat ze uit de UI verdwijnen maar in de prullenbak
+    // terug te halen zijn als 't toch onbedoeld was.
+    const duplicates = sorted.slice(1).filter(d => d.id !== canonical.id)
+    if (duplicates.length > 0) {
+      const dupIds = duplicates.map(d => d.id)
+      await admin.from('board_items')
+        .update({ group_id: canonical.id })
+        .in('group_id', dupIds)
+      await admin.from('board_groups')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', dupIds)
+        .is('deleted_at', null)
+    }
+    return canonical.id
   }
 
   const { data: posRows } = await admin
@@ -747,12 +778,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const fallbackGroup = newStatus === 'Done'
         ? await getDoneGroupFor(keepBoard)
         : (isVrij ? await getVrijGroupFor(keepBoard) : await getMeetingsGroupFor(keepBoard))
-      // existingRow.group_id alleen gebruiken als die groep nog leeft —
-      // anders verwijst 't naar 'n verdwenen of soft-deleted groep en
-      // wordt 't item door pullBoardFromRemote in 't niets weggefilterd
-      // (de UI joint items op group_id en negeert orphans).
+      // Done items ALTIJD naar de Done-bucket — ook wanneer ze nog in 'n
+      // levende andere groep zaten. Voor non-Done: existingRow.group_id
+      // alleen gebruiken als die groep nog leeft (anders verweesd item).
       const existingGroupAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
-      const keepGroup = existingGroupAlive ? existingRow!.group_id : fallbackGroup
+      const keepGroup = newStatus === 'Done'
+        ? fallbackGroup
+        : (existingGroupAlive ? existingRow!.group_id : fallbackGroup)
       const eventOwners = ownersForEvent(ev)
       // Vervang owner_ids met de VERSE set Yoko-attendees uit Google,
       // TENZIJ de gebruiker handmatig owners heeft aangepast via de UI —
@@ -978,11 +1010,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const recFallback = newStatus === 'Done'
       ? await getDoneGroupFor(keepBoard)
       : (isVrij ? await getVrijGroupFor(keepBoard) : await getMeetingsGroupFor(keepBoard))
-    // Zelfde 'is groep nog levend?'-check als bij single-events — anders
-    // belandt 't recurring-item op een soft-deleted/verdwenen group_id
-    // en wordt 't door de UI-pull gefilterd.
+    // Done ALTIJD naar Done-bucket; non-Done respecteert existingRow.
+    // group_id alleen als die nog leeft (anders verweesd).
     const recExistingAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
-    const keepGroup = recExistingAlive ? existingRow!.group_id : recFallback
+    const keepGroup = newStatus === 'Done'
+      ? recFallback
+      : (recExistingAlive ? existingRow!.group_id : recFallback)
     upserts.push({
       id,
       group_id:           keepGroup,
