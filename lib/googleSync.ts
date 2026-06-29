@@ -224,13 +224,21 @@ async function ensureDoneGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
+  // Inclusief soft-deleted (zie comment bij ensureMeetingsGroup) zodat
+  // we 'n bestaande maar weggekruiste groep niet dupliceren én items
+  // niet aan 'n onzichtbare group_id koppelen.
   const { data: rows } = await admin
-    .from('board_groups').select('id, name')
+    .from('board_groups').select('id, name, deleted_at')
     .eq('board_id', boardId)
     .ilike('name', 'done')
     .limit(1)
-  const existing = (rows as { id: string; name: string }[] | null)?.[0]
-  if (existing) return existing.id
+  const existing = (rows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
+  if (existing) {
+    if (existing.deleted_at) {
+      await admin.from('board_groups').update({ deleted_at: null }).eq('id', existing.id)
+    }
+    return existing.id
+  }
 
   const { data: posRows } = await admin
     .from('board_groups').select('position')
@@ -260,13 +268,19 @@ async function ensureVrijGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
+  // Inclusief soft-deleted (zie ensureMeetingsGroup).
   const { data: rows } = await admin
-    .from('board_groups').select('id, name')
+    .from('board_groups').select('id, name, deleted_at')
     .eq('board_id', boardId)
     .ilike('name', 'vrij')
     .limit(1)
-  const existing = (rows as { id: string; name: string }[] | null)?.[0]
-  if (existing) return existing.id
+  const existing = (rows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
+  if (existing) {
+    if (existing.deleted_at) {
+      await admin.from('board_groups').update({ deleted_at: null }).eq('id', existing.id)
+    }
+    return existing.id
+  }
 
   const { data: posRows } = await admin
     .from('board_groups').select('position')
@@ -296,11 +310,16 @@ async function ensureMeetingsGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
+  // Inclusief soft-deleted groepen ophalen — anders maken we per ongeluk
+  // 'n nieuwe groep terwijl er al eentje in de prullenbak staat met
+  // dezelfde naam, of (erger) krijgen de items een soft-deleted group_id
+  // toegewezen waardoor ze in de UI onzichtbaar worden (pull filtert
+  // soft-deleted groepen weg).
   const { data: rows } = await admin
-    .from('board_groups').select('id, name')
+    .from('board_groups').select('id, name, deleted_at')
     .eq('board_id', boardId)
     .order('position', { ascending: true })
-  const groups = (rows as { id: string; name: string }[] | null) ?? []
+  const groups = (rows as { id: string; name: string; deleted_at: string | null }[] | null) ?? []
   const norm = (s: string) => s.toLowerCase().trim()
   const target = groups.find(g => {
     const n = norm(g.name)
@@ -309,7 +328,14 @@ async function ensureMeetingsGroup(
         || n === 'meetings'
         || n === 'doorlopend'
   })
-  if (target) return target.id
+  if (target) {
+    // Bestaande groep — als 'ie soft-deleted is, herleven we 'm. Anders
+    // belanden items op een group_id die de UI filtert.
+    if (target.deleted_at) {
+      await admin.from('board_groups').update({ deleted_at: null }).eq('id', target.id)
+    }
+    return target.id
+  }
 
   const { data: posRows } = await admin
     .from('board_groups').select('position')
