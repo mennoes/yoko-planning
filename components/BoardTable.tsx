@@ -1093,6 +1093,10 @@ function Cell({ item, col, onUpdate }: {
     // ownerIds én ownerHours samen consistent houden: verwijderde owner
     // mag geen stale uren-entry achterlaten (anders telt ie zomaar weer
     // mee zodra je 'm later opnieuw toevoegt of bij periode-pro-rate).
+    // Voor Google-items: ownerIdsLocked-flag aanzetten zodat de Google-
+    // sync de owners niet bij elke pass terugzet naar de attendee-set.
+    const isGoogleItem = item.source === 'google'
+    const lockPatch = isGoogleItem ? { ownerIdsLocked: true } as Partial<BoardItem> : {}
     if (item.ownerHours && Object.keys(item.ownerHours).length > 0) {
       const active = new Set(v)
       const cleaned: Record<string, number> = {}
@@ -1100,9 +1104,9 @@ function Cell({ item, col, onUpdate }: {
         if (active.has(oid)) cleaned[oid] = hrs
       }
       const hasAny = Object.keys(cleaned).length > 0
-      onUpdate({ ownerIds: v, ownerHours: hasAny ? cleaned : undefined })
+      onUpdate({ ownerIds: v, ownerHours: hasAny ? cleaned : undefined, ...lockPatch })
     } else {
-      onUpdate({ ownerIds: v })
+      onUpdate({ ownerIds: v, ...lockPatch })
     }
   }} />
   if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
