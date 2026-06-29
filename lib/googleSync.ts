@@ -528,22 +528,20 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (self?.responseStatus === 'declined') return false
     const { start } = eventDates(ev)
     if (!start) return false
-    // De gebruiker staat zelf op de attendee-lijst → hij is uitgenodigd,
-    // door wie dan ook. ALTIJD doorlaten, ongeacht aantal andere
-    // attendees. Vangt o.a. externe 1-op-1's waar de organizer
-    // 'guests can see other guests' heeft uitgezet (Google retourneert
-    // dan alleen jezelf in de lijst → oude '≥2 attendees'-filter blokte
-    // ze stilzwijgend). Een transparent-event (Free) waar je ook
-    // expliciet aan deelneemt is óók een meeting.
-    if (self) return true
-    // Geen self → user is geen attendee. Block-events, focus-time of
-    // 'Tijd voor mezelf' van een collega. Toelaten op groepsgrootte
-    // of vrij/vakantie.
     const attendeeCount = (ev.attendees ?? []).length
-    if (ev.transparency === 'transparent' && attendeeCount < 2) return false
-    if (attendeeCount >= 2) return true
-    if (isVrijTitle(ev.summary ?? '')) return true
-    return false
+    // Geen attendees op de lijst → solo block-event (Focus tijd, Tijd
+    // voor mezelf, etc.). Alleen Vrij/vakantie laten we daar door —
+    // andere solo-blokken zijn team-planning-ruis.
+    if (attendeeCount === 0) return isVrijTitle(ev.summary ?? '')
+    // ≥1 attendee → meeting. Inclusief:
+    //  - externe 1-op-1 calls waar Google de organizer niet als self
+    //    in attendees zet → vroeger viel je dan op count<2 stiekem
+    //    door de filter heen;
+    //  - save-the-dates (transparent + meerdere attendees);
+    //  - door jezelf georganiseerde meetings waar je een ander
+    //    mailadres hebt uitgenodigd (test-flow user).
+    // De decline-skip hierboven vangt geweigerde uitnodigingen al af.
+    return true
   })
   const groupedByRec = new Map<string, GoogleEvent[]>()
   for (const ev of validEvents) {
