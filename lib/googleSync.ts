@@ -522,27 +522,22 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   //    en waar minstens één andere attendee al iets heeft beslist — dat is
   //    typisch een uitnodiging die de gebruiker stil heeft genegeerd. We laten
   //    'needsAction' wel staan als die persoon zelf de organizer is.
+  let skipCancelled = 0, skipDeclined = 0, skipNoStart = 0, skipSoloNonVrij = 0
   const validEvents = events.filter(ev => {
-    if (ev.status === 'cancelled') return false
+    if (ev.status === 'cancelled') { skipCancelled++; return false }
     const self = ev.attendees?.find(a => a.self)
-    if (self?.responseStatus === 'declined') return false
+    if (self?.responseStatus === 'declined') { skipDeclined++; return false }
     const { start } = eventDates(ev)
-    if (!start) return false
+    if (!start) { skipNoStart++; return false }
     const attendeeCount = (ev.attendees ?? []).length
-    // Geen attendees op de lijst → solo block-event (Focus tijd, Tijd
-    // voor mezelf, etc.). Alleen Vrij/vakantie laten we daar door —
-    // andere solo-blokken zijn team-planning-ruis.
-    if (attendeeCount === 0) return isVrijTitle(ev.summary ?? '')
-    // ≥1 attendee → meeting. Inclusief:
-    //  - externe 1-op-1 calls waar Google de organizer niet als self
-    //    in attendees zet → vroeger viel je dan op count<2 stiekem
-    //    door de filter heen;
-    //  - save-the-dates (transparent + meerdere attendees);
-    //  - door jezelf georganiseerde meetings waar je een ander
-    //    mailadres hebt uitgenodigd (test-flow user).
-    // De decline-skip hierboven vangt geweigerde uitnodigingen al af.
+    if (attendeeCount === 0) {
+      if (!isVrijTitle(ev.summary ?? '')) { skipSoloNonVrij++; return false }
+      return true
+    }
     return true
   })
+  // eslint-disable-next-line no-console
+  console.log(`[googleSync] cal=${cal.calendar_id} fetched=${events.length} valid=${validEvents.length} skip{cancelled:${skipCancelled},declined:${skipDeclined},noStart:${skipNoStart},soloNonVrij:${skipSoloNonVrij}}`)
   const groupedByRec = new Map<string, GoogleEvent[]>()
   for (const ev of validEvents) {
     const key = ev.recurringEventId ?? ev.id
