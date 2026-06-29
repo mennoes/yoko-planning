@@ -613,12 +613,15 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // Lineair: bar-hoogte == ratio * availH. 4u/dag = 50%, 8u/dag = 100%.
-  // Vrij-items (implicit 8u/dag) renderen full-lane, dus blijven 't
+  // Compressed-lineair: 40% baseline + 60% schaal. 0u/dag = 40% lane,
+  // 4u/dag = 70%, 8u/dag = 100%. Verhoudingen blijven duidelijk
+  // zichtbaar (8u-bar is 2,5× zo hoog als 0u-bar) maar de allerkleinste
+  // bars (per-persoon-share klein) blijven goed hoverbaar i.p.v. een
+  // strepje van 10px hoog. Vrij-items (8u/dag) renderen 100% en zijn 't
   // ankerpunt waartegen alle andere bars proportioneel ogen.
-  // Absoluut min 10px voor leesbaarheid van super-uitgesmeerde projecten.
+  const scaledRatio = 0.4 + 0.6 * ratio
   const scaledH = scaleByHours
-    ? Math.max(10, Math.round(availH * ratio))
+    ? Math.max(14, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
