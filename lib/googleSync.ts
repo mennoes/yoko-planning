@@ -969,7 +969,14 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
 
   if (upserts.length > 0) {
-    await admin.from('board_items').upsert(upserts, { onConflict: 'id' })
+    const { error: upErr } = await admin.from('board_items').upsert(upserts, { onConflict: 'id' })
+    if (upErr) {
+      // eslint-disable-next-line no-console
+      console.error(`[googleSync] upsert FAILED voor ${cal.calendar_id}:`, upErr.message, upErr.details, upErr.hint, 'rows:', upserts.length)
+      // Niet stilzwijgend doorgaan — laat de caller weten dat sync gefaald is
+      // zodat /api/google/sync de error doorgeeft aan de sidebar-knop.
+      throw new Error(`upsert failed: ${upErr.message}`)
+    }
   }
 
   // Auto-categoriseer items met 'Vrij'/'Vakantie'/'Verlof'/etc. in de titel
