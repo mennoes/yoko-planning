@@ -259,6 +259,43 @@ async function ensureDoneGroup(
   return newId
 }
 
+// Toekomstig-groep voor meetings ≥ 3 weken vooruit. Standaard ingeklapt
+// zodat het bord overzichtelijk blijft voor de korte termijn; user kan
+// hem uitklappen als 'ie ver vooruit wil kijken.
+async function ensureToekomstigGroup(
+  admin:   SupabaseClient,
+  boardId: string,
+): Promise<string> {
+  const { data: rows } = await admin
+    .from('board_groups').select('id, name, deleted_at')
+    .eq('board_id', boardId)
+    .ilike('name', 'toekomstig')
+    .limit(1)
+  const existing = (rows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
+  if (existing) {
+    if (existing.deleted_at) {
+      await admin.from('board_groups').update({ deleted_at: null }).eq('id', existing.id)
+    }
+    return existing.id
+  }
+  const { data: posRows } = await admin
+    .from('board_groups').select('position')
+    .eq('board_id', boardId)
+    .order('position', { ascending: false })
+    .limit(1)
+  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
+  const newId = `g_toekomstig_${boardId}_${Date.now()}`
+  await admin.from('board_groups').insert({
+    id:        newId,
+    board_id:  boardId,
+    name:      'Toekomstig',
+    color:     '#7e8aa0',
+    collapsed: true,
+    position:  maxPos + 1,
+  })
+  return newId
+}
+
 // Vrij/Vakantie-groep — events met titels als 'Vrij', 'Vakantie', 'Verlof',
 // 'Ziek' of een feestdag horen niet tussen losse projecten te staan. We
 // bundelen ze in een aparte 'Vrij'-groep zodat de planning meteen duidelijk
@@ -463,6 +500,26 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const gid = await ensureDoneGroup(admin, boardId)
     doneCache.set(boardId, gid)
     return gid
+  }
+
+  const toekomstigCache = new Map<string, string>()
+  async function getToekomstigGroupFor(boardId: string): Promise<string> {
+    const cached = toekomstigCache.get(boardId)
+    if (cached) return cached
+    const gid = await ensureToekomstigGroup(admin, boardId)
+    toekomstigCache.set(boardId, gid)
+    return gid
+  }
+
+  // Drempel voor toekomstig — events die ≥ 3 weken vooruit starten worden
+  // in de ingeklapte 'Toekomstig'-groep gestopt zodat de hoofd-meetings-
+  // groep niet uitpuilt van events die nog ver weg zijn.
+  const TOEKOMSTIG_THRESHOLD_DAYS = 21
+  const toekomstigCutoffMs = Date.now() + TOEKOMSTIG_THRESHOLD_DAYS * 86400000
+  function isFarFuture(startIso: string | null): boolean {
+    if (!startIso) return false
+    const t = Date.parse(startIso)
+    return Number.isFinite(t) && t > toekomstigCutoffMs
   }
 
   // Cache van groep-ids die we tijdens deze sync hebben gecontroleerd op
@@ -778,14 +835,26 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // versnipperd tussen echte projecten staan.
       const fallbackGroup = newStatus === 'Done'
         ? await getDoneGroupFor(keepBoard)
-        : (isVrij ? await getVrijGroupFor(keepBoard) : await getMeetingsGroupFor(keepBoard))
-      // Done items ALTIJD naar de Done-bucket — ook wanneer ze nog in 'n
-      // levende andere groep zaten. Voor non-Done: existingRow.group_id
-      // alleen gebruiken als die groep nog leeft (anders verweesd item).
+        : (isVrij
+            ? await getVrijGroupFor(keepBoard)
+            : (isFarFuture(start)
+                ? await getToekomstigGroupFor(keepBoard)
+                : await getMeetingsGroupFor(keepBoard)))
+      // Done items ALTIJD naar de Done-bucket. Voor non-Done: existing
+      // group respecteren, MAAR auto-shuffle tussen Meetings ↔ Toekomstig
+      // wanneer de start-datum de 3-weken-grens passeert. Andere user-
+      // verplaatsingen (eigen groep, custom bucket) blijven respected.
       const existingGroupAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
+      const meetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
+      const toekomstigGid = !isVrij ? await getToekomstigGroupFor(keepBoard) : null
+      const inAutoBucket = existingGroupAlive && (
+        existingRow!.group_id === meetingsGid || existingRow!.group_id === toekomstigGid
+      )
       const keepGroup = newStatus === 'Done'
         ? fallbackGroup
-        : (existingGroupAlive ? existingRow!.group_id : fallbackGroup)
+        : (existingGroupAlive
+            ? (inAutoBucket ? fallbackGroup : existingRow!.group_id)
+            : fallbackGroup)
       const eventOwners = ownersForEvent(ev)
       // Vervang owner_ids met de VERSE set Yoko-attendees uit Google,
       // TENZIJ de gebruiker handmatig owners heeft aangepast via de UI —
@@ -1010,13 +1079,24 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // staan i.p.v. in twee aparte groepen.
     const recFallback = newStatus === 'Done'
       ? await getDoneGroupFor(keepBoard)
-      : (isVrij ? await getVrijGroupFor(keepBoard) : await getMeetingsGroupFor(keepBoard))
-    // Done ALTIJD naar Done-bucket; non-Done respecteert existingRow.
-    // group_id alleen als die nog leeft (anders verweesd).
+      : (isVrij
+          ? await getVrijGroupFor(keepBoard)
+          : (isFarFuture(minStart)
+              ? await getToekomstigGroupFor(keepBoard)
+              : await getMeetingsGroupFor(keepBoard)))
+    // Done ALTIJD naar Done-bucket; non-Done respecteert existingRow,
+    // behalve auto-shuffle tussen Meetings ↔ Toekomstig (3-weken-grens).
     const recExistingAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
+    const recMeetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
+    const recToekomstigGid = !isVrij ? await getToekomstigGroupFor(keepBoard) : null
+    const recInAutoBucket = recExistingAlive && (
+      existingRow!.group_id === recMeetingsGid || existingRow!.group_id === recToekomstigGid
+    )
     const keepGroup = newStatus === 'Done'
       ? recFallback
-      : (recExistingAlive ? existingRow!.group_id : recFallback)
+      : (recExistingAlive
+          ? (recInAutoBucket ? recFallback : existingRow!.group_id)
+          : recFallback)
     upserts.push({
       id,
       group_id:           keepGroup,
