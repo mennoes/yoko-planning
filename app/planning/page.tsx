@@ -613,14 +613,13 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // Compressed-lineair: 12% baseline + 88% schaal, 8px hard floor.
-  // 0u/dag = 12% lane (≈8px floor), 4u/dag = 56%, 8u/dag = 100%.
-  // Veel agressiever ingedrukt zodat lage-uren bars echt mini-strips
-  // worden en niet over elkaar buitelen. Vrij (8u/dag) = 100%
-  // ankerpunt.
-  const scaledRatio = 0.12 + 0.88 * ratio
+  // Pure lineair, geen baseline. Met laneH = één lane (i.p.v. de hele
+  // stack) past elke bar nu netjes in z'n eigen lane: 8u/dag = volle
+  // lane, 4u/dag = halve lane, 1u/dag = 1/8 lane. Verschillende lanes
+  // stapelen vanzelf zonder dat ze elkaar overlappen. 6px floor zodat
+  // super-dunne bars (≤0,5u/dag) nog hoverbaar zijn.
   const scaledH = scaleByHours
-    ? Math.max(8, Math.round(availH * scaledRatio))
+    ? Math.max(6, Math.round(availH * ratio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -2186,8 +2185,12 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const wrapperH = projectStack
         return (
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
+            {/* laneH = één lane-hoogte (NIET de hele stack); anders zou
+                 een 8u/dag bar de full-stack vullen en alle bars eronder
+                 dichtoverlappen. PROJECT_LANE_H zorgt voor 1 bar = 1 lane
+                 wanneer ratio=1. */}
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
-              laneH={wrapperH}
+              laneH={PROJECT_LANE_H}
               laneIdx={b.lane}
               scaleByHours={zoom === 'week' || zoom === 'maand'}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
