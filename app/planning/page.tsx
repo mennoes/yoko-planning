@@ -2034,11 +2034,12 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Compact zodat brede tijdsranges
-  // (= veel lanes via lane-packing) niet 'n massieve wrapper-hoogte
-  // produceren. Bar-hoogte heeft hoge baseline (zie scaledRatio) zodat
-  // ook in 'n krappere lane elke bar leesbaar blijft.
-  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 30 : zoom === 'week' ? 38 : (BAR_H + BAR_GAP)) * RS)
+  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Compact gehouden zodat lane-
+  // packing met veel lanes (= brede tijdsranges) geen massieve lege
+  // wrapper genereert. Bar-hoogte gebruikt 50% baseline (zie scaledRatio)
+  // zodat bars in deze krappe lanes alsnog leesbaar blijven (4u/dag =
+  // 75% lane, 8u/dag = 100%).
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 26 : zoom === 'week' ? 30 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
@@ -2048,8 +2049,14 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   }))
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  const projectStack = projectLanes * PROJECT_LANE_H
-  const baseHeight = BAR_GAP_S + projectStack + 6
+  // Compact de wrapper tot alleen de daadwerkelijk gebruikte lanes —
+  // hoogste lane-index +1, niet projectLanes×PROJECT_LANE_H. Voorkomt
+  // 'n lege onderkant wanneer lane-packing voor de zoom-range meer
+  // lanes telt dan op de zichtbare dag terug te zien zijn.
+  const maxLaneUsed = bars.reduce((m, b) => Math.max(m, b.lane ?? 0), -1)
+  const lanesNeeded = maxLaneUsed >= 0 ? maxLaneUsed + 1 : projectLanes
+  const projectStack = lanesNeeded * PROJECT_LANE_H
+  const baseHeight = BAR_GAP_S + projectStack
   const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
 
   return (
