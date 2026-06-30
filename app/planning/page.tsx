@@ -2029,12 +2029,13 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H halved t.o.v. eerdere 60px zodat 100%-bars niet de
-  // hele schermhoogte beslaan. 30px is een goede balans tussen
-  // leesbaarheid en compactheid.
-  // Maand/kwartaal: kleinere lane zodat veel kolommen overzichtelijk
-  // blijven; week: 30; dag: BAR_H + BAR_GAP.
-  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 22 : zoom === 'week' ? 30 : (BAR_H + BAR_GAP)) * RS)
+  // PROJECT_LANE_H bepaalt hoe hoog één lane is — en dus hoe groot een
+  // 8u/dag-bar (ratio=1) wordt. Met `laneH=PROJECT_LANE_H` op de bars
+  // past elke bar netjes in z'n eigen lane zonder andere bars te
+  // overlappen. Maand/kwartaal compacter omdat daar veel kolommen
+  // tegelijk zichtbaar zijn; week ruim zodat 4u/dag-bars (50% lane)
+  // nog goed leesbaar zijn.
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 32 : zoom === 'week' ? 48 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
