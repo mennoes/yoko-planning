@@ -2044,17 +2044,21 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
-  const bars: Single[] = projectPacked.items.map(b => ({
+  const rawBars: Single[] = projectPacked.items.map(b => ({
     ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
   }))
+  // Lege lanes ertussenuit halen: lane-packing kan lanes 0, 1, 2, 4
+  // toewijzen (waarbij 3 leeg blijft op de zichtbare bars). We
+  // hernummeren naar 0, 1, 2, 3 zodat er geen verticale gap is tussen
+  // de gerenderde bars. Behoudt onderlinge volgorde van de originele
+  // lane-numbers; alleen 'sluit gaten'.
+  const usedLanes = [...new Set(rawBars.map(b => b.lane))].sort((a, b) => a - b)
+  const laneRemap = new Map<number, number>()
+  usedLanes.forEach((orig, idx) => laneRemap.set(orig, idx))
+  const bars: Single[] = rawBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  // Compact de wrapper tot alleen de daadwerkelijk gebruikte lanes —
-  // hoogste lane-index +1, niet projectLanes×PROJECT_LANE_H. Voorkomt
-  // 'n lege onderkant wanneer lane-packing voor de zoom-range meer
-  // lanes telt dan op de zichtbare dag terug te zien zijn.
-  const maxLaneUsed = bars.reduce((m, b) => Math.max(m, b.lane ?? 0), -1)
-  const lanesNeeded = maxLaneUsed >= 0 ? maxLaneUsed + 1 : projectLanes
+  const lanesNeeded = usedLanes.length > 0 ? usedLanes.length : projectLanes
   const projectStack = lanesNeeded * PROJECT_LANE_H
   const baseHeight = BAR_GAP_S + projectStack
   const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
