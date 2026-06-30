@@ -617,10 +617,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // 25% baseline + 75% schaal. Met de compactere lane-hoogtes vult dit
-  // de lane comfortabel ook bij lage uren: 1u/dag = 34% lane, 4u/dag =
-  // 62%, 8u/dag = 100%. 6px floor voor hele uitgesmeerde projecten.
-  const scaledRatio = 0.25 + 0.75 * ratio
+  // 15% baseline + 85% schaal. Met de ruimere lane-hoogte (40px week)
+  // levert dit goed leesbare bars: 1u/dag = 26% lane (~10px), 4u/dag =
+  // 58% (~22px), 8u/dag = 100% (~38px). 6px floor.
+  const scaledRatio = 0.15 + 0.85 * ratio
   const scaledH = scaleByHours
     ? Math.max(6, Math.round(availH * scaledRatio))
     : baseH
@@ -2034,11 +2034,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Lane-packing pakt veel lanes
-  // bij brede tijdsranges, dus elke pixel extra per lane wordt N× ver-
-  // menigvuldigd in de wrapperH. Compact houden zodat lege ruimte
-  // beperkt blijft maar bars nog wel leesbaar zijn.
-  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 22 : zoom === 'week' ? 28 : (BAR_H + BAR_GAP)) * RS)
+  // PROJECT_LANE_H bepaalt 1 lane-hoogte (= max bar-hoogte voor 8u/dag).
+  // Trade-off: groter = grotere, beter leesbare bars; kleiner = compactere
+  // wrapper. 40px in week-zoom past 'n 4u/dag-bar comfortabel (~24px),
+  // en 'n full 8u-bar is duidelijk maar overdrijft niet.
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 28 : zoom === 'week' ? 40 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
