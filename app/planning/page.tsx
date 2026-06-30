@@ -860,11 +860,14 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     return h + (m || 0) / 60
   })()
   const totalAvail = (laneH ?? BAR_H + BAR_GAP)
-  // Untimed items krijgen een grotere lane-based offset (~18px per lane)
-  // zodat de titels van overlappende items boven elkaar uitsteken i.p.v.
-  // door elkaar lopen. Cap op totalAvail - 18 zodat de offset 'm niet
-  // helemaal uit beeld duwt.
-  const untimedOffset = Math.min(totalAvail - 18, (laneIdx ?? 0) * 18)
+  // Untimed items: één hele lane-hoogte tussen elke lane zodat een
+  // 8u-bar (= volle lane) niet over de bar van de lane eronder valt.
+  // Vroeger stond hier 18px hardcoded — dat was minder dan de bar-
+  // hoogte zelf (tot ~48px in week-zoom), waardoor lanes elkaar visueel
+  // bedekten. Cap op totalAvail - barH zodat de laatste lane nog
+  // helemaal zichtbaar blijft.
+  const laneStep = laneH ?? (BAR_H + BAR_GAP)
+  const untimedOffset = Math.min(Math.max(0, totalAvail - barH), (laneIdx ?? 0) * laneStep)
   const barTop = scaleByHours
     ? (startHour !== null
         ? Math.max(0, Math.min(totalAvail - barH, Math.round(((startHour - dayStartH) / dayLengthH) * totalAvail)))
