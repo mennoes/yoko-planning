@@ -2039,7 +2039,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // wrapper genereert. Bar-hoogte gebruikt 50% baseline (zie scaledRatio)
   // zodat bars in deze krappe lanes alsnog leesbaar blijven (4u/dag =
   // 75% lane, 8u/dag = 100%).
-  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 26 : zoom === 'week' ? 30 : (BAR_H + BAR_GAP)) * RS)
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 22 : zoom === 'week' ? 24 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
