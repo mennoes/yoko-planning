@@ -2044,18 +2044,18 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
-  const rawBars: Single[] = projectPacked.items.map(b => ({
+  const packedBars = projectPacked.items.map(b => ({
     ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
-  }))
+  })) as Single[]
   // Lege lanes ertussenuit halen: lane-packing kan lanes 0, 1, 2, 4
   // toewijzen (waarbij 3 leeg blijft op de zichtbare bars). We
   // hernummeren naar 0, 1, 2, 3 zodat er geen verticale gap is tussen
   // de gerenderde bars. Behoudt onderlinge volgorde van de originele
   // lane-numbers; alleen 'sluit gaten'.
-  const usedLanes = [...new Set(rawBars.map(b => b.lane))].sort((a, b) => a - b)
+  const usedLanes = [...new Set(packedBars.map(b => b.lane))].sort((a, b) => a - b)
   const laneRemap = new Map<number, number>()
   usedLanes.forEach((orig, idx) => laneRemap.set(orig, idx))
-  const bars: Single[] = rawBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
+  const bars: Single[] = packedBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
 
   if (bars.length === 0 && vrijBars.length === 0) return null
   const lanesNeeded = usedLanes.length > 0 ? usedLanes.length : projectLanes
