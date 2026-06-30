@@ -613,13 +613,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // Pure lineair, geen baseline. Met laneH = één lane (i.p.v. de hele
-  // stack) past elke bar nu netjes in z'n eigen lane: 8u/dag = volle
-  // lane, 4u/dag = halve lane, 1u/dag = 1/8 lane. Verschillende lanes
-  // stapelen vanzelf zonder dat ze elkaar overlappen. 6px floor zodat
-  // super-dunne bars (≤0,5u/dag) nog hoverbaar zijn.
+  // 25% baseline + 75% schaal. Met de compactere lane-hoogtes vult dit
+  // de lane comfortabel ook bij lage uren: 1u/dag = 34% lane, 4u/dag =
+  // 62%, 8u/dag = 100%. 6px floor voor hele uitgesmeerde projecten.
+  const scaledRatio = 0.25 + 0.75 * ratio
   const scaledH = scaleByHours
-    ? Math.max(6, Math.round(availH * ratio))
+    ? Math.max(6, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -2032,13 +2031,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt hoe hoog één lane is — en dus hoe groot een
-  // 8u/dag-bar (ratio=1) wordt. Met `laneH=PROJECT_LANE_H` op de bars
-  // past elke bar netjes in z'n eigen lane zonder andere bars te
-  // overlappen. Maand/kwartaal compacter omdat daar veel kolommen
-  // tegelijk zichtbaar zijn; week ruim zodat 4u/dag-bars (50% lane)
-  // nog goed leesbaar zijn.
-  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 32 : zoom === 'week' ? 48 : (BAR_H + BAR_GAP)) * RS)
+  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Lane-packing pakt veel lanes
+  // bij brede tijdsranges, dus elke pixel extra per lane wordt N× ver-
+  // menigvuldigd in de wrapperH. Compact houden zodat lege ruimte
+  // beperkt blijft maar bars nog wel leesbaar zijn.
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 22 : zoom === 'week' ? 28 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
