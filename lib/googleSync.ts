@@ -595,22 +595,23 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   //    en waar minstens één andere attendee al iets heeft beslist — dat is
   //    typisch een uitnodiging die de gebruiker stil heeft genegeerd. We laten
   //    'needsAction' wel staan als die persoon zelf de organizer is.
-  let skipCancelled = 0, skipDeclined = 0, skipNoStart = 0, skipSoloNonVrij = 0
+  let skipCancelled = 0, skipDeclined = 0, skipNoStart = 0, skipSolo = 0, skipVrij = 0
   const validEvents = events.filter(ev => {
     if (ev.status === 'cancelled') { skipCancelled++; return false }
     const self = ev.attendees?.find(a => a.self)
     if (self?.responseStatus === 'declined') { skipDeclined++; return false }
     const { start } = eventDates(ev)
     if (!start) { skipNoStart++; return false }
+    // Vrij/vakantie/verlof in de Google-agenda is persoonlijk en hoort
+    // niet in de planning-tool. User markeert eigen vrije dagen via
+    // /team in de tool; importeren vanuit Google dubbelt 't onnodig.
+    if (isVrijTitle(ev.summary ?? '')) { skipVrij++; return false }
     const attendeeCount = (ev.attendees ?? []).length
-    if (attendeeCount === 0) {
-      if (!isVrijTitle(ev.summary ?? '')) { skipSoloNonVrij++; return false }
-      return true
-    }
+    if (attendeeCount === 0) { skipSolo++; return false }
     return true
   })
   // eslint-disable-next-line no-console
-  console.log(`[googleSync] cal=${cal.calendar_id} fetched=${events.length} valid=${validEvents.length} skip{cancelled:${skipCancelled},declined:${skipDeclined},noStart:${skipNoStart},soloNonVrij:${skipSoloNonVrij}}`)
+  console.log(`[googleSync] cal=${cal.calendar_id} fetched=${events.length} valid=${validEvents.length} skip{cancelled:${skipCancelled},declined:${skipDeclined},noStart:${skipNoStart},solo:${skipSolo},vrij:${skipVrij}}`)
   const groupedByRec = new Map<string, GoogleEvent[]>()
   for (const ev of validEvents) {
     const key = ev.recurringEventId ?? ev.id
