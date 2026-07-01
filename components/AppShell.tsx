@@ -231,13 +231,23 @@ function Inner({ children }: { children: ReactNode }) {
     return () => { offAuth(); while (unsubs.length) unsubs.pop()?.() }
   }, [])
 
-  // Google Calendar sync — pull on mount + every 5 min while signed in.
+  // Google Calendar sync — pull on mount + periodiek zolang de tab open is.
   useEffect(() => {
     let cancelled = false
-    async function tick() {
+    let lastSyncAt = 0
+    const MIN_VISIBILITY_INTERVAL_MS = 5 * 60 * 1000
+    async function tick(reason: 'mount' | 'interval' | 'visibility' = 'interval') {
       if (cancelled) return
+      // Achtergrond-tabs slaan tick over: als niemand ernaar kijkt hoeven
+      // we Vercel-bandwidth niet te verbranden.
+      if (reason === 'interval' && typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      // Tab-terug-in-focus draaien we alleen 'n verse sync wanneer 't
+      // langer dan 5 min geleden was — snel tab-switchen mag geen sync-
+      // spam veroorzaken.
+      if (reason === 'visibility' && Date.now() - lastSyncAt < MIN_VISIBILITY_INTERVAL_MS) return
       const syncing = await isSyncing()
       if (!syncing) return
+      lastSyncAt = Date.now()
       await syncGoogleNow()
       // Defensive force-pull — realtime can drop events, this guarantees the
       // local cache reflects whatever the sync just wrote.
@@ -275,16 +285,24 @@ function Inner({ children }: { children: ReactNode }) {
         }
       } catch {}
     }
-    tick()
-    // Google sync interval — 30 min. Was 5 min = 288 requests/dag per open
-    // tab per user tegen /api/google/sync + snapshot-endpoints, wat 'n
-    // significant deel van Vercel's Fast Origin Transfer opat. Voor een
-    // pas-geaccepteerde meeting kun je altijd handmatig 'Synchroniseer
-    // Google nu' klikken in de sidebar — snapshots draaien sowieso via
-    // de daily Vercel cron.
-    const id = setInterval(tick, 30 * 60 * 1000)
-    const offAuth = onAuthChange(() => { tick() })
-    return () => { cancelled = true; clearInterval(id); offAuth() }
+    tick('mount')
+    // Interval-tick blijft 30 min als tab zichtbaar is; achtergrondtabs
+    // slaan de tick over (visibility-check in tick zelf). Als de user
+    // van tab wisselt vuurt visibilitychange 'n directe verse sync zodat
+    // 't gevoel niet trager wordt bij terugkomen.
+    const id = setInterval(() => tick('interval'), 30 * 60 * 1000)
+    function onVisibility() {
+      if (typeof document === 'undefined') return
+      if (document.visibilityState === 'visible') tick('visibility')
+    }
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility)
+    const offAuth = onAuthChange(() => { tick('mount') })
+    return () => {
+      cancelled = true
+      clearInterval(id)
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility)
+      offAuth()
+    }
   }, [])
 
   // Login + share + auth routes: geen sidebar, geen ProfileSetup, geen auth-redirect

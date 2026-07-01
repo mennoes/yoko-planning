@@ -617,14 +617,13 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // 70% baseline + 30% schaal. Met 60px-lane in week-zoom: 0u = 42px,
-  // 4u = ~51px, 8u = ~57px. Elke bar heeft nu ruimte voor titel +
-  // subtitle-regel + bord-tag zonder dat de content over de bar-rand
-  // heen schiet (was 't hoofdprobleem bij het 'overlap zonder reden'-
-  // effect).
-  const scaledRatio = 0.7 + 0.3 * ratio
+  // 65% baseline + 35% schaal. Met 40px-lane in week-zoom: 0u = ~26px,
+  // 4u = ~33px, 8u = ~38px. Subtitle-regel hoort niet meer in de bar
+  // (drempel 36px) — één regel titel + tag past comfortabel, verticaal
+  // gecentreerd, geen content-overflow.
+  const scaledRatio = 0.65 + 0.35 * ratio
   const scaledH = scaleByHours
-    ? Math.max(36, Math.round(availH * scaledRatio))
+    ? Math.max(22, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -950,7 +949,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               project een subitem-afgeleide is. Geeft visueel meteen
               door welk hoofditem dit subitem hoort. Wordt alleen
               gerenderd als de bar hoog genoeg is voor twee regels. */}
-          {project.parentName && project.parentName !== project.name && barH >= 20 && (
+          {project.parentName && project.parentName !== project.name && barH >= 36 && (
             <span style={{
               fontSize: small ? 8.5 : 9.5, fontWeight: 500,
               opacity: 0.78, lineHeight: 1.1, marginTop: 1,
@@ -2041,7 +2040,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // wrapper genereert. Bar-hoogte gebruikt 50% baseline (zie scaledRatio)
   // zodat bars in deze krappe lanes alsnog leesbaar blijven (4u/dag =
   // 75% lane, 8u/dag = 100%).
-  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 44 : zoom === 'week' ? 60 : (BAR_H + BAR_GAP)) * RS)
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 32 : zoom === 'week' ? 40 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
