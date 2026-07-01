@@ -276,10 +276,13 @@ function Inner({ children }: { children: ReactNode }) {
       } catch {}
     }
     tick()
-    // Google sync interval — terug op 5 min. 15 voelde te traag voor 'n
-    // pas-geaccepteerde meeting → in-de-planner. Handmatig 'Synchroniseer
-    // nu' in de sidebar als je 't direct wilt.
-    const id = setInterval(tick, 5 * 60 * 1000)
+    // Google sync interval — 30 min. Was 5 min = 288 requests/dag per open
+    // tab per user tegen /api/google/sync + snapshot-endpoints, wat 'n
+    // significant deel van Vercel's Fast Origin Transfer opat. Voor een
+    // pas-geaccepteerde meeting kun je altijd handmatig 'Synchroniseer
+    // Google nu' klikken in de sidebar — snapshots draaien sowieso via
+    // de daily Vercel cron.
+    const id = setInterval(tick, 30 * 60 * 1000)
     const offAuth = onAuthChange(() => { tick() })
     return () => { cancelled = true; clearInterval(id); offAuth() }
   }, [])
