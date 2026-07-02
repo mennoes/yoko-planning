@@ -617,13 +617,13 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // 75% baseline + 25% schaal. Met 28px-lane in week-zoom: 0u = ~17px,
-  // 4u = ~20px, 8u = ~23px. Alle bars zijn strak één regel: titel + tag
-  // + G/2p, verticaal gecentreerd, geen overflow. Klein hoogte-verschil
-  // (~6px) tussen 0u en 8u bewaart de proportionele hint.
-  const scaledRatio = 0.75 + 0.25 * ratio
+  // 65% baseline + 35% schaal. Met 42px-lane in week-zoom: 0u = ~26px,
+  // 4u = ~32px, 8u = ~37px. Genoeg voor titel + inline tags. Kleiner dan
+  // laneH (42) zodat er zichtbaar witruimte tussen bars in aangrenzende
+  // lanes zit — visueel duidelijke scheiding, geen chaos.
+  const scaledRatio = 0.65 + 0.35 * ratio
   const scaledH = scaleByHours
-    ? Math.max(18, Math.round(availH * scaledRatio))
+    ? Math.max(22, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -2041,10 +2041,10 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // wrapper genereert. Bar-hoogte gebruikt 50% baseline (zie scaledRatio)
   // zodat bars in deze krappe lanes alsnog leesbaar blijven (4u/dag =
   // 75% lane, 8u/dag = 100%).
-  // Compacter houden — 28px lane in week-zoom houdt wrapper klein zelfs
-  // bij 6-8 lanes actief. Bar-content is single-line (subtitle-threshold
-  // is > laneH dus nooit getoond in deze zoom).
-  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 24 : zoom === 'week' ? 28 : (BAR_H + BAR_GAP)) * RS)
+  // Genoeg verticale ruimte per lane om bars VISUEEL te scheiden.
+  // 42px lane + 26-42px bars → 0-16px zichtbaar gap tussen lanes onderling,
+  // waardoor stapelende bars herkenbaar los van elkaar staan.
+  const PROJECT_LANE_H = Math.round((zoom === 'maand' ? 32 : zoom === 'week' ? 42 : (BAR_H + BAR_GAP)) * RS)
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
