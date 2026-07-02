@@ -930,7 +930,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.15 }}>
-              {project.name}{(!scaleByHours || barH < 28) && project.board ? ` | ${project.board}` : ''}
+              {project.name}
             </span>
             {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
             {isMultiOwner && (
@@ -949,13 +949,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               project een subitem-afgeleide is. Geeft visueel meteen
               door welk hoofditem dit subitem hoort. Wordt alleen
               gerenderd als de bar hoog genoeg is voor twee regels. */}
-          {project.parentName && project.parentName !== project.name && barH >= 36 && (
-            <span style={{
-              fontSize: small ? 8.5 : 9.5, fontWeight: 500,
-              opacity: 0.78, lineHeight: 1.1, marginTop: 1,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>↳ {project.parentName}</span>
-          )}
+          {/* Subtitle-regel (parent-context) uitgeschakeld voor de planning-
+              bars. Op korte bar-hoogtes stapelde 't visueel met de titel
+              en gaf chaos. Voor context: hover de bar → popup toont de
+              volledige info. */}
           {/* Board-naam (bord van herkomst) als tweede regel zodra de
               bar hoog genoeg is — anders staat 'ie inline achter de
               titel via de | separator. */}
