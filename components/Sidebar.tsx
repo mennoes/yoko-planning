@@ -25,7 +25,7 @@ import {
   IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
   IconDocument, IconFolder, IconFolderOpen, IconSort, IconRefresh, IconActivity,
-  IconSearch,
+  IconSearch, IconHourglass,
 } from './Icon'
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
@@ -34,12 +34,12 @@ import { NotificationBell } from './NotificationBell'
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   '/':         IconHome,
-  '/planning': IconPlanning,
+  '/planning': IconHourglass,
   '/todos':    IconCheckList,
 }
 const DEFAULT_MAIN = [
   { id: 'home',     href: '/',         label: 'Home' },
-  { id: 'planning', href: '/planning', label: 'Planning' },
+  { id: 'planning', href: '/planning', label: 'Werklast' },
   { id: 'todos',    href: '/todos',    label: "To do's" },
 ]
 type MainNavItem = typeof DEFAULT_MAIN[number]
@@ -387,7 +387,9 @@ function SectionBlock({
           e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '0'))
         }}>
         <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          {open ? <IconFolderOpen size={22} /> : <IconFolder size={22} />}
+          {section.type === 'projects'
+            ? <IconPlanning size={22} />
+            : (open ? <IconFolderOpen size={22} /> : <IconFolder size={22} />)}
         </span>
 
         {editName ? (
