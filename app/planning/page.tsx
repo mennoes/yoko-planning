@@ -1886,23 +1886,29 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       const e = eDate.getTime() + 86400000
       if (e < gridStartMs || s > gridEndMs) return null
 
-      let left: number, width: number
+      let left: number, width: number, packWidth: number
       // Minimum visible width — short events were impossible to click. The
       // bar overhangs slightly to the right past its actual end date, which
       // is a small lie but a much better UX than a 6px target.
+      // packWidth = ACTUAL width (zonder min) voor lane-packing. Anders
+      // "overlappen" twee korte events op dezelfde dag artificieel omdat
+      // hun min-width elkaar overlapt, en krijgen we onnodig veel lanes.
       const MIN_BAR_W = 22
       if (isWeek) {
         const csDate = s < gridStartMs ? new Date(gridStartMs) : sDate
         const ceDate = new Date(Math.min(e, gridEndMs))
         left  = dateToWeekPx(csDate, gridStart, colW)
         const right = dateToWeekPx(ceDate, gridStart, colW)
-        width = Math.max(right - left - 2, MIN_BAR_W)
+        packWidth = Math.max(1, right - left - 2)
+        width = Math.max(packWidth, MIN_BAR_W)
       } else {
         const cs = Math.max(s, gridStartMs)
         const ce = Math.min(e, gridEndMs)
         left  = (cs - gridStartMs) / msPerPx
-        width = Math.max((ce - cs) / msPerPx - 2, MIN_BAR_W)
+        packWidth = Math.max(1, (ce - cs) / msPerPx - 2)
+        width = Math.max(packWidth, MIN_BAR_W)
       }
+      void packWidth
       // Meeting-classificatie: BEPERKT tot duidelijke gevallen, niet alles
       // wat per ongeluk 'Meeting' in z'n naam heeft. De automatische
       // name-pattern classifier vangt te veel handmatige items (een
@@ -1915,9 +1921,9 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       const isMeeting = explicitCat === 'meeting'
         || (p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2)
       if (hideMeetings && isMeeting) return null
-      return { p, left, width, isMeeting }
+      return { p, left, width, packWidth, isMeeting }
     })
-    .filter(Boolean) as { p: Project; left: number; width: number; isMeeting: boolean }[]
+    .filter(Boolean) as { p: Project; left: number; width: number; packWidth: number; isMeeting: boolean }[]
 
   // Geen clustering meer in Overzicht: elke meeting krijgt zijn eigen
   // bar in zijn eigen lane, gesorteerd op starttijd (vroegste bovenaan).
@@ -1942,7 +1948,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // MAX_LANES = 5: gebruiker prefereert wat overlap boven onleesbaar veel
   // rijen. Items die niet zonder conflict passen worden bij de lane met
   // de minste overlap geduwd in plaats van een nieuwe rij te starten.
-  function packLanes<T extends { left: number; width: number }>(items: T[]) {
+  function packLanes<T extends { left: number; width: number; packWidth?: number }>(items: T[]) {
     // MAX_LANES = 10: royaal genoeg om overlap onder normale drukte te
     // vermijden. Door de lane-remap-stap (usedLanes → 0..N) blijft de
     // wrapper compact voor dagen waar minder lanes actief zijn, dus 'n
@@ -1967,7 +1973,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     }
     const packed = sorted.map(b => {
       const s = b.left
-      const e = b.left + b.width
+      // Voor lane-packing: gebruik packWidth (echte tijdsduur) i.p.v. de
+      // min-22px render-width. Voorkomt dat twee korte events op dezelfde
+      // dag artificieel gaan overlappen en dus onnodige extra lanes
+      // opeisen — de wrapper werd anders veel hoger dan nodig.
+      const e = b.left + (b.packWidth ?? b.width)
       // Probeer een lane zonder enige overlap
       let lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
       if (lane >= 0) {
