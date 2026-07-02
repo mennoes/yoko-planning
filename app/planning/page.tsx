@@ -953,16 +953,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               bars. Op korte bar-hoogtes stapelde 't visueel met de titel
               en gaf chaos. Voor context: hover de bar → popup toont de
               volledige info. */}
-          {/* Board-naam (bord van herkomst) als tweede regel zodra de
-              bar hoog genoeg is — anders staat 'ie inline achter de
-              titel via de | separator. */}
-          {scaleByHours && barH >= 28 && project.board && (
-            <span style={{
-              fontSize: 9.5, fontWeight: 500, textTransform: 'capitalize',
-              opacity: 0.78, lineHeight: 1.1, marginTop: 1,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{project.board}</span>
-          )}
+          {/* Board-naam tweede-regel UITGESCHAKELD — met de kleine lane-
+              hoogtes stapelde het 'Vlaanderen'-onderschrift visueel op
+              de bar eronder en oogde het als overlap. Bord staat sowieso
+              in de hover-popup en in de agenda-headers. */}
         </span>
       </div>
       {/* Resize-handles BUITEN de balk, alleen bij hover en niet-readonly.
