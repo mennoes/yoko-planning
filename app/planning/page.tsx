@@ -617,12 +617,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // 85% baseline + 15% schaal — bars vullen bijna de volle lane zodat
-  // ze duidelijk zichtbaar zijn, met net genoeg gap ertussen voor visuele
-  // scheiding. Met 30px-lane in week: 0u = ~21px, 4u = ~23px, 8u = ~25px.
+  // 85% baseline + 15% schaal — bars vullen bijna de volle lane. Met
+  // 36px-lane in week: 0u = ~26px, 4u = ~29px, 8u = ~31px. Genoeg voor
+  // titel + agenda-subtitle op 2 regels.
   const scaledRatio = 0.85 + 0.15 * ratio
   const scaledH = scaleByHours
-    ? Math.max(18, Math.round(availH * scaledRatio))
+    ? Math.max(22, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -951,14 +951,16 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               project een subitem-afgeleide is. Geeft visueel meteen
               door welk hoofditem dit subitem hoort. Wordt alleen
               gerenderd als de bar hoog genoeg is voor twee regels. */}
-          {/* Subtitle-regel (parent-context) uitgeschakeld voor de planning-
-              bars. Op korte bar-hoogtes stapelde 't visueel met de titel
-              en gaf chaos. Voor context: hover de bar → popup toont de
-              volledige info. */}
-          {/* Board-naam tweede-regel UITGESCHAKELD — met de kleine lane-
-              hoogtes stapelde het 'Vlaanderen'-onderschrift visueel op
-              de bar eronder en oogde het als overlap. Bord staat sowieso
-              in de hover-popup en in de agenda-headers. */}
+          {/* Agenda-naam (bord van herkomst) als 2e regel zodra de bar hoog
+              genoeg is voor twee regels. Small (meeting-pill) blijft
+              1-regel. */}
+          {scaleByHours && !small && barH >= 26 && project.board && (
+            <span style={{
+              fontSize: 9.5, fontWeight: 500, textTransform: 'capitalize',
+              opacity: 0.78, lineHeight: 1.1, marginTop: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{project.board}</span>
+          )}
         </span>
       </div>
       {/* Resize-handles BUITEN de balk, alleen bij hover en niet-readonly.
@@ -1883,19 +1885,42 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       if (e < gridStartMs || s > gridEndMs) return null
 
       let left: number, width: number, packWidth: number
-      // Minimum visible width — short events were impossible to click. The
-      // bar overhangs slightly to the right past its actual end date, which
-      // is a small lie but a much better UX than a 6px target.
-      // packWidth = ACTUAL width (zonder min) voor lane-packing. Anders
-      // "overlappen" twee korte events op dezelfde dag artificieel omdat
-      // hun min-width elkaar overlapt, en krijgen we onnodig veel lanes.
-      const MIN_BAR_W = 22
+      // MIN_BAR_W = 16: klein genoeg dat 2-3 chips op dezelfde dag naast
+      // elkaar passen in de day-slice, groot genoeg om nog aan te klikken.
+      const MIN_BAR_W = 16
+      // Same-day chips vroeger allemaal op dezelfde x-positie (day-slice
+      // begin) — packLanes moest ze allemaal in verschillende lanes zetten
+      // → veel witruimte. Nu spreiden we ze horizontaal binnen de day-slice
+      // op basis van hun startTime (09-18 uur → linker- naar rechterrand
+      // van de day-slice) zodat chips van verschillende tijden ook echt
+      // horizontaal uit elkaar staan en meer in dezelfde lane passen.
+      const parseStartHour = (): number | null => {
+        const t = p.startTime
+        if (!t) return null
+        const [hh, mm] = t.split(':').map(n => parseInt(n, 10))
+        if (Number.isNaN(hh)) return null
+        return hh + (mm || 0) / 60
+      }
+      const projDays = Math.max(1, Math.round((e - s) / 86400000))
+      const isSingleDay = projDays <= 1
+      const startHrForShift = isSingleDay ? parseStartHour() : null
+      // Werkdag 09-18 = 9 uur. Fractie binnen day-slice: 0 = 09:00, 1 = 18:00.
+      const hourFrac = startHrForShift !== null
+        ? Math.min(1, Math.max(0, (startHrForShift - 9) / 9))
+        : 0
       if (isWeek) {
         const csDate = s < gridStartMs ? new Date(gridStartMs) : sDate
         const ceDate = new Date(Math.min(e, gridEndMs))
-        left  = dateToWeekPx(csDate, gridStart, colW)
+        const baseLeft = dateToWeekPx(csDate, gridStart, colW)
+        // Day-slice binnen een week-kolom = colW / 5 (Mon-Fri).
+        const daySlice = colW / 5
+        // Reserveer MIN_BAR_W op de rechterkant zodat een 18:00 chip niet
+        // buiten de day-slice valt.
+        const shiftRoom = Math.max(0, daySlice - MIN_BAR_W)
+        const timeShift = isSingleDay ? Math.round(hourFrac * shiftRoom) : 0
+        left  = baseLeft + timeShift
         const right = dateToWeekPx(ceDate, gridStart, colW)
-        packWidth = Math.max(1, right - left - 2)
+        packWidth = Math.max(1, right - baseLeft - 2)
         width = Math.max(packWidth, MIN_BAR_W)
       } else {
         const cs = Math.max(s, gridStartMs)
@@ -1904,7 +1929,6 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         packWidth = Math.max(1, (ce - cs) / msPerPx - 2)
         width = Math.max(packWidth, MIN_BAR_W)
       }
-      void packWidth
       // Meeting-classificatie: BEPERKT tot duidelijke gevallen, niet alles
       // wat per ongeluk 'Meeting' in z'n naam heeft. De automatische
       // name-pattern classifier vangt te veel handmatige items (een
@@ -1969,12 +1993,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     }
     const packed = sorted.map(b => {
       const s = b.left
-      // Gebruik de GERENDERDE breedte (incl. MIN_BAR_W = 22px) voor
-      // lane-packing. Twee korte events op dezelfde dag hebben qua tijd
-      // maar 1-2px overlap, maar visueel dekken hun 22px-chips elkaar.
-      // Door de render-width te gebruiken krijgen ze elk een eigen lane
-      // en overlappen ze niet meer op het scherm.
-      const e = b.left + b.width
+      // Pack op ECHTE tijdsduur (packWidth). Chips van verschillende
+      // start-tijden krijgen al een andere x-positie via startTime-shift
+      // in rawBars, dus als hun tijds-intervallen niet overlappen kunnen
+      // ze in dezelfde lane. Voorkomt lane-explosie op drukke dagen.
+      const e = b.left + (b.packWidth ?? b.width)
       // Probeer een lane zonder enige overlap
       let lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
       if (lane >= 0) {
@@ -2040,15 +2063,14 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 30px in week, 24px in maand.
-  // Schaalt MET rowScale (RS) zodat de hoogte-slider écht bar-hoogte
-  // aanpast. Lane-remap dedupt lege lanes → wrapper blijft compact op
-  // rustige dagen ook al is de cap ruim.
+  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 36px in week (ruimte voor
+  // titel + agenda-subtitle op 2 regels), 26px in maand. Schaalt met
+  // rowScale (RS) zodat de hoogte-slider écht bar-hoogte aanpast.
   const PROJECT_LANE_H = zoom === 'maand'
-    ? Math.max(20, Math.round(24 * RS))
+    ? Math.max(22, Math.round(26 * RS))
     : zoom === 'week'
-      ? Math.max(22, Math.round(30 * RS))
-      : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
+      ? Math.max(28, Math.round(36 * RS))
+      : Math.max(30, Math.round((BAR_H + BAR_GAP) * RS))
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
