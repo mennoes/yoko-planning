@@ -1967,11 +1967,12 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     }
     const packed = sorted.map(b => {
       const s = b.left
-      // Voor lane-packing: gebruik packWidth (echte tijdsduur) i.p.v. de
-      // min-22px render-width. Voorkomt dat twee korte events op dezelfde
-      // dag artificieel gaan overlappen en dus onnodige extra lanes
-      // opeisen — de wrapper werd anders veel hoger dan nodig.
-      const e = b.left + (b.packWidth ?? b.width)
+      // Gebruik de GERENDERDE breedte (incl. MIN_BAR_W = 22px) voor
+      // lane-packing. Twee korte events op dezelfde dag hebben qua tijd
+      // maar 1-2px overlap, maar visueel dekken hun 22px-chips elkaar.
+      // Door de render-width te gebruiken krijgen ze elk een eigen lane
+      // en overlappen ze niet meer op het scherm.
+      const e = b.left + b.width
       // Probeer een lane zonder enige overlap
       let lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
       if (lane >= 0) {
