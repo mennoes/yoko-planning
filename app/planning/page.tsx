@@ -1878,8 +1878,15 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const owned = projects.filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
 
   const rawBars = owned.map(p => {
-      const sDate = p.startDate ? new Date(p.startDate) : new Date(gridStartMs)
-      const eDate = p.endDate   ? new Date(p.endDate)   : new Date(gridEndMs - 86400000)
+      // Orphan-date bars (alleen startDate óf alleen endDate) vroeger:
+      // fallback naar grid-start/grid-end → bar strekt zich uit over de
+      // hele timeline en pakt een hele lane over de volledige breedte.
+      // Enorme verspilling van verticale ruimte. Fix: gebruik de ene set
+      // datum voor beide zodat 't een 1-daagse bar wordt op die datum.
+      const startIso = p.startDate || p.endDate
+      const endIso   = p.endDate   || p.startDate
+      const sDate = startIso ? new Date(startIso) : new Date(gridStartMs)
+      const eDate = endIso   ? new Date(endIso)   : new Date(gridEndMs - 86400000)
       const s = sDate.getTime()
       const e = eDate.getTime() + 86400000
       if (e < gridStartMs || s > gridEndMs) return null
@@ -1969,11 +1976,12 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // rijen. Items die niet zonder conflict passen worden bij de lane met
   // de minste overlap geduwd in plaats van een nieuwe rij te starten.
   function packLanes<T extends { left: number; width: number; packWidth?: number }>(items: T[]) {
-    // MAX_LANES = 10: royaal genoeg om overlap onder normale drukte te
-    // vermijden. Door de lane-remap-stap (usedLanes → 0..N) blijft de
-    // wrapper compact voor dagen waar minder lanes actief zijn, dus 'n
-    // hogere cap kost geen vaste extra hoogte.
-    const MAX_LANES = 10
+    // MAX_LANES = 6: houdt de rij compact. Voorbij deze cap wordt overlap
+    // toegestaan (fallback = lane met minste overlap). Een grote cap
+    // veroorzaakte pijnlijke witruimte omdat off-screen bars in latere
+    // weken makkelijk 8-10 lanes opeisten — de rij werd dan zichtbaar
+    // veel te hoog terwijl je maar 4-5 lanes echt gebruikt ziet.
+    const MAX_LANES = 6
     const sorted = [...items].sort((a, b) => {
       if (b.width !== a.width) return b.width - a.width
       return a.left - b.left
@@ -2063,14 +2071,15 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 36px in week (ruimte voor
-  // titel + agenda-subtitle op 2 regels), 26px in maand. Schaalt met
-  // rowScale (RS) zodat de hoogte-slider écht bar-hoogte aanpast.
+  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 32px in week (net genoeg
+  // voor titel + agenda-subtitle op 2 regels), 24px in maand. Schaalt
+  // met rowScale (RS) zodat de hoogte-slider écht bar-hoogte aanpast.
+  // Met MAX_LANES=6 wordt de totale rij-hoogte in week: max ~192px.
   const PROJECT_LANE_H = zoom === 'maand'
-    ? Math.max(22, Math.round(26 * RS))
+    ? Math.max(22, Math.round(24 * RS))
     : zoom === 'week'
-      ? Math.max(28, Math.round(36 * RS))
-      : Math.max(30, Math.round((BAR_H + BAR_GAP) * RS))
+      ? Math.max(26, Math.round(32 * RS))
+      : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
