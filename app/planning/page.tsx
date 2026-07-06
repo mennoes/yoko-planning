@@ -88,7 +88,9 @@ const NAME_PAD = 28
 // die scale wordt als prop doorgegeven aan TimelineBars / WeekTimeGrid /
 // DraggableBar zodat de gebruiker live verticaal kan in/uitzoomen.
 const BAR_H    = 32
-const BAR_GAP  = 5
+// Krappe gap tussen bars — vroeger 5px; te veel witruimte tussen aangrenzende
+// lanes. 2px geeft nog visuele scheiding maar houdt de rij compact.
+const BAR_GAP  = 2
 const HANDLE_W = 8
 
 // ─── View-size presets ────────────────────────────────────────────────────────
@@ -617,12 +619,13 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // 85% baseline + 15% schaal — bars vullen bijna de volle lane. Met
-  // 36px-lane in week: 0u = ~26px, 4u = ~29px, 8u = ~31px. Genoeg voor
-  // titel + agenda-subtitle op 2 regels.
-  const scaledRatio = 0.85 + 0.15 * ratio
+  // 95% baseline + 5% schaal — bars vullen bijna de volle lane, met net
+  // 2px gap tussen aangrenzende lanes. Met 32px-lane + 2px gap in week:
+  // availH = 30, bar-height range ~28-30px. Titel + agenda-subtitle
+  // passen ruim.
+  const scaledRatio = 0.95 + 0.05 * ratio
   const scaledH = scaleByHours
-    ? Math.max(22, Math.round(availH * scaledRatio))
+    ? Math.max(26, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
