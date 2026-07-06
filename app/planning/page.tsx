@@ -617,13 +617,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
   // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // 75% baseline + 25% schaal. Met 26px-lane in week-zoom: 0u = ~16px,
-  // 4u = ~19px, 8u = ~21px. Bar zelf is single-line (titel + tags), past
-  // strak in 21px. Rest van de 26px lane = witruimte tussen aangrenzende
-  // bars → duidelijke visuele scheiding.
-  const scaledRatio = 0.75 + 0.25 * ratio
+  // 85% baseline + 15% schaal — bars vullen bijna de volle lane zodat
+  // ze duidelijk zichtbaar zijn, met net genoeg gap ertussen voor visuele
+  // scheiding. Met 30px-lane in week: 0u = ~21px, 4u = ~23px, 8u = ~25px.
+  const scaledRatio = 0.85 + 0.15 * ratio
   const scaledH = scaleByHours
-    ? Math.max(16, Math.round(availH * scaledRatio))
+    ? Math.max(18, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -864,17 +863,20 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     return h + (m || 0) / 60
   })()
   const totalAvail = (laneH ?? BAR_H + BAR_GAP)
-  // Untimed items: één hele lane-hoogte tussen elke lane zodat 'n volle
-  // (= 100%-ratio) bar niet over de lane eronder valt. Cap op
-  // stackWrapperH - barH (de volledige wrapper-hoogte, niet alleen één
-  // lane) zodat lanes 2+ niet allemaal op dezelfde positie belanden.
+  // Alle bars — of ze nu een startTime hebben of niet — positioneren op
+  // hun toegewezen lane. Vroeger schaalden we timed-items door de
+  // startTime van de dag → dan renderden meerdere meetings op dezelfde
+  // dag boven elkaar (allemaal binnen dezelfde 26px band, lane-index
+  // genegeerd). Nu: strict lane-based positioning zodat packLanes'
+  // conflict-detectie ook visueel klopt.
   const laneStep = laneH ?? (BAR_H + BAR_GAP)
   const stackWrapperH = stackH ?? totalAvail
-  const untimedOffset = Math.min(Math.max(0, stackWrapperH - barH), (laneIdx ?? 0) * laneStep)
+  const laneOffset = Math.min(Math.max(0, stackWrapperH - barH), (laneIdx ?? 0) * laneStep)
+  void startHour
+  void dayStartH
+  void dayLengthH
   const barTop = scaleByHours
-    ? (startHour !== null
-        ? Math.max(0, Math.min(totalAvail - barH, Math.round(((startHour - dayStartH) / dayLengthH) * totalAvail)))
-        : Math.max(0, untimedOffset))
+    ? Math.max(0, laneOffset)
     : BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
   // Titel-shift: schuif de tekst met de scroll mee zolang de bar nog (deels)
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
@@ -2038,17 +2040,15 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Compact gehouden zodat lane-
-  // packing met veel lanes (= brede tijdsranges) geen massieve lege
-  // wrapper genereert. Bar-hoogte gebruikt 50% baseline (zie scaledRatio)
-  // zodat bars in deze krappe lanes alsnog leesbaar blijven (4u/dag =
-  // 75% lane, 8u/dag = 100%).
-  // Compact — bar-content is nu single-line dus 26px lane is genoeg voor
-  // een leesbare bar met 4-6px zichtbare gap tussen lanes onderling.
-  // Bij drukke rows (6 lanes) blijft wrapper ~160px ipv 250+, en wij
-  // laten row-zoom (RS) 't lane-verhaal NIET scalen zodat een user die
-  // 200% zoomt niet ineens 500px hoge member-rows krijgt.
-  const PROJECT_LANE_H = zoom === 'maand' ? 22 : zoom === 'week' ? 26 : (BAR_H + BAR_GAP)
+  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 30px in week, 24px in maand.
+  // Schaalt MET rowScale (RS) zodat de hoogte-slider écht bar-hoogte
+  // aanpast. Lane-remap dedupt lege lanes → wrapper blijft compact op
+  // rustige dagen ook al is de cap ruim.
+  const PROJECT_LANE_H = zoom === 'maand'
+    ? Math.max(20, Math.round(24 * RS))
+    : zoom === 'week'
+      ? Math.max(22, Math.round(30 * RS))
+      : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
 
   function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
