@@ -5032,25 +5032,12 @@ export default function PlanningPage() {
               </span>
             </div>
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <div style={segGroup}>
-              <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
-              <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
-              <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
-              <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
-              <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
-            </div>
-            {/* Meetings-toggle direct naast Vandaag zodat je 'm makkelijk
-                vindt bij het snel wisselen tussen focus (meetings uit) en
-                volledig overzicht (meetings aan). */}
-            <button onClick={() => setHideMeetings(v => !v)}
-              title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
-              style={ghostBtn(hideMeetings)}>
-              {hideMeetings
-                ? <IconEye    size={14} style={{ marginRight: 6 }} />
-                : <IconEyeOff size={14} style={{ marginRight: 6 }} />}
-              Meetings
-            </button>
+          <div style={segGroup}>
+            <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
+            <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
+            <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
+            <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
+            <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
           </div>
         </div>
         )}
@@ -5627,6 +5614,23 @@ export default function PlanningPage() {
                       cursor: 'pointer', flexShrink: 0,
                     }}>
                     Vandaag
+                  </button>
+                  {/* Meetings-toggle direct rechts naast Vandaag zodat je 'm
+                      binnen handbereik hebt. */}
+                  <button onClick={() => setHideMeetings(v => !v)}
+                    title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center',
+                      padding: '4px 10px', borderRadius: 6, marginRight: 6,
+                      background: hideMeetings ? 'var(--bg-hover)' : 'var(--bg-card)',
+                      border: '1px solid var(--border-light)',
+                      color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 600,
+                      cursor: 'pointer', flexShrink: 0,
+                    }}>
+                    {hideMeetings
+                      ? <IconEye    size={12} style={{ marginRight: 5 }} />
+                      : <IconEyeOff size={12} style={{ marginRight: 5 }} />}
+                    Meetings
                   </button>
                 </>
               )}
