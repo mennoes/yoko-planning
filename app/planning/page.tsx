@@ -4075,27 +4075,23 @@ export default function PlanningPage() {
       const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
       pendingAnchorRef.current = { colIdx: idx }
     }
-    const raw = updater(virtualZoom)
-    const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_MAX, raw))
-    const daysPerCol = { dag: 1, week: 7, maand: 30 } as const
     if (zoom === 'maand') {
       // In maand-zoom werkt de slider niet — gebruik de dropdown om
       // terug te schakelen naar week of dag.
       return
     }
-    if (clamped <= VIRTUAL_CROSS) {
-      if (zoom !== 'week') {
-        const currentDays = colOffset * daysPerCol[zoom]
-        setZoom('week')
-        setColOffset(Math.round(currentDays / daysPerCol.week))
-      }
+    // GEEN auto-switch tussen zoom-niveaus meer. De slider clampt binnen
+    // het huidige niveau — voor niveau-switch gebruikt de user het
+    // dropdown-menu. Voorheen kroop de zoom stiekem van Overzicht naar
+    // Week-view (of andersom) via de slider, wat onvoorspelbaar voelde.
+    const raw = updater(virtualZoom)
+    if (zoom === 'week') {
+      // Slider-range in week-zoom: [VIRTUAL_MIN, VIRTUAL_CROSS].
+      const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_CROSS, raw))
       setColWZoom(Math.max(50, Math.min(300, clamped)))
     } else {
-      if (zoom !== 'dag') {
-        const currentDays = colOffset * daysPerCol[zoom]
-        setZoom('dag')
-        setColOffset(Math.round(currentDays / daysPerCol.dag))
-      }
+      // Slider-range in dag-zoom: [VIRTUAL_CROSS, VIRTUAL_MAX].
+      const clamped = Math.max(VIRTUAL_CROSS, Math.min(VIRTUAL_MAX, raw))
       setColWZoom(Math.max(50, Math.min(300, clamped - 250)))
     }
   }
@@ -4114,6 +4110,26 @@ export default function PlanningPage() {
       }
     }
     if (zoom === level) { setColWZoom(colW); return }
+    // Switch naar dag-view: land ALTIJD op VANDAAG (colOffset=0) zodat
+    // je meteen de huidige dag ziet i.p.v. willekeurig ergens in de
+    // toekomst waar je week-zoom stond. De todayScreenX-anker + scroll
+    // naar today marker doet de rest.
+    if (level === 'dag') {
+      setZoom(level)
+      setColOffset(0)
+      setColWZoom(colW)
+      try { window.localStorage.removeItem('planning-scroll-left') } catch {}
+      try { window.localStorage.removeItem('planning-scroll-left-at') } catch {}
+      requestAnimationFrame(() => {
+        const el2 = gridRef.current
+        if (!el2) return
+        const todayEl2 = el2.querySelector<HTMLElement>('[data-today-marker]')
+        if (!todayEl2) return
+        const target = Math.max(0, todayEl2.offsetLeft - el2.clientWidth * 0.25)
+        el2.scrollTo({ left: target, behavior: 'smooth' })
+      })
+      return
+    }
     const currentDays = colOffset * daysPerCol[zoom]
     setZoom(level)
     setColOffset(Math.round(currentDays / daysPerCol[level]))
@@ -5016,12 +5032,25 @@ export default function PlanningPage() {
               </span>
             </div>
           </div>
-          <div style={segGroup}>
-            <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
-            <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
-            <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
-            <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
-            <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <div style={segGroup}>
+              <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
+              <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
+              <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
+              <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
+              <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
+            </div>
+            {/* Meetings-toggle direct naast Vandaag zodat je 'm makkelijk
+                vindt bij het snel wisselen tussen focus (meetings uit) en
+                volledig overzicht (meetings aan). */}
+            <button onClick={() => setHideMeetings(v => !v)}
+              title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
+              style={ghostBtn(hideMeetings)}>
+              {hideMeetings
+                ? <IconEye    size={14} style={{ marginRight: 6 }} />
+                : <IconEyeOff size={14} style={{ marginRight: 6 }} />}
+              Meetings
+            </button>
           </div>
         </div>
         )}
@@ -5046,19 +5075,13 @@ export default function PlanningPage() {
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
                   padding: '6px 8px', lineHeight: 1 }}>−</button>
               <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                <input type="range"
+                  min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
+                  max={zoom === 'week' ? VIRTUAL_CROSS : VIRTUAL_MAX}
+                  step={5}
                   value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                   title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
                   style={{ width: 96, accentColor: 'var(--accent)' }} />
-                {/* Tick op de cross-over zodat de gebruiker ziet waar 't
-                    omslaat van Overzicht naar Week-view. */}
-                <span aria-hidden style={{
-                  position: 'absolute',
-                  left: `${((VIRTUAL_CROSS - VIRTUAL_MIN) / (VIRTUAL_MAX - VIRTUAL_MIN)) * 96}px`,
-                  top: '50%', transform: 'translate(-50%, -50%)',
-                  width: 2, height: 14, background: 'var(--accent)', borderRadius: 1,
-                  pointerEvents: 'none', opacity: 0.7,
-                }} />
               </div>
               <span style={{
                 fontSize: 9.5, fontWeight: 700, color: 'var(--text-muted)',
@@ -5103,14 +5126,7 @@ export default function PlanningPage() {
               <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
                 <IconHourglass size={14} style={{ marginRight: 6 }} />Capaciteit
               </button>
-              <button onClick={() => setHideMeetings(v => !v)}
-                title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
-                style={ghostBtn(hideMeetings)}>
-                {hideMeetings
-                  ? <IconEye    size={14} style={{ marginRight: 6 }} />
-                  : <IconEyeOff size={14} style={{ marginRight: 6 }} />}
-                Meetings
-              </button>
+              {/* Meetings-knop verhuisd naar naast Vandaag (bovenaan). */}
               <span style={separator} />
               <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
                 + Nieuw item
@@ -5621,7 +5637,10 @@ export default function PlanningPage() {
                   <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
                     style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>−</button>
-                  <input type="range" min={VIRTUAL_MIN} max={VIRTUAL_MAX} step={5}
+                  <input type="range"
+                    min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
+                    max={zoom === 'week' ? VIRTUAL_CROSS : VIRTUAL_MAX}
+                    step={5}
                     value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                     title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
                     style={{ flex: 1, minWidth: 0, accentColor: 'var(--accent)' }} />
