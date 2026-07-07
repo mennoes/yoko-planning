@@ -2062,15 +2062,13 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Hele-dag-flag is alleen nog nodig voor isVrijBar; full-day-projecten
   // gaan nu via de gewone bar-packing zodat hun hoogte proportioneel is.
   void isFullDayBar
-  // Meetings + reguliere projecten DELEN nu één lane-stack. Vroeger kreeg
-  // elke meeting een eigen rij boven de projecten — dat blies de hoogte
-  // op zodra je 'Meetings tonen' aanzette. Nu fitten ze in dezelfde
-  // gap-aware packing en blijft 't compact.
-  const projectItems = projectAllSingles
-  void isVrijBar
-  // vrij wordt nu ook via de gewone bar-packing gerenderd zodat 'ie
-  // visueel 100% lane = 8u/dag is, gelijk aan een dagvullend project.
-  const vrijBars: SingleBar[] = []
+  // Meetings + reguliere projecten DELEN één lane-stack (gap-aware pack).
+  // Vrij-events daarentegen halen we UIT de pack: ze renderen full-height
+  // achtergrond-blokken zodat één blik meteen laat zien dat de dag(en) op
+  // slot staan. Vroeger vielen ze samen met projecten in dezelfde lane
+  // waardoor de groene 'vrij-tape' visueel wegzakte tussen andere bars.
+  const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
+  const vrijBars: SingleBar[] = projectAllSingles.filter(b => isVrijBar(b))
   const projectPacked = packLanes(projectItems)
   const projectLanes  = projectPacked.numLanes
 
