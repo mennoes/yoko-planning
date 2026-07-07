@@ -4058,6 +4058,10 @@ export default function PlanningPage() {
   const VIRTUAL_MIN = 50
   const VIRTUAL_MAX = 550
   const VIRTUAL_CROSS = 300
+  // Week-view mag verder inzoomen (colWZoom-cap). Vroeger stopte 'ie op
+  // 300 omdat daarboven auto-switch naar dag-zoom triggerde — dat is nu
+  // weg (zie anchoredColWZoom), dus we mogen ruim doorgaan.
+  const WEEK_ZOOM_MAX = 550
   const virtualZoom = zoom === 'week'
     ? colWZoom
     : zoom === 'maand'
@@ -4086,9 +4090,10 @@ export default function PlanningPage() {
     // Week-view (of andersom) via de slider, wat onvoorspelbaar voelde.
     const raw = updater(virtualZoom)
     if (zoom === 'week') {
-      // Slider-range in week-zoom: [VIRTUAL_MIN, VIRTUAL_CROSS].
-      const clamped = Math.max(VIRTUAL_MIN, Math.min(VIRTUAL_CROSS, raw))
-      setColWZoom(Math.max(50, Math.min(300, clamped)))
+      // Slider-range in week-zoom: [VIRTUAL_MIN, WEEK_ZOOM_MAX] — ruimer
+      // dan vroeger zodat een week-kolom flink groot kan worden getoond.
+      const clamped = Math.max(VIRTUAL_MIN, Math.min(WEEK_ZOOM_MAX, raw))
+      setColWZoom(Math.max(50, Math.min(WEEK_ZOOM_MAX, clamped)))
     } else {
       // Slider-range in dag-zoom: [VIRTUAL_CROSS, VIRTUAL_MAX].
       const clamped = Math.max(VIRTUAL_CROSS, Math.min(VIRTUAL_MAX, raw))
@@ -5064,7 +5069,7 @@ export default function PlanningPage() {
               <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                 <input type="range"
                   min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
-                  max={zoom === 'week' ? VIRTUAL_CROSS : VIRTUAL_MAX}
+                  max={zoom === 'week' ? WEEK_ZOOM_MAX : VIRTUAL_MAX}
                   step={5}
                   value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                   title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
@@ -5643,7 +5648,7 @@ export default function PlanningPage() {
                     style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>−</button>
                   <input type="range"
                     min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
-                    max={zoom === 'week' ? VIRTUAL_CROSS : VIRTUAL_MAX}
+                    max={zoom === 'week' ? WEEK_ZOOM_MAX : VIRTUAL_MAX}
                     step={5}
                     value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                     title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
