@@ -224,19 +224,17 @@ async function ensureDoneGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
-  // Inclusief soft-deleted (zie comment bij ensureMeetingsGroup) zodat
-  // we 'n bestaande maar weggekruiste groep niet dupliceren én items
-  // niet aan 'n onzichtbare group_id koppelen.
+  // Alleen ACTIEVE Done-groepen hergebruiken. Soft-deleted respecteren
+  // we — de user heeft 'm bewust weggehaald. Als er dan alsnog 'n Done-
+  // event moet landen, maken we een verse Done-groep aan.
   const { data: rows } = await admin
     .from('board_groups').select('id, name, deleted_at')
     .eq('board_id', boardId)
     .ilike('name', 'done')
+    .is('deleted_at', null)
     .limit(1)
   const existing = (rows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
   if (existing) {
-    if (existing.deleted_at) {
-      await admin.from('board_groups').update({ deleted_at: null }).eq('id', existing.id)
-    }
     return existing.id
   }
 
@@ -259,60 +257,104 @@ async function ensureDoneGroup(
   return newId
 }
 
-// Opkomend-subgroep voor meetings ≥ 3 weken vooruit. Standaard ingeklapt
+// Opkomend-subgroep voor meetings > 4 weken vooruit. Standaard ingeklapt
 // en visueel gepositioneerd DIRECT ONDER de Meetings & doorlopend-groep
 // zodat 't oogt als een sub-sectie van Meetings. Bestaande legacy
-// 'Toekomstig'-groepen worden hier automatisch omgedoopt naar 'Opkomend'.
-// Naam-prefix '↳ ' (Unicode return-pijl) markeert visueel de sub-relatie
-// ook zonder echte hiërarchie in het data-model.
-const OPKOMEND_NAME = '↳ Opkomend'
+// 'Toekomstig'/'Opkomend'-groepen worden hier automatisch omgedoopt en
+// duplicaten worden geconsolideerd zodat er nooit twee naast elkaar
+// blijven staan. Naam-prefix '↳ ' (Unicode return-pijl) markeert visueel
+// de sub-relatie ook zonder echte hiërarchie in het data-model.
+// Live item-count wordt appended via updateOpkomendCount() aan het eind
+// van de sync — de basis-naam blijft OPKOMEND_BASE_NAME.
+const OPKOMEND_BASE_NAME = '↳ Opkomend'
+function isOpkomendName(n: string): boolean {
+  const norm = n.toLowerCase().trim().replace(/^↳\s*/, '').replace(/\s*\(\d+\)\s*$/, '')
+  return norm === 'opkomend' || norm === 'toekomstig'
+}
+function isMeetingsName(n: string): boolean {
+  const norm = n.toLowerCase().trim()
+  return norm === 'meetings & doorlopend' || norm === 'meetings en doorlopend' || norm === 'meetings' || norm === 'doorlopend'
+}
 async function ensureToekomstigGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
-  // Alle groepen op dit bord in position-volgorde ophalen zodat we
-  // (a) de bestaande Opkomend/Toekomstig-groep kunnen vinden en
-  // (b) 'm direct achter de Meetings-groep kunnen positioneren.
   const { data: rows } = await admin
     .from('board_groups').select('id, name, deleted_at, position')
     .eq('board_id', boardId)
     .order('position', { ascending: true })
   const groups = (rows as { id: string; name: string; deleted_at: string | null; position: number | null }[] | null) ?? []
-  const norm = (s: string) => s.toLowerCase().trim().replace(/^↳\s*/, '')
-  const meetingsG = groups.find(g => {
-    const n = norm(g.name)
-    return n === 'meetings & doorlopend' || n === 'meetings en doorlopend' || n === 'meetings' || n === 'doorlopend'
+  const meetingsG = groups.find(g => isMeetingsName(g.name))
+  // Canonical Opkomend-groep uitkiezen: actieve boven soft-deleted; bij
+  // meerdere actieve pakt de LAAGSTE position (meest logische parent-
+  // volgorde). Alle andere duplicaten worden verplaatst naar canonical
+  // en soft-gedelete zodat er slechts één Opkomend-groep overblijft.
+  const opkomendMatches = groups.filter(g => isOpkomendName(g.name))
+  const sorted = opkomendMatches.slice().sort((a, b) => {
+    const aDead = a.deleted_at ? 1 : 0
+    const bDead = b.deleted_at ? 1 : 0
+    if (aDead !== bDead) return aDead - bDead
+    return (a.position ?? 0) - (b.position ?? 0)
   })
-  const existing = groups.find(g => {
-    const n = norm(g.name)
-    return n === 'opkomend' || n === 'toekomstig'
-  })
-  // Streef-positie: direct na de Meetings-groep. Voor bestaande én nieuwe
-  // Opkomend-groepen zorgen we dat 'ie op die plek staat.
   const desiredPos = meetingsG?.position !== undefined && meetingsG?.position !== null
     ? meetingsG.position + 0.5
     : null
-  if (existing) {
+  const canonical = sorted[0]
+  if (canonical) {
     const patch: Record<string, unknown> = {}
-    if (existing.deleted_at) patch.deleted_at = null
-    if ((existing.name ?? '') !== OPKOMEND_NAME) patch.name = OPKOMEND_NAME
-    if (desiredPos !== null && existing.position !== desiredPos) patch.position = desiredPos
+    if (canonical.deleted_at) patch.deleted_at = null
+    // Alleen de basis-naam checken; count-suffix wordt later toegevoegd.
+    const canonicalBase = (canonical.name ?? '').replace(/\s*\(\d+\)\s*$/, '')
+    if (canonicalBase !== OPKOMEND_BASE_NAME) patch.name = OPKOMEND_BASE_NAME
+    if (desiredPos !== null && canonical.position !== desiredPos) patch.position = desiredPos
     if (Object.keys(patch).length > 0) {
-      await admin.from('board_groups').update(patch).eq('id', existing.id)
+      await admin.from('board_groups').update(patch).eq('id', canonical.id)
     }
-    return existing.id
+    // Duplicaten opruimen: items migreren, dan soft-deleten.
+    const dups = sorted.slice(1)
+    if (dups.length > 0) {
+      const dupIds = dups.map(d => d.id)
+      await admin.from('board_items').update({ group_id: canonical.id }).in('group_id', dupIds)
+      await admin.from('board_groups')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', dupIds)
+        .is('deleted_at', null)
+    }
+    return canonical.id
   }
   const newId = `g_opkomend_${boardId}_${Date.now()}`
   const maxPos = groups.reduce((m, g) => Math.max(m, g.position ?? 0), -1)
   await admin.from('board_groups').insert({
     id:        newId,
     board_id:  boardId,
-    name:      OPKOMEND_NAME,
+    name:      OPKOMEND_BASE_NAME,
     color:     '#D8B62E',
     collapsed: true,
     position:  desiredPos !== null ? desiredPos : maxPos + 1,
   })
   return newId
+}
+
+// Live-count achter de Opkomend-groepnaam: '↳ Opkomend (5)'. Roept
+// aan het eind van syncOneCalendar zodat 't aantal altijd klopt met wat
+// er nu daadwerkelijk in de groep zit.
+async function updateOpkomendCount(admin: SupabaseClient, boardId: string): Promise<void> {
+  const { data: rows } = await admin
+    .from('board_groups').select('id, name')
+    .eq('board_id', boardId)
+    .is('deleted_at', null)
+  const groups = (rows as { id: string; name: string }[] | null) ?? []
+  const opkomend = groups.find(g => isOpkomendName(g.name))
+  if (!opkomend) return
+  const { count } = await admin
+    .from('board_items').select('id', { count: 'exact', head: true })
+    .eq('group_id', opkomend.id)
+    .is('deleted_at', null)
+  const n = count ?? 0
+  const newName = n > 0 ? `${OPKOMEND_BASE_NAME} (${n})` : OPKOMEND_BASE_NAME
+  if (opkomend.name !== newName) {
+    await admin.from('board_groups').update({ name: newName }).eq('id', opkomend.id)
+  }
 }
 
 // Vrij/Vakantie-groep — events met titels als 'Vrij', 'Vakantie', 'Verlof',
@@ -531,9 +573,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
 
   // Drempel voor toekomstig — events die ≥ 3 weken vooruit starten worden
-  // in de ingeklapte 'Toekomstig'-groep gestopt zodat de hoofd-meetings-
-  // groep niet uitpuilt van events die nog ver weg zijn.
-  const TOEKOMSTIG_THRESHOLD_DAYS = 21
+  // in de ingeklapte 'Opkomend'-subgroep gestopt zodat de hoofd-meetings-
+  // groep niet uitpuilt van events die nog ver weg zijn. 4 weken =
+  // gebruiker-instelling: alles daarbuiten hoort in 'Opkomend', binnen
+  // 4 weken hoort in de hoofd-Meetings-groep.
+  const TOEKOMSTIG_THRESHOLD_DAYS = 28
   const toekomstigCutoffMs = Date.now() + TOEKOMSTIG_THRESHOLD_DAYS * 86400000
   function isFarFuture(startIso: string | null): boolean {
     if (!startIso) return false
@@ -1243,6 +1287,18 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // verlies meer.
 
   await admin.from('google_calendars').update({ last_sync_at: new Date().toISOString() }).eq('id', cal.id)
+  // Live-count achter de Opkomend-groepnaam bijwerken voor alle borden
+  // die deze sync heeft aangeraakt. Zonder dit stap zag je '↳ Opkomend'
+  // zonder aantal — of erger, een out-of-date aantal na het bijschuiven
+  // van items tussen Meetings ↔ Opkomend.
+  const touchedBoards = new Set<string>()
+  for (const u of upserts) {
+    const b = u.board_id
+    if (typeof b === 'string') touchedBoards.add(b)
+  }
+  for (const boardId of touchedBoards) {
+    try { await updateOpkomendCount(admin, boardId) } catch {}
+  }
   return { added, updated, removed }
 }
 

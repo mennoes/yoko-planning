@@ -24,7 +24,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, pullBoardFromRemote, markItemInProgress, purgeNieuwItemPlaceholders } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, purgeNieuwItemPlaceholders } from '@/lib/boardStore'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
@@ -4047,6 +4047,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
   function handleDeleteGroup(id: string) {
     onChange(groups.filter(g => g.id !== id))
+    // Ook in Supabase soft-deleten — anders komt de groep bij de eerst-
+    // volgende realtime-pull weer terug (onChange stuurt de UPDATE, niet
+    // de DELETE van de group-rij).
+    softDeleteGroup(id).catch(() => {})
   }
 
   function exportCSV() {

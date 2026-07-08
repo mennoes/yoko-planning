@@ -703,6 +703,15 @@ export async function hardDeleteItems(itemIds: string[]): Promise<boolean> {
 // kan tonen wie 't verwijderd heeft. Migration 0032 voegt de kolom
 // toe; we proberen 't met de kolom én vallen terug zonder als 't
 // schema 'm nog niet kent.
+export async function softDeleteGroup(groupId: string): Promise<boolean> {
+  if (!supabase) return false
+  const stamp = new Date().toISOString()
+  const { error } = await supabase.from('board_groups')
+    .update({ deleted_at: stamp })
+    .eq('id', groupId)
+  return !error
+}
+
 let deletedByColumnSupported = true
 export async function softDeleteItem(itemId: string): Promise<boolean> {
   if (!supabase) return false
