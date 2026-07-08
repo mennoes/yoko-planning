@@ -27,6 +27,10 @@ export const IconChevronsRight = (p: Props) => base({ ...p, children: <><polylin
 export const IconPlay       = (p: Props) => base({ ...p, children: <polygon points="6 4 20 12 6 20 6 4" /> })
 export const IconStop       = (p: Props) => base({ ...p, children: <rect x="6" y="6" width="12" height="12" rx="1" /> })
 export const IconPlanning   = (p: Props) => base({ ...p, children: <><rect x="3" y="5" width="18" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="3" y1="10" x2="21" y2="10" /></> })
+// Agenda-icoon: kalenderlijf + korte streepjes die aparte events/afspraken
+// op verschillende dagen suggereren — onderscheidt 'm visueel van de kale
+// kalenderpagina van IconPlanning/IconCalendar.
+export const IconAgenda     = (p: Props) => base({ ...p, children: <><rect x="3" y="5" width="18" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="7" y1="14" x2="10" y2="14" /><line x1="13" y1="14" x2="17" y2="14" /><line x1="7" y1="18" x2="12" y2="18" /></> })
 export const IconHome       = (p: Props) => base({ ...p, children: <><path d="M3 11l9-7 9 7" /><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" /></> })
 export const IconCheck      = (p: Props) => base({ ...p, children: <polyline points="5 12 10 17 19 7" /> })
 export const IconCheckList  = (p: Props) => base({ ...p, children: <><polyline points="3 7 5 9 9 5" /><polyline points="3 14 5 16 9 12" /><line x1="13" y1="7" x2="20" y2="7" /><line x1="13" y1="14" x2="20" y2="14" /></> })
