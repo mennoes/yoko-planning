@@ -2994,10 +2994,16 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   //      ("hier kan je loslaten")
   //  - dropHover = je hovert nú boven deze groep → opvallend accent
   const isDropTarget = !!subDragName
+  // Subgroepen (naam start met '↳ ') worden visueel ingesprongen zodat ze
+  // oogen als een sub-sectie van de bovenliggende groep. Ook een kleinere
+  // top-margin zodat 't visueel aansluit op de parent.
+  const isSubgroup = /^↳\s/.test(group.name ?? '')
   return (
     <GroupCtx.Provider value={{ color: group.color }}>
       <div style={{
         marginBottom: 18, borderRadius: 14, position: 'relative',
+        marginTop:  isSubgroup ? -14 : 0,
+        marginLeft: isSubgroup ? 32  : 0,
         // Eigen rondingen + kader maakt 't visueel minder hoekig en geeft
         // duidelijker een 'card per groep'-gevoel.
         border: `1px solid var(--border)`,
