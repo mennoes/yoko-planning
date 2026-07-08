@@ -6,6 +6,11 @@ export type NavItem = {
   href:  string
   icon?: string
   color?: string
+  // Optioneel: beperk zichtbaarheid in de sidebar tot deze member-ID's.
+  // Ontbreekt dit veld, dan is 't item voor iedereen zichtbaar (bestaand
+  // gedrag). Dit is puur UX — de echte beveiliging zit server-side in de
+  // Supabase RLS-policy van de onderliggende data (zie bv. budget_entries).
+  visibleTo?: string[]
 }
 
 export type NavSection = {
@@ -21,6 +26,7 @@ const DEFAULT_DOCS: NavItem[] = [
   { id: 'team',        label: 'Team',        href: '/team',        icon: '👥' },
   { id: 'team-admin',  label: 'Team beheren', href: '/team-admin',  icon: '⚙️' },
   { id: 'kantoor',     label: 'Kantoor',     href: '/kantoor',     icon: '🏢' },
+  { id: 'budget',      label: 'Budget',      href: '/budget',      icon: '💰', visibleTo: ['menno', 'vincent'] },
   { id: 'accounts',    label: 'Accounts',    href: '/accounts',    icon: '🔑' },
   { id: 'papierbak',   label: 'Papierbak',   href: '/papierbak',   icon: '🗑' },
   { id: 'snapshots',   label: 'Geschiedenis', href: '/geschiedenis', icon: '📜' },
@@ -70,11 +76,26 @@ function defaultSections(): SidebarSection[] {
   ]
 }
 
+// Nieuwe DEFAULT_DOCS-items (zoals 'Budget') die na een release worden
+// toegevoegd, missen anders in de al-gecachte localStorage-sections van
+// bestaande gebruikers — loadSections() valt alleen terug op de defaults
+// als er HELEMAAL niks gecached is. Hier vullen we ontbrekende ids aan
+// zonder de gebruiker z'n eigen volgorde/hernoemingen/verwijderingen van
+// bestaande items te verstoren.
+function reconcileDocsItems(sections: SidebarSection[]): SidebarSection[] {
+  const docs = sections.find(s => s.id === 'pagina')
+  if (!docs) return sections
+  const existingIds = new Set(docs.items.map(i => i.id))
+  const missing = DEFAULT_DOCS.filter(d => !existingIds.has(d.id))
+  if (missing.length === 0) return sections
+  return sections.map(s => s.id === 'pagina' ? { ...s, items: [...s.items, ...missing] } : s)
+}
+
 export function loadSections(): SidebarSection[] {
   if (typeof window === 'undefined') return defaultSections()
   try {
     const raw = localStorage.getItem(SECTIONS_KEY)
-    if (raw) return JSON.parse(raw) as SidebarSection[]
+    if (raw) return reconcileDocsItems(JSON.parse(raw) as SidebarSection[])
   } catch {}
   return defaultSections()
 }
