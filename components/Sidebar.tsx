@@ -262,6 +262,12 @@ function SectionBlock({
   onMoveSection:  (dir: -1 | 1) => void
   showToast:      (message: string) => void
 }) {
+  // Items met visibleTo (bv. de Budget-pagina) alleen tonen aan de
+  // toegestane member-ID's. Puur UX-filter — de echte afscherming zit
+  // server-side in de Supabase RLS-policy van de onderliggende data.
+  const { profile } = useProfile()
+  const visibleItems = section.items.filter(i => !i.visibleTo || (profile && i.visibleTo.includes(profile.memberId)))
+
   // All sections are collapsible. Standaard ingeklapt — gebruikers willen
   // niet dat hun zorgvuldig dichtgeklapte secties (zoals Agenda's) elke
   // navigatie weer openploppen. We bewaren de open/dicht-staat per sectie
@@ -448,7 +454,12 @@ function SectionBlock({
 
       {open && section.type !== 'pages' && (
         <div style={{ marginTop: 2 }}>
-          {section.items.map((item, idx) => {
+          {visibleItems.map((item) => {
+            // Echte index in section.items (niet in de gefilterde lijst) —
+            // anders reordenen drag-handlers het verkeerde item zodra een
+            // gebruiker items ziet die NA een voor-hen-verborgen item
+            // (zoals Budget) in de array staan.
+            const idx = section.items.findIndex(i => i.id === item.id)
             const active  = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
             const editing = editingItemId === item.id
             // Een /projects/<board> link mag een item-drop accepteren —
