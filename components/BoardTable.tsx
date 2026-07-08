@@ -4157,6 +4157,16 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     // Geen confirm-dialog meer — undo-toast vangt vergissingen op.
     const snapshot = groups.map(g => ({ ...g, items: [...g.items.map(i => ({ ...i, subitems: i.subitems ? [...i.subitems] : i.subitems }))] }))
     const count = selectedIds.size
+    // Verzamel de TOP-LEVEL item-IDs die verwijderd worden — die moeten
+    // óók in Supabase soft-gedelete worden. Zonder deze stap kwam 't item
+    // via de eerstvolgende realtime-pull weer terug (onChange stuurt alleen
+    // de UPDATE, niet de DELETE van de rij).
+    const topLevelIdsToDelete: string[] = []
+    for (const g of groups) {
+      for (const i of g.items) {
+        if (selectedIds.has(i.id)) topLevelIdsToDelete.push(i.id)
+      }
+    }
     onChange(groups.map(g => ({
       ...g,
       items: g.items
@@ -4165,6 +4175,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           ? { ...i, subitems: i.subitems.filter(s => !selectedIds.has(s.id)) }
           : i),
     })))
+    for (const id of topLevelIdsToDelete) {
+      softDeleteItem(id).catch(() => {})
+    }
     pushUndo(() => onChange(snapshot), `${count} item${count === 1 ? '' : 's'} verwijderd`)
     clearSelection()
   }
