@@ -22,7 +22,7 @@ import type { BoardGroup } from '@/lib/boards'
 import { upsertBoard, defaultColumnsForNewBoard, pullBoardsFromRemote } from '@/lib/boardsRegistry'
 import { VacationButton } from './VacationButton'
 import {
-  IconHome, IconPlanning, IconCheckList, IconClose, IconSettings,
+  IconHome, IconAgenda, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
   IconDocument, IconFolder, IconFolderOpen, IconSort, IconRefresh, IconActivity,
   IconSearch, IconHourglass,
@@ -388,7 +388,7 @@ function SectionBlock({
         }}>
         <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           {section.type === 'projects'
-            ? <IconPlanning size={22} />
+            ? <IconAgenda size={22} />
             : (open ? <IconFolderOpen size={22} /> : <IconFolder size={22} />)}
         </span>
 
