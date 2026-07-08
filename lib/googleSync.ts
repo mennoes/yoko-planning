@@ -259,22 +259,29 @@ async function ensureDoneGroup(
   return newId
 }
 
-// Toekomstig-groep voor meetings ≥ 3 weken vooruit. Standaard ingeklapt
+// Opkomend-groep voor meetings ≥ 3 weken vooruit. Standaard ingeklapt
 // zodat het bord overzichtelijk blijft voor de korte termijn; user kan
-// hem uitklappen als 'ie ver vooruit wil kijken.
+// hem uitklappen als 'ie ver vooruit wil kijken. Bestaande groepen die
+// nog 'Toekomstig' heten (legacy naam) worden automatisch omgedoopt naar
+// 'Opkomend' zodat er niet twee groepen naast elkaar ontstaan.
 async function ensureToekomstigGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
+  // Zoek een bestaande groep met de nieuwe of oude naam.
   const { data: rows } = await admin
     .from('board_groups').select('id, name, deleted_at')
     .eq('board_id', boardId)
-    .ilike('name', 'toekomstig')
+    .or('name.ilike.opkomend,name.ilike.toekomstig')
     .limit(1)
   const existing = (rows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
   if (existing) {
-    if (existing.deleted_at) {
-      await admin.from('board_groups').update({ deleted_at: null }).eq('id', existing.id)
+    const patch: Record<string, unknown> = {}
+    if (existing.deleted_at) patch.deleted_at = null
+    // Legacy naam → hernoemen naar de nieuwe naam.
+    if ((existing.name ?? '').toLowerCase() !== 'opkomend') patch.name = 'Opkomend'
+    if (Object.keys(patch).length > 0) {
+      await admin.from('board_groups').update(patch).eq('id', existing.id)
     }
     return existing.id
   }
@@ -284,11 +291,11 @@ async function ensureToekomstigGroup(
     .order('position', { ascending: false })
     .limit(1)
   const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
-  const newId = `g_toekomstig_${boardId}_${Date.now()}`
+  const newId = `g_opkomend_${boardId}_${Date.now()}`
   await admin.from('board_groups').insert({
     id:        newId,
     board_id:  boardId,
-    name:      'Toekomstig',
+    name:      'Opkomend',
     color:     '#7e8aa0',
     collapsed: true,
     position:  maxPos + 1,
