@@ -259,46 +259,58 @@ async function ensureDoneGroup(
   return newId
 }
 
-// Opkomend-groep voor meetings ≥ 3 weken vooruit. Standaard ingeklapt
-// zodat het bord overzichtelijk blijft voor de korte termijn; user kan
-// hem uitklappen als 'ie ver vooruit wil kijken. Bestaande groepen die
-// nog 'Toekomstig' heten (legacy naam) worden automatisch omgedoopt naar
-// 'Opkomend' zodat er niet twee groepen naast elkaar ontstaan.
+// Opkomend-subgroep voor meetings ≥ 3 weken vooruit. Standaard ingeklapt
+// en visueel gepositioneerd DIRECT ONDER de Meetings & doorlopend-groep
+// zodat 't oogt als een sub-sectie van Meetings. Bestaande legacy
+// 'Toekomstig'-groepen worden hier automatisch omgedoopt naar 'Opkomend'.
+// Naam-prefix '↳ ' (Unicode return-pijl) markeert visueel de sub-relatie
+// ook zonder echte hiërarchie in het data-model.
+const OPKOMEND_NAME = '↳ Opkomend'
 async function ensureToekomstigGroup(
   admin:   SupabaseClient,
   boardId: string,
 ): Promise<string> {
-  // Zoek een bestaande groep met de nieuwe of oude naam.
+  // Alle groepen op dit bord in position-volgorde ophalen zodat we
+  // (a) de bestaande Opkomend/Toekomstig-groep kunnen vinden en
+  // (b) 'm direct achter de Meetings-groep kunnen positioneren.
   const { data: rows } = await admin
-    .from('board_groups').select('id, name, deleted_at')
+    .from('board_groups').select('id, name, deleted_at, position')
     .eq('board_id', boardId)
-    .or('name.ilike.opkomend,name.ilike.toekomstig')
-    .limit(1)
-  const existing = (rows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
+    .order('position', { ascending: true })
+  const groups = (rows as { id: string; name: string; deleted_at: string | null; position: number | null }[] | null) ?? []
+  const norm = (s: string) => s.toLowerCase().trim().replace(/^↳\s*/, '')
+  const meetingsG = groups.find(g => {
+    const n = norm(g.name)
+    return n === 'meetings & doorlopend' || n === 'meetings en doorlopend' || n === 'meetings' || n === 'doorlopend'
+  })
+  const existing = groups.find(g => {
+    const n = norm(g.name)
+    return n === 'opkomend' || n === 'toekomstig'
+  })
+  // Streef-positie: direct na de Meetings-groep. Voor bestaande én nieuwe
+  // Opkomend-groepen zorgen we dat 'ie op die plek staat.
+  const desiredPos = meetingsG?.position !== undefined && meetingsG?.position !== null
+    ? meetingsG.position + 0.5
+    : null
   if (existing) {
     const patch: Record<string, unknown> = {}
     if (existing.deleted_at) patch.deleted_at = null
-    // Legacy naam → hernoemen naar de nieuwe naam.
-    if ((existing.name ?? '').toLowerCase() !== 'opkomend') patch.name = 'Opkomend'
+    if ((existing.name ?? '') !== OPKOMEND_NAME) patch.name = OPKOMEND_NAME
+    if (desiredPos !== null && existing.position !== desiredPos) patch.position = desiredPos
     if (Object.keys(patch).length > 0) {
       await admin.from('board_groups').update(patch).eq('id', existing.id)
     }
     return existing.id
   }
-  const { data: posRows } = await admin
-    .from('board_groups').select('position')
-    .eq('board_id', boardId)
-    .order('position', { ascending: false })
-    .limit(1)
-  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
   const newId = `g_opkomend_${boardId}_${Date.now()}`
+  const maxPos = groups.reduce((m, g) => Math.max(m, g.position ?? 0), -1)
   await admin.from('board_groups').insert({
     id:        newId,
     board_id:  boardId,
-    name:      'Opkomend',
-    color:     '#7e8aa0',
+    name:      OPKOMEND_NAME,
+    color:     '#D8B62E',
     collapsed: true,
-    position:  maxPos + 1,
+    position:  desiredPos !== null ? desiredPos : maxPos + 1,
   })
   return newId
 }
