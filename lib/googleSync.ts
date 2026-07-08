@@ -563,14 +563,28 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     return gid
   }
 
-  const toekomstigCache = new Map<string, string>()
-  async function getToekomstigGroupFor(boardId: string): Promise<string> {
-    const cached = toekomstigCache.get(boardId)
-    if (cached) return cached
-    const gid = await ensureToekomstigGroup(admin, boardId)
-    toekomstigCache.set(boardId, gid)
-    return gid
+  // Legacy Opkomend/Toekomstig-groepen opruimen: items terug naar de
+  // Meetings-groep migreren, dan de losse Opkomend-groep soft-deleten.
+  // De client rendert 'Opkomend' nu als in-line subsectie binnen Meetings
+  // & doorlopend zelf — geen aparte database-groep meer nodig.
+  const opkomendCleaned = new Set<string>()
+  async function cleanupLegacyOpkomend(boardId: string): Promise<void> {
+    if (opkomendCleaned.has(boardId)) return
+    opkomendCleaned.add(boardId)
+    const { data: rows } = await admin
+      .from('board_groups').select('id, name, deleted_at')
+      .eq('board_id', boardId)
+      .is('deleted_at', null)
+    const groups = (rows as { id: string; name: string; deleted_at: string | null }[] | null) ?? []
+    const opkomendGroups = groups.filter(g => isOpkomendName(g.name))
+    if (opkomendGroups.length === 0) return
+    const meetingsGid = await getMeetingsGroupFor(boardId)
+    const ids = opkomendGroups.map(g => g.id)
+    await admin.from('board_items').update({ group_id: meetingsGid }).in('group_id', ids)
+    await admin.from('board_groups').update({ deleted_at: new Date().toISOString() }).in('id', ids)
   }
+  void ensureToekomstigGroup
+  void updateOpkomendCount
 
   // Drempel voor toekomstig — events die ≥ 3 weken vooruit starten worden
   // in de ingeklapte 'Opkomend'-subgroep gestopt zodat de hoofd-meetings-
@@ -896,23 +910,24 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // status/Vrij/Meetings-startpositie. Meetings (alle non-Vrij Google
       // events) gaan naar de 'Meetings & doorlopend'-groep zodat ze niet
       // versnipperd tussen echte projecten staan.
+      // Alle Google meetings (near én far future) landen in dezelfde
+      // Meetings & doorlopend-groep. De client rendert far-future items
+      // (> 4 weken) in een client-side inklapbare 'Opkomend'-subsectie
+      // binnen die groep — geen aparte database-groep meer.
       const fallbackGroup = newStatus === 'Done'
         ? await getDoneGroupFor(keepBoard)
         : (isVrij
             ? await getVrijGroupFor(keepBoard)
-            : (isFarFuture(start)
-                ? await getToekomstigGroupFor(keepBoard)
-                : await getMeetingsGroupFor(keepBoard)))
-      // Done items ALTIJD naar de Done-bucket. Voor non-Done: existing
-      // group respecteren, MAAR auto-shuffle tussen Meetings ↔ Toekomstig
-      // wanneer de start-datum de 3-weken-grens passeert. Andere user-
-      // verplaatsingen (eigen groep, custom bucket) blijven respected.
+            : await getMeetingsGroupFor(keepBoard))
+      // Done items ALTIJD naar de Done-bucket. Voor non-Done: bestaande
+      // meetings-groep respecteren; als het item in de Meetings-groep zit
+      // blijft 't daar. User-verplaatsingen (eigen groep) blijven respected.
       const existingGroupAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
       const meetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
-      const toekomstigGid = !isVrij ? await getToekomstigGroupFor(keepBoard) : null
       const inAutoBucket = existingGroupAlive && (
-        existingRow!.group_id === meetingsGid || existingRow!.group_id === toekomstigGid
+        existingRow!.group_id === meetingsGid
       )
+      void isFarFuture
       const keepGroup = newStatus === 'Done'
         ? fallbackGroup
         : (existingGroupAlive
@@ -1144,16 +1159,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       ? await getDoneGroupFor(keepBoard)
       : (isVrij
           ? await getVrijGroupFor(keepBoard)
-          : (isFarFuture(minStart)
-              ? await getToekomstigGroupFor(keepBoard)
-              : await getMeetingsGroupFor(keepBoard)))
-    // Done ALTIJD naar Done-bucket; non-Done respecteert existingRow,
-    // behalve auto-shuffle tussen Meetings ↔ Toekomstig (3-weken-grens).
+          : await getMeetingsGroupFor(keepBoard))
+    // Done ALTIJD naar Done-bucket; non-Done respecteert existingRow als
+    // 't niet in de auto-Meetings-bucket zit.
     const recExistingAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
     const recMeetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
-    const recToekomstigGid = !isVrij ? await getToekomstigGroupFor(keepBoard) : null
     const recInAutoBucket = recExistingAlive && (
-      existingRow!.group_id === recMeetingsGid || existingRow!.group_id === recToekomstigGid
+      existingRow!.group_id === recMeetingsGid
     )
     const keepGroup = newStatus === 'Done'
       ? recFallback
@@ -1287,17 +1299,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // verlies meer.
 
   await admin.from('google_calendars').update({ last_sync_at: new Date().toISOString() }).eq('id', cal.id)
-  // Live-count achter de Opkomend-groepnaam bijwerken voor alle borden
-  // die deze sync heeft aangeraakt. Zonder dit stap zag je '↳ Opkomend'
-  // zonder aantal — of erger, een out-of-date aantal na het bijschuiven
-  // van items tussen Meetings ↔ Opkomend.
+  // Legacy Opkomend/Toekomstig-groepen opruimen voor alle borden die
+  // deze sync heeft aangeraakt. Client rendert Opkomend nu als in-line
+  // subsectie binnen de Meetings-groep zelf.
   const touchedBoards = new Set<string>()
   for (const u of upserts) {
     const b = u.board_id
     if (typeof b === 'string') touchedBoards.add(b)
   }
   for (const boardId of touchedBoards) {
-    try { await updateOpkomendCount(admin, boardId) } catch {}
+    try { await cleanupLegacyOpkomend(boardId) } catch {}
   }
   return { added, updated, removed }
 }

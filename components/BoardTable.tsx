@@ -2866,6 +2866,21 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
         return 0
       })
     : group.items
+  // Opkomend-subsectie: items met startDate > vandaag + 4 weken bundelen
+  // we in een client-side inklapbaar 'Opkomend (N)'-blok binnen dezelfde
+  // groep, zodat de hoofd-lijst zich richt op wat op korte termijn speelt
+  // maar verre-toekomst-events niet verdwenen zijn.
+  const OPKOMEND_THRESHOLD_MS = 28 * 86400000
+  const opkomendCutoff = Date.now() + OPKOMEND_THRESHOLD_MS
+  const isOpkomendItem = (i: BoardItem): boolean => {
+    const s = i.startDate
+    if (!s) return false
+    const t = Date.parse(s)
+    return Number.isFinite(t) && t > opkomendCutoff
+  }
+  const currentItems  = renderItems.filter(i => !isOpkomendItem(i))
+  const opkomendItems = renderItems.filter(i =>  isOpkomendItem(i))
+  const [opkomendOpen, setOpkomendOpen] = useState(false)
   // Onthoud welk item zojuist via 'Voeg item toe' is aangemaakt zodat de
   // bijbehorende rij direct in name-edit-modus opent (autoFocus + select).
   // Wordt na het eerste render geconsumeerd zodat een refresh of nieuwe
@@ -2994,16 +3009,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   //      ("hier kan je loslaten")
   //  - dropHover = je hovert nú boven deze groep → opvallend accent
   const isDropTarget = !!subDragName
-  // Subgroepen (naam start met '↳ ') worden visueel ingesprongen zodat ze
-  // oogen als een sub-sectie van de bovenliggende groep. Ook een kleinere
-  // top-margin zodat 't visueel aansluit op de parent.
-  const isSubgroup = /^↳\s/.test(group.name ?? '')
   return (
     <GroupCtx.Provider value={{ color: group.color }}>
       <div style={{
         marginBottom: 18, borderRadius: 14, position: 'relative',
-        marginTop:  isSubgroup ? -14 : 0,
-        marginLeft: isSubgroup ? 32  : 0,
         // Eigen rondingen + kader maakt 't visueel minder hoekig en geeft
         // duidelijker een 'card per groep'-gevoel.
         border: `1px solid var(--border)`,
@@ -3237,7 +3246,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
               <div style={{ borderLeft: '1px solid var(--border)' }} />
             </div>
 
-            {renderItems.map((item) => {
+            {(() => {
+              const renderRow = (item: BoardItem) => {
               const realIdx = group.items.findIndex(i => i.id === item.id)
               return (
               <div key={item.id} data-item-id={item.id}
@@ -3333,11 +3343,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
-                {/* Drag-handles: twee stuks, hover-only. Eén tussen checkbox
-                    en ▶-arrow zodat 't drag-punt logisch náást de andere
-                    row-controls staat, één op vaste positie rechts zodat je
-                    ook vanaf 't einde van een lange rij kunt slepen zonder
-                    helemaal terug naar links te muiszen. */}
+                {/* Drag-handles: twee stuks, hover-only. Eén IN de checkbox-
+                    kolom (rechts van de checkbox, LINKS van de ▶-arrow zodat
+                    'ie niet meer over de expand-knop valt), één in de name-
+                    kolom net LINKS van de comment-knop zodat je vanaf 't
+                    einde van een lange rij kunt slepen zonder helemaal terug
+                    te muiszen naar links. */}
                 {!reorderMode && (() => {
                   const startDrag = (e: React.DragEvent) => {
                     dragRowRef.current = realIdx
@@ -3353,30 +3364,38 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }
                   const gripBase: React.CSSProperties = {
                     position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-                    width: 16, height: 26,
+                    width: 14, height: 24,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: 'grab', userSelect: 'none',
-                    color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
+                    color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, lineHeight: 1,
                     opacity: 0, transition: 'opacity 0.12s, background 0.12s',
                     zIndex: 5, borderRadius: 4,
                     background: 'var(--bg-hover)',
                     border: '1px solid var(--border)',
                     pointerEvents: 'auto',
                   }
+                  // Naam-kolom eindigt op (32 + nameW). Comment-knop zit
+                  // helemaal rechts binnen die kolom (padding-right ~14 +
+                  // knop-breedte ~34-44). We plaatsen de rechter grip 52px
+                  // vóór de kolom-rand zodat 'ie net links van de comment-
+                  // knop verschijnt.
+                  const nameW = colWidths['name'] ?? 200
+                  const rightHandleLeft = 32 + nameW - 52
                   return (
                     <>
                       <span draggable
                         className="row-grip"
                         title="Sleep om te verplaatsen tussen groepen"
                         onDragStart={startDrag}
-                        // Tussen checkbox (32px kolom) en ▶-arrow. Iets
-                        // uitspringen zodat 'ie visueel loskomt van de rand.
-                        style={{ ...gripBase, left: 34 }}>⠿</span>
+                        // Rechts van de checkbox (16px center + 8px margin =
+                        // 24px), links van de kolomrand (32px). Overlapt niet
+                        // meer met de ▶-arrow die op ~36px begint.
+                        style={{ ...gripBase, left: 18 }}>⠿</span>
                       <span draggable
                         className="row-grip"
                         title="Sleep om te verplaatsen tussen groepen"
                         onDragStart={startDrag}
-                        style={{ ...gripBase, right: 42 }}>⠿</span>
+                        style={{ ...gripBase, left: rightHandleLeft }}>⠿</span>
                     </>
                   )
                 })()}
@@ -3399,7 +3418,37 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   onUpdate={u => updateItem(item.id, u)} onDelete={() => deleteItem(item.id)} />
               </div>
               )
-            })}
+              }
+              return (
+                <>
+                  {currentItems.map(renderRow)}
+                  {opkomendItems.length > 0 && (
+                    <>
+                      <button type="button"
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); setOpkomendOpen(o => !o) }}
+                        style={{
+                          width: '100%', textAlign: 'left',
+                          background: 'var(--overlay-faint)', border: 'none',
+                          borderBottom: '1px solid var(--border)',
+                          padding: '9px 14px 9px 32px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
+                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                        }}>
+                        <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
+                          {opkomendOpen ? '▼' : '▶'}
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 2, background: group.color }} />
+                          Opkomend ({opkomendItems.length})
+                        </span>
+                      </button>
+                      {opkomendOpen && opkomendItems.map(renderRow)}
+                    </>
+                  )}
+                </>
+              )
+            })()}
 
             <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
               <button onClick={addItem} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: 0 }}
