@@ -134,6 +134,9 @@ export function markItemInProgress(itemId: string): void {
   // typen. Daarna wordt 'ie opgeruimd zoals elke andere lege placeholder.
   setTimeout(() => inProgressNewItems.delete(itemId), 60000)
 }
+export function isItemInProgress(itemId: string): boolean {
+  return inProgressNewItems.has(itemId)
+}
 
 export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGroup[] {
   if (typeof window === 'undefined') return fallback

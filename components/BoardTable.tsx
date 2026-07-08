@@ -24,7 +24,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, purgeNieuwItemPlaceholders } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders } from '@/lib/boardStore'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
@@ -2908,14 +2908,21 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     !i.source && !i.contactpersoon && !i.framelink
 
   // Lege 'Nieuw item'-placeholders die niet net door deze user zijn
-  // aangemaakt (justCreatedId) zijn vergeten/ongebruikte rijen. Hard-
-  // delete ze atomair zodat ze niet terugkomen via een race tussen
-  // soft-delete en de defensieve pull op AppShell-mount. Effect re-fired
-  // op group.items zodat een late pull-back ook opgeruimd wordt.
+  // aangemaakt zijn vergeten/ongebruikte rijen. Hard-delete ze atomair
+  // zodat ze niet terugkomen via een race tussen soft-delete en de
+  // defensieve pull op AppShell-mount. Effect re-fired op group.items
+  // zodat een late pull-back ook opgeruimd wordt.
+  //
+  // BELANGRIJK: bescherming via isItemInProgress (60s-window, boardStore),
+  // NIET via justCreatedId. justCreatedId reset al na 50ms (zie de
+  // useEffect hierboven — die is puur voor de defaultEditName-flits zodat
+  // BoardRow in edit-mode opent) — een user die iets langzamer typt dan
+  // 50ms zag zijn kersverse 'Nieuw item'-rij dan alweer hard-deleted
+  // voordat hij een naam had kunnen intikken.
   const pruningRef = useRef(false)
   useEffect(() => {
     if (pruningRef.current) return
-    const empties = group.items.filter(i => isEmptyPlaceholder(i) && i.id !== justCreatedId)
+    const empties = group.items.filter(i => isEmptyPlaceholder(i) && i.id !== justCreatedId && !isItemInProgress(i.id))
     if (empties.length === 0) return
     pruningRef.current = true
     const ids = empties.map(it => it.id)
