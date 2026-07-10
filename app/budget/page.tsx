@@ -21,6 +21,14 @@ import { isVrijTitle } from '@/lib/workloadCategory'
 import { IconChart } from '@/components/Icon'
 
 // ─── Project-lijst (Menno/Vincent als owner, over alle boards) ─────────────
+type ForecastSubitem = {
+  id:        string
+  name:      string
+  status:    string
+  startDate: string | null
+  endDate:   string | null
+}
+
 type ForecastProject = {
   itemId:   string
   boardId:  string
@@ -29,6 +37,7 @@ type ForecastProject = {
   ownerIds: string[]     // subset ∩ {menno, vincent}
   status:   string
   endDate:  string | null  // effectieve einddatum (subitem-rollup), bepaalt kwartaal
+  subitems: ForecastSubitem[]  // alleen voor context — geen eigen omzet-veld
 }
 
 // Zelfde subitem-rollup als BoardTable's effectiveItem: vroegste/laatste
@@ -65,6 +74,9 @@ function loadForecastProjects(): ForecastProject[] {
           itemId: `${board.id}__${item.id}`, boardId: board.id, boardName: board.name,
           name: item.name, ownerIds: owned, status: item.status,
           endDate: effectiveEndDateOf(item),
+          subitems: (item.subitems ?? [])
+            .map(s => ({ id: s.id, name: s.name, status: s.status, startDate: s.startDate, endDate: s.endDate }))
+            .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? '')),
         })
       }
     }
@@ -221,13 +233,35 @@ function ProjectRevenueTable({ projects, revenueByItem, members, onSetAmount, on
   }
   const sortedQuarters = [...quarterGroups.keys()].sort()
 
+  // Subitems zijn alleen context (welke deelleveringen zitten er in dit
+  // project) — geen eigen omzet-veld. Standaard ingeklapt zodat de lijst
+  // compact blijft; per project onthouden we de open/dicht-staat lokaal.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  function toggleExpanded(itemId: string) {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      next.has(itemId) ? next.delete(itemId) : next.add(itemId)
+      return next
+    })
+  }
+
   function renderRow(p: ForecastProject) {
     const rev = revenueByItem.get(p.itemId)
+    const hasSubitems = p.subitems.length > 0
+    const isExpanded = expandedIds.has(p.itemId)
     return (
-      <div key={p.itemId} style={{
+      <div key={p.itemId}>
+      <div style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
-        borderBottom: '1px solid var(--border-light)', fontSize: 13,
+        borderBottom: hasSubitems && isExpanded ? 'none' : '1px solid var(--border-light)', fontSize: 13,
       }}>
+        <button onClick={() => hasSubitems && toggleExpanded(p.itemId)}
+          title={hasSubitems ? `${p.subitems.length} subitem${p.subitems.length === 1 ? '' : 's'}` : undefined}
+          style={{
+            background: 'none', border: 'none', padding: 0, width: 14, flexShrink: 0,
+            cursor: hasSubitems ? 'pointer' : 'default', fontSize: 10, lineHeight: 1,
+            color: hasSubitems ? 'var(--text-secondary)' : 'transparent',
+          }}>{hasSubitems ? (isExpanded ? '▼' : '▶') : '·'}</button>
         <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
           {p.ownerIds.map(id => (
             <span key={id} aria-hidden title={memberById.get(id)?.name} style={{
@@ -249,6 +283,28 @@ function ProjectRevenueTable({ projects, revenueByItem, members, onSetAmount, on
           bevestigd
         </label>
         <AmountInput value={rev?.amount ?? 0} onCommit={n => onSetAmount(p, n)} />
+      </div>
+      {hasSubitems && isExpanded && (
+        <div style={{ borderBottom: '1px solid var(--border-light)' }}>
+          {p.subitems.map(s => (
+            <div key={s.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px 5px 38px',
+              fontSize: 12, color: 'var(--text-muted)',
+            }}>
+              <span aria-hidden style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--text-muted)', flexShrink: 0 }} />
+              <span style={{
+                flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                opacity: s.status === 'Done' ? 0.55 : 1,
+              }}>{s.name}</span>
+              {(s.startDate || s.endDate) && (
+                <span style={{ fontSize: 11, flexShrink: 0 }}>
+                  {s.startDate ?? '?'} – {s.endDate ?? '?'}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       </div>
     )
   }
