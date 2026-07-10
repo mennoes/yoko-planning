@@ -14,10 +14,16 @@ import {
   loadProjectRevenue, pullProjectRevenue, subscribeRemoteProjectRevenue,
   upsertProjectRevenue,
 } from '@/lib/projectRevenueStore'
+import {
+  type RevenueTemplate,
+  loadRevenueTemplates, pullRevenueTemplates, subscribeRemoteRevenueTemplates,
+  upsertRevenueTemplate,
+} from '@/lib/revenueTemplateStore'
 import { getBoards } from '@/lib/boardsRegistry'
 import { loadGroups } from '@/lib/boardStore'
 import type { BoardItem } from '@/lib/boards'
 import { isVrijTitle } from '@/lib/workloadCategory'
+import { normalizeTitle } from '@/lib/subitemRules'
 import { IconChart } from '@/components/Icon'
 
 // ─── Project-lijst (Menno/Vincent als owner, over alle boards) ─────────────
@@ -38,6 +44,17 @@ type ForecastProject = {
   status:   string
   endDate:  string | null  // effectieve einddatum (subitem-rollup), bepaalt kwartaal
   subitems: ForecastSubitem[]  // alleen voor context — geen eigen omzet-veld
+  pattern:  string | null  // genormaliseerde naam — null als te kort om betrouwbaar te zijn
+}
+
+// Minimum-lengte voor een genormaliseerde naam om als betrouwbaar patroon te
+// tellen — zelfde drempel als de bestaande routing-rule-systemen
+// (learnBoardRoutingRule, subitemRules) gebruiken om te voorkomen dat een
+// te generieke/korte rest-string (bv. 'de') alles op één hoop gooit.
+const MIN_PATTERN_LENGTH = 8
+
+function templateKeyOf(boardId: string, pattern: string): string {
+  return `${boardId}::${pattern}`
 }
 
 // Zelfde subitem-rollup als BoardTable's effectiveItem: vroegste/laatste
@@ -70,6 +87,7 @@ function loadForecastProjects(): ForecastProject[] {
         if (item.source === 'google') continue
         const owned = (item.ownerIds ?? []).filter(id => BUDGET_ALLOWED_MEMBER_IDS.includes(id))
         if (owned.length === 0) continue
+        const normalized = normalizeTitle(item.name)
         out.push({
           itemId: `${board.id}__${item.id}`, boardId: board.id, boardName: board.name,
           name: item.name, ownerIds: owned, status: item.status,
@@ -77,6 +95,7 @@ function loadForecastProjects(): ForecastProject[] {
           subitems: (item.subitems ?? [])
             .map(s => ({ id: s.id, name: s.name, status: s.status, startDate: s.startDate, endDate: s.endDate }))
             .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? '')),
+          pattern: normalized.length >= MIN_PATTERN_LENGTH ? normalized : null,
         })
       }
     }
@@ -192,7 +211,11 @@ function QuarterBarChart({ quarters, byQuarterMember, members }: {
 }
 
 // ─── Bedrag-inputje met lokale draft-state (commit on blur/Enter) ─────────
-function AmountInput({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
+// isEstimate = waarde komt van een patroon-sjabloon, niet een expliciete
+// per-item override — gestippelde rand + gedimde tekst zodat je in één
+// oogopslag ziet 'dit is een schatting, niet bevestigd voor DIT item'.
+// Typen erin committeert altijd als expliciete override voor dit item.
+function AmountInput({ value, isEstimate, onCommit }: { value: number; isEstimate?: boolean; onCommit: (n: number) => void }) {
   const [draft, setDraft] = useState(value ? String(value) : '')
   useEffect(() => { setDraft(value ? String(value) : '') }, [value])
   function commit() {
@@ -203,10 +226,64 @@ function AmountInput({ value, onCommit }: { value: number; onCommit: (n: number)
     <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') commit() }}
       placeholder="€ 0" inputMode="decimal"
+      title={isEstimate ? 'Schatting via herkend patroon — typ een bedrag om dit specifieke item te overrulen' : undefined}
       style={{
-        width: 100, background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 6,
-        padding: '5px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', textAlign: 'right',
+        width: 100, background: 'var(--bg-base)',
+        border: isEstimate ? '1px dashed var(--border)' : '1px solid var(--border)',
+        borderRadius: 6, padding: '5px 8px',
+        color: isEstimate ? 'var(--text-muted)' : 'var(--text-primary)',
+        fontStyle: isEstimate ? 'italic' : 'normal',
+        fontSize: 13, outline: 'none', textAlign: 'right',
       }} />
+  )
+}
+
+// ─── Herkende patronen (terugkerende reeksen) ──────────────────────────────
+// Groepeert projecten per (bord, genormaliseerde naam). Zodra ≥2 items
+// dezelfde 'kale' naam delen — bv. 'NL College S04E01' en 'NL College
+// S04E02' worden allebei 'nl college' — is 't een terugkerende reeks
+// (denk UvNL-afleveringen). Hier stel je ÉÉN bedrag in dat automatisch
+// als schatting voor de HELE reeks geldt (huidige + toekomstige items),
+// tenzij een los item zijn eigen bedrag krijgt in de lijst hieronder.
+// Board als 'yoko' bestaat vooral uit losse projecten (elk een unieke
+// naam) → daar ontstaan vanzelf geen groepen; borden als 'Nederland'/
+// 'Vlaanderen' met terugkerende content leveren hier automatisch
+// meerdere reeksen op. Geen hardcoded onderscheid nodig — puur tellen.
+type PatternGroup = { key: string; boardId: string; boardName: string; pattern: string; projects: ForecastProject[] }
+
+function PatternsSection({ groups, templates, onSetDefault }: {
+  groups: PatternGroup[]
+  templates: Map<string, RevenueTemplate>
+  onSetDefault: (g: PatternGroup, amount: number) => void
+}) {
+  if (groups.length === 0) return null
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 20px' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+        Herkende patronen
+      </div>
+      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+        Terugkerende reeksen — één bedrag hier telt automatisch als schatting voor elk item in de reeks (incl. toekomstige), tenzij je een item hieronder een eigen bedrag geeft.
+      </p>
+      {groups.map(g => {
+        const t = templates.get(templateKeyOf(g.boardId, g.pattern))
+        return (
+          <div key={g.key} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
+            borderBottom: '1px solid var(--border-light)', fontSize: 13,
+          }}>
+            <span style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {g.pattern}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+              {g.projects.length}× · {g.boardName}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>per item</span>
+            <AmountInput value={t?.defaultAmount ?? 0} onCommit={n => onSetDefault(g, n)} />
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -216,9 +293,10 @@ function AmountInput({ value, onCommit }: { value: number; onCommit: (n: number)
 // Hier vul je de VERWACHTE omzet per project in — dat is de forward-looking
 // forecast die los staat van de handmatige omzet-regels hieronder (die zijn
 // voor omzet die niet aan één specifiek project hangt).
-function ProjectRevenueTable({ projects, revenueByItem, members, onSetAmount, onToggleConfirmed }: {
+function ProjectRevenueTable({ projects, revenueByItem, templates, members, onSetAmount, onToggleConfirmed }: {
   projects: ForecastProject[]
   revenueByItem: Map<string, ProjectRevenue>
+  templates: Map<string, RevenueTemplate>
   members: { id: string; name: string; color: string }[]
   onSetAmount: (p: ForecastProject, amount: number) => void
   onToggleConfirmed: (p: ForecastProject) => void
@@ -282,7 +360,13 @@ function ProjectRevenueTable({ projects, revenueByItem, members, onSetAmount, on
             style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
           bevestigd
         </label>
-        <AmountInput value={rev?.amount ?? 0} onCommit={n => onSetAmount(p, n)} />
+        {(() => {
+          const explicit = rev?.amount ?? 0
+          const templateAmount = p.pattern ? (templates.get(templateKeyOf(p.boardId, p.pattern))?.defaultAmount ?? 0) : 0
+          const displayAmount = explicit > 0 ? explicit : templateAmount
+          const isEstimate = explicit <= 0 && templateAmount > 0
+          return <AmountInput value={displayAmount} isEstimate={isEstimate} onCommit={n => onSetAmount(p, n)} />
+        })()}
       </div>
       {hasSubitems && isExpanded && (
         <div style={{ borderBottom: '1px solid var(--border-light)' }}>
@@ -437,20 +521,24 @@ function EntryList({ entries, members, onDelete }: {
 export default function BudgetPage() {
   const { profile } = useProfile()
   const { members: teamMembers } = useTeam()
-  const [entries, setEntries]   = useState<BudgetEntry[]>([])
-  const [revenue, setRevenue]   = useState<ProjectRevenue[]>([])
-  const [projects, setProjects] = useState<ForecastProject[]>([])
-  const [loaded,  setLoaded]    = useState(false)
+  const [entries, setEntries]     = useState<BudgetEntry[]>([])
+  const [revenue, setRevenue]     = useState<ProjectRevenue[]>([])
+  const [templates, setTemplates] = useState<RevenueTemplate[]>([])
+  const [projects, setProjects]   = useState<ForecastProject[]>([])
+  const [loaded,  setLoaded]      = useState(false)
 
   useEffect(() => {
     setEntries(loadBudgetEntries())
     setRevenue(loadProjectRevenue())
+    setTemplates(loadRevenueTemplates())
     setProjects(loadForecastProjects())
     setLoaded(true)
     pullBudgetEntries().then(ok => { if (ok) setEntries(loadBudgetEntries()) })
     pullProjectRevenue().then(ok => { if (ok) setRevenue(loadProjectRevenue()) })
-    function onBudgetUpdate()  { setEntries(loadBudgetEntries()) }
-    function onRevenueUpdate() { setRevenue(loadProjectRevenue()) }
+    pullRevenueTemplates().then(ok => { if (ok) setTemplates(loadRevenueTemplates()) })
+    function onBudgetUpdate()   { setEntries(loadBudgetEntries()) }
+    function onRevenueUpdate()  { setRevenue(loadProjectRevenue()) }
+    function onTemplateUpdate() { setTemplates(loadRevenueTemplates()) }
     // Projecten zelf kunnen in een ANDER tabblad (de planning-borden) worden
     // bewerkt — 'yoko-board-update' vuurt bij elke board-save, dus we
     // herladen de project-lijst zodat een nieuwe deadline/einddatum meteen
@@ -458,14 +546,17 @@ export default function BudgetPage() {
     function onBoardUpdate()   { setProjects(loadForecastProjects()) }
     window.addEventListener('yoko-budget-update', onBudgetUpdate)
     window.addEventListener('yoko-project-revenue-update', onRevenueUpdate)
+    window.addEventListener('yoko-revenue-template-update', onTemplateUpdate)
     window.addEventListener('yoko-board-update', onBoardUpdate)
-    const offBudget  = subscribeRemoteBudget()
-    const offRevenue = subscribeRemoteProjectRevenue()
+    const offBudget    = subscribeRemoteBudget()
+    const offRevenue   = subscribeRemoteProjectRevenue()
+    const offTemplates = subscribeRemoteRevenueTemplates()
     return () => {
       window.removeEventListener('yoko-budget-update', onBudgetUpdate)
       window.removeEventListener('yoko-project-revenue-update', onRevenueUpdate)
+      window.removeEventListener('yoko-revenue-template-update', onTemplateUpdate)
       window.removeEventListener('yoko-board-update', onBoardUpdate)
-      offBudget(); offRevenue()
+      offBudget(); offRevenue(); offTemplates()
     }
   }, [])
 
@@ -484,6 +575,35 @@ export default function BudgetPage() {
   const quarters = useMemo(() => quarterRange(2, 4), [])
 
   const revenueByItem = useMemo(() => new Map(revenue.map(r => [r.itemId, r])), [revenue])
+  const templateByKey = useMemo(
+    () => new Map(templates.map(t => [templateKeyOf(t.boardId, t.pattern), t])),
+    [templates],
+  )
+
+  // Herkende patronen: groepeer projecten per (bord, genormaliseerde naam).
+  // ≥2 items met dezelfde 'kale' naam = een terugkerende reeks. Eén item
+  // met een unieke naam (zoals de meeste yoko-projecten) vormt geen groep.
+  const patternGroups = useMemo(() => {
+    const byKey = new Map<string, PatternGroup>()
+    for (const p of projects) {
+      if (!p.pattern) continue
+      const key = templateKeyOf(p.boardId, p.pattern)
+      const g = byKey.get(key)
+      if (g) g.projects.push(p)
+      else byKey.set(key, { key, boardId: p.boardId, boardName: p.boardName, pattern: p.pattern, projects: [p] })
+    }
+    return [...byKey.values()].filter(g => g.projects.length >= 2).sort((a, b) => b.projects.length - a.projects.length)
+  }, [projects])
+
+  // Effectief bedrag per project: expliciete override wint, anders de
+  // patroon-sjabloon-default (als 't project in een herkende reeks valt),
+  // anders 0.
+  function effectiveAmountOf(p: ForecastProject): number {
+    const explicit = revenueByItem.get(p.itemId)?.amount ?? 0
+    if (explicit > 0) return explicit
+    if (!p.pattern) return 0
+    return templateByKey.get(templateKeyOf(p.boardId, p.pattern))?.defaultAmount ?? 0
+  }
 
   const byQuarterMember = useMemo(() => {
     const out: Record<string, Record<string, number>> = {}
@@ -495,14 +615,15 @@ export default function BudgetPage() {
     // Project-omzet: verdeel het bedrag gelijk over de owners die in de
     // Menno/Vincent-allowlist vallen (meestal 1, bij een gedeeld project 2×50%).
     for (const p of projects) {
-      const rev = revenueByItem.get(p.itemId)
-      if (!rev || rev.amount <= 0 || !p.endDate) continue
+      const amount = effectiveAmountOf(p)
+      if (amount <= 0 || !p.endDate) continue
       const q = quarterOf(new Date(p.endDate))
-      const share = rev.amount / p.ownerIds.length
+      const share = amount / p.ownerIds.length
       for (const ownerId of p.ownerIds) add(q, ownerId, share)
     }
     return out
-  }, [entries, projects, revenueByItem])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, projects, revenueByItem, templateByKey])
 
   const nowQ = currentQuarter()
   const myTotal = profile ? (byQuarterMember[nowQ]?.[profile.memberId] ?? 0) : 0
@@ -535,6 +656,11 @@ export default function BudgetPage() {
     }
     setRevenue(prev => [...prev.filter(r => r.itemId !== p.itemId), next])
     upsertProjectRevenue(next)
+  }
+  function handleSetPatternDefault(g: PatternGroup, amount: number) {
+    const next: RevenueTemplate = { pattern: g.pattern, boardId: g.boardId, defaultAmount: amount, updatedAt: new Date().toISOString() }
+    setTemplates(prev => [...prev.filter(t => templateKeyOf(t.boardId, t.pattern) !== g.key), next])
+    upsertRevenueTemplate(next)
   }
 
   if (!loaded || !profile) return null
@@ -573,7 +699,11 @@ export default function BudgetPage() {
       </div>
 
       <div style={{ marginBottom: 24 }}>
-        <ProjectRevenueTable projects={projects} revenueByItem={revenueByItem} members={members}
+        <PatternsSection groups={patternGroups} templates={templateByKey} onSetDefault={handleSetPatternDefault} />
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <ProjectRevenueTable projects={projects} revenueByItem={revenueByItem} templates={templateByKey} members={members}
           onSetAmount={handleSetAmount} onToggleConfirmed={handleToggleConfirmed} />
       </div>
 
