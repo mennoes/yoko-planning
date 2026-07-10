@@ -7,9 +7,70 @@ import {
   type BudgetEntry, BUDGET_ALLOWED_MEMBER_IDS,
   loadBudgetEntries, pullBudgetEntries, subscribeRemoteBudget,
   upsertBudgetEntry, deleteBudgetEntry, genBudgetId,
-  quarterRange, quarterLabel, currentQuarter,
+  quarterRange, quarterOf, quarterLabel, currentQuarter,
 } from '@/lib/budgetStore'
+import {
+  type ProjectRevenue,
+  loadProjectRevenue, pullProjectRevenue, subscribeRemoteProjectRevenue,
+  upsertProjectRevenue,
+} from '@/lib/projectRevenueStore'
+import { getBoards } from '@/lib/boardsRegistry'
+import { loadGroups } from '@/lib/boardStore'
+import type { BoardItem } from '@/lib/boards'
+import { isVrijTitle } from '@/lib/workloadCategory'
 import { IconChart } from '@/components/Icon'
+
+// ─── Project-lijst (Menno/Vincent als owner, over alle boards) ─────────────
+type ForecastProject = {
+  itemId:   string
+  boardId:  string
+  boardName: string
+  name:     string
+  ownerIds: string[]     // subset ∩ {menno, vincent}
+  status:   string
+  endDate:  string | null  // effectieve einddatum (subitem-rollup), bepaalt kwartaal
+}
+
+// Zelfde subitem-rollup als BoardTable's effectiveItem: vroegste/laatste
+// actieve-subitem-datum wint van het eigen (mogelijk stale) veld van de
+// parent. Nodig zodat de kwartaal-toewijzing hier hetzelfde 'einddatum'
+// gebruikt als wat de gebruiker in de planning-borden ziet.
+function effectiveEndDateOf(item: BoardItem): string | null {
+  const subs = item.subitems
+  if (subs && subs.length > 0) {
+    const activeSubs = subs.filter(s => s.status !== 'Done')
+    const dateSubs   = activeSubs.length > 0 ? activeSubs : subs
+    const subEnds    = dateSubs.map(s => s.endDate).filter(Boolean) as string[]
+    if (subEnds.length > 0) return [...subEnds].sort().slice(-1)[0]
+  }
+  return item.endDate ?? item.startDate ?? null
+}
+
+function loadForecastProjects(): ForecastProject[] {
+  const out: ForecastProject[] = []
+  for (const board of getBoards()) {
+    const groups = loadGroups(board.id, [])
+    for (const g of groups) {
+      for (const item of g.items) {
+        if ((item.name ?? '').trim() === 'Nieuw item') continue
+        // Vrij/vakantie/verlof-items zijn geen factureerbaar werk — horen
+        // niet in een omzet-forecast. Google Calendar-meetings evenmin —
+        // die zijn er per definitie met tientallen en representeren geen
+        // apart te factureren klantproject.
+        if (isVrijTitle(item.name)) continue
+        if (item.source === 'google') continue
+        const owned = (item.ownerIds ?? []).filter(id => BUDGET_ALLOWED_MEMBER_IDS.includes(id))
+        if (owned.length === 0) continue
+        out.push({
+          itemId: `${board.id}__${item.id}`, boardId: board.id, boardName: board.name,
+          name: item.name, ownerIds: owned, status: item.status,
+          endDate: effectiveEndDateOf(item),
+        })
+      }
+    }
+  }
+  return out
+}
 
 // ─── Geld-formattering ──────────────────────────────────────────────────────
 const fmtEuro = (n: number) => new Intl.NumberFormat('nl-NL', {
@@ -118,6 +179,111 @@ function QuarterBarChart({ quarters, byQuarterMember, members }: {
   )
 }
 
+// ─── Bedrag-inputje met lokale draft-state (commit on blur/Enter) ─────────
+function AmountInput({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
+  const [draft, setDraft] = useState(value ? String(value) : '')
+  useEffect(() => { setDraft(value ? String(value) : '') }, [value])
+  function commit() {
+    const n = parseFloat(draft.replace(',', '.'))
+    onCommit(Number.isFinite(n) && n >= 0 ? n : 0)
+  }
+  return (
+    <input value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') commit() }}
+      placeholder="€ 0" inputMode="decimal"
+      style={{
+        width: 100, background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 6,
+        padding: '5px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', textAlign: 'right',
+      }} />
+  )
+}
+
+// ─── Projecten & verwachte omzet ────────────────────────────────────────────
+// Lijst van alle projecten (over alle boards) waar Menno of Vincent owner
+// van zijn, gegroepeerd per kwartaal op basis van de effectieve einddatum.
+// Hier vul je de VERWACHTE omzet per project in — dat is de forward-looking
+// forecast die los staat van de handmatige omzet-regels hieronder (die zijn
+// voor omzet die niet aan één specifiek project hangt).
+function ProjectRevenueTable({ projects, revenueByItem, members, onSetAmount, onToggleConfirmed }: {
+  projects: ForecastProject[]
+  revenueByItem: Map<string, ProjectRevenue>
+  members: { id: string; name: string; color: string }[]
+  onSetAmount: (p: ForecastProject, amount: number) => void
+  onToggleConfirmed: (p: ForecastProject) => void
+}) {
+  const memberById = new Map(members.map(m => [m.id, m]))
+  const withQuarter = projects.filter(p => p.endDate)
+  const withoutQuarter = projects.filter(p => !p.endDate)
+  const quarterGroups = new Map<string, ForecastProject[]>()
+  for (const p of withQuarter) {
+    const q = quarterOf(new Date(p.endDate as string))
+    quarterGroups.set(q, [...(quarterGroups.get(q) ?? []), p])
+  }
+  const sortedQuarters = [...quarterGroups.keys()].sort()
+
+  function renderRow(p: ForecastProject) {
+    const rev = revenueByItem.get(p.itemId)
+    return (
+      <div key={p.itemId} style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px',
+        borderBottom: '1px solid var(--border-light)', fontSize: 13,
+      }}>
+        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+          {p.ownerIds.map(id => (
+            <span key={id} aria-hidden title={memberById.get(id)?.name} style={{
+              width: 8, height: 8, borderRadius: '50%', background: memberById.get(id)?.color ?? '#888',
+            }} />
+          ))}
+        </div>
+        <span style={{
+          flex: 1, minWidth: 0, color: 'var(--text-primary)', overflow: 'hidden',
+          textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          opacity: p.status === 'Done' ? 0.55 : 1,
+        }}>{p.name}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, width: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {p.boardName}
+        </span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, cursor: 'pointer' }}>
+          <input type="checkbox" checked={rev?.confirmed ?? false} onChange={() => onToggleConfirmed(p)}
+            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
+          bevestigd
+        </label>
+        <AmountInput value={rev?.amount ?? 0} onCommit={n => onSetAmount(p, n)} />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 20px' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+        Projecten &amp; verwachte omzet
+      </div>
+      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+        Kwartaal = einddatum van het project. Bedragen tellen mee in de grafiek hierboven.
+      </p>
+      {sortedQuarters.length === 0 && withoutQuarter.length === 0 && (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen projecten gevonden met Menno of Vincent als owner.</p>
+      )}
+      {sortedQuarters.map(q => (
+        <div key={q} style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6 }}>
+            {quarterLabel(q)}
+          </div>
+          {quarterGroups.get(q)!.map(renderRow)}
+        </div>
+      ))}
+      {withoutQuarter.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6 }}>
+            Geen datum
+          </div>
+          {withoutQuarter.map(renderRow)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Entry-formulier ────────────────────────────────────────────────────────
 function AddEntryForm({ members, defaultMemberId, onAdd }: {
   members: { id: string; name: string; color: string }[]
@@ -215,17 +381,36 @@ function EntryList({ entries, members, onDelete }: {
 export default function BudgetPage() {
   const { profile } = useProfile()
   const { members: teamMembers } = useTeam()
-  const [entries, setEntries] = useState<BudgetEntry[]>([])
-  const [loaded,  setLoaded]  = useState(false)
+  const [entries, setEntries]   = useState<BudgetEntry[]>([])
+  const [revenue, setRevenue]   = useState<ProjectRevenue[]>([])
+  const [projects, setProjects] = useState<ForecastProject[]>([])
+  const [loaded,  setLoaded]    = useState(false)
 
   useEffect(() => {
     setEntries(loadBudgetEntries())
+    setRevenue(loadProjectRevenue())
+    setProjects(loadForecastProjects())
     setLoaded(true)
     pullBudgetEntries().then(ok => { if (ok) setEntries(loadBudgetEntries()) })
-    function onUpdate() { setEntries(loadBudgetEntries()) }
-    window.addEventListener('yoko-budget-update', onUpdate)
-    const off = subscribeRemoteBudget()
-    return () => { window.removeEventListener('yoko-budget-update', onUpdate); off() }
+    pullProjectRevenue().then(ok => { if (ok) setRevenue(loadProjectRevenue()) })
+    function onBudgetUpdate()  { setEntries(loadBudgetEntries()) }
+    function onRevenueUpdate() { setRevenue(loadProjectRevenue()) }
+    // Projecten zelf kunnen in een ANDER tabblad (de planning-borden) worden
+    // bewerkt — 'yoko-board-update' vuurt bij elke board-save, dus we
+    // herladen de project-lijst zodat een nieuwe deadline/einddatum meteen
+    // in het juiste kwartaal valt zonder page-refresh.
+    function onBoardUpdate()   { setProjects(loadForecastProjects()) }
+    window.addEventListener('yoko-budget-update', onBudgetUpdate)
+    window.addEventListener('yoko-project-revenue-update', onRevenueUpdate)
+    window.addEventListener('yoko-board-update', onBoardUpdate)
+    const offBudget  = subscribeRemoteBudget()
+    const offRevenue = subscribeRemoteProjectRevenue()
+    return () => {
+      window.removeEventListener('yoko-budget-update', onBudgetUpdate)
+      window.removeEventListener('yoko-project-revenue-update', onRevenueUpdate)
+      window.removeEventListener('yoko-board-update', onBoardUpdate)
+      offBudget(); offRevenue()
+    }
   }, [])
 
   const allowed = !!profile && BUDGET_ALLOWED_MEMBER_IDS.includes(profile.memberId)
@@ -237,15 +422,31 @@ export default function BudgetPage() {
     })
   }, [teamMembers])
 
-  const quarters = useMemo(() => quarterRange(5, 0), [])
+  // 2 kwartalen terug + huidige + 4 vooruit — bewust naar voren geschoven
+  // t.o.v. een puur-historisch overzicht: het doel is zien wat er de
+  // KOMENDE kwartalen aan omzet binnenkomt, niet alleen wat er al was.
+  const quarters = useMemo(() => quarterRange(2, 4), [])
+
+  const revenueByItem = useMemo(() => new Map(revenue.map(r => [r.itemId, r])), [revenue])
+
   const byQuarterMember = useMemo(() => {
     const out: Record<string, Record<string, number>> = {}
-    for (const e of entries) {
-      out[e.quarter] ??= {}
-      out[e.quarter][e.memberId] = (out[e.quarter][e.memberId] ?? 0) + e.amount
+    const add = (q: string, memberId: string, amount: number) => {
+      out[q] ??= {}
+      out[q][memberId] = (out[q][memberId] ?? 0) + amount
+    }
+    for (const e of entries) add(e.quarter, e.memberId, e.amount)
+    // Project-omzet: verdeel het bedrag gelijk over de owners die in de
+    // Menno/Vincent-allowlist vallen (meestal 1, bij een gedeeld project 2×50%).
+    for (const p of projects) {
+      const rev = revenueByItem.get(p.itemId)
+      if (!rev || rev.amount <= 0 || !p.endDate) continue
+      const q = quarterOf(new Date(p.endDate))
+      const share = rev.amount / p.ownerIds.length
+      for (const ownerId of p.ownerIds) add(q, ownerId, share)
     }
     return out
-  }, [entries])
+  }, [entries, projects, revenueByItem])
 
   const nowQ = currentQuarter()
   const myTotal = profile ? (byQuarterMember[nowQ]?.[profile.memberId] ?? 0) : 0
@@ -260,6 +461,24 @@ export default function BudgetPage() {
   function handleDelete(id: string) {
     setEntries(prev => prev.filter(e => e.id !== id))
     deleteBudgetEntry(id)
+  }
+  function handleSetAmount(p: ForecastProject, amount: number) {
+    const existing = revenueByItem.get(p.itemId)
+    const next: ProjectRevenue = {
+      itemId: p.itemId, boardId: p.boardId, amount,
+      confirmed: existing?.confirmed ?? false, updatedAt: new Date().toISOString(),
+    }
+    setRevenue(prev => [...prev.filter(r => r.itemId !== p.itemId), next])
+    upsertProjectRevenue(next)
+  }
+  function handleToggleConfirmed(p: ForecastProject) {
+    const existing = revenueByItem.get(p.itemId)
+    const next: ProjectRevenue = {
+      itemId: p.itemId, boardId: p.boardId, amount: existing?.amount ?? 0,
+      confirmed: !(existing?.confirmed ?? false), updatedAt: new Date().toISOString(),
+    }
+    setRevenue(prev => [...prev.filter(r => r.itemId !== p.itemId), next])
+    upsertProjectRevenue(next)
   }
 
   if (!loaded || !profile) return null
@@ -297,7 +516,15 @@ export default function BudgetPage() {
         <QuarterBarChart quarters={quarters} byQuarterMember={byQuarterMember} members={members} />
       </div>
 
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 10px' }}>Omzet-regels beheren</h2>
+      <div style={{ marginBottom: 24 }}>
+        <ProjectRevenueTable projects={projects} revenueByItem={revenueByItem} members={members}
+          onSetAmount={handleSetAmount} onToggleConfirmed={handleToggleConfirmed} />
+      </div>
+
+      <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 10px' }}>Losse omzet-regels</h2>
+      <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+        Voor omzet die niet aan één specifiek project hangt.
+      </p>
       <div style={{ marginBottom: 18 }}>
         <AddEntryForm members={members} defaultMemberId={profile.memberId} onAdd={handleAdd} />
       </div>
