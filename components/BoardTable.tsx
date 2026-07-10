@@ -2870,10 +2870,28 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   // we in een client-side inklapbaar 'Opkomend (N)'-blok binnen dezelfde
   // groep, zodat de hoofd-lijst zich richt op wat op korte termijn speelt
   // maar verre-toekomst-events niet verdwenen zijn.
+  //
+  // BELANGRIJK: dezelfde subitem-rollup als BoardRow's effectiveItem
+  // (verderop) — anders blijft een item met subitems in Opkomend hangen
+  // omdat we naar de STALE parent.startDate keken i.p.v. de vroegste
+  // actieve subitem-datum die ook in de Timeline-kolom getoond wordt.
+  // Zonder deze rollup zag je een item met subitems al binnen 4 weken
+  // (via de subitem-datum in de UI) maar bleef 't toch onder Opkomend
+  // staan omdat de parent's eigen veld nooit werd bijgewerkt.
+  const effectiveStartDateOf = (i: BoardItem): string | null => {
+    const subs = i.subitems
+    if (subs && subs.length > 0) {
+      const activeSubs = subs.filter(s => s.status !== 'Done')
+      const dateSubs   = activeSubs.length > 0 ? activeSubs : subs
+      const subStarts  = dateSubs.map(s => s.startDate).filter(Boolean) as string[]
+      if (subStarts.length > 0) return [...subStarts].sort()[0]
+    }
+    return i.startDate ?? null
+  }
   const OPKOMEND_THRESHOLD_MS = 28 * 86400000
   const opkomendCutoff = Date.now() + OPKOMEND_THRESHOLD_MS
   const isOpkomendItem = (i: BoardItem): boolean => {
-    const s = i.startDate
+    const s = effectiveStartDateOf(i)
     if (!s) return false
     const t = Date.parse(s)
     return Number.isFinite(t) && t > opkomendCutoff
