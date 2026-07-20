@@ -9,6 +9,11 @@ export type Section     = { id: string; title: string; emoji: string; items: Tod
 
 const STORAGE_KEY = 'yoko-todos'
 const EVENT       = 'yoko-todos-update'
+// Zelfde key als app/todos/page.tsx (deleteSection) gebruikt — daar puur
+// om de auto-seed te laten weten dat een sectie bewust weg is; hier om
+// pushToRemote te vertellen wélke sectie-id's expliciet verwijderd zijn.
+const DELETED_SECTION_IDS_KEY = 'yoko-todos-deleted-sections'
+const DELETED_ITEM_IDS_KEY    = 'yoko-todos-deleted-item-ids'
 
 export function loadSections(fallback: Section[]): Section[] {
   if (typeof window === 'undefined') return fallback
@@ -30,7 +35,40 @@ export function saveSections(sections: Section[]): void {
   // staat terugplakken bovenop wat we net lokaal wijzigden.
   markLocalWrite()
   writeCache(sections)
-  pushToRemote(sections).catch(() => {})
+  pushWithRetry(sections)
+}
+
+/** Verwijderd item — onthouden zodat pushToRemote 'm expliciet mag
+ *  wissen op Supabase, i.p.v. impliciet af te leiden uit "staat niet
+ *  (meer) in mijn huidige lokale array" (zie pushToRemote-comment). */
+export function markItemDeleted(id: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const set = loadIdSet(DELETED_ITEM_IDS_KEY)
+    set.add(id)
+    localStorage.setItem(DELETED_ITEM_IDS_KEY, JSON.stringify([...set]))
+  } catch {}
+}
+
+/** pushToRemote faalt soms door een kortstondig netwerkhaperinkje (net
+ *  een nieuwe tab, device net wakker, etc). Fire-and-forget zonder
+ *  retry laat de remote-staat dan permanent achter — en de volgende
+ *  pull (bv. in een nieuwe tab) plakt die stale staat terug over wat
+ *  je net lokaal wijzigde. 3 pogingen met korte backoff dekt de
+ *  meeste transiënte gevallen; blijft 't falen dan loggen we 't
+ *  zichtbaar i.p.v. silent te swallowen. */
+async function pushWithRetry(sections: Section[], attempt = 0): Promise<void> {
+  const ok = await pushToRemote(sections).catch(err => {
+    console.error('[todosStore] pushToRemote error (attempt', attempt + 1, ')', err)
+    return false
+  })
+  if (ok) return
+  if (attempt >= 2) {
+    console.error('[todosStore] pushToRemote bleef falen na 3 pogingen — todos zijn niet gesynchroniseerd naar Supabase.')
+    return
+  }
+  await new Promise(r => setTimeout(r, 800 * (attempt + 1)))
+  return pushWithRetry(sections, attempt + 1)
 }
 
 export function onTodosUpdate(handler: () => void): () => void {
@@ -117,29 +155,37 @@ export async function pushToRemote(sections: Section[]): Promise<boolean> {
     if (error) return false
   }
 
-  // Verwijder items die lokaal verdwenen zijn.
-  const localItemIds = new Set(itemRows.map(r => r.id))
-  const { data: remoteItemIds } = await supabase.from('todo_items').select('id')
-  if (remoteItemIds) {
-    const stale = (remoteItemIds as { id: string }[])
-      .filter(r => !localItemIds.has(r.id)).map(r => r.id)
-    if (stale.length > 0) {
-      await supabase.from('todo_items').delete().in('id', stale)
-    }
+  // Verwijder ALLEEN items/secties die de gebruiker hier expliciet heeft
+  // verwijderd (bijgehouden door markItemDeleted / deleteSection in
+  // app/todos/page.tsx) — niet "alles wat niet in mijn huidige lokale
+  // array staat". Dat laatste leek een veilige diff, maar sloeg elke
+  // save plat alsnog terug als "verwijderd" wat een ANDER tabblad/
+  // toestel had toegevoegd en deze tab nog niet had gepulld: een save
+  // hier kon dus stilletjes werk van elders wegvagen. Expliciete
+  // deletion-lijsten kunnen nooit per ongeluk iets raken dat niet
+  // door DEZE gebruiker met een kruisje is weggeklikt.
+  const deletedItemIds = [...loadIdSet(DELETED_ITEM_IDS_KEY)]
+  if (deletedItemIds.length > 0) {
+    const { error } = await supabase.from('todo_items').delete().in('id', deletedItemIds)
+    if (!error) { try { localStorage.removeItem(DELETED_ITEM_IDS_KEY) } catch {} }
   }
-  // Verwijder secties die lokaal verdwenen zijn — anders kwam een
-  // verwijderde sectie (bv. 'Test') bij elke refresh terug omdat de
-  // remote rij bleef bestaan.
-  const localSectionIds = new Set(sectionRows.map(r => r.id))
-  const { data: remoteSectionIds } = await supabase.from('todo_sections').select('id')
-  if (remoteSectionIds) {
-    const stale = (remoteSectionIds as { id: string }[])
-      .filter(r => !localSectionIds.has(r.id)).map(r => r.id)
-    if (stale.length > 0) {
-      await supabase.from('todo_sections').delete().in('id', stale)
-    }
+  const deletedSectionIds = [...loadIdSet(DELETED_SECTION_IDS_KEY)]
+  if (deletedSectionIds.length > 0) {
+    await supabase.from('todo_sections').delete().in('id', deletedSectionIds)
+    // 'yoko-todos-deleted-sections' blijft ook staan voor de auto-seed-
+    // skip-check in page.tsx (voorkomt dat een verwijderd yoko-crew-lid
+    // meteen weer terugkomt) — dus NIET verwijderen na een succesvolle
+    // Supabase-delete, in tegenstelling tot de item-ids hierboven.
   }
   return true
+}
+
+function loadIdSet(key: string): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(key)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch { return new Set() }
 }
 
 let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
@@ -154,7 +200,11 @@ let pullTimer: ReturnType<typeof setTimeout> | null = null
 // page-refresh, dus zonder de localStorage-kopie zou de lock exact het
 // scenario missen waarvoor-ie bedoeld is.
 let lastLocalWriteAt = 0
-const LOCAL_WRITE_LOCK_MS = 5000
+// 5s bleek te kort: "vinkje zetten → nieuw tabblad open → naar /todos
+// navigeren" kost in de praktijk makkelijk 10-15s, en viel dus buiten
+// het venster — de pull in de nieuwe tab plakte dan alsnog de oude
+// (nog niet bevestigd-gepushte) staat terug.
+const LOCAL_WRITE_LOCK_MS = 15000
 const LAST_WRITE_KEY = 'yoko-todos-last-write-at'
 
 function markLocalWrite(): void {
