@@ -28,7 +28,7 @@ export function saveSections(sections: Section[]): void {
   // Zet de lokale-write-lock zodat realtime pulls die hierna binnenkomen
   // (door onze eigen pushToRemote) niet de ongedeleted/ongepushte
   // staat terugplakken bovenop wat we net lokaal wijzigden.
-  lastLocalWriteAt = Date.now()
+  markLocalWrite()
   writeCache(sections)
   pushToRemote(sections).catch(() => {})
 }
@@ -43,9 +43,16 @@ export function onTodosUpdate(handler: () => void): () => void {
 type SectionRow = { id: string; title: string; emoji: string; position: number }
 type ItemRow    = { id: string; section_id: string; text: string; done: boolean; position: number; project_ref: ProjectLink | null }
 
-/** Pull from Supabase. Returns null if no auth, or empty remote. */
+/** Pull from Supabase. Returns null if no auth, empty remote, or a local
+ *  write is still within its lock window (zie withinLocalWriteLock). */
 export async function pullFromRemote(): Promise<Section[] | null> {
   if (!supabase) return null
+  // Net lokaal een vinkje gezet en meteen de pagina ververst? Dan is de
+  // fire-and-forget push naar Supabase misschien nog niet aangekomen.
+  // Vertrouw dan de lokale cache i.p.v. de (mogelijk nog stale) remote-
+  // rijen terug te plakken — de caller valt terug op z'n eigen
+  // localStorage-copy en pusht die opnieuw om te reconciliëren.
+  if (withinLocalWriteLock()) return null
   if (!await getCurrentUserId()) return null
   const { data: sections, error: sErr } = await supabase
     .from('todo_sections').select('*').order('position')
@@ -137,18 +144,38 @@ export async function pushToRemote(sections: Section[]): Promise<boolean> {
 
 let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
 let pullTimer: ReturnType<typeof setTimeout> | null = null
-// Lokale-mutatie-lock: tijdens en 3s na een eigen push negeren we
-// realtime pulls. Anders haalt een schedulePull die binnen 400ms na
-// de delete fired de oude (ongedeleted) state op, voor de DELETE in
-// Supabase is doorgevoerd — en plopt 't verwijderde item terug.
+// Lokale-mutatie-lock: tijdens en enkele seconden na een eigen push
+// negeren we pulls (zowel de realtime schedulePull als de initiële pull
+// op page-load). Anders haalt een pull binnen dat venster de oude state
+// op — vóór onze eigen upsert in Supabase is doorgevoerd — en plakt die
+// terug over wat we net lokaal wijzigden (bv. een net afgevinkt todo-item
+// dat na een refresh weer 'open' lijkt).
+// In-memory ÉN localStorage: de module-var reset naar 0 bij een hard
+// page-refresh, dus zonder de localStorage-kopie zou de lock exact het
+// scenario missen waarvoor-ie bedoeld is.
 let lastLocalWriteAt = 0
-const LOCAL_WRITE_LOCK_MS = 3000
+const LOCAL_WRITE_LOCK_MS = 5000
+const LAST_WRITE_KEY = 'yoko-todos-last-write-at'
+
+function markLocalWrite(): void {
+  lastLocalWriteAt = Date.now()
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(LAST_WRITE_KEY, String(lastLocalWriteAt)) } catch {}
+}
+
+function withinLocalWriteLock(): boolean {
+  if (Date.now() - lastLocalWriteAt < LOCAL_WRITE_LOCK_MS) return true
+  if (typeof window === 'undefined') return false
+  try {
+    const raw = localStorage.getItem(LAST_WRITE_KEY)
+    return !!raw && Date.now() - Number(raw) < LOCAL_WRITE_LOCK_MS
+  } catch { return false }
+}
 
 function schedulePull() {
   if (pullTimer) return
   pullTimer = setTimeout(async () => {
     pullTimer = null
-    if (Date.now() - lastLocalWriteAt < LOCAL_WRITE_LOCK_MS) return
     const remote = await pullFromRemote()
     if (remote) writeCache(remote)
   }, 400)
