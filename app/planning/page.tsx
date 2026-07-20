@@ -950,19 +950,26 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
                 }}>{ownerCount}p</span>
             )}
           </span>
-          {/* Parent-context: tweede regel met pijltje + parent-naam zodra
-              project een subitem-afgeleide is. Geeft visueel meteen
-              door welk hoofditem dit subitem hoort. Wordt alleen
-              gerenderd als de bar hoog genoeg is voor twee regels. */}
-          {/* Agenda-naam (bord van herkomst) als 2e regel zodra de bar hoog
-              genoeg is voor twee regels. Small (meeting-pill) blijft
-              1-regel. */}
-          {scaleByHours && !small && barH >= 26 && project.board && (
-            <span style={{
-              fontSize: 9.5, fontWeight: 500, textTransform: 'capitalize',
-              opacity: 0.78, lineHeight: 1.1, marginTop: 1,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{project.board}</span>
+          {/* Tweede regel zodra de bar hoog genoeg is voor twee regels
+              (Small = meeting-pill blijft 1-regel):
+              - Subitem → hoofditem-naam (overzichtelijker dan het bord,
+                want dat wéét je al aan de kleur/rij; welk project 't
+                subitem bij hoort is de nuttigere context).
+              - Anders → agenda-naam (bord van herkomst). */}
+          {scaleByHours && !small && barH >= 26 && (
+            project.parentName && project.parentName !== project.name ? (
+              <span style={{
+                fontSize: 9.5, fontWeight: 500,
+                opacity: 0.78, lineHeight: 1.1, marginTop: 1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>↳ {project.parentName}</span>
+            ) : project.board && (
+              <span style={{
+                fontSize: 9.5, fontWeight: 500, textTransform: 'capitalize',
+                opacity: 0.78, lineHeight: 1.1, marginTop: 1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{project.board}</span>
+            )
           )}
         </span>
       </div>
