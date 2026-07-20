@@ -37,6 +37,7 @@ import {
   pullFromRemote as pullTodos,
   pushToRemote   as pushTodos,
   subscribeRemoteTodos,
+  markItemDeleted,
   type Section, type TodoItem, type ProjectLink,
 } from '@/lib/todosStore'
 
@@ -396,6 +397,10 @@ function TodoCard({
     // we dat zodat de auto-seed 'm niet bij elke pageload terugbrengt.
     const target = section.items.find(i => i.id === id)
     if (!target) return
+    // Expliciet gemarkeerd zodat pushToRemote 'm mag wissen op Supabase —
+    // zie lib/todosStore.ts voor waarom dit veiliger is dan een impliciete
+    // diff tegen de lokale array.
+    markItemDeleted(id)
     if (target.projectRef) {
       markProjectRemoved(target.projectRef.board, target.projectRef.itemId)
     } else {
