@@ -615,17 +615,14 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     : (project.estHours || 0) / owners
   const rawHoursPerDay = memberHours / projectDays
   const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
-  // Bar-hoogte schalen op uren-per-dag met sqrt + 80% baseline zodat
-  // dunne bars goed leesbaar blijven binnen de compacte lane-hoogte.
-  // 1u/dag ≈ 87%, 8u/dag = 100%.
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // 95% baseline + 5% schaal — bars vullen bijna de volle lane, met net
-  // 2px gap tussen aangrenzende lanes. Met 32px-lane + 2px gap in week:
-  // availH = 30, bar-height range ~28-30px. Titel + agenda-subtitle
-  // passen ruim.
-  const scaledRatio = 0.95 + 0.05 * ratio
+  // 70% baseline + 30% schaal — genoeg visueel verschil tussen een rustige
+  // en een volle dag (was 95%+5%, bijna onzichtbaar) terwijl bars nog
+  // ruim binnen de lane blijven. Met 32px-lane + 2px gap in week:
+  // availH = 30 → 0u ≈ 21px, 4u ≈ 26px, 8u = 30px.
+  const scaledRatio = 0.7 + 0.3 * ratio
   const scaledH = scaleByHours
-    ? Math.max(26, Math.round(availH * scaledRatio))
+    ? Math.max(20, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -5581,6 +5578,24 @@ export default function PlanningPage() {
                     cursor: 'pointer', flexShrink: 0,
                   }}>
                   Vandaag
+                </button>
+                {/* Meetings-toggle — ontbrak hier terwijl 't wél in de
+                    maand/kwartaal-header stond, waardoor de knop in de
+                    (meest gebruikte) week/dag-zoom onvindbaar was. */}
+                <button onClick={() => setHideMeetings(v => !v)}
+                  title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    padding: '4px 10px', borderRadius: 6, marginLeft: 4,
+                    background: hideMeetings ? 'var(--bg-hover)' : 'var(--bg-card)',
+                    border: '1px solid var(--border-light)',
+                    color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 600,
+                    cursor: 'pointer', flexShrink: 0,
+                  }}>
+                  {hideMeetings
+                    ? <IconEye    size={12} style={{ marginRight: 5 }} />
+                    : <IconEyeOff size={12} style={{ marginRight: 5 }} />}
+                  Meetings
                 </button>
               </div>
               {monthGroups.map(({ label, widthPx }) => (
