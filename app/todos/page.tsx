@@ -38,6 +38,7 @@ import {
   pushToRemote   as pushTodos,
   subscribeRemoteTodos,
   markItemDeleted,
+  mergeSections,
   type Section, type TodoItem, type ProjectLink,
 } from '@/lib/todosStore'
 
@@ -1170,8 +1171,16 @@ export default function TodosPage() {
     // direct in browser B verschijnt.
     pullTodos().then(remote => {
       if (remote) {
-        setSections(remote)
-        saveTodoSections(remote)  // ververst localStorage zonder push-loop
+        // Mergen i.p.v. overschrijven: een pull kan een item/sectie
+        // missen die lokaal al bestaat (bv. een net-afgevinkt todo
+        // waarvan de push nog niet was aangekomen). setSections(remote)
+        // zette zo'n item terug op 'open' — en de auto-seed-effecten
+        // hieronder zagen 't project dan als 'nog niet geseed' en
+        // voegden 't opnieuw toe als duplicaat. mergeSections voorkomt
+        // beide.
+        const merged = mergeSections(loadSections(), remote)
+        setSections(merged)
+        saveTodoSections(merged)  // ververst localStorage zonder push-loop
       } else {
         // Remote empty → upload de huidige (localStorage) staat
         const local = loadSections()
