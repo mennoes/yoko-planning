@@ -619,13 +619,14 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // sqrt i.p.v. lineair: de meeste items zitten op 2-4u/dag, niet 8u/dag.
   // Een lineaire schaal (ratio = uren/8) duwt die meerderheid dus allemaal
   // naar de ondergrens → veel witruimte in de doorsnee-view. sqrt trekt
-  // gangbare belastingen dicht naar de bovenkant (2u/dag ≈ 90%, 4u/dag
-  // ≈ 94%) en laat alleen écht lichte taken (<1u/dag) duidelijk krimpen.
-  // Met 32px-lane + 2px gap in week: availH = 30 → 0u = 24px, 1u ≈ 26px,
-  // 4u ≈ 28px, 8u = 30px.
-  const scaledRatio = 0.8 + 0.2 * Math.sqrt(ratio)
+  // gangbare belastingen dicht naar de bovenkant, en laat lichte taken
+  // duidelijker krimpen. Bredere range (60%+40%) dan de vorige versie
+  // (80%+20%) zodat het hoogteverschil ook echt opvalt. Met 32px-lane +
+  // 2px gap in week: availH = 30 → 0.5u ≈ 21px, 1u ≈ 22px, 2u ≈ 24px,
+  // 4u ≈ 26px, 8u = 30px.
+  const scaledRatio = 0.6 + 0.4 * Math.sqrt(ratio)
   const scaledH = scaleByHours
-    ? Math.max(22, Math.round(availH * scaledRatio))
+    ? Math.max(18, Math.round(availH * scaledRatio))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
