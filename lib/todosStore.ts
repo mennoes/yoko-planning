@@ -77,6 +77,62 @@ export function onTodosUpdate(handler: () => void): () => void {
   return () => window.removeEventListener(EVENT, handler)
 }
 
+/** Merge een net-gepulde remote-snapshot met de lokale staat i.p.v. 'm
+ *  klakkeloos te overschrijven. Een pull kan best een item/sectie MISSEN
+ *  die lokaal al bestaat — bv. omdat een eerdere push nog niet was
+ *  aangekomen, of nog niet is doorgedrongen tot deze read-replica. Een
+ *  blinde overwrite (setSections(remote)) liet zo'n net-afgevinkt item
+ *  weer als 'open' verschijnen, en erger: de reactieve auto-seed-effecten
+ *  in app/todos/page.tsx zagen dat project-item dan als 'nog niet
+ *  geseed' en voegden 'm opnieuw toe — een zichtbaar duplicaat, met de
+ *  done-state weer op false.
+ *
+ *  Regels:
+ *  - Expliciet verwijderde secties/items (zie DELETED_*_KEY) blijven weg,
+ *    van welke kant ze ook komen.
+ *  - Bestaat een item in beide? 'done' wint zodra ÉÉN kant 'm afgerond
+ *    ziet — een net-bevestigde toggle kan nooit door een trage pull
+ *    worden terug gezet naar open.
+ *  - Bestaat een sectie/item alleen lokaal (nog niet gepusht) of alleen
+ *    remote (door een ander tabblad/toestel toegevoegd)? Beide blijven
+ *    staan — vereniging, geen doorsnede. */
+export function mergeSections(local: Section[], remote: Section[]): Section[] {
+  const deletedSectionIds = loadIdSet(DELETED_SECTION_IDS_KEY)
+  const deletedItemIds    = loadIdSet(DELETED_ITEM_IDS_KEY)
+  const remoteById = new Map(remote.map(s => [s.id, s]))
+  const seen = new Set<string>()
+  const merged: Section[] = []
+
+  for (const ls of local) {
+    if (deletedSectionIds.has(ls.id)) continue
+    seen.add(ls.id)
+    const rs = remoteById.get(ls.id)
+    merged.push(rs ? { ...ls, items: mergeItems(ls.items, rs.items, deletedItemIds) } : ls)
+  }
+  for (const rs of remote) {
+    if (seen.has(rs.id) || deletedSectionIds.has(rs.id)) continue
+    merged.push({ ...rs, items: rs.items.filter(i => !deletedItemIds.has(i.id)) })
+  }
+  return merged
+}
+
+function mergeItems(localItems: TodoItem[], remoteItems: TodoItem[], deletedItemIds: Set<string>): TodoItem[] {
+  const remoteById = new Map(remoteItems.map(i => [i.id, i]))
+  const seen = new Set<string>()
+  const out: TodoItem[] = []
+  for (const li of localItems) {
+    if (deletedItemIds.has(li.id)) continue
+    seen.add(li.id)
+    const ri = remoteById.get(li.id)
+    out.push(ri ? { ...li, done: li.done || ri.done } : li)
+  }
+  for (const ri of remoteItems) {
+    if (seen.has(ri.id) || deletedItemIds.has(ri.id)) continue
+    out.push(ri)
+  }
+  return out
+}
+
 // ─── Remote sync ──────────────────────────────────────────────────────────────
 type SectionRow = { id: string; title: string; emoji: string; position: number }
 type ItemRow    = { id: string; section_id: string; text: string; done: boolean; position: number; project_ref: ProjectLink | null }
@@ -227,7 +283,12 @@ function schedulePull() {
   pullTimer = setTimeout(async () => {
     pullTimer = null
     const remote = await pullFromRemote()
-    if (remote) writeCache(remote)
+    if (!remote) return
+    // Mergen i.p.v. overschrijven — zie mergeSections-comment. Een
+    // realtime-pull triggert op ELKE wijziging (ook van andere users),
+    // en mag dus nooit lokaal nog-niet-bevestigde staat wegvegen.
+    const merged = mergeSections(loadSections([]), remote)
+    writeCache(merged)
   }, 400)
 }
 
