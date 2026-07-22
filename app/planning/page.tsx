@@ -93,6 +93,32 @@ const BAR_H    = 32
 const BAR_GAP  = 2
 const HANDLE_W = 8
 
+// Gedeelde uren-per-dag → hoogte-ratio, gebruikt door zowel DraggableBar
+// (Week/Overzicht-zoom) als de all-day-pills in WeekTimeGrid (Dag-zoom).
+// sqrt i.p.v. lineair: de meeste items zitten op 2-4u/dag, niet 8u/dag —
+// een lineaire schaal zou die meerderheid allemaal naar de ondergrens
+// duwen. sqrt trekt gangbare belastingen dichter naar de bovenkant en
+// laat lichte taken toch duidelijk krimpen. 0.6 baseline + 0.4 schaal
+// geeft een merkbaar hoogteverschil (was eerder 0.8+0.2, amper zichtbaar).
+function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
+  const FULL_DAY_HOURS = 8
+  const projectDays = (() => {
+    if (!project.startDate || !project.endDate) return 1
+    const s = new Date(project.startDate).getTime()
+    const e = new Date(project.endDate).getTime()
+    return Math.max(1, Math.round((e - s) / 86400000) + 1)
+  })()
+  const isVrijForScale = isVrijTitle(project.name)
+  const owners = Math.max(1, project.ownerIds.filter(id => id !== 'unassigned').length)
+  const memberHours = memberId && project.ownerHours && memberId in project.ownerHours
+    ? Number(project.ownerHours[memberId]) || 0
+    : (project.estHours || 0) / owners
+  const rawHoursPerDay = memberHours / projectDays
+  const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
+  const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
+  return 0.6 + 0.4 * Math.sqrt(ratio)
+}
+
 // ─── View-size presets ────────────────────────────────────────────────────────
 function vc(vs: ViewSize) {
   if (vs === 'large') return { cs: 78, or: 35, hh: 110, av: 58 }
@@ -584,49 +610,25 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   onClick:    () => void
   onReassign?: (project: Project, fromMemberId: string, toMemberId: string) => void
 }) {
-  const FULL_DAY_HOURS = 8
   const availH = (laneH ?? BAR_H + BAR_GAP) - BAR_GAP
   // Bar-hoogte volgt nu de lane-hoogte (laneH - gap) i.p.v. de vaste
   // BAR_H-constante, zodat verticale zoom (rowScale op TimelineBars) ook
   // in dag-zoom doorwerkt. Meeting-pills blijven 10px.
   const baseH  = small ? 10 : Math.max(14, availH)
-  // Hoogte schaalt op uren-PER-DAG, niet op het totaal van het project.
-  // Een 20u project dat 2.5 maanden loopt is ~16 minuten/dag, niet een
-  // volle werkdag. Eerder gebruikten we project.estHours direct,
-  // waardoor lange projecten ten onrechte als hele-dag werden getoond.
+  // Ook gebruikt voor de z-index-regel hieronder (1-dag-items altijd op
+  // top t.o.v. meerdaagse balken).
   const projectDays = (() => {
     if (!project.startDate || !project.endDate) return 1
     const s = new Date(project.startDate).getTime()
     const e = new Date(project.endDate).getTime()
     return Math.max(1, Math.round((e - s) / 86400000) + 1)
   })()
-  // Vrij = inherent een volle werkdag vrij (8u/dag). Sommige vrij-items
-  // hebben estHours=0 in de data; we forceren 'm dan op FULL_DAY_HOURS
-  // zodat de bar visueel 100% wordt — gelijk aan een 8u/dag project.
-  const isVrijForScale = isVrijTitle(project.name)
-  // Bar-hoogte gebruikt de uren-deel van DEZE persoon, niet het totaal.
-  // Vroeger: estHours / projectDays → iedereen kreeg dezelfde hoogte voor
-  // 'n shared project. Probleem: iemand die slechts 1u doet aan een 80u
-  // klus had alsnog een full-height bar. Nu pakken we ownerHours[memberId]
-  // (door radial chart gezet) of een gelijke verdeling als fallback.
-  const owners = Math.max(1, project.ownerIds.filter(id => id !== 'unassigned').length)
-  const memberHours = project.ownerHours && memberId in project.ownerHours
-    ? Number(project.ownerHours[memberId]) || 0
-    : (project.estHours || 0) / owners
-  const rawHoursPerDay = memberHours / projectDays
-  const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
-  const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  // sqrt i.p.v. lineair: de meeste items zitten op 2-4u/dag, niet 8u/dag.
-  // Een lineaire schaal (ratio = uren/8) duwt die meerderheid dus allemaal
-  // naar de ondergrens → veel witruimte in de doorsnee-view. sqrt trekt
-  // gangbare belastingen dicht naar de bovenkant, en laat lichte taken
-  // duidelijker krimpen. Bredere range (60%+40%) dan de vorige versie
-  // (80%+20%) zodat het hoogteverschil ook echt opvalt. Met 32px-lane +
-  // 2px gap in week: availH = 30 → 0.5u ≈ 21px, 1u ≈ 22px, 2u ≈ 24px,
-  // 4u ≈ 26px, 8u = 30px.
-  const scaledRatio = 0.6 + 0.4 * Math.sqrt(ratio)
+  // Hoogte schaalt op uren-PER-DAG (via hoursScaleRatio — gedeeld met de
+  // all-day-pills in WeekTimeGrid), niet op het totaal van het project.
+  // Een 20u project dat 2.5 maanden loopt is ~16 minuten/dag, niet een
+  // volle werkdag.
   const scaledH = scaleByHours
-    ? Math.max(18, Math.round(availH * scaledRatio))
+    ? Math.max(18, Math.round(availH * hoursScaleRatio(project, memberId)))
     : baseH
   const barH   = scaleByHours ? scaledH : baseH
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -1541,6 +1543,11 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
           {allDayBars.map(b => {
             const color = BOARD_COLORS[b.p.board] ?? '#888'
             const top = 6 + b.lane * (allDayLaneH + 4)
+            // Hoogte van de pill zelf schaalt met uren/dag (zelfde ratio als
+            // de balken in Week/Overzicht-zoom) — top-anchored binnen de
+            // vaste lane-hoogte hierboven, zodat de lane-packing (en dus het
+            // niet-overlappen van andere pills) ongewijzigd blijft.
+            const pillH = Math.max(16, Math.round(allDayLaneH * hoursScaleRatio(b.p, memberId)))
             const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
             const titleShift = titleOffsetFor(b.left + 2, b.width, 9)
             const isGoogle = b.p.source === 'google'
@@ -1580,7 +1587,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
                 onClick={e => { if (!isDraggingMe) { e.stopPropagation(); onSelect(b.p) } }}
                 title={b.p.name + (isGoogle ? ' (Google, niet versleepbaar)' : ' (sleep om te verplaatsen, randen om te trimmen)')}
                 style={{ position: 'absolute', left: b.left + 2 + shiftLeft, top,
-                  width: Math.max(40, b.width + shiftWidth), height: allDayLaneH,
+                  width: Math.max(40, b.width + shiftWidth), height: pillH,
                   background: color, color: '#fff', border: 'none', borderRadius: 7,
                   padding: '4px 9px', cursor: isGoogle || !onDateDragEnd ? 'pointer' : 'grab', textAlign: 'left',
                   fontSize: 12, fontWeight: 600, lineHeight: 1.25,
