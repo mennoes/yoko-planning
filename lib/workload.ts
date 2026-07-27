@@ -314,9 +314,13 @@ export function projectHoursInWeek(
   // balk-hoogte) wél als vrij herkend, maar hier niet — met 0u als gevolg
   // op precies de dagen die countWorkdays dan alsnog wegskipte. isVrijTitle
   // is nu de ENIGE bron van waarheid voor naam-matching; plus de expliciete
-  // category-override (planning-popup) voor namen die geen enkel patroon
-  // raken, zoals 'Zwitserland'.
-  const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name)
+  // category-override én de GROEPSNAAM (zelfde regel als isVrijDayForMember
+  // in lib/vrijDays.ts) voor namen die geen enkel patroon raken, zoals
+  // 'Zwitserland' in een groep 'Vrij'. Reproduceerbaar bevestigd: zonder
+  // de groepsnaam-check verdween zo'n item volledig (0u) uit de
+  // werkdruk-totalen, terwijl isVrijDayForMember het lid op die exacte
+  // dagen al wél als 'vrij' had gemarkeerd via die groepsnaam.
+  const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
   const totalCalDays = Math.max(1, Math.floor((pEnd.getTime() - pStart.getTime()) / 86400000) + 1)
   const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
