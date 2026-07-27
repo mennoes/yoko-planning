@@ -58,6 +58,12 @@ export type BoardItem = {
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
   links?:         ItemLink[]            // gekoppelde bestanden / externe URL's
+  // Wanneer 't item subitems heeft volgt de timeline (startDate/endDate)
+  // normaliter automatisch de vroegste/laatste actieve-subitem-datum
+  // (BoardTable's effectiveItem-rollup). Zet de gebruiker zelf een datum
+  // op het hoofditem, dan wint die vanaf dat moment — tot dit veld weer
+  // wordt gereset (via de '↺ Auto'-knop in de UI).
+  datesOverride?: boolean
   [key: string]:  unknown
 }
 
