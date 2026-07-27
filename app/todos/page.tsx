@@ -1352,6 +1352,47 @@ export default function TodosPage() {
     saveTodoSections(next)
   }, [currentProfile?.memberId, hydrated, sections, allProjects, liveTeam])
 
+  // ── Dedup: duplicate todo's binnen één sectie opruimen ─────────────────────
+  // Kan ontstaan door 1) de oude pull/merge-bug (al gefixt, maar bestaande
+  // duplicaten bleven staan) of 2) twee tabbladen/toestellen die
+  // onafhankelijk hetzelfde project auto-seeden vóórdat ze elkaars
+  // toevoeging hebben gepulled — elk met een eigen unieke auto-${...}-id,
+  // dus de existingItemIds-check in de auto-seed hierboven kan dat niet
+  // voorkomen. Dedup is per SECTIE (niet globaal): hetzelfde project mag
+  // legitiem in de secties van meerdere eigenaars staan, dat is geen bug.
+  // Bij een duplicaat houden we de EERSTE aan (blijft z'n huidige positie/
+  // volgorde behouden) en nemen we 'done: true' over als een van de
+  // duplicaten al was afgevinkt — zo verlies je nooit een bevestigde
+  // toggle door de opruiming zelf.
+  useEffect(() => {
+    if (!hydrated || sections.length === 0) return
+    let changed = false
+    const next = sections.map(s => {
+      const byKey = new Map<string, TodoItem>()
+      const order: string[] = []
+      for (const item of s.items) {
+        const key = item.projectRef
+          ? `pr:${item.projectRef.board}:${item.projectRef.itemId}`
+          : `tx:${item.text.trim().toLowerCase()}`
+        const existing = byKey.get(key)
+        if (!existing) {
+          byKey.set(key, item)
+          order.push(key)
+        } else {
+          changed = true
+          markItemDeleted(item.id)
+          if (item.done && !existing.done) byKey.set(key, { ...existing, done: true })
+        }
+      }
+      const deduped = order.map(k => byKey.get(k)!)
+      if (deduped.length === s.items.length) return s
+      return { ...s, items: deduped }
+    })
+    if (!changed) return
+    setSections(next)
+    saveTodoSections(next)
+  }, [hydrated, sections])
+
   function updateSection(updated: Section, prev?: Section) {
     const next = sections.map(s => s.id === updated.id ? updated : s)
     setSections(next)
