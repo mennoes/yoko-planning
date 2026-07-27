@@ -2180,8 +2180,23 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     barTops.set(b.p.id, top)
     placed.push({ lane: b.lane, start: bStart, end: bEnd, bottom: top + h })
   }
-  const baseHeight = placed.length > 0
-    ? Math.max(...placed.map(r => r.bottom)) + BAR_GAP_S
+  // Container-hoogte NIET baseren op de volledige ~2-jaar zichtbare
+  // periode — een drukke dag ver weg (andere maand/kwartaal, bv. 4
+  // dingen die dezelfde dag overlappen en dus 4 lanes nodig hebben)
+  // blies anders de rij-hoogte op voor ÉLKE week, óók rustige weken die
+  // daar niets mee te maken hebben — precies de 'grote lege ruimte
+  // onder een enkel 8u-item' die gerapporteerd werd. Venster van ±90
+  // dagen rond vandaag: alleen balken die (mede) in dat venster vallen
+  // tellen mee voor de container-hoogte. Balken ver buiten het venster
+  // houden hun eigen correcte top/hoogte (skyline hierboven raakt daar
+  // niet aan), maar mogen de referentie voor de rest van de tijdlijn
+  // niet meer opblazen.
+  const WINDOW_DAYS = 90
+  const windowPx = (WINDOW_DAYS * 86400000) / msPerPx
+  const todayPx  = (Date.now() - gridStartMs) / msPerPx
+  const windowed = placed.filter(r => r.start < todayPx + windowPx && r.end > todayPx - windowPx)
+  const baseHeight = windowed.length > 0
+    ? Math.max(...windowed.map(r => r.bottom)) + BAR_GAP_S
     : BASELINE_AVAIL_H + BAR_GAP_S * 2
   const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
 
