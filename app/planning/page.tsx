@@ -950,10 +950,19 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           overflow: 'hidden', fontSize: small ? 9.5 : 10.5, fontWeight: 500, color: '#fff',
           cursor: ghost ? 'grabbing' : 'grab', userSelect: 'none',
           pointerEvents: 'auto',
-          border: multiOwnerBorder,
-          boxShadow: hoverBar ? '0 4px 12px rgba(0,0,0,0.4)' : '0 1px 2px rgba(0,0,0,0.18)',
-          // Done-items faden naar 45% zodat actief werk visueel pop't.
-          opacity: project.status === 'done' ? 0.45 : 1,
+          // Meerdaagse ('achtergrond') balken mogen sinds kort door losse
+          // 1-dags items ('voorgrond') overlapt worden i.p.v. dat die een
+          // eigen lane zoeken — een lichte rand op korte balken laat ze
+          // duidelijker 'boven op' een langer project poppen, anders
+          // vallen twee even-gekleurde bars visueel in elkaar.
+          border: projectDays <= 1 ? (multiOwnerBorder || '1px solid rgba(255,255,255,0.55)') : multiOwnerBorder,
+          boxShadow: hoverBar
+            ? '0 4px 12px rgba(0,0,0,0.4)'
+            : projectDays <= 1 ? '0 2px 6px rgba(0,0,0,0.3)' : '0 1px 2px rgba(0,0,0,0.18)',
+          // Done-items faden naar 45%; meerdaagse achtergrond-balken faden
+          // licht (92%) zodat overlappende voorgrond-items duidelijker
+          // bovenop liggen.
+          opacity: project.status === 'done' ? 0.45 : (projectDays > 1 ? 0.92 : 1),
           // Hover-bar én actieve-drag krijgen hoge z-index zodat 'ie ALTIJD
           // bovenop overlappende balken zichtbaar is. Anders kan een short
           // event onder een langere balk verstopt blijven.
@@ -2113,8 +2122,24 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // waardoor de groene 'vrij-tape' visueel wegzakte tussen andere bars.
   const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
   const vrijBars: SingleBar[] = projectAllSingles.filter(b => isVrijBar(b))
-  const projectPacked = packLanes(projectItems)
-  const projectLanes  = projectPacked.numLanes
+
+  // Meerdaagse projecten ('achtergrond') en losse 1-dags items
+  // ('voorgrond') pakken we APART: een kort item hoeft een lang project
+  // niet meer te ontwijken, het mag er gewoon overheen renderen (hogere
+  // z-index) — 'een item dat korter duurt gaat altijd over het item dat
+  // langer duurt'. Voorheen deelden ze ÉÉN lane-stack, waardoor een klein
+  // dagelijks meeting-chipje een compleet meerwekig project-blok omlaag
+  // duwde naar een nieuwe lane, met enorme rij-hoogtes tot gevolg zodra
+  // er een paar losse items naast een lang project stonden. Binnen elke
+  // groep blijven overlappende items nog wél netjes uit elkaars weg
+  // (twee 1-dags meetings op dezelfde dag krijgen nog steeds elk hun
+  // eigen lane) — alleen het KRUIS tussen de twee groepen mag overlappen.
+  const isMultiDayBar = (b: SingleBar): boolean =>
+    !!(b.p.startDate && b.p.endDate && b.p.startDate !== b.p.endDate)
+  const bgItems = projectItems.filter(isMultiDayBar)
+  const fgItems = projectItems.filter(b => !isMultiDayBar(b))
+  const bgPacked = packLanes(bgItems)
+  const fgPacked = packLanes(fgItems)
 
   // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 32px in week (net genoeg
   // voor titel + agenda-subtitle op 2 regels), 24px in maand. Schaalt
@@ -2137,18 +2162,24 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
-  const packedBars = projectPacked.items.map(b => ({
-    ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
-  })) as Single[]
   // Lege lanes ertussenuit halen: lane-packing kan lanes 0, 1, 2, 4
   // toewijzen (waarbij 3 leeg blijft op de zichtbare bars). We
   // hernummeren naar 0, 1, 2, 3 zodat er geen verticale gap is tussen
   // de gerenderde bars. Behoudt onderlinge volgorde van de originele
-  // lane-numbers; alleen 'sluit gaten'.
-  const usedLanes = [...new Set(packedBars.map(b => b.lane))].sort((a, b) => a - b)
-  const laneRemap = new Map<number, number>()
-  usedLanes.forEach((orig, idx) => laneRemap.set(orig, idx))
-  const bars: Single[] = packedBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
+  // lane-numbers; alleen 'sluit gaten'. Herbruikbaar per groep (bg/fg)
+  // zodat elke groep z'n EIGEN contiguous lane-nummering krijgt.
+  function remapLanes(packed: { items: (SingleBar & { lane: number; isMeeting: boolean })[] }): Single[] {
+    const withTrack = packed.items.map(b => ({
+      ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
+    })) as Single[]
+    const used = [...new Set(withTrack.map(b => b.lane))].sort((a, b) => a - b)
+    const remap = new Map<number, number>()
+    used.forEach((orig, idx) => remap.set(orig, idx))
+    return withTrack.map(b => ({ ...b, lane: remap.get(b.lane) ?? b.lane }))
+  }
+  const bgBars = remapLanes(bgPacked)
+  const fgBars = remapLanes(fgPacked)
+  const bars: Single[] = [...bgBars, ...fgBars]
 
   if (bars.length === 0 && vrijBars.length === 0) return null
 
@@ -2162,24 +2193,37 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // packWidth-overlap-check als packLanes gebruikte om lanes toe te
   // wijzen), niet van een globale per-lane-index-hoogte. Zo reserveert
   // niets ruimte voor een dag waar het toch niets bevat.
+  //
+  // Skyline draait NU APART per groep (achtergrond/voorgrond) — een
+  // voorgrond-item checkt alleen andere voorgrond-bewoners voor overlap,
+  // nooit de achtergrond-projecten, want die mag het gewoon overlappen
+  // (hogere z-index bij het renderen hieronder).
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
-  const barTops = new Map<string, number>()
-  const placed: { lane: number; start: number; end: number; bottom: number }[] = []
-  for (const b of [...bars].sort((a, b) => a.lane - b.lane)) {
-    const bStart = b.left
-    const bEnd = b.left + (b.packWidth || b.width)
-    let top = BAR_GAP_S
-    for (const rec of placed) {
-      if (rec.lane >= b.lane) continue
-      if (rec.start < bEnd && rec.end > bStart) top = Math.max(top, rec.bottom + BAR_GAP_S)
+  type Placed = { lane: number; start: number; end: number; bottom: number }
+  function computeSkyline(group: Single[]): { tops: Map<string, number>; placed: Placed[] } {
+    const tops = new Map<string, number>()
+    const placed: Placed[] = []
+    for (const b of [...group].sort((a, c) => a.lane - c.lane)) {
+      const bStart = b.left
+      const bEnd = b.left + (b.packWidth || b.width)
+      let top = BAR_GAP_S
+      for (const rec of placed) {
+        if (rec.lane >= b.lane) continue
+        if (rec.start < bEnd && rec.end > bStart) top = Math.max(top, rec.bottom + BAR_GAP_S)
+      }
+      const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
+      tops.set(b.p.id, top)
+      placed.push({ lane: b.lane, start: bStart, end: bEnd, bottom: top + h })
     }
-    const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
-    barTops.set(b.p.id, top)
-    placed.push({ lane: b.lane, start: bStart, end: bEnd, bottom: top + h })
+    return { tops, placed }
   }
+  const bgSkyline = computeSkyline(bgBars)
+  const fgSkyline = computeSkyline(fgBars)
+  const barTops = new Map<string, number>([...bgSkyline.tops, ...fgSkyline.tops])
+  const placed = [...bgSkyline.placed, ...fgSkyline.placed]
   // Container-hoogte NIET baseren op de volledige ~2-jaar zichtbare
   // periode — een drukke dag ver weg (andere maand/kwartaal, bv. 4
   // dingen die dezelfde dag overlappen en dus 4 lanes nodig hebben)
