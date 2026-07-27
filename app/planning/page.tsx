@@ -88,9 +88,11 @@ const NAME_PAD = 28
 // die scale wordt als prop doorgegeven aan TimelineBars / WeekTimeGrid /
 // DraggableBar zodat de gebruiker live verticaal kan in/uitzoomen.
 const BAR_H    = 32
-// Krappe gap tussen bars — vroeger 5px; te veel witruimte tussen aangrenzende
-// lanes. 2px geeft nog visuele scheiding maar houdt de rij compact.
-const BAR_GAP  = 2
+// Krappe gap tussen bars — 1px. Lane-hoogte is dynamisch (zie
+// TimelineBars/hoursScaleRatio: elke lane past zich al aan zijn eigen
+// inhoud aan), dus een kleinere gap kost geen extra witruimte-risico
+// meer — die zat altijd al in de vaste-pitch-benadering, niet hier.
+const BAR_GAP  = 1
 const HANDLE_W = 8
 
 // Gedeelde uren-per-dag → hoogte-ratio, gebruikt door zowel DraggableBar
@@ -98,8 +100,11 @@ const HANDLE_W = 8
 // sqrt i.p.v. lineair: de meeste items zitten op 2-4u/dag, niet 8u/dag —
 // een lineaire schaal zou die meerderheid allemaal naar de ondergrens
 // duwen. sqrt trekt gangbare belastingen dichter naar de bovenkant en
-// laat lichte taken toch duidelijk krimpen. 0.6 baseline + 0.4 schaal
-// geeft een merkbaar hoogteverschil (was eerder 0.8+0.2, amper zichtbaar).
+// laat lichte taken toch duidelijk krimpen. 0.3 baseline + 0.7 schaal:
+// sinds de lane-hoogte dynamisch is (elke lane = grootte van z'n eigen
+// bewoner, geen gedeelde vaste pitch meer) kost een bredere range geen
+// extra witruimte — dus veel meer ruimte voor een duidelijk verschil
+// tussen een rustige en een volle dag (was 0.6+0.4, nog te subtiel).
 function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
   const FULL_DAY_HOURS = 8
   const projectDays = (() => {
@@ -116,7 +121,7 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
   const rawHoursPerDay = memberHours / projectDays
   const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  return 0.6 + 0.4 * Math.sqrt(ratio)
+  return 0.3 + 0.7 * Math.sqrt(ratio)
 }
 
 // ─── View-size presets ────────────────────────────────────────────────────────
@@ -650,7 +655,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // Een 20u project dat 2.5 maanden loopt is ~16 minuten/dag, niet een
   // volle werkdag.
   const scaledH = scaleByHours
-    ? Math.max(18, Math.round(availH * hoursScaleRatio(project, memberId)))
+    ? Math.max(14, Math.round(availH * hoursScaleRatio(project, memberId)))
     : baseH
   const barH   = barHeightOverride ?? (scaleByHours ? scaledH : baseH)
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -1897,7 +1902,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const RS = rowScale ?? 1
-  const BAR_GAP_S = Math.max(2, Math.round(BAR_GAP * RS))
+  const BAR_GAP_S = Math.max(1, Math.round(BAR_GAP * RS))
   // Overrides voor workload-categorieën meedoen: items die de gebruiker
   // expliciet als 'meeting' heeft gemarkeerd moeten zich ook gedragen als
   // meeting (cluster + verbergbaar via 'Verberg Meetings'-toggle).
@@ -2153,7 +2158,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // zou 'm te veel laten krimpen).
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
   const naturalHeights = new Map<string, number>(
-    bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
+    bars.map(b => [b.p.id, Math.max(14, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
   const laneHeights: number[] = Array.from({ length: lanesNeeded }, (_, i) => {
     const occupants = bars.filter(b => b.lane === i).map(b => naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H)
