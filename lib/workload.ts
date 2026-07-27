@@ -35,6 +35,7 @@ export type Project = {
 
 import { getBoardColor } from './boardsRegistry'
 import type { BoardGroup } from './boards'
+import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 // Proxy zodat code als BOARD_COLORS[boardId] blijft werken, maar nu
 // dynamisch op de registry. Toegevoegde borden krijgen hun eigen kleur
 // uit de boards-tabel; onbekende keys vallen terug op grijs.
@@ -260,6 +261,13 @@ export function projectHoursInWeek(
   project: Project,
   memberId: string,
   weekStart: Date,
+  // Category-override voor dit project ('vrij' | 'meeting' | ... | undefined).
+  // Zonder deze param viel de vrij-detectie hieronder terug op alleen
+  // naam-patroon-matching — items die de gebruiker via de planning-popup
+  // hándmatig op 'vrij' heeft gezet (bv. 'Zwitserland' i.p.v. 'Vakantie')
+  // werden dan gemist en telden 0u i.p.v. hun echte uren. Optioneel zodat
+  // bestaande callers die 'm niet meegeven gewoon op naam-matching vallen.
+  categoryOverride?: string | null,
 ): number {
   if (!project.ownerIds.includes(memberId)) return 0
   if (project.estHours === 0) return 0
@@ -298,7 +306,17 @@ export function projectHoursInWeek(
   // EXCEPTION: vrij-events zelf moeten WEL meetellen — anders skipt
   // countWorkdays hun eigen dag weg en wordt een 8u vakantie 0u in de
   // werkdruk-bol. Voor vrij dus geen memberId-skip; alleen weekend.
-  const isVrij = /(^|\s)(vrij|vakantie|hemelvaart|verlof|tweede pinksterdag|tweede paasdag|tweede kerstdag|pasen|pinksteren|kerst|nieuwjaar|koningsdag|bevrijdingsdag|good ?friday)(\s|$)/i.test(project.name ?? '')
+  //
+  // Gebruikte vroeger een eigen los regex-patroon hier, dat niet 1-op-1
+  // overeenkwam met de canonieke VRIJ_PATTERNS in lib/workloadCategory.ts
+  // (miste bv. 'ziek', 'thuiswerken', losse 'Pinksterdag' zonder 'tweede').
+  // Zo'n item werd overal ELDERS in de app (todo-filter, categorie-badge,
+  // balk-hoogte) wél als vrij herkend, maar hier niet — met 0u als gevolg
+  // op precies de dagen die countWorkdays dan alsnog wegskipte. isVrijTitle
+  // is nu de ENIGE bron van waarheid voor naam-matching; plus de expliciete
+  // category-override (planning-popup) voor namen die geen enkel patroon
+  // raken, zoals 'Zwitserland'.
+  const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name)
   const totalCalDays = Math.max(1, Math.floor((pEnd.getTime() - pStart.getTime()) / 86400000) + 1)
   const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
@@ -315,8 +333,12 @@ export function memberContributions(
   memberId: string,
   weekStart: Date,
 ): ProjectContribution[] {
+  // Eén keer laden i.p.v. per project — dit loopt over alle projects ×
+  // members × weken in de planning-grid, dus een localStorage-read per
+  // item zou nodeloos vaak herhalen.
+  const overrides = loadCategoryOverrides()
   return projects
-    .map(p => ({ project: p, hours: projectHoursInWeek(p, memberId, weekStart) }))
+    .map(p => ({ project: p, hours: projectHoursInWeek(p, memberId, weekStart, overrides[p.id]) }))
     .filter(c => c.hours > 0)
 }
 
