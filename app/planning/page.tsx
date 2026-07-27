@@ -113,13 +113,17 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
     const e = new Date(project.endDate).getTime()
     return Math.max(1, Math.round((e - s) / 86400000) + 1)
   })()
-  const isVrijForScale = isVrijTitle(project.name)
+  // Vrij (vakantie, hemelvaart, …) is altijd 'de hele dag vrij', ongeacht
+  // wat estHours toevallig zegt (soms 0 in de data) — maar mag niet even
+  // hoog oogen als een ECHTE 8u/dag-werkdag. Cap op 70% i.p.v. de volle
+  // 100% die een genuine volle werkdag krijgt, zodat een vrije dag zich
+  // nog steeds onderscheidt van een drukke werkdag.
+  if (isVrijTitle(project.name)) return 0.7
   const owners = Math.max(1, project.ownerIds.filter(id => id !== 'unassigned').length)
   const memberHours = memberId && project.ownerHours && memberId in project.ownerHours
     ? Number(project.ownerHours[memberId]) || 0
     : (project.estHours || 0) / owners
-  const rawHoursPerDay = memberHours / projectDays
-  const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
+  const hoursPerDay = memberHours / projectDays
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
   return 0.3 + 0.7 * Math.sqrt(ratio)
 }
@@ -2284,10 +2288,14 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
             title={isReadOnly ? `${b.p.name} · bewerk in Google Calendar` : `${b.p.name} · sleep om te verplaatsen`}
             style={{
               // Vrij = volledige dag vrij — visueel blokkeert 't álle
-              // lanes van die rij. Bewust full-height (top:2 bottom:2)
-              // i.p.v. 1 lane: niets anders kan op die dag, dus de groene
-              // tape mag de hele rij dragen.
-              position: 'absolute', top: 2, bottom: 2,
+              // lanes van die rij, dus bewust niet in de gewone skyline-
+              // packing. Hoogte 70% van BASELINE_AVAIL_H (dezelfde
+              // absolute maat waarop een ECHTE 8u/dag-werkdag via
+              // hoursScaleRatio op 100% uitkomt) i.p.v. 70% van de
+              // (wisselende) rij-hoogte — anders zou vrij op een drukke
+              // dag ineens hoger ogen dan op een rustige dag.
+              position: 'absolute', top: 2,
+              height: Math.max(20, Math.round(BASELINE_AVAIL_H * 0.7)),
               left: b.left + 2, width: Math.max(20, b.width - 4),
               background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
               border: '2px solid rgba(72,130,82,1)',
