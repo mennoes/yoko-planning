@@ -251,7 +251,7 @@ function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): num
 }
 
 // ─── Hours in arbitrary range ─────────────────────────────────────────────────
-function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): number {
+function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, categoryOverride?: string | null): number {
   if (!project.ownerIds.includes(memberId)) return 0
   if (project.estHours === 0 || !project.startDate || !project.endDate) return 0
   const pS = new Date(project.startDate)
@@ -266,7 +266,18 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
   // skipt countWorkdaysMs hen weg en wordt een 8u vakantiedag 0u in de bol.
   // Voor vrij gebruiken we daarom GEEN memberId-skip: alleen weekend
   // wordt nog uitgesloten.
-  const isVrij = isVrijTitle(project.name)
+  // Naast naam-patroon (isVrijTitle) ook de GROEPSNAAM checken (zelfde
+  // regel als isVrijDayForMember in lib/vrijDays.ts) en de expliciete
+  // category-override. Zonder dit: een item als 'Zwitserland' dat in een
+  // groep 'Vrij'/'Vakantie' hangt (naam zelf matcht geen patroon) werd
+  // door isVrijDayForMember wél als vrije dag voor dit lid herkend — dus
+  // memberId werd elders al als 'af' geskipt op die dagen — maar hier
+  // niet als vrij herkend, dus WEL de memberId-skip toegepast op ZICHZELF.
+  // Resultaat: precies het project dat de vrije dagen veroorzaakt kwam op
+  // 0u uit i.p.v. de vrije-dag-uren te representeren. Reproduceerbaar
+  // bevestigd: item in groep 'Vrij' zonder naam-match → 40u compleet
+  // verdwenen uit de werkdruk-totalen.
+  const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
   const totalCalDays = Math.max(1, Math.floor((pE.getTime() - pS.getTime()) / 86400000) + 1)
   const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
@@ -280,8 +291,11 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date): n
 }
 
 function memberHoursInCol(projects: Project[], memberId: string, col: Col) {
+  // Eén keer laden i.p.v. per project — deze functie loopt over alle
+  // projects × members × kolommen in de grid.
+  const overrides = loadCategoryOverrides()
   return projects
-    .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd) }))
+    .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd, overrides[p.id]) }))
     .filter(c => c.hours > 0)
 }
 
