@@ -1113,7 +1113,34 @@ function Cell({ item, col, onUpdate }: {
     onUpdate({ status: v })
     notifyOwnersOfStatusChange(item, item.status, v)
   }} />
-  if (col.type === 'daterange') return <DateRangeCell startDate={item.startDate} endDate={item.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} />
+  if (col.type === 'daterange') {
+    // Bij subitems volgt de timeline standaard automatisch de subitem-
+    // rollup (zie effectiveItem in BoardRow) — net als de est-uren-cel
+    // ('Eigen Xu + Yu uit subs') krijgt deze cel een title-tooltip die
+    // uitlegt wat er gebeurt. Kiest de gebruiker hier zelf een datum,
+    // dan wint die vanaf nu (datesOverride) — de ↺-knop zet 'm terug op
+    // automatisch.
+    const hasSubsForDates = (item.subitems?.length ?? 0) > 0
+    const overridden = hasSubsForDates && !!item.datesOverride
+    const hint = !hasSubsForDates ? undefined : overridden
+      ? 'Handmatig ingesteld — volgt niet meer automatisch de subitems. Klik ↺ om terug te zetten op automatisch.'
+      : 'Automatisch overgenomen van de subitems (vroegste t/m laatste datum). Kies hier een eigen datum om dit te overrulen.'
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }} title={hint}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <DateRangeCell startDate={item.startDate} endDate={item.endDate}
+            onChange={(s, e) => onUpdate(hasSubsForDates ? { startDate: s, endDate: e, datesOverride: true } : { startDate: s, endDate: e })} />
+        </div>
+        {overridden && (
+          <button onClick={e => { e.stopPropagation(); onUpdate({ datesOverride: false }) }}
+            title="Terug naar automatisch (volgt weer de subitems)"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}>
+            ↺
+          </button>
+        )}
+      </div>
+    )
+  }
   if (col.type === 'url')       return <UrlCell       value={(item[col.key] as string) ?? ''} onChange={v => onUpdate({ [col.key]: v })} />
 
   const hasSubs = (item.subitems?.length ?? 0) > 0
@@ -1868,9 +1895,15 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
 
   // Auto-rollup: als parent een veld leeg laat én er zijn subitems, dan
   // afleiden uit subitems. Hours doen we al verderop in de Cell-dispatcher
-  // (read-only sum). Hier: timeline + owners. Schrijf-actie van de gebruiker
-  // overschrijft de derived waarde — om weer auto te krijgen moet je 't
-  // veld op de parent leegmaken.
+  // (read-only sum). Hier: timeline + owners.
+  //
+  // Timeline is een UITZONDERING op 'schrijf-actie overschrijft de derived
+  // waarde': zolang item.datesOverride niet gezet is, wint de subitem-
+  // rollup ALTIJD — dat is de gewenste 'volgt automatisch de subitems'-
+  // default. Zet de gebruiker zelf een datum op het hoofditem (via de
+  // datum-cel), dan zet de UI datesOverride=true en wint vanaf dat moment
+  // de eigen waarde — tot de gebruiker 'm weer terugzet via de '↺ Auto'-
+  // knop (die datesOverride weer op false zet).
   let effectiveItem: BoardItem = item
   if (hasSubitems) {
     const updates: Partial<BoardItem> = {}
@@ -1884,10 +1917,10 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     const dateSubs   = activeSubs.length > 0 ? activeSubs : subitems
     const subStarts = dateSubs.map(s => s.startDate).filter(Boolean) as string[]
     const subEnds   = dateSubs.map(s => s.endDate).filter(Boolean) as string[]
-    // Override de stored parent-datums altijd zodra subitems datums hebben.
-    // De parent eigen startDate/endDate zijn dan slechts een fallback.
-    if (subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
-    if (subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
+    if (!item.datesOverride) {
+      if (subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
+      if (subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
+    }
     // Owner-rollup: alle eigenaren over subitems verzamelen en samenvoegen
     // met de parent eigen ownerIds. Voorheen vulden we alleen aan wanneer
     // de parent helemaal leeg was; daardoor zag je niet de Yoko-collega's
