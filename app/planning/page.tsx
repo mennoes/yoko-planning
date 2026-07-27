@@ -11,7 +11,7 @@ import pnpRaw            from '@/data/boards/pnp.json'
 import nederlandRaw      from '@/data/boards/nederland.json'
 import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
 import dienjaarRaw       from '@/data/boards/dienjaar.json'
-import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscribeRemoteBoard, pullBoardFromRemote } from '@/lib/boardStore'
+import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscribeRemoteBoard, pullBoardFromRemote, softDeleteItem, restoreTrashItem } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
@@ -4841,6 +4841,10 @@ export default function PlanningPage() {
     const siMatch = origItemId.match(/^(.+)__si(\d+)$/)
     let groupsAfter: BoardGroup[]
     let removedSomething = false
+    // Subitem-removal raakt alleen de subitems-array van de PARENT-rij —
+    // die rij blijft bestaan en wordt via de normale upsert-diff gepusht,
+    // dus geen expliciete Supabase-delete nodig hier.
+    const isTopLevelRemoval = !siMatch
     if (siMatch) {
       const parentId = siMatch[1]
       const subIdx   = parseInt(siMatch[2], 10)
@@ -4870,11 +4874,18 @@ export default function PlanningPage() {
     }
     saveGroups(boardName, groupsAfter)
     setAllGroups(prev => ({ ...prev, [boardName]: groupsAfter }))
+    // pushBoardToRemote upsert alleen items die (nog) in de lokale staat
+    // staan en doet zelf GEEN reconcile-deletie meer (te gevaarlijk bij
+    // een tijdelijk gefilterde/stale lokale array) — dus zonder deze
+    // expliciete soft-delete blijft de rij in Supabase bestaan en komt
+    // 'ie bij de volgende pull terug. Zie lib/boardStore.ts.
+    if (isTopLevelRemoval) softDeleteItem(origItemId).catch(() => {})
     logActivity('Project verwijderd', project.name)
     setDetailProject(null)
     pushUndo(() => {
       saveGroups(boardName, before)
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
+      if (isTopLevelRemoval) restoreTrashItem(origItemId).catch(() => {})
     }, `'${project.name}' verwijderd`)
   }
 
