@@ -100,10 +100,11 @@ const HANDLE_W = 8
 // sqrt i.p.v. lineair: de meeste items zitten op 2-4u/dag, niet 8u/dag —
 // een lineaire schaal zou die meerderheid allemaal naar de ondergrens
 // duwen. sqrt trekt gangbare belastingen dichter naar de bovenkant en
-// laat lichte taken toch duidelijk krimpen. 0.4 baseline + 0.6 schaal,
-// met een hogere PROJECT_LANE_H-baseline (zie hieronder) zodat de
-// ondergrens zelf ook leesbaar blijft (was 0.3+0.7 op een kleinere
-// baseline — de kleinste items werden dan bijna onleesbaar).
+// laat lichte taken toch duidelijk krimpen. 0.3 baseline + 0.7 schaal op
+// een veel grotere PROJECT_LANE_H-baseline (zie hieronder): de ondergrens
+// (rustige items) blijft ongeveer waar-ie was, maar de bovengrens
+// (volle dagen) wordt nu FLINK hoger — kost niets aan witruimte dankzij
+// de skyline-packing (elke balk pakt precies z'n eigen ruimte).
 function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
   const FULL_DAY_HOURS = 8
   const projectDays = (() => {
@@ -120,7 +121,7 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
   const rawHoursPerDay = memberHours / projectDays
   const hoursPerDay = isVrijForScale && rawHoursPerDay < FULL_DAY_HOURS ? FULL_DAY_HOURS : rawHoursPerDay
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  return 0.4 + 0.6 * Math.sqrt(ratio)
+  return 0.3 + 0.7 * Math.sqrt(ratio)
 }
 
 // ─── View-size presets ────────────────────────────────────────────────────────
@@ -2124,12 +2125,13 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const PROJECT_LANE_H = zoom === 'maand'
     ? Math.max(22, Math.round(24 * RS))
     : zoom === 'week'
-      // 32 → 48: meer absolute ruimte om uren-per-dag zichtbaar te maken.
-      // Kost geen extra witruimte — de lane-hoogte is skyline-based
-      // (elke balk pakt precies z'n eigen benodigde ruimte), dus een
-      // grotere baseline vergroot alleen het bereik tussen kleinste en
-      // grootste balk, niet de gaten ertussen.
-      ? Math.max(38, Math.round(48 * RS))
+      // 48 → 90: veel meer absolute ruimte zodat een volle dag (8u)
+      // duidelijk VEEL hoger oogt dan een rustige dag. Kost geen extra
+      // witruimte — de lane-hoogte is skyline-based (elke balk pakt
+      // precies z'n eigen benodigde ruimte), dus een grotere baseline
+      // vergroot alleen het bereik tussen kleinste en grootste balk,
+      // niet de gaten ertussen.
+      ? Math.max(70, Math.round(90 * RS))
       : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
