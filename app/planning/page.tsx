@@ -2000,7 +2000,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Geen clustering meer in Overzicht: elke meeting krijgt zijn eigen
   // bar in zijn eigen lane, gesorteerd op starttijd (vroegste bovenaan).
   // Project-balken blijven horizontaal gepackt.
-  type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; isMeeting: boolean }
+  type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; packWidth: number; isMeeting: boolean }
   type Bar = SingleBar
 
   const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
@@ -2143,34 +2143,38 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const bars: Single[] = packedBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
 
   if (bars.length === 0 && vrijBars.length === 0) return null
-  const lanesNeeded = usedLanes.length > 0 ? usedLanes.length : projectLanes
 
-  // Elke lane had voorheen een VASTE pitch (PROJECT_LANE_H), gelijk aan de
-  // hoogte die een 8u/dag-bar nodig heeft — een 2u/dag-bar in die lane
-  // liet dus altijd dode ruimte onder zich staan tot de volgende lane
-  // begint. Nu krijgt elke lane precies de hoogte van z'n HOOGSTE bewoner
-  // (+ gap): een rij met alleen rustige items wordt zelf compact, een rij
-  // met een volle dag ertussen blijft ruim. hoursScaleRatio is dezelfde
-  // functie die de bar-hoogte zelf bepaalt — 1x berekend hier, en als
-  // barHeightOverride doorgegeven aan DraggableBar zodat de sqrt-curve
-  // niet per ongeluk dubbel wordt toegepast (availH zou anders al de
-  // uitkomst van deze berekening zijn, en er nogmaals *ratio op toepassen
-  // zou 'm te veel laten krimpen).
+  // Eerdere aanpak: elke lane-INDEX kreeg één gedeelde hoogte (= hoogste
+  // bewoner van die index, waar dan ook in de zichtbare tijdlijn). Bleek
+  // stuk: een lane-index kan op dag X leeg zijn maar op dag Y wél een
+  // hoge bar bevatten — dan reserveerde dag X nog steeds die volle
+  // hoogte, wat als onvoorspelbare 'gaten' tussen items op dag X oogde.
+  // Skyline i.p.v. lane-tabel: de top van een balk hangt alleen af van
+  // ANDERE balken die 'm daadwerkelijk in tijd overlappen (zelfde
+  // packWidth-overlap-check als packLanes gebruikte om lanes toe te
+  // wijzen), niet van een globale per-lane-index-hoogte. Zo reserveert
+  // niets ruimte voor een dag waar het toch niets bevat.
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(14, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
-  const laneHeights: number[] = Array.from({ length: lanesNeeded }, (_, i) => {
-    const occupants = bars.filter(b => b.lane === i).map(b => naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H)
-    return (occupants.length > 0 ? Math.max(...occupants) : BASELINE_AVAIL_H) + BAR_GAP_S
-  })
-  const laneOffsets: number[] = []
-  {
-    let acc = BAR_GAP_S
-    for (let i = 0; i < lanesNeeded; i++) { laneOffsets[i] = acc; acc += laneHeights[i] }
+  const barTops = new Map<string, number>()
+  const placed: { lane: number; start: number; end: number; bottom: number }[] = []
+  for (const b of [...bars].sort((a, b) => a.lane - b.lane)) {
+    const bStart = b.left
+    const bEnd = b.left + (b.packWidth || b.width)
+    let top = BAR_GAP_S
+    for (const rec of placed) {
+      if (rec.lane >= b.lane) continue
+      if (rec.start < bEnd && rec.end > bStart) top = Math.max(top, rec.bottom + BAR_GAP_S)
+    }
+    const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
+    barTops.set(b.p.id, top)
+    placed.push({ lane: b.lane, start: bStart, end: bEnd, bottom: top + h })
   }
-  const projectStack = laneHeights.reduce((s, h) => s + h, 0)
-  const baseHeight = BAR_GAP_S + projectStack
+  const baseHeight = placed.length > 0
+    ? Math.max(...placed.map(r => r.bottom)) + BAR_GAP_S
+    : BASELINE_AVAIL_H + BAR_GAP_S * 2
   const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
 
   return (
@@ -2307,21 +2311,21 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
           is met 4u/dag, 2u/dag, etc. */}
       {bars.map(b => {
         const top = 0
-        const wrapperH = projectStack
+        const wrapperH = height
+        const barH = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
         return (
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
-            {/* laneH = de (dynamische) hoogte van DEZE bar's eigen lane —
-                 niet de hele stack. barHeightOverride/topOverride komen
-                 uit de per-lane-max-hoogte-berekening hierboven, zodat
-                 lanes zonder hoge bewoner ook zelf compact blijven i.p.v.
-                 altijd de globale PROJECT_LANE_H-pitch te reserveren. */}
+            {/* laneH hoeft nu geen gedeelde tabelwaarde meer te zijn —
+                 elke bar krijgt gewoon z'n eigen hoogte + gap. barHeight-
+                 Override/topOverride komen uit de skyline-berekening
+                 hierboven (zie comment daar). */}
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
-              laneH={laneHeights[b.lane] ?? PROJECT_LANE_H}
+              laneH={barH + BAR_GAP_S}
               stackH={wrapperH}
               laneIdx={b.lane}
               scaleByHours={zoom === 'week' || zoom === 'maand'}
-              barHeightOverride={naturalHeights.get(b.p.id)}
-              topOverride={laneOffsets[b.lane]}
+              barHeightOverride={barH}
+              topOverride={barTops.get(b.p.id)}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
