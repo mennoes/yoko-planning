@@ -113,12 +113,10 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
     const e = new Date(project.endDate).getTime()
     return Math.max(1, Math.round((e - s) / 86400000) + 1)
   })()
-  // Vrij (vakantie, hemelvaart, …) is altijd 'de hele dag vrij', ongeacht
-  // wat estHours toevallig zegt (soms 0 in de data) — maar mag niet even
-  // hoog oogen als een ECHTE 8u/dag-werkdag. Cap op 70% i.p.v. de volle
-  // 100% die een genuine volle werkdag krijgt, zodat een vrije dag zich
-  // nog steeds onderscheidt van een drukke werkdag.
-  if (isVrijTitle(project.name)) return 0.7
+  // Vrij (vakantie, hemelvaart, …) is altijd 'de hele dag vrij' (8u),
+  // ongeacht wat estHours toevallig zegt (soms 0 in de data) — dus 100%,
+  // exact zoals een echte 8u/dag-werkdag.
+  if (isVrijTitle(project.name)) return 1.0
   const owners = Math.max(1, project.ownerIds.filter(id => id !== 'unassigned').length)
   const memberHours = memberId && project.ownerHours && memberId in project.ownerHours
     ? Number(project.ownerHours[memberId]) || 0
@@ -2289,13 +2287,13 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
             style={{
               // Vrij = volledige dag vrij — visueel blokkeert 't álle
               // lanes van die rij, dus bewust niet in de gewone skyline-
-              // packing. Hoogte 70% van BASELINE_AVAIL_H (dezelfde
-              // absolute maat waarop een ECHTE 8u/dag-werkdag via
-              // hoursScaleRatio op 100% uitkomt) i.p.v. 70% van de
-              // (wisselende) rij-hoogte — anders zou vrij op een drukke
+              // packing. Hoogte = 100% van BASELINE_AVAIL_H, exact zoals
+              // een ECHTE 8u/dag-werkdag via hoursScaleRatio ook op 100%
+              // uitkomt — een vaste absolute maat i.p.v. 100% van de
+              // (wisselende) rij-hoogte, anders zou vrij op een drukke
               // dag ineens hoger ogen dan op een rustige dag.
               position: 'absolute', top: 2,
-              height: Math.max(20, Math.round(BASELINE_AVAIL_H * 0.7)),
+              height: Math.max(20, BASELINE_AVAIL_H),
               left: b.left + 2, width: Math.max(20, b.width - 4),
               background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
               border: '2px solid rgba(72,130,82,1)',
