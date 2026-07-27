@@ -600,7 +600,7 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
 type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; startY: number; origStart: string | null; origEnd: string | null }
 
-function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
+function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   team?: TeamMember[]
   left: number; width: number; colW: number
@@ -619,6 +619,14 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // landen — net iets gestackt voor leesbaarheid.
   laneIdx?: number
   scaleByHours?: boolean
+  // TimelineBars berekent bij variabele-lane-hoogte de definitieve hoogte
+  // + top-positie zelf (per-lane gedimensioneerd op de hoogste bewoner
+  // i.p.v. een vaste pitch voor alle lanes — anders blijft er onder een
+  // kort item altijd dode ruimte over tot de vaste pitch-grens). Als
+  // deze gezet zijn WINNEN ze van de eigen ratio-/laneIdx-berekening
+  // hieronder, zodat de sqrt-curve niet dubbel wordt toegepast.
+  barHeightOverride?: number
+  topOverride?: number
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick:    () => void
@@ -644,7 +652,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   const scaledH = scaleByHours
     ? Math.max(18, Math.round(availH * hoursScaleRatio(project, memberId)))
     : baseH
-  const barH   = scaleByHours ? scaledH : baseH
+  const barH   = barHeightOverride ?? (scaleByHours ? scaledH : baseH)
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
   // groene look + palmboom-prefix zodat in één oogopslag duidelijk is dat
   // iemand niet werkt op die dagen — overruled meeting-geel en bord-kleur.
@@ -895,9 +903,9 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   void startHour
   void dayStartH
   void dayLengthH
-  const barTop = scaleByHours
+  const barTop = topOverride ?? (scaleByHours
     ? Math.max(0, laneOffset)
-    : BAR_GAP + (small ? (BAR_H - barH) / 2 : 0)
+    : BAR_GAP + (small ? (BAR_H - barH) / 2 : 0))
   // Titel-shift: schuif de tekst met de scroll mee zolang de bar nog (deels)
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
   // tekst niet pal tegen de sticky kolomrand plakt.
@@ -2105,13 +2113,15 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // voor titel + agenda-subtitle op 2 regels), 24px in maand. Schaalt
   // met rowScale (RS) zodat de hoogte-slider écht bar-hoogte aanpast.
   // Met MAX_LANES=6 wordt de totale rij-hoogte in week: max ~192px.
+  // PROJECT_LANE_H is nu alleen nog de BASELINE waarmee een bar z'n eigen
+  // 'natuurlijke' (uren-per-dag-afhankelijke) hoogte berekent — de
+  // daadwerkelijke lane-pitch is per lane dynamisch, zie laneHeights
+  // hieronder.
   const PROJECT_LANE_H = zoom === 'maand'
     ? Math.max(22, Math.round(24 * RS))
     : zoom === 'week'
       ? Math.max(26, Math.round(32 * RS))
       : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
-
-  function projectLaneTop(lane: number) { return BAR_GAP_S + lane * PROJECT_LANE_H }
 
   type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
   const packedBars = projectPacked.items.map(b => ({
@@ -2129,7 +2139,32 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   if (bars.length === 0 && vrijBars.length === 0) return null
   const lanesNeeded = usedLanes.length > 0 ? usedLanes.length : projectLanes
-  const projectStack = lanesNeeded * PROJECT_LANE_H
+
+  // Elke lane had voorheen een VASTE pitch (PROJECT_LANE_H), gelijk aan de
+  // hoogte die een 8u/dag-bar nodig heeft — een 2u/dag-bar in die lane
+  // liet dus altijd dode ruimte onder zich staan tot de volgende lane
+  // begint. Nu krijgt elke lane precies de hoogte van z'n HOOGSTE bewoner
+  // (+ gap): een rij met alleen rustige items wordt zelf compact, een rij
+  // met een volle dag ertussen blijft ruim. hoursScaleRatio is dezelfde
+  // functie die de bar-hoogte zelf bepaalt — 1x berekend hier, en als
+  // barHeightOverride doorgegeven aan DraggableBar zodat de sqrt-curve
+  // niet per ongeluk dubbel wordt toegepast (availH zou anders al de
+  // uitkomst van deze berekening zijn, en er nogmaals *ratio op toepassen
+  // zou 'm te veel laten krimpen).
+  const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
+  const naturalHeights = new Map<string, number>(
+    bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
+  )
+  const laneHeights: number[] = Array.from({ length: lanesNeeded }, (_, i) => {
+    const occupants = bars.filter(b => b.lane === i).map(b => naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H)
+    return (occupants.length > 0 ? Math.max(...occupants) : BASELINE_AVAIL_H) + BAR_GAP_S
+  })
+  const laneOffsets: number[] = []
+  {
+    let acc = BAR_GAP_S
+    for (let i = 0; i < lanesNeeded; i++) { laneOffsets[i] = acc; acc += laneHeights[i] }
+  }
+  const projectStack = laneHeights.reduce((s, h) => s + h, 0)
   const baseHeight = BAR_GAP_S + projectStack
   const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
 
@@ -2270,15 +2305,18 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const wrapperH = projectStack
         return (
           <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
-            {/* laneH = één lane-hoogte (NIET de hele stack); anders zou
-                 een 8u/dag bar de full-stack vullen en alle bars eronder
-                 dichtoverlappen. stackH = hele wrapper zodat lane-
-                 positionering verder dan één lane kan reiken. */}
+            {/* laneH = de (dynamische) hoogte van DEZE bar's eigen lane —
+                 niet de hele stack. barHeightOverride/topOverride komen
+                 uit de per-lane-max-hoogte-berekening hierboven, zodat
+                 lanes zonder hoge bewoner ook zelf compact blijven i.p.v.
+                 altijd de globale PROJECT_LANE_H-pitch te reserveren. */}
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
-              laneH={PROJECT_LANE_H}
+              laneH={laneHeights[b.lane] ?? PROJECT_LANE_H}
               stackH={wrapperH}
               laneIdx={b.lane}
               scaleByHours={zoom === 'week' || zoom === 'maand'}
+              barHeightOverride={naturalHeights.get(b.p.id)}
+              topOverride={laneOffsets[b.lane]}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
@@ -2299,7 +2337,7 @@ const MEETING_BAR_H = 18
 // Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
 // gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
 // met naam, tijd, uren en link naar Google Calendar.
-function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, stackH, laneIdx, scaleByHours, onDragMove, onDragEnd, onClick, onReassign }: {
+function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project
   memberId: string
   team?: TeamMember[]
@@ -2310,6 +2348,8 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
   stackH?: number
   laneIdx?: number
   scaleByHours?: boolean
+  barHeightOverride?: number
+  topOverride?: number
   onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick: () => void
@@ -2384,6 +2424,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
       style={{ position: 'absolute', top: 0, left: 0, right: 0, height: laneH, pointerEvents: 'none' }}>
       <DraggableBar project={project} memberId={memberId} team={team} left={left} width={width} colW={colW} small={false}
         laneH={laneH} stackH={stackH} laneIdx={laneIdx} scaleByHours={scaleByHours ?? false}
+        barHeightOverride={barHeightOverride} topOverride={topOverride}
         onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
         // pointer-events: none op de buitenkant zodat de muis door 't
