@@ -2012,12 +2012,21 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // de laatste balk, zodat een korte balk WEL in een eerder hiaat van een
   // bestaande lane kan landen (niet alleen na de laatste end-positie).
   //
-  // Sorteer-volgorde:
-  // 1) Breedste balken eerst (width desc) — krijgen lane 0/1/2 (bovenaan).
-  // 2) Daarna korte blokjes — die zoeken het EERSTE hiaat van de bovenste
-  //    bestaande lanes en vullen daar in. Pas als ze nergens passen ZONDER
-  //    overlap krijgen ze (a) gedeeld een lane met minste overlap (cap
-  //    bereikt) of (b) een nieuwe lane (cap niet bereikt).
+  // Sorteer-volgorde: op START-positie (niet breedte!). Dit is het
+  // klassieke, BEWEZEN-optimale interval-partitioning-algoritme —
+  // sorteer op starttijd, wijs steeds de laagst-genummerde lane toe die
+  // al vrij is. Dat garandeert het MINIMUM aantal lanes (exact het aantal
+  // items dat op enig moment écht gelijktijdig overlapt), nooit meer.
+  //
+  // Eerdere volgorde (breedste balken eerst) kon overlap-vrije lanes
+  // MISSEN: een brede balk die als eerste verwerkt werd claimde lane 0,
+  // ook als een chronologisch eerder-startend item daar prima had gepast
+  // — de brede balk schoof dan naar een hogere lane voor z'n HELE lengte,
+  // met een grote, onnodige lege ruimte tot gevolg zodra de items waar
+  // die brede balk 'voor moest wijken' zelf maar een klein stukje van
+  // die lengte overlapten. Breedte als secundair tie-break (bij gelijke
+  // start) blijft behouden zodat het grootste item bij een gelijke start
+  // nog steeds de voorkeur krijgt voor de laagste lane.
   //
   // MAX_LANES = 5: gebruiker prefereert wat overlap boven onleesbaar veel
   // rijen. Items die niet zonder conflict passen worden bij de lane met
@@ -2030,8 +2039,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     // veel te hoog terwijl je maar 4-5 lanes echt gebruikt ziet.
     const MAX_LANES = 6
     const sorted = [...items].sort((a, b) => {
-      if (b.width !== a.width) return b.width - a.width
-      return a.left - b.left
+      if (a.left !== b.left) return a.left - b.left
+      return b.width - a.width
     })
     type IV = { start: number; end: number }
     const lanes: IV[][] = []
