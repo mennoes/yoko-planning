@@ -97,14 +97,14 @@ const HANDLE_W = 8
 
 // Gedeelde uren-per-dag → hoogte-ratio, gebruikt door zowel DraggableBar
 // (Week/Overzicht-zoom) als de all-day-pills in WeekTimeGrid (Dag-zoom).
-// sqrt i.p.v. lineair: de meeste items zitten op 2-4u/dag, niet 8u/dag —
-// een lineaire schaal zou die meerderheid allemaal naar de ondergrens
-// duwen. sqrt trekt gangbare belastingen dichter naar de bovenkant en
-// laat lichte taken toch duidelijk krimpen. 0.3 baseline + 0.7 schaal op
-// een veel grotere PROJECT_LANE_H-baseline (zie hieronder): de ondergrens
-// (rustige items) blijft ongeveer waar-ie was, maar de bovengrens
-// (volle dagen) wordt nu FLINK hoger — kost niets aan witruimte dankzij
-// de skyline-packing (elke balk pakt precies z'n eigen ruimte).
+// sqrt i.p.v. lineair: puur lineair (ratio=uren/8) duwt de meerderheid
+// (2-4u/dag, niet 8u/dag) naar de ondergrens. sqrt trekt gangbare
+// belastingen omhoog. 0.1 baseline + 0.9 schaal (was 0.3+0.7 — te veel
+// compressie in het midden, 4u/dag en 8u/dag oogden bijna even hoog):
+// 0.5u≈32%, 2u≈55%, 4u≈74%, 6u≈88%, 8u=100%. Duidelijk oplopend over
+// het HELE bereik, niet alleen aan de uiterste onderkant. Kost niets aan
+// witruimte dankzij de skyline-packing (elke balk pakt precies z'n
+// eigen ruimte, geen gedeelde vaste pitch).
 function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
   const FULL_DAY_HOURS = 8
   const projectDays = (() => {
@@ -123,7 +123,7 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
     : (project.estHours || 0) / owners
   const hoursPerDay = memberHours / projectDays
   const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  return 0.3 + 0.7 * Math.sqrt(ratio)
+  return 0.1 + 0.9 * Math.sqrt(ratio)
 }
 
 // ─── View-size presets ────────────────────────────────────────────────────────
