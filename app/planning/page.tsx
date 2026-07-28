@@ -2007,87 +2007,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
 
-  // Project-balken packen we horizontaal. Gap-aware first-fit: elke lane
-  // houdt z'n volledige intervallenlijst bij i.p.v. alleen het einde van
-  // de laatste balk, zodat een korte balk WEL in een eerder hiaat van een
-  // bestaande lane kan landen (niet alleen na de laatste end-positie).
-  //
-  // Sorteer-volgorde: op START-positie (niet breedte!). Dit is het
-  // klassieke, BEWEZEN-optimale interval-partitioning-algoritme —
-  // sorteer op starttijd, wijs steeds de laagst-genummerde lane toe die
-  // al vrij is. Dat garandeert het MINIMUM aantal lanes (exact het aantal
-  // items dat op enig moment écht gelijktijdig overlapt), nooit meer.
-  //
-  // Eerdere volgorde (breedste balken eerst) kon overlap-vrije lanes
-  // MISSEN: een brede balk die als eerste verwerkt werd claimde lane 0,
-  // ook als een chronologisch eerder-startend item daar prima had gepast
-  // — de brede balk schoof dan naar een hogere lane voor z'n HELE lengte,
-  // met een grote, onnodige lege ruimte tot gevolg zodra de items waar
-  // die brede balk 'voor moest wijken' zelf maar een klein stukje van
-  // die lengte overlapten. Breedte als secundair tie-break (bij gelijke
-  // start) blijft behouden zodat het grootste item bij een gelijke start
-  // nog steeds de voorkeur krijgt voor de laagste lane.
-  //
-  // MAX_LANES = 5: gebruiker prefereert wat overlap boven onleesbaar veel
-  // rijen. Items die niet zonder conflict passen worden bij de lane met
-  // de minste overlap geduwd in plaats van een nieuwe rij te starten.
-  function packLanes<T extends { left: number; width: number; packWidth?: number }>(items: T[]) {
-    // MAX_LANES = 6: houdt de rij compact. Voorbij deze cap wordt overlap
-    // toegestaan (fallback = lane met minste overlap). Een grote cap
-    // veroorzaakte pijnlijke witruimte omdat off-screen bars in latere
-    // weken makkelijk 8-10 lanes opeisten — de rij werd dan zichtbaar
-    // veel te hoog terwijl je maar 4-5 lanes echt gebruikt ziet.
-    const MAX_LANES = 6
-    const sorted = [...items].sort((a, b) => {
-      if (a.left !== b.left) return a.left - b.left
-      return b.width - a.width
-    })
-    type IV = { start: number; end: number }
-    const lanes: IV[][] = []
-    const fitsLane = (intervals: IV[], s: number, e: number): boolean =>
-      intervals.every(iv => iv.end <= s + 1 || iv.start >= e - 1)
-    const overlapWith = (intervals: IV[], s: number, e: number): number => {
-      let total = 0
-      for (const iv of intervals) {
-        const lo = Math.max(iv.start, s)
-        const hi = Math.min(iv.end,   e)
-        if (hi > lo) total += (hi - lo)
-      }
-      return total
-    }
-    const packed = sorted.map(b => {
-      const s = b.left
-      // Pack op ECHTE tijdsduur (packWidth). Chips van verschillende
-      // start-tijden krijgen al een andere x-positie via startTime-shift
-      // in rawBars, dus als hun tijds-intervallen niet overlappen kunnen
-      // ze in dezelfde lane. Voorkomt lane-explosie op drukke dagen.
-      const e = b.left + (b.packWidth ?? b.width)
-      // Probeer een lane zonder enige overlap
-      let lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
-      if (lane >= 0) {
-        lanes[lane].push({ start: s, end: e })
-        return { ...b, lane }
-      }
-      // Cap niet bereikt → nieuwe lane
-      if (lanes.length < MAX_LANES) {
-        lanes.push([{ start: s, end: e }])
-        return { ...b, lane: lanes.length - 1 }
-      }
-      // Cap bereikt → kies de lane met de kleinste overlap; overlap toegestaan
-      let bestLane = 0
-      let bestOverlap = Infinity
-      for (let i = 0; i < lanes.length; i++) {
-        const o = overlapWith(lanes[i], s, e)
-        if (o < bestOverlap) { bestOverlap = o; bestLane = i }
-      }
-      lanes[bestLane].push({ start: s, end: e })
-      return { ...b, lane: bestLane }
-    })
-    return { items: packed, numLanes: lanes.length }
-  }
-
-  // Vrij-events trekken we uit de lane-pack zodat ze geen rij vergroten —
-  // ze worden los gerenderd over de volle hoogte van de container, achter
+  // Vrij-events trekken we uit de pack zodat ze geen rij vergroten — ze
+  // worden los gerenderd over de volle hoogte van de container, achter
   // de andere events.
   const projectAllSingles = finalBars
   const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
@@ -2115,24 +2036,20 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Hele-dag-flag is alleen nog nodig voor isVrijBar; full-day-projecten
   // gaan nu via de gewone bar-packing zodat hun hoogte proportioneel is.
   void isFullDayBar
-  // Meetings + reguliere projecten DELEN één lane-stack (gap-aware pack).
-  // Vrij-events daarentegen halen we UIT de pack: ze renderen full-height
-  // achtergrond-blokken zodat één blik meteen laat zien dat de dag(en) op
-  // slot staan. Vroeger vielen ze samen met projecten in dezelfde lane
-  // waardoor de groene 'vrij-tape' visueel wegzakte tussen andere bars.
+  // Meetings + reguliere projecten delen dezelfde stack. Vrij-events
+  // halen we ERUIT: ze renderen full-height achtergrond-blokken zodat één
+  // blik meteen laat zien dat de dag(en) op slot staan. Vroeger vielen ze
+  // samen met projecten in dezelfde lane waardoor de groene 'vrij-tape'
+  // visueel wegzakte tussen andere bars.
   const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
   const vrijBars: SingleBar[] = projectAllSingles.filter(b => isVrijBar(b))
-  const projectPacked = packLanes(projectItems)
-  const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 32px in week (net genoeg
-  // voor titel + agenda-subtitle op 2 regels), 24px in maand. Schaalt
-  // met rowScale (RS) zodat de hoogte-slider écht bar-hoogte aanpast.
-  // Met MAX_LANES=6 wordt de totale rij-hoogte in week: max ~192px.
-  // PROJECT_LANE_H is nu alleen nog de BASELINE waarmee een bar z'n eigen
-  // 'natuurlijke' (uren-per-dag-afhankelijke) hoogte berekent — de
-  // daadwerkelijke lane-pitch is per lane dynamisch, zie laneHeights
-  // hieronder.
+  // PROJECT_LANE_H bepaalt de BASELINE-hoogte waarmee een bar z'n eigen
+  // 'natuurlijke' (uren-per-dag-afhankelijke) hoogte berekent. Base 32px
+  // in week (net genoeg voor titel + agenda-subtitle op 2 regels), 24px
+  // in maand. Schaalt met rowScale (RS) zodat de hoogte-slider écht
+  // bar-hoogte aanpast. De daadwerkelijke verticale positie is per bar
+  // dynamisch — zie de skyline-pack hieronder.
   const PROJECT_LANE_H = zoom === 'maand'
     ? Math.max(22, Math.round(24 * RS))
     : zoom === 'week'
@@ -2145,49 +2062,64 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       ? Math.max(70, Math.round(90 * RS))
       : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
 
-  type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
-  const packedBars = projectPacked.items.map(b => ({
-    ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
-  })) as Single[]
-  // Lege lanes ertussenuit halen: lane-packing kan lanes 0, 1, 2, 4
-  // toewijzen (waarbij 3 leeg blijft op de zichtbare bars). We
-  // hernummeren naar 0, 1, 2, 3 zodat er geen verticale gap is tussen
-  // de gerenderde bars. Behoudt onderlinge volgorde van de originele
-  // lane-numbers; alleen 'sluit gaten'.
-  const usedLanes = [...new Set(packedBars.map(b => b.lane))].sort((a, b) => a - b)
-  const laneRemap = new Map<number, number>()
-  usedLanes.forEach((orig, idx) => laneRemap.set(orig, idx))
-  const bars: Single[] = packedBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
+  const bars: SingleBar[] = projectItems
 
   if (bars.length === 0 && vrijBars.length === 0) return null
 
-  // Eerdere aanpak: elke lane-INDEX kreeg één gedeelde hoogte (= hoogste
-  // bewoner van die index, waar dan ook in de zichtbare tijdlijn). Bleek
-  // stuk: een lane-index kan op dag X leeg zijn maar op dag Y wél een
-  // hoge bar bevatten — dan reserveerde dag X nog steeds die volle
-  // hoogte, wat als onvoorspelbare 'gaten' tussen items op dag X oogde.
-  // Skyline i.p.v. lane-tabel: de top van een balk hangt alleen af van
-  // ANDERE balken die 'm daadwerkelijk in tijd overlappen (zelfde
-  // packWidth-overlap-check als packLanes gebruikte om lanes toe te
-  // wijzen), niet van een globale per-lane-index-hoogte. Zo reserveert
-  // niets ruimte voor een dag waar het toch niets bevat.
+  // Eerdere aanpak: elke bar kreeg eerst een discrete LANE toegewezen
+  // puur op basis van tijd-overlap (packLanes), en pas DAARNA werd de
+  // top berekend door strikt op lane-nummer te stapelen (alles in lane N
+  // rendert altijd onder alles in lane < N dat 'm in tijd overlapt). Dat
+  // bleek stuk: een klein chip-item dat toevallig lane 2 kreeg kon NOOIT
+  // boven een grote bar in lane 1 uitkomen, ook niet als er boven die
+  // grote bar nog volop lege ruimte was — de lane was al vastgelegd
+  // vóórdat er iets over hoogte bekend was. Precies dít veroorzaakte de
+  // 'losse chips staan onder Huisstijl terwijl er boven Huisstijl nog
+  // ruimte is'-klacht.
+  //
+  // Fix: één ECHTE 2D-skyline. Elke bar zoekt zelf de laagst mogelijke
+  // top die geen enkele eerder geplaatste, in tijd overlappende bar
+  // raakt — desnoods midden tussen twee andere bars in, als daar een gat
+  // past. Geen lane-nummer bepaalt meer de stapel-volgorde; de eerste
+  // vrije verticale opening wint, wie de buur ook is.
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
   const barTops = new Map<string, number>()
-  const placed: { lane: number; start: number; end: number; bottom: number }[] = []
-  for (const b of [...bars].sort((a, b) => a.lane - b.lane)) {
+  const placed: { start: number; end: number; top: number; bottom: number }[] = []
+  // MAX_STACK_DEPTH: veiligheidsklep tegen eindeloos hoge rijen op een
+  // pathologisch drukke dag (>6 gelijktijdige items) — sta dan overlap
+  // toe i.p.v. een 7e+ verdieping toe te voegen.
+  const MAX_STACK_DEPTH = 6
+  const sortedBars = [...bars].sort((a, b) => {
+    if (a.left !== b.left) return a.left - b.left
+    return b.width - a.width
+  })
+  for (const b of sortedBars) {
     const bStart = b.left
-    const bEnd = b.left + (b.packWidth || b.width)
-    let top = BAR_GAP_S
-    for (const rec of placed) {
-      if (rec.lane >= b.lane) continue
-      if (rec.start < bEnd && rec.end > bStart) top = Math.max(top, rec.bottom + BAR_GAP_S)
-    }
+    const bEnd = b.left + (b.packWidth ?? b.width)
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
+    const overlapping = placed.filter(r => r.start < bEnd && r.end > bStart)
+    let top: number
+    if (overlapping.length >= MAX_STACK_DEPTH) {
+      // Te veel gelijktijdige items: leg 'm over de minst-volle buur i.p.v.
+      // de rij nóg hoger te maken.
+      const least = overlapping.reduce((a, c) => (c.bottom < a.bottom ? c : a))
+      top = least.top
+    } else {
+      // Kandidaat-hoogtes: de bovenkant van de rij, en de onderkant (+gap)
+      // van elke bestaande, tijd-overlappende bar. De laagst mogelijke
+      // geldige top ligt altijd op één van deze breekpunten.
+      const candidates = [BAR_GAP_S, ...overlapping.map(r => r.bottom + BAR_GAP_S)].sort((x, y) => x - y)
+      top = candidates[candidates.length - 1]
+      for (const cand of candidates) {
+        const collides = overlapping.some(r => !(cand + h + BAR_GAP_S <= r.top || cand >= r.bottom + BAR_GAP_S))
+        if (!collides) { top = cand; break }
+      }
+    }
     barTops.set(b.p.id, top)
-    placed.push({ lane: b.lane, start: bStart, end: bEnd, bottom: top + h })
+    placed.push({ start: bStart, end: bEnd, top, bottom: top + h })
   }
   // Container-hoogte NIET baseren op de volledige ~2-jaar zichtbare
   // periode — een drukke dag ver weg (andere maand/kwartaal, bv. 4
@@ -2358,7 +2290,6 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
               laneH={barH + BAR_GAP_S}
               stackH={wrapperH}
-              laneIdx={b.lane}
               scaleByHours={zoom === 'week' || zoom === 'maand'}
               barHeightOverride={barH}
               topOverride={barTops.get(b.p.id)}
