@@ -28,8 +28,7 @@ const DEFAULT_DOCS: NavItem[] = [
   { id: 'kantoor',     label: 'Kantoor',     href: '/kantoor',     icon: '🏢' },
   { id: 'budget',      label: 'Budget',      href: '/budget',      icon: '💰', visibleTo: ['menno', 'vincent'] },
   { id: 'accounts',    label: 'Accounts',    href: '/accounts',    icon: '🔑' },
-  { id: 'papierbak',   label: 'Papierbak',   href: '/papierbak',   icon: '🗑' },
-  { id: 'snapshots',   label: 'Geschiedenis', href: '/geschiedenis', icon: '📜' },
+  { id: 'snapshots',   label: 'Geschiedenis & herstel', href: '/geschiedenis', icon: '📜' },
 ]
 
 const DEFAULT_PROJECTS: NavItem[] = [
@@ -52,7 +51,21 @@ function save(key: string, val: unknown) {
   localStorage.setItem(key, JSON.stringify(val))
 }
 
-export function loadDocs():     NavItem[] { return load(DOCS_KEY,     DEFAULT_DOCS)     }
+function reconcileDocsList(items: NavItem[]): NavItem[] {
+  // Papierbak en snapshot-geschiedenis zijn samengevoegd op één pagina.
+  // Verwijder de oude losse standaardlink ook uit bestaande lokale
+  // sidebar-caches en actualiseer de standaardnaam van Geschiedenis.
+  const withoutLegacyTrash = items
+    .filter(item => item.id !== 'papierbak')
+    .map(item => item.id === 'snapshots' && item.label === 'Geschiedenis'
+      ? { ...item, label: 'Geschiedenis & herstel', href: '/geschiedenis' }
+      : item)
+  const existingIds = new Set(withoutLegacyTrash.map(i => i.id))
+  const missing = DEFAULT_DOCS.filter(d => !existingIds.has(d.id))
+  return missing.length > 0 ? [...withoutLegacyTrash, ...missing] : withoutLegacyTrash
+}
+
+export function loadDocs():     NavItem[] { return reconcileDocsList(load(DOCS_KEY, DEFAULT_DOCS)) }
 export function loadProjects(): NavItem[] { return load(PROJECTS_KEY, DEFAULT_PROJECTS) }
 
 export function saveDocs(items: NavItem[])     { save(DOCS_KEY,     items) }
@@ -85,10 +98,12 @@ function defaultSections(): SidebarSection[] {
 function reconcileDocsItems(sections: SidebarSection[]): SidebarSection[] {
   const docs = sections.find(s => s.id === 'pagina')
   if (!docs) return sections
-  const existingIds = new Set(docs.items.map(i => i.id))
-  const missing = DEFAULT_DOCS.filter(d => !existingIds.has(d.id))
-  if (missing.length === 0) return sections
-  return sections.map(s => s.id === 'pagina' ? { ...s, items: [...s.items, ...missing] } : s)
+  const reconciled = reconcileDocsList(docs.items)
+  if (
+    reconciled.length === docs.items.length &&
+    reconciled.every((item, idx) => item === docs.items[idx])
+  ) return sections
+  return sections.map(s => s.id === 'pagina' ? { ...s, items: reconciled } : s)
 }
 
 export function loadSections(): SidebarSection[] {
