@@ -2241,7 +2241,17 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     const bEnd = b.left + (b.packWidth || b.width)
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
     const blockers = placed
-      .filter(rec => rec.start < bEnd && rec.end > bStart)
+      .filter(rec => {
+        const overlapPx = Math.min(rec.end, bEnd) - Math.max(rec.start, bStart)
+        if (overlapPx <= 0) return false
+        // Kleine horizontale raakvlakken mogen dezelfde verticale plek
+        // delen. Begrensd op 8px / 18% van de kortste balk, zodat chips
+        // iets over elkaar heen mogen vallen zonder hun klikvlak of titel
+        // grotendeels te verbergen.
+        const shorterSpan = Math.min(rec.end - rec.start, bEnd - bStart)
+        const horizontalAllowance = Math.min(8, Math.max(2, Math.round(shorterSpan * 0.18)))
+        return overlapPx > horizontalAllowance
+      })
       .sort((a, b) => a.top - b.top)
     const strictTop = firstVerticalGap(h, blockers)
     // Near-fit fallback: alleen een kleine overlap toestaan wanneer dat
