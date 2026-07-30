@@ -2045,26 +2045,23 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // de laatste balk, zodat een korte balk WEL in een eerder hiaat van een
   // bestaande lane kan landen (niet alleen na de laatste end-positie).
   //
-  // Sorteer-volgorde: op START-positie (niet breedte!). Dit is het
-  // klassieke, BEWEZEN-optimale interval-partitioning-algoritme —
-  // sorteer op starttijd, wijs steeds de laagst-genummerde lane toe die
-  // al vrij is. Dat garandeert het MINIMUM aantal lanes (exact het aantal
-  // items dat op enig moment écht gelijktijdig overlapt), nooit meer.
+  // Plaatsingsprioriteit:
+  //   1. meetings eerst: die vormen de compacte bovenste agenda-laag;
+  //   2. daarna lange projecten: een balk zoals "Huisstijl" komt zo
+  //      direct onder de meetings te liggen;
+  //   3. korte projecten als laatste: first-fit kan die vervolgens in
+  //      ieder nog vrij datumgat van de bovenste lanes schuiven.
   //
-  // Eerdere volgorde (breedste balken eerst) kon overlap-vrije lanes
-  // MISSEN: een brede balk die als eerste verwerkt werd claimde lane 0,
-  // ook als een chronologisch eerder-startend item daar prima had gepast
-  // — de brede balk schoof dan naar een hogere lane voor z'n HELE lengte,
-  // met een grote, onnodige lege ruimte tot gevolg zodra de items waar
-  // die brede balk 'voor moest wijken' zelf maar een klein stukje van
-  // die lengte overlapten. Breedte als secundair tie-break (bij gelijke
-  // start) blijft behouden zodat het grootste item bij een gelijke start
-  // nog steeds de voorkeur krijgt voor de laagste lane.
+  // Alleen op starttijd sorteren gaf een chronologisch correcte maar
+  // visueel slechte uitkomst: een vroeg kort project kon lane 0 voor een
+  // stukje claimen, waarna een lange balk voor z'n HELE looptijd naar
+  // lane 1 schoof. Alle later verwerkte korte items kwamen daardoor onder
+  // die lange balk terecht, ook waar lane 0 zichtbaar leeg was.
   //
   // MAX_LANES = 5: gebruiker prefereert wat overlap boven onleesbaar veel
   // rijen. Items die niet zonder conflict passen worden bij de lane met
   // de minste overlap geduwd in plaats van een nieuwe rij te starten.
-  function packLanes<T extends { left: number; width: number; packWidth?: number }>(items: T[]) {
+  function packLanes<T extends { left: number; width: number; packWidth?: number; isMeeting?: boolean }>(items: T[]) {
     // MAX_LANES = 6: houdt de rij compact. Voorbij deze cap wordt overlap
     // toegestaan (fallback = lane met minste overlap). Een grote cap
     // veroorzaakte pijnlijke witruimte omdat off-screen bars in latere
@@ -2072,6 +2069,12 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     // veel te hoog terwijl je maar 4-5 lanes echt gebruikt ziet.
     const MAX_LANES = 6
     const sorted = [...items].sort((a, b) => {
+      if (Boolean(a.isMeeting) !== Boolean(b.isMeeting)) return a.isMeeting ? -1 : 1
+      if (!a.isMeeting && !b.isMeeting) {
+        const aSpan = a.packWidth ?? a.width
+        const bSpan = b.packWidth ?? b.width
+        if (aSpan !== bSpan) return bSpan - aSpan
+      }
       if (a.left !== b.left) return a.left - b.left
       return b.width - a.width
     })
