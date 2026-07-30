@@ -2211,7 +2211,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
   const barTops = new Map<string, number>()
-  const placed: { start: number; end: number; top: number; bottom: number }[] = []
+  const placed: { start: number; end: number; visualStart: number; visualEnd: number; top: number; bottom: number }[] = []
   const firstVerticalGap = (
     h: number,
     blockers: { top: number; bottom: number }[],
@@ -2226,6 +2226,42 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     }
     return candidate
   }
+  const horizontalCoverageAt = (
+    candidateTop: number,
+    h: number,
+    visualStart: number,
+    visualEnd: number,
+    blockers: typeof placed,
+    verticalAllowance: number,
+  ): number => {
+    const candidateBottom = candidateTop + h
+    const ranges = blockers
+      .filter(blocker => {
+        const verticalOverlap = Math.min(candidateBottom, blocker.bottom) - Math.max(candidateTop, blocker.top)
+        return verticalOverlap > verticalAllowance
+      })
+      .map(blocker => ({
+        start: Math.max(visualStart, blocker.visualStart),
+        end: Math.min(visualEnd, blocker.visualEnd),
+      }))
+      .filter(range => range.end > range.start)
+      .sort((a, b) => a.start - b.start)
+    if (ranges.length === 0) return 0
+    let covered = 0
+    let rangeStart = ranges[0].start
+    let rangeEnd = ranges[0].end
+    for (const range of ranges.slice(1)) {
+      if (range.start > rangeEnd) {
+        covered += Math.max(0, rangeEnd - rangeStart)
+        rangeStart = range.start
+        rangeEnd = range.end
+      } else {
+        rangeEnd = Math.max(rangeEnd, range.end)
+      }
+    }
+    covered += Math.max(0, rangeEnd - rangeStart)
+    return covered / Math.max(1, visualEnd - visualStart)
+  }
   const placementBars = [...bars].sort((a, b) => {
     if (a.isMeeting !== b.isMeeting) return a.isMeeting ? -1 : 1
     if (!a.isMeeting && !b.isMeeting) {
@@ -2239,6 +2275,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   for (const b of placementBars) {
     const bStart = b.left
     const bEnd = b.left + (b.packWidth || b.width)
+    const bVisualEnd = b.left + b.width
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
     const blockers = placed
       .filter(rec => {
@@ -2262,9 +2299,31 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     const overlapAllowance = Math.min(8, Math.max(3, Math.round(h * 0.18)))
     const relaxedTop = firstVerticalGap(h, blockers, overlapAllowance)
     const meaningfulSaving = Math.max(12, Math.round(h * 0.25))
-    const top = strictTop - relaxedTop >= meaningfulSaving ? relaxedTop : strictTop
+    let top = strictTop - relaxedTop >= meaningfulSaving ? relaxedTop : strictTop
+    // Oppervlaktebewuste fallback voor lange, rechte balken: één lokaal
+    // hoog item mag niet honderden pixels lege ruimte onder de rest van
+    // de looptijd veroorzaken. Probeer alle logische Y-posities en kies
+    // de hoogste waarbij maximaal 18% van de ZICHTBARE balkbreedte door
+    // serieuze overlap wordt geraakt. De zichtbare breedte (niet alleen
+    // packWidth) voorkomt dat een rij vol minimum-width meetingchips ten
+    // onrechte als "nauwelijks overlap" wordt gezien.
+    if (!b.isMeeting) {
+      const candidates = [
+        BAR_GAP_S,
+        ...blockers.map(blocker => Math.max(BAR_GAP_S, blocker.bottom + BAR_GAP_S - overlapAllowance)),
+      ].sort((a, b) => a - b)
+      for (const candidate of candidates) {
+        if (horizontalCoverageAt(candidate, h, b.left, bVisualEnd, blockers, overlapAllowance) > 0.18) continue
+        if (top - candidate >= meaningfulSaving) top = candidate
+        break
+      }
+    }
     barTops.set(b.p.id, top)
-    placed.push({ start: bStart, end: bEnd, top, bottom: top + h })
+    placed.push({
+      start: bStart, end: bEnd,
+      visualStart: b.left, visualEnd: bVisualEnd,
+      top, bottom: top + h,
+    })
   }
   // Container-hoogte NIET baseren op de volledige ~2-jaar zichtbare
   // periode — een drukke dag ver weg (andere maand/kwartaal, bv. 4
