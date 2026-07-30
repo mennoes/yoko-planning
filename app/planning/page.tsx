@@ -2213,6 +2213,20 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   )
   const barTops = new Map<string, number>()
   const placed: { start: number; end: number; top: number; bottom: number }[] = []
+  const firstVerticalGap = (
+    h: number,
+    blockers: { top: number; bottom: number }[],
+    overlapAllowance = 0,
+  ): number => {
+    let candidate = BAR_GAP_S
+    for (const blocker of blockers) {
+      if (candidate + h + BAR_GAP_S <= blocker.top + overlapAllowance) break
+      if (blocker.bottom + BAR_GAP_S - overlapAllowance > candidate) {
+        candidate = blocker.bottom + BAR_GAP_S - overlapAllowance
+      }
+    }
+    return candidate
+  }
   for (const b of bars) {
     const bStart = b.left
     const bEnd = b.left + (b.packWidth || b.width)
@@ -2220,15 +2234,16 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     const blockers = placed
       .filter(rec => rec.start < bEnd && rec.end > bStart)
       .sort((a, b) => a.top - b.top)
-    let top = BAR_GAP_S
-    for (const blocker of blockers) {
-      // Genoeg verticale ruimte vóór deze blocker: dit is het eerste en
-      // dus hoogst mogelijke gat; latere blockers staan nog lager.
-      if (top + h + BAR_GAP_S <= blocker.top) break
-      // Blocker ligt boven/door onze kandidaat heen: schuif kandidaat
-      // direct eronder en zoek verder.
-      if (blocker.bottom + BAR_GAP_S > top) top = blocker.bottom + BAR_GAP_S
-    }
+    const strictTop = firstVerticalGap(h, blockers)
+    // Near-fit fallback: alleen een kleine overlap toestaan wanneer dat
+    // het item aantoonbaar een flink stuk hoger trekt. Zo blijven normale
+    // situaties conflictvrij, maar offert de planner bij een nét te klein
+    // gat niet een volledige extra rij op. Maximaal 8px / 18% van de
+    // balkhoogte, zodat titel en klikvlak leesbaar blijven.
+    const overlapAllowance = Math.min(8, Math.max(3, Math.round(h * 0.18)))
+    const relaxedTop = firstVerticalGap(h, blockers, overlapAllowance)
+    const meaningfulSaving = Math.max(12, Math.round(h * 0.25))
+    const top = strictTop - relaxedTop >= meaningfulSaving ? relaxedTop : strictTop
     barTops.set(b.p.id, top)
     placed.push({ start: bStart, end: bEnd, top, bottom: top + h })
   }
