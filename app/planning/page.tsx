@@ -2197,33 +2197,40 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   if (bars.length === 0 && vrijBars.length === 0) return null
 
-  // Eerdere aanpak: elke lane-INDEX kreeg één gedeelde hoogte (= hoogste
-  // bewoner van die index, waar dan ook in de zichtbare tijdlijn). Bleek
-  // stuk: een lane-index kan op dag X leeg zijn maar op dag Y wél een
-  // hoge bar bevatten — dan reserveerde dag X nog steeds die volle
-  // hoogte, wat als onvoorspelbare 'gaten' tussen items op dag X oogde.
-  // Skyline i.p.v. lane-tabel: de top van een balk hangt alleen af van
-  // ANDERE balken die 'm daadwerkelijk in tijd overlappen (zelfde
-  // packWidth-overlap-check als packLanes gebruikte om lanes toe te
-  // wijzen), niet van een globale per-lane-index-hoogte. Zo reserveert
-  // niets ruimte voor een dag waar het toch niets bevat.
+  // Echte 2D-gap-packing: lane-nummers bepalen alleen de stabiele
+  // plaatsingsprioriteit, niet meer de uiteindelijke Y-positie. Voor
+  // iedere balk scannen we van boven naar beneden naar het eerste
+  // rechthoekige gat dat qua hoogte én datumbereik past.
+  //
+  // Dit is belangrijk bij een lange balk zoals "Huisstijl": die moet
+  // voor z'n hele looptijd onder de drukste meeting-stack blijven en kan
+  // daardoor lokaal veel ruimte boven zich hebben. Een later kort item
+  // mag in zo'n lokaal gat terechtkomen, ook al heeft het door de globale
+  // interval-pack een hoger lane-nummer dan Huisstijl.
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
   const barTops = new Map<string, number>()
-  const placed: { lane: number; start: number; end: number; bottom: number }[] = []
-  for (const b of [...bars].sort((a, b) => a.lane - b.lane)) {
+  const placed: { start: number; end: number; top: number; bottom: number }[] = []
+  for (const b of bars) {
     const bStart = b.left
     const bEnd = b.left + (b.packWidth || b.width)
-    let top = BAR_GAP_S
-    for (const rec of placed) {
-      if (rec.lane >= b.lane) continue
-      if (rec.start < bEnd && rec.end > bStart) top = Math.max(top, rec.bottom + BAR_GAP_S)
-    }
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
+    const blockers = placed
+      .filter(rec => rec.start < bEnd && rec.end > bStart)
+      .sort((a, b) => a.top - b.top)
+    let top = BAR_GAP_S
+    for (const blocker of blockers) {
+      // Genoeg verticale ruimte vóór deze blocker: dit is het eerste en
+      // dus hoogst mogelijke gat; latere blockers staan nog lager.
+      if (top + h + BAR_GAP_S <= blocker.top) break
+      // Blocker ligt boven/door onze kandidaat heen: schuif kandidaat
+      // direct eronder en zoek verder.
+      if (blocker.bottom + BAR_GAP_S > top) top = blocker.bottom + BAR_GAP_S
+    }
     barTops.set(b.p.id, top)
-    placed.push({ lane: b.lane, start: bStart, end: bEnd, bottom: top + h })
+    placed.push({ start: bStart, end: bEnd, top, bottom: top + h })
   }
   // Container-hoogte NIET baseren op de volledige ~2-jaar zichtbare
   // periode — een drukke dag ver weg (andere maand/kwartaal, bv. 4
