@@ -149,9 +149,22 @@ export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGrou
     // brengt een stale localStorage van vorige sessies de lege rijen
     // visueel terug — én een achtergrondpull cleant ze pas ná de eerste
     // render op.
+    //
+    // dedupeSubitems draaide tot nu toe alleen op de remote-pull-kant
+    // (rowToItem) — een localStorage-cache van vóór die fix houdt dubbele
+    // subitems dus voor altijd vast, want deze read-path overschreef ze
+    // nooit. Zelfde behandeling hier zodat oude caches ook opschonen.
+    // Daarnaast: hard id-dedup over ALLE groepen van dit bord heen, voor
+    // het geval een item (sync- of drag-bug) in twee groepen tegelijk
+    // terecht is gekomen — anders duikt 'ie dubbel op in bv. de 'Jouw
+    // taken'-widget.
+    const seenItemIds = new Set<string>()
     return parsed.map(g => ({
       ...g,
-      items: g.items.filter(i => !isEmptyNieuwItem(i) || inProgressNewItems.has(i.id)),
+      items: g.items
+        .filter(i => !isEmptyNieuwItem(i) || inProgressNewItems.has(i.id))
+        .filter(i => { if (seenItemIds.has(i.id)) return false; seenItemIds.add(i.id); return true })
+        .map(i => ({ ...i, subitems: dedupeSubitems(i.subitems) })),
     }))
   } catch { return fallback }
 }
