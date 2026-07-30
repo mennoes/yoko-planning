@@ -606,6 +606,14 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
 type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; startY: number; origStart: string | null; origEnd: string | null }
+type DragGhost = { left: number; width: number; startDate: string | null; endDate: string | null }
+
+function formatDragDate(iso: string | null): string {
+  if (!iso) return 'Geen datum'
+  const d = new Date(`${iso}T12:00:00`)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })
+}
 
 function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
@@ -728,7 +736,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // 'wegvallen' tegen achtergronden van andere bars.
   const multiOwnerBorder = multiOwnerGradient ? `1px solid ${color}` : undefined
   const dragRef = useRef<DragInfo | null>(null)
-  const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
+  const [ghost, setGhost] = useState<DragGhost | null>(null)
   const reassignRef = useRef<string | null>(null)
   const didDrag = useRef(false)
   const dpx = 7 / colW
@@ -801,7 +809,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     e.preventDefault(); e.stopPropagation()
     didDrag.current = false
     dragRef.current = { mode, startX: e.clientX, startY: e.clientY, origStart: project.startDate, origEnd: project.endDate }
-    setGhost({ left, width })
+    setGhost({ left, width, startDate: project.startDate, endDate: project.endDate })
     reassignRef.current = null
     captureRows()
     // Pauseer remote-pulls tijdens een drag — anders kan een binnen-
@@ -845,11 +853,11 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
       if (m === 'move')       { newL = left + ddays * (colW / 7) }
       else if (m === 'start') { const dl = ddays * (colW / 7); newL = left + dl; newW = Math.max(colW / 7, width - dl) }
       else                    { newW = Math.max(colW / 7, width + ddays * (colW / 7)) }
-      setGhost({ left: newL, width: newW })
       let ss = origStart, se = origEnd
       if (m === 'move')       { ss = origStart ? addDays(origStart, ddays) : null; se = origEnd ? addDays(origEnd, ddays) : null }
       else if (m === 'start') { ss = origStart ? addDays(origStart, ddays) : null; if (ss && se && ss > se) ss = se }
       else                    { se = origEnd ? addDays(origEnd, ddays) : null; if (ss && se && se < ss) se = ss }
+      setGhost({ left: newL, width: newW, startDate: ss, endDate: se })
       onDragMove(ss, se)
     }
 
@@ -923,6 +931,31 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
+      {ghost && (
+        <>
+          <div style={{
+            position: 'absolute', top: barTop + Math.max(0, (barH - 18) / 2), left: ghost.left + 2,
+            transform: 'translateX(-100%)', marginLeft: -4,
+            padding: '3px 6px', borderRadius: 5,
+            background: 'var(--bg-card)', border: `1px solid ${color}`,
+            color: 'var(--text-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+            fontSize: 10, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap',
+            pointerEvents: 'none', zIndex: 8,
+          }}>
+            {formatDragDate(ghost.startDate)}
+          </div>
+          <div style={{
+            position: 'absolute', top: barTop + Math.max(0, (barH - 18) / 2), left: ghost.left + ghost.width + 2,
+            marginLeft: 4, padding: '3px 6px', borderRadius: 5,
+            background: 'var(--bg-card)', border: `1px solid ${color}`,
+            color: 'var(--text-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+            fontSize: 10, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap',
+            pointerEvents: 'none', zIndex: 8,
+          }}>
+            {formatDragDate(ghost.endDate)}
+          </div>
+        </>
+      )}
       {/* Hit-area expander — sibling of de bar zodat dunne bars makkelijk
           aanklikbaar zijn. ALLEEN voor draggable items; read-only items
           (Google-meetings) overslaan we 'm zodat ie geen events

@@ -52,6 +52,22 @@ type TodoItem = { id: string; text: string; done: boolean }
 type SectionId = 'taken' | 'werkdruk' | 'team' | 'deadlines' | 'overload' | 'documenten' | 'paginas'
 const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload', 'paginas', 'documenten']
 
+function todoIdentity(todo: TodoStoreItem): string {
+  const ref = todo.projectRef
+  if (ref?.itemId) return `project:${ref.board}:${ref.itemId}`
+  return `text:${todo.text.trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')}`
+}
+
+function dedupeTodos(items: TodoStoreItem[]): TodoStoreItem[] {
+  const unique = new Map<string, TodoStoreItem>()
+  for (const item of items) {
+    const key = todoIdentity(item)
+    const existing = unique.get(key)
+    if (!existing || (existing.done && !item.done)) unique.set(key, item)
+  }
+  return [...unique.values()]
+}
+
 type RemoteProfile = {
   member_id:       string | null
   name:            string | null
@@ -438,12 +454,9 @@ export default function HomePage() {
     // Projects) — anders zou de home-card minder items tonen dan /todos
     // wanneer de auto-seed daar nog niet is gedraaid (user heeft /todos
     // nooit geopend in deze sessie).
-    function loadMine() {
-      const fallback: TodoSection[] = todosData.sections as TodoSection[]
-      const sections = loadTodoSectionsStore(fallback)
-      const s = sections.find(x => x.id === memberId)
-      const stored = (s?.items ?? []) as TodoStoreItem[]
-      const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
+    function mergeStoredWithProjects(stored: TodoStoreItem[]): TodoStoreItem[] {
+      const storedUnique = dedupeTodos(stored)
+      const existingRefs = new Set(storedUnique.map(todoIdentity))
       // Lees de 'verwijderd door user'-set zodat extras die de user op
       // /todos heeft weggekruist niet alsnog hier verschijnen — anders
       // matchen home en /todos niet (zelfde key: 'yoko-todos-removed-projects').
@@ -455,37 +468,29 @@ export default function HomePage() {
         } catch {}
       }
       const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
-        .filter(p => !existingIds.has(p.itemId))
+        .filter(p => !existingRefs.has(`project:${p.board}:${p.itemId}`))
         .filter(p => !removedProjectKeys.has(`${p.board}:${p.itemId}`))
-        .map((p, i) => ({
-          id: `auto-${p.board}-${p.itemId}-${i}`,
+        .map(p => ({
+          id: `auto-${p.board}-${p.itemId}`,
           text: p.name, done: false,
           projectRef: { board: p.board, itemId: p.itemId, name: p.name },
         }))
-      setMyTodos([...stored, ...extras])
+      return dedupeTodos([...storedUnique, ...extras])
+    }
+
+    function loadMine() {
+      const fallback: TodoSection[] = todosData.sections as TodoSection[]
+      const sections = loadTodoSectionsStore(fallback)
+      const s = sections.find(x => x.id === memberId)
+      const stored = (s?.items ?? []) as TodoStoreItem[]
+      setMyTodos(mergeStoredWithProjects(stored))
     }
     loadMine()
     pullTodos().then(remote => {
       if (remote) {
         const s = remote.find(x => x.id === memberId)
         const stored = (s?.items ?? []) as TodoStoreItem[]
-        const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
-        let removedProjectKeys = new Set<string>()
-        if (typeof window !== 'undefined') {
-          try {
-            const raw = window.localStorage.getItem('yoko-todos-removed-projects')
-            if (raw) removedProjectKeys = new Set(JSON.parse(raw) as string[])
-          } catch {}
-        }
-        const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
-          .filter(p => !existingIds.has(p.itemId))
-          .filter(p => !removedProjectKeys.has(`${p.board}:${p.itemId}`))
-          .map((p, i) => ({
-            id: `auto-${p.board}-${p.itemId}-${i}`,
-            text: p.name, done: false,
-            projectRef: { board: p.board, itemId: p.itemId, name: p.name },
-          }))
-        setMyTodos([...stored, ...extras])
+        setMyTodos(mergeStoredWithProjects(stored))
       }
     }).catch(() => {})
     const offTodos = onTodosUpdate(loadMine)
