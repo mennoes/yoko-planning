@@ -12,16 +12,14 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { IconCheckList, IconComment } from '@/components/Icon'
 import initialData from '@/data/todos.json'
 import teamData    from '@/data/team.json'
-import yokoRaw       from '@/data/boards/yoko.json'
-import pnpRaw        from '@/data/boards/pnp.json'
-import nederlandRaw  from '@/data/boards/nederland.json'
-import vlaanderenRaw from '@/data/boards/vlaanderen.json'
-import dienjaarRaw   from '@/data/boards/dienjaar.json'
-import { loadGroups } from '@/lib/boardStore'
 import { BOARD_COLORS } from '@/lib/workload'
-import { isVrijTitle, loadCategoryOverrides } from '@/lib/workloadCategory'
 import { TextWithItemRefs } from '@/components/ItemRefChip'
-import type { BoardGroup } from '@/lib/boards'
+import {
+  loadAllTodoProjects,
+  loadDoneTodoProjectKeys,
+  loadMyOpenProjects,
+  mergeMemberTodoItems,
+} from '@/lib/todoProjectSeed'
 import {
   loadCommentsFor, saveComment, onCommentsUpdate,
   newCommentId, toggleReaction, type CommentThread,
@@ -42,142 +40,11 @@ import {
   type Section, type TodoItem, type ProjectLink,
 } from '@/lib/todosStore'
 
-const RAW: Record<string, { groups: unknown[] }> = {
-  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
-  vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
-}
-
 // Member-id-set wordt op render uit teamData getrokken — extras (Manuel,
 // freelancers etc) worden bij boot in teamData.members gemerged, dus een
 // statische Set bij module-load mist die. Functie + Set in elke compute,
 // goedkoop genoeg.
 const memberIdSet = () => new Set(teamData.members.map(m => m.id))
-
-function loadAllProjects(): ProjectLink[] {
-  if (typeof window === 'undefined') return []
-  const out: ProjectLink[] = []
-  for (const [board, raw] of Object.entries(RAW)) {
-    const groups = loadGroups(board, raw.groups as BoardGroup[])
-    for (const g of groups) for (const item of g.items) {
-      if (!item.name) continue
-      out.push({ board, itemId: item.id, name: item.name,
-        startDate: (item.startDate as string | null) ?? null,
-        endDate:   (item.endDate   as string | null) ?? null })
-      // Subitems ook toevoegen met hun __si{idx}-id zodat de week-bucket
-      // in /todos hun eigen start-datum gebruikt i.p.v. terug te vallen
-      // op die van de parent. loadMyOpenProjects pusht subitem-todos met
-      // datzelfde id-patroon, dus de projectDates-lookup matcht direct.
-      const subs = (item.subitems as Array<{ id?: string; name?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
-      subs.forEach((si, idx) => {
-        out.push({
-          board,
-          itemId: `${item.id}__si${idx}`,
-          name: si.name ?? item.name,
-          startDate: si.startDate ?? null,
-          endDate:   si.endDate   ?? si.startDate ?? null,
-        })
-      })
-    }
-  }
-  return out
-}
-
-// Verzamel de open Monday-projecten waar `memberId` eigenaar van is.
-// Filters:
-//  - niet-Google (Google events horen niet in todo's, gebruik de agenda)
-//  - status ≠ 'Done' en niet in een 'Done'-groep
-//  - niet voorbij de eind-datum
-//  - memberId moet in ownerIds zitten (echte eigenaar in de agenda)
-// Het auto-seed-mechanisme markeert toegevoegde IDs als 'gezien' in
-// localStorage, dus verwijdert de user 'm in z'n todo-lijst dan komt-ie
-// niet terug.
-function loadMyOpenProjects(memberId: string): ProjectLink[] {
-  if (typeof window === 'undefined') return []
-  const today = new Date().toISOString().slice(0, 10)
-  const out: ProjectLink[] = []
-  const catOverrides = loadCategoryOverrides()
-  for (const [board, raw] of Object.entries(RAW)) {
-    const groups = loadGroups(board, raw.groups as BoardGroup[])
-    for (const g of groups) {
-      const groupName = (g.name ?? '').toLowerCase()
-      if (groupName === 'done') continue
-      for (const item of g.items) {
-        if (!item.name) continue
-        if (item.source === 'google') continue
-        if ((item.status ?? '').toLowerCase() === 'done') continue
-        // Vrij/vakantie items horen niet in todos — check zowel naam-
-        // pattern als category-override (gebruiker kan 'm via planning-
-        // popup expliciet op 'vrij' zetten).
-        const projectId = `${board}__${item.id}`
-        if (isVrijTitle(item.name as string)) continue
-        if (catOverrides[projectId] === 'vrij') continue
-        const parentOwnerIds = Array.isArray(item.ownerIds) ? item.ownerIds : []
-        const parentOwns = parentOwnerIds.includes(memberId)
-        const end = item.endDate ?? item.startDate
-        const parentExpired = end && end < today
-        // Parent zelf als todo wanneer ik eigenaar ben én 'm nog niet voorbij is.
-        if (parentOwns && !parentExpired) {
-          out.push({ board, itemId: item.id, name: item.name,
-            startDate: (item.startDate as string | null) ?? null,
-            endDate:   (item.endDate   as string | null) ?? null })
-        }
-        // Subitem-todos: alleen wanneer 't subitem EXPLICIET aan deze
-        // member is toegewezen ÉN de parent niet (anders dekt de
-        // parent-entry 't al). Voorkomt de oude lawine van automatische
-        // subitem-todos, terwijl wie écht een specifieke deeltaak heeft
-        // 'm nog steeds ziet (bv. Manuel met een boekomslag-subitem).
-        if (parentOwns) continue
-        const subs = (item.subitems as Array<{ id?: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
-        subs.forEach((si, idx) => {
-          const subOwners = Array.isArray(si.ownerIds) ? si.ownerIds : []
-          if (!subOwners.includes(memberId)) return
-          if ((si.status ?? '').toLowerCase() === 'done') return
-          const subEnd = si.endDate ?? si.startDate
-          if (subEnd && subEnd < today) return
-          const subName = si.name && si.name.trim().length > 0 ? si.name : item.name
-          if (isVrijTitle(subName as string)) return
-          const subProjectId = `${board}__${item.id}__si${idx}`
-          if (catOverrides[subProjectId] === 'vrij') return
-          // Parent-context op tweede regel via '\n' + pijltje, zelfde
-          // patroon als de subitem-bars in /planning. Renderer splits 'm
-          // op '\n' en maakt de tweede regel kleiner.
-          out.push({ board, itemId: `${item.id}__si${idx}`,
-            name: `${subName}\n↳ ${item.name}`,
-            startDate: si.startDate ?? null,
-            endDate:   si.endDate ?? si.startDate ?? null })
-        })
-      }
-    }
-  }
-  return out
-}
-
-// Verzamel alle project-items die "voorbij" zijn voor de to-do-lijst:
-//   - status = 'Done', of
-//   - de eind-datum ligt al in het verleden (en het item heeft tenminste
-//     een datum), of
-//   - de groep waar 't in zit heet 'Done' (sommige imports gebruiken een
-//     vertaalde status zoals 'Klaar', maar de groep is wel Done).
-// Zo verdwijnen oude items vanzelf uit Menno's persoonlijke kaart zonder
-// dat hij ze allemaal moet aanvinken.
-function loadDoneProjectKeys(): Set<string> {
-  if (typeof window === 'undefined') return new Set()
-  const out = new Set<string>()
-  const today = new Date().toISOString().slice(0, 10)
-  for (const [board, raw] of Object.entries(RAW)) {
-    const groups = loadGroups(board, raw.groups as BoardGroup[])
-    for (const g of groups) {
-      const groupIsDone = (g.name ?? '').toLowerCase() === 'done'
-      for (const item of g.items) {
-        if (groupIsDone) { out.add(`${board}:${item.id}`); continue }
-        if ((item.status ?? '').trim() === 'Done') { out.add(`${board}:${item.id}`); continue }
-        const end = (item.endDate ?? item.startDate) as string | null | undefined
-        if (end && end < today) out.add(`${board}:${item.id}`)
-      }
-    }
-  }
-  return out
-}
 
 // Onthoud welke project-id's de gebruiker zelf uit z'n auto-seed-lijst
 // heeft gegooid, zodat ze niet bij elke pageload terugkomen. Per-device
@@ -785,7 +652,14 @@ function TodoCard({
           placeholder="+ Voeg toe of typ / om een project te koppelen"
           style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid transparent', color: 'var(--text-muted)', fontSize: 14.3, padding: '4px 0', outline: 'none', boxSizing: 'border-box' }}
           onFocus={e => { e.currentTarget.style.borderBottomColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-          onBlur={e => { e.currentTarget.style.borderBottomColor = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
+          onBlur={e => {
+            e.currentTarget.style.borderBottomColor = 'transparent'
+            e.currentTarget.style.color = 'var(--text-muted)'
+            // Wegklikken bevestigt een gewone checklistregel. Slash-
+            // zoeken blijft een expliciete projectkeuze, zodat tekst als
+            // "/huisstijl" nooit per ongeluk als losse taak wordt bewaard.
+            if (!isSearchMode) add()
+          }}
         />
         {isSearchMode && popPos && typeof document !== 'undefined' && createPortal(
           <div style={{
@@ -1162,8 +1036,8 @@ export default function TodosPage() {
 
   useEffect(() => {
     setSections(loadSections())
-    setAllProjects(loadAllProjects())
-    setDoneProjectKeys(loadDoneProjectKeys())
+    setAllProjects(loadAllTodoProjects())
+    setDoneProjectKeys(loadDoneTodoProjectKeys())
     setHydrated(true)
 
     // Sync met Supabase: pull, en als er nog niks staat seed met de lokale
@@ -1191,8 +1065,8 @@ export default function TodosPage() {
     const offRemote = subscribeRemoteTodos()
     const offEvent  = onTodosUpdate(() => setSections(loadSections()))
     const onBoardUpdate = () => {
-      setAllProjects(loadAllProjects())
-      setDoneProjectKeys(loadDoneProjectKeys())
+      setAllProjects(loadAllTodoProjects())
+      setDoneProjectKeys(loadDoneTodoProjectKeys())
     }
     window.addEventListener('yoko-board-update', onBoardUpdate)
     return () => {
@@ -1513,6 +1387,7 @@ export default function TodosPage() {
   // altijd. Sectie met items > 0 tonen we sowieso (gebruiker heeft er
   // actief iets in zitten).
   const personal = sections.filter(isPersonalSection)
+    .map(s => ({ ...s, items: mergeMemberTodoItems(s.items, s.id) }))
     .filter(s => {
       if (s.items.length > 0) return true
       const m = liveTeam.find(lt => lt.id === s.id)
