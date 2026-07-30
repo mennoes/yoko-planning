@@ -14,6 +14,7 @@
 import { loadGroups } from './boardStore'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
+import type { TodoItem } from './todosStore'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -24,6 +25,8 @@ export type ProjectSeedLink = {
   board:  string
   itemId: string
   name:   string
+  startDate?: string | null
+  endDate?:   string | null
 }
 
 const RAW: Record<string, { groups: BoardGroup[] }> = {
@@ -32,6 +35,33 @@ const RAW: Record<string, { groups: BoardGroup[] }> = {
   nederland:  nederlandRaw  as { groups: BoardGroup[] },
   vlaanderen: vlaanderenRaw as { groups: BoardGroup[] },
   dienjaar:   dienjaarRaw   as { groups: BoardGroup[] },
+}
+
+export function loadAllTodoProjects(): ProjectSeedLink[] {
+  if (typeof window === 'undefined') return []
+  const out: ProjectSeedLink[] = []
+  for (const [board, raw] of Object.entries(RAW)) {
+    const groups = loadGroups(board, raw.groups)
+    for (const g of groups) for (const item of g.items) {
+      if (!item.name) continue
+      out.push({
+        board, itemId: item.id, name: item.name,
+        startDate: item.startDate ?? null,
+        endDate: item.endDate ?? null,
+      })
+      const subs = (item.subitems as Array<{ name?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+      subs.forEach((sub, idx) => {
+        out.push({
+          board,
+          itemId: `${item.id}__si${idx}`,
+          name: sub.name ?? item.name,
+          startDate: sub.startDate ?? null,
+          endDate: sub.endDate ?? sub.startDate ?? null,
+        })
+      })
+    }
+  }
+  return out
 }
 
 export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
@@ -59,7 +89,11 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
         const end = item.endDate ?? item.startDate
         const parentExpired = end && end < today
         if (parentOwns && !parentExpired) {
-          out.push({ board, itemId: item.id, name: item.name })
+          out.push({
+            board, itemId: item.id, name: item.name,
+            startDate: item.startDate ?? null,
+            endDate: item.endDate ?? null,
+          })
         }
         const subs = (item.subitems as Array<{ id?: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
         if (parentOwns) continue
@@ -75,10 +109,111 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
           if (catOverrides[subProjectId] === 'vrij') return
           // Parent-context op tweede regel — renderer splits op '\n'.
           out.push({ board, itemId: `${item.id}__si${idx}`,
-            name: `${subName}\n↳ ${item.name}` })
+            name: `${subName}\n↳ ${item.name}`,
+            startDate: si.startDate ?? null,
+            endDate: si.endDate ?? si.startDate ?? null,
+          })
         })
       }
     }
   }
   return out
+}
+
+export function loadDoneTodoProjectKeys(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  const out = new Set<string>()
+  const today = new Date().toISOString().slice(0, 10)
+  for (const [board, raw] of Object.entries(RAW)) {
+    const groups = loadGroups(board, raw.groups)
+    for (const g of groups) {
+      const groupIsDone = (g.name ?? '').toLowerCase() === 'done'
+      for (const item of g.items) {
+        const parentIsDone = groupIsDone || (item.status ?? '').trim().toLowerCase() === 'done'
+        if (parentIsDone) {
+          out.add(`${board}:${item.id}`)
+        }
+        const end = item.endDate ?? item.startDate
+        if (end && end < today) out.add(`${board}:${item.id}`)
+        const subs = (item.subitems as Array<{ status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+        subs.forEach((sub, idx) => {
+          const subEnd = sub.endDate ?? sub.startDate
+          if (
+            parentIsDone ||
+            (sub.status ?? '').trim().toLowerCase() === 'done' ||
+            (subEnd && subEnd < today)
+          ) {
+            out.add(`${board}:${item.id}__si${idx}`)
+          }
+        })
+      }
+    }
+  }
+  return out
+}
+
+export function todoIdentity(todo: TodoItem): string {
+  const ref = todo.projectRef
+  if (ref?.itemId) return `project:${ref.board}:${ref.itemId}`
+  return `text:${todo.text.trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')}`
+}
+
+export function dedupeTodoItems(items: TodoItem[]): TodoItem[] {
+  const unique = new Map<string, TodoItem>()
+  for (const item of items) {
+    const key = todoIdentity(item)
+    const existing = unique.get(key)
+    if (!existing) unique.set(key, item)
+    else if (item.done && !existing.done) unique.set(key, { ...existing, done: true })
+  }
+  return [...unique.values()]
+}
+
+function loadRemovedProjectKeys(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem('yoko-todos-removed-projects')
+    return new Set(raw ? JSON.parse(raw) as string[] : [])
+  } catch {
+    return new Set()
+  }
+}
+
+// Eén zichtbare persoonlijke takenlijst voor zowel /todos als Home.
+// Vult missende open projecten aan, verrijkt bestaande koppelingen met
+// actuele datums, dedupliceert, en verbergt gekoppelde projecten die
+// inmiddels Done/verlopen/vrij zijn.
+export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): TodoItem[] {
+  const storedUnique = dedupeTodoItems(stored)
+  const existingRefs = new Set(storedUnique.map(todoIdentity))
+  const removed = loadRemovedProjectKeys()
+  const projects = loadAllTodoProjects()
+  const projectsByKey = new Map(projects.map(p => [`${p.board}:${p.itemId}`, p]))
+  const extras: TodoItem[] = loadMyOpenProjects(memberId)
+    .filter(p => !existingRefs.has(`project:${p.board}:${p.itemId}`))
+    .filter(p => !removed.has(`${p.board}:${p.itemId}`))
+    .map(p => ({
+      id: `auto-${p.board}-${p.itemId}`,
+      text: p.name,
+      done: false,
+      projectRef: p,
+    }))
+
+  const doneKeys = loadDoneTodoProjectKeys()
+  const overrides = loadCategoryOverrides()
+  return dedupeTodoItems([...storedUnique, ...extras])
+    .map(item => {
+      if (!item.projectRef) return item
+      const current = projectsByKey.get(`${item.projectRef.board}:${item.projectRef.itemId}`)
+      return current ? { ...item, projectRef: { ...item.projectRef, ...current } } : item
+    })
+    .filter(item => {
+      const ref = item.projectRef
+      if (ref) {
+        if (doneKeys.has(`${ref.board}:${ref.itemId}`)) return false
+        if (overrides[`${ref.board}__${ref.itemId}`] === 'vrij') return false
+        if (isVrijTitle(ref.name ?? '')) return false
+      }
+      return !isVrijTitle((item.text ?? '').split('\n')[0] ?? '')
+    })
 }
