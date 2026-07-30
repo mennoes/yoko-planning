@@ -2202,11 +2202,10 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // iedere balk scannen we van boven naar beneden naar het eerste
   // rechthoekige gat dat qua hoogte én datumbereik past.
   //
-  // Dit is belangrijk bij een lange balk zoals "Huisstijl": die moet
-  // voor z'n hele looptijd onder de drukste meeting-stack blijven en kan
-  // daardoor lokaal veel ruimte boven zich hebben. Een later kort item
-  // mag in zo'n lokaal gat terechtkomen, ook al heeft het door de globale
-  // interval-pack een hoger lane-nummer dan Huisstijl.
+  // Plaatsingsvolgorde: meetings eerst, daarna korte projecten en pas als
+  // laatste de lange balken. Daardoor vormen Huisstijl-achtige balken de
+  // onderste drager van de stapel in plaats van een scheidslijn waar
+  // korte items onnodig onder belanden.
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
@@ -2227,12 +2226,32 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     }
     return candidate
   }
-  for (const b of bars) {
+  const placementBars = [...bars].sort((a, b) => {
+    if (a.isMeeting !== b.isMeeting) return a.isMeeting ? -1 : 1
+    if (!a.isMeeting && !b.isMeeting) {
+      const aSpan = a.packWidth || a.width
+      const bSpan = b.packWidth || b.width
+      if (aSpan !== bSpan) return aSpan - bSpan
+    }
+    if (a.left !== b.left) return a.left - b.left
+    return a.lane - b.lane
+  })
+  for (const b of placementBars) {
     const bStart = b.left
     const bEnd = b.left + (b.packWidth || b.width)
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
     const blockers = placed
-      .filter(rec => rec.start < bEnd && rec.end > bStart)
+      .filter(rec => {
+        const overlapPx = Math.min(rec.end, bEnd) - Math.max(rec.start, bStart)
+        if (overlapPx <= 0) return false
+        // Kleine horizontale raakvlakken mogen dezelfde verticale plek
+        // delen. Begrensd op 8px / 18% van de kortste balk, zodat chips
+        // iets over elkaar heen mogen vallen zonder hun klikvlak of titel
+        // grotendeels te verbergen.
+        const shorterSpan = Math.min(rec.end - rec.start, bEnd - bStart)
+        const horizontalAllowance = Math.min(8, Math.max(2, Math.round(shorterSpan * 0.18)))
+        return overlapPx > horizontalAllowance
+      })
       .sort((a, b) => a.top - b.top)
     const strictTop = firstVerticalGap(h, blockers)
     // Near-fit fallback: alleen een kleine overlap toestaan wanneer dat
