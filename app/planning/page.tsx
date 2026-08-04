@@ -2800,7 +2800,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   allGroups: Record<string, BoardGroup[]>
   anchor?: { x: number; y: number } | null
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
   onDuplicate?: () => void
   onDelete?: () => void
 }) {
@@ -2848,6 +2848,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     return { estHours: workdays * 8 }
   }
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
+  const [contactpersoon, setContactpersoon] = useState((rawItem?.contactpersoon as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
   const [links,     setLinks]     = useState<import('@/lib/boards').ItemLink[]>((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
   const [newEntry,  setNewEntry]  = useState('')
@@ -2896,6 +2897,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   useEffect(() => {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
     setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
+    setContactpersoon((rawItem?.contactpersoon as string) ?? '')
     setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
     setLinks((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
     setOwnerHours((rawItem?.ownerHours as Record<string, number> | undefined) ?? {})
@@ -2922,6 +2924,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     endTime:   string | null
     estHours:  number
     notes:     string
+    contactpersoon: string
     journal:   import('@/lib/boards').JournalEntry[]
     ownerHours: Record<string, number>
     ownerIds:  string[]
@@ -2953,6 +2956,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     const nextEnd   = patch.endDate   !== undefined ? patch.endDate   : (endDate   || null)
     const nextEst   = patch.estHours  !== undefined ? patch.estHours  : (parseFloat(estHours) || 0)
     const nextNotes = patch.notes     !== undefined ? patch.notes     : notes
+    const nextContactpersoon = patch.contactpersoon !== undefined ? patch.contactpersoon : contactpersoon
     const nextJournal    = patch.journal    !== undefined ? patch.journal    : journal
     const nextOwnerHours = patch.ownerHours !== undefined ? patch.ownerHours : ownerHours
     const nextLinks      = patch.links      !== undefined ? patch.links      : links
@@ -2963,6 +2967,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 
     const extra: Patch = {
       notes: nextNotes,
+      contactpersoon: nextContactpersoon,
       journal: nextJournal,
       ownerHours: nextOwnerHours,
       ownerIds: finalOwners,
@@ -3368,6 +3373,19 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               </button>
             )}
           </div>
+        </Row>
+        <Row label="Contactpersoon">
+          <input
+            type="text"
+            value={contactpersoon}
+            disabled={isGoogle}
+            onChange={e => setContactpersoon(e.target.value)}
+            onBlur={() => {
+              if (contactpersoon !== ((rawItem?.contactpersoon as string) ?? '')) commit({ contactpersoon })
+            }}
+            placeholder={isGoogle ? '' : 'Naam of contactgegevens…'}
+            style={{ ...dateInput, width: '100%', maxWidth: 360, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }}
+          />
         </Row>
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -4997,7 +5015,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
     const boardName  = project.board
     let rawIdPart    = project.id.slice(boardName.length + 2)
     // Vrij-events worden per-dag gesynthetiseerd met suffix '__vrij_YYYY-
