@@ -4,5 +4,5 @@ import { redirect } from 'next/navigation'
 // zodat oude bookmarks + cached navStore-entries (waar nog '/trash' in
 // staat) toch goed terechtkomen.
 export default function TrashRedirect() {
-  redirect('/papierbak')
+  redirect('/geschiedenis?tab=papierbak')
 }

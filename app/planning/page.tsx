@@ -606,6 +606,14 @@ function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupBy
 
 // ─── Draggable timeline bar ───────────────────────────────────────────────────
 type DragInfo = { mode: 'move' | 'start' | 'end'; startX: number; startY: number; origStart: string | null; origEnd: string | null }
+type DragGhost = { left: number; width: number; startDate: string | null; endDate: string | null }
+
+function formatDragDate(iso: string | null): string {
+  if (!iso) return 'Geen datum'
+  const d = new Date(`${iso}T12:00:00`)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })
+}
 
 function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
@@ -728,7 +736,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // 'wegvallen' tegen achtergronden van andere bars.
   const multiOwnerBorder = multiOwnerGradient ? `1px solid ${color}` : undefined
   const dragRef = useRef<DragInfo | null>(null)
-  const [ghost, setGhost] = useState<{ left: number; width: number } | null>(null)
+  const [ghost, setGhost] = useState<DragGhost | null>(null)
   const reassignRef = useRef<string | null>(null)
   const didDrag = useRef(false)
   const dpx = 7 / colW
@@ -801,7 +809,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     e.preventDefault(); e.stopPropagation()
     didDrag.current = false
     dragRef.current = { mode, startX: e.clientX, startY: e.clientY, origStart: project.startDate, origEnd: project.endDate }
-    setGhost({ left, width })
+    setGhost({ left, width, startDate: project.startDate, endDate: project.endDate })
     reassignRef.current = null
     captureRows()
     // Pauseer remote-pulls tijdens een drag — anders kan een binnen-
@@ -845,11 +853,11 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
       if (m === 'move')       { newL = left + ddays * (colW / 7) }
       else if (m === 'start') { const dl = ddays * (colW / 7); newL = left + dl; newW = Math.max(colW / 7, width - dl) }
       else                    { newW = Math.max(colW / 7, width + ddays * (colW / 7)) }
-      setGhost({ left: newL, width: newW })
       let ss = origStart, se = origEnd
       if (m === 'move')       { ss = origStart ? addDays(origStart, ddays) : null; se = origEnd ? addDays(origEnd, ddays) : null }
       else if (m === 'start') { ss = origStart ? addDays(origStart, ddays) : null; if (ss && se && ss > se) ss = se }
       else                    { se = origEnd ? addDays(origEnd, ddays) : null; if (ss && se && se < ss) se = ss }
+      setGhost({ left: newL, width: newW, startDate: ss, endDate: se })
       onDragMove(ss, se)
     }
 
@@ -923,6 +931,31 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
+      {ghost && (
+        <>
+          <div style={{
+            position: 'absolute', top: barTop + Math.max(0, (barH - 18) / 2), left: ghost.left + 2,
+            transform: 'translateX(-100%)', marginLeft: -4,
+            padding: '3px 6px', borderRadius: 5,
+            background: 'var(--bg-card)', border: `1px solid ${color}`,
+            color: 'var(--text-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+            fontSize: 10, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap',
+            pointerEvents: 'none', zIndex: 8,
+          }}>
+            {formatDragDate(ghost.startDate)}
+          </div>
+          <div style={{
+            position: 'absolute', top: barTop + Math.max(0, (barH - 18) / 2), left: ghost.left + ghost.width + 2,
+            marginLeft: 4, padding: '3px 6px', borderRadius: 5,
+            background: 'var(--bg-card)', border: `1px solid ${color}`,
+            color: 'var(--text-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+            fontSize: 10, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap',
+            pointerEvents: 'none', zIndex: 8,
+          }}>
+            {formatDragDate(ghost.endDate)}
+          </div>
+        </>
+      )}
       {/* Hit-area expander — sibling of de bar zodat dunne bars makkelijk
           aanklikbaar zijn. ALLEEN voor draggable items; read-only items
           (Google-meetings) overslaan we 'm zodat ie geen events
@@ -2007,8 +2040,90 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
 
-  // Vrij-events trekken we uit de pack zodat ze geen rij vergroten — ze
-  // worden los gerenderd over de volle hoogte van de container, achter
+  // Project-balken packen we horizontaal. Gap-aware first-fit: elke lane
+  // houdt z'n volledige intervallenlijst bij i.p.v. alleen het einde van
+  // de laatste balk, zodat een korte balk WEL in een eerder hiaat van een
+  // bestaande lane kan landen (niet alleen na de laatste end-positie).
+  //
+  // Plaatsingsprioriteit:
+  //   1. meetings eerst: die vormen de compacte bovenste agenda-laag;
+  //   2. daarna lange projecten: een balk zoals "Huisstijl" komt zo
+  //      direct onder de meetings te liggen;
+  //   3. korte projecten als laatste: first-fit kan die vervolgens in
+  //      ieder nog vrij datumgat van de bovenste lanes schuiven.
+  //
+  // Alleen op starttijd sorteren gaf een chronologisch correcte maar
+  // visueel slechte uitkomst: een vroeg kort project kon lane 0 voor een
+  // stukje claimen, waarna een lange balk voor z'n HELE looptijd naar
+  // lane 1 schoof. Alle later verwerkte korte items kwamen daardoor onder
+  // die lange balk terecht, ook waar lane 0 zichtbaar leeg was.
+  //
+  // MAX_LANES = 5: gebruiker prefereert wat overlap boven onleesbaar veel
+  // rijen. Items die niet zonder conflict passen worden bij de lane met
+  // de minste overlap geduwd in plaats van een nieuwe rij te starten.
+  function packLanes<T extends { left: number; width: number; packWidth?: number; isMeeting?: boolean }>(items: T[]) {
+    // MAX_LANES = 6: houdt de rij compact. Voorbij deze cap wordt overlap
+    // toegestaan (fallback = lane met minste overlap). Een grote cap
+    // veroorzaakte pijnlijke witruimte omdat off-screen bars in latere
+    // weken makkelijk 8-10 lanes opeisten — de rij werd dan zichtbaar
+    // veel te hoog terwijl je maar 4-5 lanes echt gebruikt ziet.
+    const MAX_LANES = 6
+    const sorted = [...items].sort((a, b) => {
+      if (Boolean(a.isMeeting) !== Boolean(b.isMeeting)) return a.isMeeting ? -1 : 1
+      if (!a.isMeeting && !b.isMeeting) {
+        const aSpan = a.packWidth ?? a.width
+        const bSpan = b.packWidth ?? b.width
+        if (aSpan !== bSpan) return bSpan - aSpan
+      }
+      if (a.left !== b.left) return a.left - b.left
+      return b.width - a.width
+    })
+    type IV = { start: number; end: number }
+    const lanes: IV[][] = []
+    const fitsLane = (intervals: IV[], s: number, e: number): boolean =>
+      intervals.every(iv => iv.end <= s + 1 || iv.start >= e - 1)
+    const overlapWith = (intervals: IV[], s: number, e: number): number => {
+      let total = 0
+      for (const iv of intervals) {
+        const lo = Math.max(iv.start, s)
+        const hi = Math.min(iv.end,   e)
+        if (hi > lo) total += (hi - lo)
+      }
+      return total
+    }
+    const packed = sorted.map(b => {
+      const s = b.left
+      // Pack op ECHTE tijdsduur (packWidth). Chips van verschillende
+      // start-tijden krijgen al een andere x-positie via startTime-shift
+      // in rawBars, dus als hun tijds-intervallen niet overlappen kunnen
+      // ze in dezelfde lane. Voorkomt lane-explosie op drukke dagen.
+      const e = b.left + (b.packWidth ?? b.width)
+      // Probeer een lane zonder enige overlap
+      let lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
+      if (lane >= 0) {
+        lanes[lane].push({ start: s, end: e })
+        return { ...b, lane }
+      }
+      // Cap niet bereikt → nieuwe lane
+      if (lanes.length < MAX_LANES) {
+        lanes.push([{ start: s, end: e }])
+        return { ...b, lane: lanes.length - 1 }
+      }
+      // Cap bereikt → kies de lane met de kleinste overlap; overlap toegestaan
+      let bestLane = 0
+      let bestOverlap = Infinity
+      for (let i = 0; i < lanes.length; i++) {
+        const o = overlapWith(lanes[i], s, e)
+        if (o < bestOverlap) { bestOverlap = o; bestLane = i }
+      }
+      lanes[bestLane].push({ start: s, end: e })
+      return { ...b, lane: bestLane }
+    })
+    return { items: packed, numLanes: lanes.length }
+  }
+
+  // Vrij-events trekken we uit de lane-pack zodat ze geen rij vergroten —
+  // ze worden los gerenderd over de volle hoogte van de container, achter
   // de andere events.
   const projectAllSingles = finalBars
   const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
@@ -2036,20 +2151,24 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Hele-dag-flag is alleen nog nodig voor isVrijBar; full-day-projecten
   // gaan nu via de gewone bar-packing zodat hun hoogte proportioneel is.
   void isFullDayBar
-  // Meetings + reguliere projecten delen dezelfde stack. Vrij-events
-  // halen we ERUIT: ze renderen full-height achtergrond-blokken zodat één
-  // blik meteen laat zien dat de dag(en) op slot staan. Vroeger vielen ze
-  // samen met projecten in dezelfde lane waardoor de groene 'vrij-tape'
-  // visueel wegzakte tussen andere bars.
+  // Meetings + reguliere projecten DELEN één lane-stack (gap-aware pack).
+  // Vrij-events daarentegen halen we UIT de pack: ze renderen full-height
+  // achtergrond-blokken zodat één blik meteen laat zien dat de dag(en) op
+  // slot staan. Vroeger vielen ze samen met projecten in dezelfde lane
+  // waardoor de groene 'vrij-tape' visueel wegzakte tussen andere bars.
   const projectItems = projectAllSingles.filter(b => !isVrijBar(b))
   const vrijBars: SingleBar[] = projectAllSingles.filter(b => isVrijBar(b))
+  const projectPacked = packLanes(projectItems)
+  const projectLanes  = projectPacked.numLanes
 
-  // PROJECT_LANE_H bepaalt de BASELINE-hoogte waarmee een bar z'n eigen
-  // 'natuurlijke' (uren-per-dag-afhankelijke) hoogte berekent. Base 32px
-  // in week (net genoeg voor titel + agenda-subtitle op 2 regels), 24px
-  // in maand. Schaalt met rowScale (RS) zodat de hoogte-slider écht
-  // bar-hoogte aanpast. De daadwerkelijke verticale positie is per bar
-  // dynamisch — zie de skyline-pack hieronder.
+  // PROJECT_LANE_H bepaalt 1 lane-hoogte. Base 32px in week (net genoeg
+  // voor titel + agenda-subtitle op 2 regels), 24px in maand. Schaalt
+  // met rowScale (RS) zodat de hoogte-slider écht bar-hoogte aanpast.
+  // Met MAX_LANES=6 wordt de totale rij-hoogte in week: max ~192px.
+  // PROJECT_LANE_H is nu alleen nog de BASELINE waarmee een bar z'n eigen
+  // 'natuurlijke' (uren-per-dag-afhankelijke) hoogte berekent — de
+  // daadwerkelijke lane-pitch is per lane dynamisch, zie laneHeights
+  // hieronder.
   const PROJECT_LANE_H = zoom === 'maand'
     ? Math.max(22, Math.round(24 * RS))
     : zoom === 'week'
@@ -2062,64 +2181,149 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       ? Math.max(70, Math.round(90 * RS))
       : Math.max(28, Math.round((BAR_H + BAR_GAP) * RS))
 
-  const bars: SingleBar[] = projectItems
+  type Single  = SingleBar  & { lane: number; track: 'project' | 'meeting' }
+  const packedBars = projectPacked.items.map(b => ({
+    ...b, track: b.isMeeting ? 'meeting' as const : 'project' as const,
+  })) as Single[]
+  // Lege lanes ertussenuit halen: lane-packing kan lanes 0, 1, 2, 4
+  // toewijzen (waarbij 3 leeg blijft op de zichtbare bars). We
+  // hernummeren naar 0, 1, 2, 3 zodat er geen verticale gap is tussen
+  // de gerenderde bars. Behoudt onderlinge volgorde van de originele
+  // lane-numbers; alleen 'sluit gaten'.
+  const usedLanes = [...new Set(packedBars.map(b => b.lane))].sort((a, b) => a - b)
+  const laneRemap = new Map<number, number>()
+  usedLanes.forEach((orig, idx) => laneRemap.set(orig, idx))
+  const bars: Single[] = packedBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
 
   if (bars.length === 0 && vrijBars.length === 0) return null
 
-  // Eerdere aanpak: elke bar kreeg eerst een discrete LANE toegewezen
-  // puur op basis van tijd-overlap (packLanes), en pas DAARNA werd de
-  // top berekend door strikt op lane-nummer te stapelen (alles in lane N
-  // rendert altijd onder alles in lane < N dat 'm in tijd overlapt). Dat
-  // bleek stuk: een klein chip-item dat toevallig lane 2 kreeg kon NOOIT
-  // boven een grote bar in lane 1 uitkomen, ook niet als er boven die
-  // grote bar nog volop lege ruimte was — de lane was al vastgelegd
-  // vóórdat er iets over hoogte bekend was. Precies dít veroorzaakte de
-  // 'losse chips staan onder Huisstijl terwijl er boven Huisstijl nog
-  // ruimte is'-klacht.
+  // Echte 2D-gap-packing: lane-nummers bepalen alleen de stabiele
+  // plaatsingsprioriteit, niet meer de uiteindelijke Y-positie. Voor
+  // iedere balk scannen we van boven naar beneden naar het eerste
+  // rechthoekige gat dat qua hoogte én datumbereik past.
   //
-  // Fix: één ECHTE 2D-skyline. Elke bar zoekt zelf de laagst mogelijke
-  // top die geen enkele eerder geplaatste, in tijd overlappende bar
-  // raakt — desnoods midden tussen twee andere bars in, als daar een gat
-  // past. Geen lane-nummer bepaalt meer de stapel-volgorde; de eerste
-  // vrije verticale opening wint, wie de buur ook is.
+  // Plaatsingsvolgorde: meetings eerst, daarna korte projecten en pas als
+  // laatste de lange balken. Daardoor vormen Huisstijl-achtige balken de
+  // onderste drager van de stapel in plaats van een scheidslijn waar
+  // korte items onnodig onder belanden.
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
   const barTops = new Map<string, number>()
-  const placed: { start: number; end: number; top: number; bottom: number }[] = []
-  // MAX_STACK_DEPTH: veiligheidsklep tegen eindeloos hoge rijen op een
-  // pathologisch drukke dag (>6 gelijktijdige items) — sta dan overlap
-  // toe i.p.v. een 7e+ verdieping toe te voegen.
-  const MAX_STACK_DEPTH = 6
-  const sortedBars = [...bars].sort((a, b) => {
+  const placed: { start: number; end: number; visualStart: number; visualEnd: number; top: number; bottom: number }[] = []
+  const firstVerticalGap = (
+    h: number,
+    blockers: { top: number; bottom: number }[],
+    overlapAllowance = 0,
+  ): number => {
+    let candidate = BAR_GAP_S
+    for (const blocker of blockers) {
+      if (candidate + h + BAR_GAP_S <= blocker.top + overlapAllowance) break
+      if (blocker.bottom + BAR_GAP_S - overlapAllowance > candidate) {
+        candidate = blocker.bottom + BAR_GAP_S - overlapAllowance
+      }
+    }
+    return candidate
+  }
+  const horizontalCoverageAt = (
+    candidateTop: number,
+    h: number,
+    visualStart: number,
+    visualEnd: number,
+    blockers: typeof placed,
+    verticalAllowance: number,
+  ): number => {
+    const candidateBottom = candidateTop + h
+    const ranges = blockers
+      .filter(blocker => {
+        const verticalOverlap = Math.min(candidateBottom, blocker.bottom) - Math.max(candidateTop, blocker.top)
+        return verticalOverlap > verticalAllowance
+      })
+      .map(blocker => ({
+        start: Math.max(visualStart, blocker.visualStart),
+        end: Math.min(visualEnd, blocker.visualEnd),
+      }))
+      .filter(range => range.end > range.start)
+      .sort((a, b) => a.start - b.start)
+    if (ranges.length === 0) return 0
+    let covered = 0
+    let rangeStart = ranges[0].start
+    let rangeEnd = ranges[0].end
+    for (const range of ranges.slice(1)) {
+      if (range.start > rangeEnd) {
+        covered += Math.max(0, rangeEnd - rangeStart)
+        rangeStart = range.start
+        rangeEnd = range.end
+      } else {
+        rangeEnd = Math.max(rangeEnd, range.end)
+      }
+    }
+    covered += Math.max(0, rangeEnd - rangeStart)
+    return covered / Math.max(1, visualEnd - visualStart)
+  }
+  const placementBars = [...bars].sort((a, b) => {
+    if (a.isMeeting !== b.isMeeting) return a.isMeeting ? -1 : 1
+    if (!a.isMeeting && !b.isMeeting) {
+      const aSpan = a.packWidth || a.width
+      const bSpan = b.packWidth || b.width
+      if (aSpan !== bSpan) return aSpan - bSpan
+    }
     if (a.left !== b.left) return a.left - b.left
-    return b.width - a.width
+    return a.lane - b.lane
   })
-  for (const b of sortedBars) {
+  for (const b of placementBars) {
     const bStart = b.left
-    const bEnd = b.left + (b.packWidth ?? b.width)
+    const bEnd = b.left + (b.packWidth || b.width)
+    const bVisualEnd = b.left + b.width
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
-    const overlapping = placed.filter(r => r.start < bEnd && r.end > bStart)
-    let top: number
-    if (overlapping.length >= MAX_STACK_DEPTH) {
-      // Te veel gelijktijdige items: leg 'm over de minst-volle buur i.p.v.
-      // de rij nóg hoger te maken.
-      const least = overlapping.reduce((a, c) => (c.bottom < a.bottom ? c : a))
-      top = least.top
-    } else {
-      // Kandidaat-hoogtes: de bovenkant van de rij, en de onderkant (+gap)
-      // van elke bestaande, tijd-overlappende bar. De laagst mogelijke
-      // geldige top ligt altijd op één van deze breekpunten.
-      const candidates = [BAR_GAP_S, ...overlapping.map(r => r.bottom + BAR_GAP_S)].sort((x, y) => x - y)
-      top = candidates[candidates.length - 1]
-      for (const cand of candidates) {
-        const collides = overlapping.some(r => !(cand + h + BAR_GAP_S <= r.top || cand >= r.bottom + BAR_GAP_S))
-        if (!collides) { top = cand; break }
+    const blockers = placed
+      .filter(rec => {
+        const overlapPx = Math.min(rec.end, bEnd) - Math.max(rec.start, bStart)
+        if (overlapPx <= 0) return false
+        // Kleine horizontale raakvlakken mogen dezelfde verticale plek
+        // delen. Begrensd op 8px / 18% van de kortste balk, zodat chips
+        // iets over elkaar heen mogen vallen zonder hun klikvlak of titel
+        // grotendeels te verbergen.
+        const shorterSpan = Math.min(rec.end - rec.start, bEnd - bStart)
+        const horizontalAllowance = Math.min(8, Math.max(2, Math.round(shorterSpan * 0.18)))
+        return overlapPx > horizontalAllowance
+      })
+      .sort((a, b) => a.top - b.top)
+    const strictTop = firstVerticalGap(h, blockers)
+    // Near-fit fallback: alleen een kleine overlap toestaan wanneer dat
+    // het item aantoonbaar een flink stuk hoger trekt. Zo blijven normale
+    // situaties conflictvrij, maar offert de planner bij een nét te klein
+    // gat niet een volledige extra rij op. Maximaal 8px / 18% van de
+    // balkhoogte, zodat titel en klikvlak leesbaar blijven.
+    const overlapAllowance = Math.min(8, Math.max(3, Math.round(h * 0.18)))
+    const relaxedTop = firstVerticalGap(h, blockers, overlapAllowance)
+    const meaningfulSaving = Math.max(12, Math.round(h * 0.25))
+    let top = strictTop - relaxedTop >= meaningfulSaving ? relaxedTop : strictTop
+    // Oppervlaktebewuste fallback voor lange, rechte balken: één lokaal
+    // hoog item mag niet honderden pixels lege ruimte onder de rest van
+    // de looptijd veroorzaken. Probeer alle logische Y-posities en kies
+    // de hoogste waarbij maximaal 18% van de ZICHTBARE balkbreedte door
+    // serieuze overlap wordt geraakt. De zichtbare breedte (niet alleen
+    // packWidth) voorkomt dat een rij vol minimum-width meetingchips ten
+    // onrechte als "nauwelijks overlap" wordt gezien.
+    if (!b.isMeeting) {
+      const candidates = [
+        BAR_GAP_S,
+        ...blockers.map(blocker => Math.max(BAR_GAP_S, blocker.bottom + BAR_GAP_S - overlapAllowance)),
+      ].sort((a, b) => a - b)
+      for (const candidate of candidates) {
+        if (horizontalCoverageAt(candidate, h, b.left, bVisualEnd, blockers, overlapAllowance) > 0.18) continue
+        if (top - candidate >= meaningfulSaving) top = candidate
+        break
       }
     }
     barTops.set(b.p.id, top)
-    placed.push({ start: bStart, end: bEnd, top, bottom: top + h })
+    placed.push({
+      start: bStart, end: bEnd,
+      visualStart: b.left, visualEnd: bVisualEnd,
+      top, bottom: top + h,
+    })
   }
   // Container-hoogte NIET baseren op de volledige ~2-jaar zichtbare
   // periode — een drukke dag ver weg (andere maand/kwartaal, bv. 4
@@ -2290,6 +2494,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
             <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
               laneH={barH + BAR_GAP_S}
               stackH={wrapperH}
+              laneIdx={b.lane}
               scaleByHours={zoom === 'week' || zoom === 'maand'}
               barHeightOverride={barH}
               topOverride={barTops.get(b.p.id)}
@@ -2595,7 +2800,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   allGroups: Record<string, BoardGroup[]>
   anchor?: { x: number; y: number } | null
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
   onDuplicate?: () => void
   onDelete?: () => void
 }) {
@@ -2643,6 +2848,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     return { estHours: workdays * 8 }
   }
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
+  const [contactpersoon, setContactpersoon] = useState((rawItem?.contactpersoon as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
   const [links,     setLinks]     = useState<import('@/lib/boards').ItemLink[]>((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
   const [newEntry,  setNewEntry]  = useState('')
@@ -2691,6 +2897,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   useEffect(() => {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
     setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
+    setContactpersoon((rawItem?.contactpersoon as string) ?? '')
     setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
     setLinks((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
     setOwnerHours((rawItem?.ownerHours as Record<string, number> | undefined) ?? {})
@@ -2717,6 +2924,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     endTime:   string | null
     estHours:  number
     notes:     string
+    contactpersoon: string
     journal:   import('@/lib/boards').JournalEntry[]
     ownerHours: Record<string, number>
     ownerIds:  string[]
@@ -2748,6 +2956,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     const nextEnd   = patch.endDate   !== undefined ? patch.endDate   : (endDate   || null)
     const nextEst   = patch.estHours  !== undefined ? patch.estHours  : (parseFloat(estHours) || 0)
     const nextNotes = patch.notes     !== undefined ? patch.notes     : notes
+    const nextContactpersoon = patch.contactpersoon !== undefined ? patch.contactpersoon : contactpersoon
     const nextJournal    = patch.journal    !== undefined ? patch.journal    : journal
     const nextOwnerHours = patch.ownerHours !== undefined ? patch.ownerHours : ownerHours
     const nextLinks      = patch.links      !== undefined ? patch.links      : links
@@ -2758,6 +2967,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 
     const extra: Patch = {
       notes: nextNotes,
+      contactpersoon: nextContactpersoon,
       journal: nextJournal,
       ownerHours: nextOwnerHours,
       ownerIds: finalOwners,
@@ -3163,6 +3373,19 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               </button>
             )}
           </div>
+        </Row>
+        <Row label="Contactpersoon">
+          <input
+            type="text"
+            value={contactpersoon}
+            disabled={isGoogle}
+            onChange={e => setContactpersoon(e.target.value)}
+            onBlur={() => {
+              if (contactpersoon !== ((rawItem?.contactpersoon as string) ?? '')) commit({ contactpersoon })
+            }}
+            placeholder={isGoogle ? '' : 'Naam of contactgegevens…'}
+            style={{ ...dateInput, width: '100%', maxWidth: 360, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }}
+          />
         </Row>
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -4792,7 +5015,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
     const boardName  = project.board
     let rawIdPart    = project.id.slice(boardName.length + 2)
     // Vrij-events worden per-dag gesynthetiseerd met suffix '__vrij_YYYY-

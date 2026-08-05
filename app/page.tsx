@@ -17,12 +17,13 @@ import todosData from '@/data/todos.json'
 import {
   loadSections as loadTodoSectionsStore,
   saveSections as saveTodoSectionsStore,
+  mergeSections as mergeTodoSections,
   pullFromRemote as pullTodos,
   onTodosUpdate,
   type Section as TodoSection,
   type TodoItem as TodoStoreItem,
 } from '@/lib/todosStore'
-import { loadMyOpenProjects } from '@/lib/todoProjectSeed'
+import { mergeMemberTodoItems } from '@/lib/todoProjectSeed'
 import teamData  from '@/data/team.json'
 import yokoRaw        from '@/data/boards/yoko.json'
 import pnpRaw         from '@/data/boards/pnp.json'
@@ -438,54 +439,26 @@ export default function HomePage() {
     // Projects) — anders zou de home-card minder items tonen dan /todos
     // wanneer de auto-seed daar nog niet is gedraaid (user heeft /todos
     // nooit geopend in deze sessie).
+    function mergeStoredWithProjects(stored: TodoStoreItem[]): TodoStoreItem[] {
+      return mergeMemberTodoItems(stored, memberId)
+    }
+
     function loadMine() {
       const fallback: TodoSection[] = todosData.sections as TodoSection[]
       const sections = loadTodoSectionsStore(fallback)
       const s = sections.find(x => x.id === memberId)
       const stored = (s?.items ?? []) as TodoStoreItem[]
-      const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
-      // Lees de 'verwijderd door user'-set zodat extras die de user op
-      // /todos heeft weggekruist niet alsnog hier verschijnen — anders
-      // matchen home en /todos niet (zelfde key: 'yoko-todos-removed-projects').
-      let removedProjectKeys = new Set<string>()
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = window.localStorage.getItem('yoko-todos-removed-projects')
-          if (raw) removedProjectKeys = new Set(JSON.parse(raw) as string[])
-        } catch {}
-      }
-      const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
-        .filter(p => !existingIds.has(p.itemId))
-        .filter(p => !removedProjectKeys.has(`${p.board}:${p.itemId}`))
-        .map((p, i) => ({
-          id: `auto-${p.board}-${p.itemId}-${i}`,
-          text: p.name, done: false,
-          projectRef: { board: p.board, itemId: p.itemId, name: p.name },
-        }))
-      setMyTodos([...stored, ...extras])
+      setMyTodos(mergeStoredWithProjects(stored))
     }
     loadMine()
     pullTodos().then(remote => {
       if (remote) {
-        const s = remote.find(x => x.id === memberId)
+        const fallback: TodoSection[] = todosData.sections as TodoSection[]
+        const local = loadTodoSectionsStore(fallback)
+        const merged = mergeTodoSections(local, remote)
+        const s = merged.find(x => x.id === memberId)
         const stored = (s?.items ?? []) as TodoStoreItem[]
-        const existingIds = new Set(stored.map(t => t.projectRef?.itemId).filter((x): x is string => !!x))
-        let removedProjectKeys = new Set<string>()
-        if (typeof window !== 'undefined') {
-          try {
-            const raw = window.localStorage.getItem('yoko-todos-removed-projects')
-            if (raw) removedProjectKeys = new Set(JSON.parse(raw) as string[])
-          } catch {}
-        }
-        const extras: TodoStoreItem[] = loadMyOpenProjects(memberId)
-          .filter(p => !existingIds.has(p.itemId))
-          .filter(p => !removedProjectKeys.has(`${p.board}:${p.itemId}`))
-          .map((p, i) => ({
-            id: `auto-${p.board}-${p.itemId}-${i}`,
-            text: p.name, done: false,
-            projectRef: { board: p.board, itemId: p.itemId, name: p.name },
-          }))
-        setMyTodos([...stored, ...extras])
+        setMyTodos(mergeStoredWithProjects(stored))
       }
     }).catch(() => {})
     const offTodos = onTodosUpdate(loadMine)
@@ -667,7 +640,7 @@ export default function HomePage() {
     saveTodoSectionsStore(finalSections)
     setNewTodoText('')
     const mine = finalSections.find(s => s.id === memberId)
-    if (mine) setMyTodos(mine.items as TodoStoreItem[])
+    if (mine) setMyTodos(mergeMemberTodoItems(mine.items as TodoStoreItem[], memberId))
   }
 
   // Tikt een todo op de eigen sectie aan/uit vanuit de home-widget zodat
@@ -681,7 +654,7 @@ export default function HomePage() {
       : s)
     saveTodoSectionsStore(next)
     const mine = next.find(s => s.id === memberId)
-    if (mine) setMyTodos(mine.items as TodoStoreItem[])
+    if (mine) setMyTodos(mergeMemberTodoItems(mine.items as TodoStoreItem[], memberId))
   }
 
   // Tick een workload-item Done (of un-Done): laadt het juiste bord, zet
@@ -759,12 +732,10 @@ export default function HomePage() {
   }
   const homeToday = new Date(); homeToday.setHours(0, 0, 0, 0)
   const homeThisWeekStart = homeWeekStartOf(homeToday)
-  const homeProjectDates = new Map<string, string | null>()
-  for (const p of allProjects) homeProjectDates.set(`${p.board}:${p.id.startsWith(p.board + '__') ? p.id.slice(p.board.length + 2) : p.id}`, p.startDate ?? null)
   const homeWeekStartIsoFor = (t: TodoStoreItem): string => {
     const tIso = homeThisWeekStart.toISOString().slice(0, 10)
     if (!t.projectRef) return tIso
-    const sd = homeProjectDates.get(`${t.projectRef.board}:${t.projectRef.itemId}`)
+    const sd = t.projectRef.startDate
     if (!sd) return tIso
     const s = new Date(sd); if (Number.isNaN(s.getTime())) return tIso
     const ws = homeWeekStartOf(s)

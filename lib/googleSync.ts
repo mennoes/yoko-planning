@@ -725,15 +725,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // We negeren ook events waarvan:
   //  - de status 'cancelled' is (afgezegd)
   //  - de transparency 'transparent' is (in Google als "Free" gemarkeerd)
-  //  - de gebruiker zelf 'declined' heeft (afgewezen) of nog op 'needsAction' staat
-  //    en waar minstens één andere attendee al iets heeft beslist — dat is
-  //    typisch een uitnodiging die de gebruiker stil heeft genegeerd. We laten
-  //    'needsAction' wel staan als die persoon zelf de organizer is.
-  let skipCancelled = 0, skipDeclined = 0, skipNoStart = 0, skipSolo = 0, skipVrij = 0
+  //  - de gebruiker zelf niet expliciet 'accepted' heeft. Google toont dit als
+  //    "Yes" / "Ja"; Maybe, No en onbeantwoorde uitnodigingen vallen af.
+  let skipCancelled = 0, skipNotAccepted = 0, skipNoStart = 0, skipSolo = 0, skipVrij = 0
   const validEvents = events.filter(ev => {
     if (ev.status === 'cancelled') { skipCancelled++; return false }
     const self = ev.attendees?.find(a => a.self)
-    if (self?.responseStatus === 'declined') { skipDeclined++; return false }
+    // Google toont `accepted` als "Yes" / "Ja". Alle andere antwoorden
+    // (Maybe, No en nog niet beantwoord) blijven buiten de planner.
+    if (self?.responseStatus !== 'accepted') { skipNotAccepted++; return false }
     const { start } = eventDates(ev)
     if (!start) { skipNoStart++; return false }
     // Vrij/vakantie/verlof in de Google-agenda is persoonlijk en hoort
@@ -745,7 +745,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     return true
   })
   // eslint-disable-next-line no-console
-  console.log(`[googleSync] cal=${cal.calendar_id} fetched=${events.length} valid=${validEvents.length} skip{cancelled:${skipCancelled},declined:${skipDeclined},noStart:${skipNoStart},solo:${skipSolo},vrij:${skipVrij}}`)
+  console.log(`[googleSync] cal=${cal.calendar_id} fetched=${events.length} valid=${validEvents.length} skip{cancelled:${skipCancelled},notAccepted:${skipNotAccepted},noStart:${skipNoStart},solo:${skipSolo},vrij:${skipVrij}}`)
   const groupedByRec = new Map<string, GoogleEvent[]>()
   for (const ev of validEvents) {
     const key = ev.recurringEventId ?? ev.id
@@ -1231,6 +1231,26 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     }
   }
 
+  // Verberg eerder geïmporteerde events zodra het Google-antwoord niet meer
+  // "Ja" is. `existing` is hierboven al beperkt tot deze gebruiker en deze
+  // kalender, zodat een sync nooit de Google-items van een teamgenoot wist.
+  // We raken alleen events aan die Google in het huidige sync-window leverde;
+  // oudere items buiten dat window blijven, net als bij de bestaande cleanup.
+  const fetchedExternalIds = new Set<string>()
+  for (const ev of events) fetchedExternalIds.add(ev.recurringEventId ?? ev.id)
+  const acceptedExternalIds = new Set<string>()
+  for (const ev of validEvents) acceptedExternalIds.add(ev.recurringEventId ?? ev.id)
+  const noLongerAcceptedIds = existing
+    .filter(r => r.external_id && fetchedExternalIds.has(r.external_id) && !acceptedExternalIds.has(r.external_id))
+    .map(r => r.id)
+  if (noLongerAcceptedIds.length > 0) {
+    const hiddenAt = new Date().toISOString()
+    await admin
+      .from('board_items')
+      .update({ deleted_at: hiddenAt, updated_at: hiddenAt })
+      .in('id', noLongerAcceptedIds)
+  }
+
   // Auto-categoriseer items met 'Vrij'/'Vakantie'/'Verlof'/etc. in de titel
   // als category='vrij' in workload_categories. De classifier doet dit op de
   // fly ook, maar door 't expliciet op te slaan zien alle devices/tools het
@@ -1281,7 +1301,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // (Papierbak) drawer herstelbaar.
   void existing
   void seenIds
-  const removed = 0
+  const removed = noLongerAcceptedIds.length
 
   // VERWIJDERD: de oude 'auto-cleanup non-google rows met dezelfde naam
   // als een synced Google item' veegde handmatige projecten weg zodra
