@@ -30,6 +30,7 @@ type ShareGroup = {
   color: string
   items: ShareItem[]
 }
+type MonthlyHours = { key: string; label: string; hours: number; isCurrent: boolean }
 
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 function fmtDate(iso: string | null): string {
@@ -53,7 +54,7 @@ const STATUS_FG: Record<string, string> = {
   'Doorlopend': '#579bfc',
 }
 
-type Preset = 'all' | 'month' | 'next' | 'quarter' | 'custom'
+type Preset = 'all' | 'prevMonth' | 'month' | 'next' | 'quarter' | 'custom'
 
 function localIsoToday(): string {
   return new Date().toISOString().slice(0, 10)
@@ -73,11 +74,12 @@ export default function ShareBoardPage() {
   const params = useParams<{ board: string }>()
   const board = params.board
 
-  const [groups, setGroups]     = useState<ShareGroup[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
+  const [groups, setGroups]             = useState<ShareGroup[]>([])
+  const [monthlyHours, setMonthlyHours] = useState<MonthlyHours[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
 
-  const [preset, setPreset]     = useState<Preset>('all')
+  const [preset, setPreset]     = useState<Preset>('month')
   const [from, setFrom]         = useState('')
   const [until, setUntil]       = useState('')
 
@@ -89,6 +91,7 @@ export default function ShareBoardPage() {
         const j = await r.json().catch(() => ({}))
         if (!r.ok || !j?.ok) { setError(j?.error ?? 'Kon bord niet laden'); setGroups([]); return }
         setGroups((j.groups ?? []) as ShareGroup[])
+        setMonthlyHours((j.monthlyHours ?? []) as MonthlyHours[])
       })
       .catch(() => setError('Netwerkfout'))
       .finally(() => setLoading(false))
@@ -98,6 +101,10 @@ export default function ShareBoardPage() {
   useEffect(() => {
     const today = new Date()
     if (preset === 'all')    { setFrom(''); setUntil(''); return }
+    if (preset === 'prevMonth') {
+      const p = addMonths(today, -1)
+      setFrom(monthStart(p)); setUntil(monthEnd(p)); return
+    }
     if (preset === 'month')  { setFrom(monthStart(today));         setUntil(monthEnd(today));               return }
     if (preset === 'next')   {
       const n = addMonths(today, 1)
@@ -169,14 +176,54 @@ export default function ShareBoardPage() {
         {stats.total} items · {stats.done} afgerond · {stats.pct}% klaar
       </p>
 
+      {/* Uren per maand — het belangrijkste dat een klant in één oogopslag
+          moet kunnen zien: hoeveel tijd is er vorige maand aan besteed,
+          hoeveel deze maand, en hoeveel staat er volgende maand gepland.
+          Klikbaar: filtert de lijst eronder meteen op die maand. */}
+      {monthlyHours.length === 3 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
+          {monthlyHours.map((m, idx) => {
+            const presetForCard: Preset = idx === 0 ? 'prevMonth' : idx === 1 ? 'month' : 'next'
+            const active = preset === presetForCard
+            return (
+              <button key={m.key} onClick={() => setPreset(presetForCard)}
+                style={{
+                  textAlign: 'left', cursor: 'pointer',
+                  padding: '14px 16px', borderRadius: 12,
+                  background: m.isCurrent ? color + '14' : 'var(--bg-card)',
+                  border: `1.5px solid ${active ? color : m.isCurrent ? color + '55' : 'var(--border-light)'}`,
+                }}>
+                <div style={{
+                  fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                  color: m.isCurrent ? color : 'var(--text-muted)', marginBottom: 6,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  {idx === 0 ? 'Vorige maand' : idx === 1 ? 'Deze maand' : 'Volgende maand'}
+                  {m.isCurrent && (
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
+                  )}
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                  {m.hours > 0 ? `${m.hours}u` : '—'}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', textTransform: 'capitalize', marginTop: 2 }}>
+                  {m.label}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Datum-filter — preset-knoppen + optionele custom range. */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
         {([
-          { id: 'all',     label: 'Alles' },
-          { id: 'month',   label: 'Deze maand' },
-          { id: 'next',    label: 'Volgende maand' },
-          { id: 'quarter', label: '3 maanden' },
-          { id: 'custom',  label: 'Eigen range' },
+          { id: 'all',       label: 'Alles' },
+          { id: 'prevMonth', label: 'Vorige maand' },
+          { id: 'month',     label: 'Deze maand' },
+          { id: 'next',      label: 'Volgende maand' },
+          { id: 'quarter',   label: '3 maanden' },
+          { id: 'custom',    label: 'Eigen range' },
         ] as { id: Preset; label: string }[]).map(p => {
           const active = preset === p.id
           return (
