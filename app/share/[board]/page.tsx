@@ -79,7 +79,7 @@ export default function ShareBoardPage() {
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
 
-  const [preset, setPreset]     = useState<Preset>('all')
+  const [preset, setPreset]     = useState<Preset>('month')
   const [from, setFrom]         = useState('')
   const [until, setUntil]       = useState('')
 
