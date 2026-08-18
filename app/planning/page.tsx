@@ -2028,14 +2028,14 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       const isMeeting = explicitCat === 'meeting'
         || (p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2)
       if (hideMeetings && isMeeting) return null
-      return { p, left, width, packWidth, isMeeting }
+      return { p, left, width, packWidth, isMeeting, durationDays: projDays }
     })
-    .filter(Boolean) as { p: Project; left: number; width: number; packWidth: number; isMeeting: boolean }[]
+    .filter(Boolean) as { p: Project; left: number; width: number; packWidth: number; isMeeting: boolean; durationDays: number }[]
 
   // Geen clustering meer in Overzicht: elke meeting krijgt zijn eigen
   // bar in zijn eigen lane, gesorteerd op starttijd (vroegste bovenaan).
   // Project-balken blijven horizontaal gepackt.
-  type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; packWidth: number; isMeeting: boolean }
+  type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; packWidth: number; isMeeting: boolean; durationDays: number }
   type Bar = SingleBar
 
   const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
@@ -2207,6 +2207,10 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // onderste drager van de stapel in plaats van een scheidslijn waar
   // korte items onnodig onder belanden.
   const BASELINE_AVAIL_H = PROJECT_LANE_H - BAR_GAP_S
+  // Kortere items winnen altijd de stapelvolgorde van langere items. Door
+  // deze prioriteit zowel op gewone als Vrij-balken te zetten kan een brede
+  // achtergrondbalk nooit meer een kort item afdekken.
+  const durationZIndex = (days: number): number => 1001 - Math.min(1000, Math.max(1, days))
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
@@ -2346,7 +2350,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
 
   return (
-    <div style={{ position: 'relative', height, overflow: 'hidden' }}>
+    <div style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
@@ -2462,11 +2466,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
               padding: '5px 9px', gap: 6,
               cursor: isReadOnly ? 'pointer' : 'grab',
               userSelect: 'none',
-              // z=3: hoogste laag in de tijdlijn-content (boven alle bars en
-              // de VANDAAG-streep DOM-rendering volgorde), maar netjes onder
-              // de sticky naam-kolom (z=4+) zodat de groene tape NIET door
-              // de avatars heen schiet bij horizontaal scrollen.
-              zIndex: 3,
+              zIndex: durationZIndex(b.durationDays),
               fontSize: 12.5, fontWeight: 700, color: '#fff',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               textShadow: '0 1px 2px rgba(0,0,0,0.4)',
@@ -2486,7 +2486,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const wrapperH = height
         const barH = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
         return (
-          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none' }}>
+          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: durationZIndex(b.durationDays) }}>
             {/* laneH hoeft nu geen gedeelde tabelwaarde meer te zijn —
                  elke bar krijgt gewoon z'n eigen hoogte + gap. barHeight-
                  Override/topOverride komen uit de skyline-berekening
