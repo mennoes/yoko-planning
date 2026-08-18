@@ -146,6 +146,35 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
     }
   }
 
+  async function herstelItems(snap: Snapshot) {
+    if (!supabase) return
+    if (!window.confirm(
+      `Verdwenen hoofditems herstellen uit de versie van ${fmtDate(snap.snapshot_at)}?\n\n` +
+      `Alleen items en groepen die nu ontbreken worden teruggezet. Bestaande items en recente wijzigingen blijven onaangeroerd.`,
+    )) return
+    const sess = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token
+    if (!token) { window.alert('Niet ingelogd.'); return }
+    setBusy(snap.id); setMsg(null)
+    try {
+      const res = await fetch('/api/snapshots/merge-missing-items', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId, since: snap.snapshot_at }),
+      })
+      const json = await res.json() as { ok: boolean; error?: string; restoredItems?: number; restoredGroups?: number; status?: string }
+      if (!json.ok) { setMsg(`Item-recovery mislukt: ${json.error ?? 'onbekend'}`); return }
+      await pullBoardFromRemote(boardId).catch(() => {})
+      if (json.status === 'nothing_to_restore') {
+        setMsg('Geen ontbrekende hoofditems of groepen gevonden in deze versie.')
+      } else {
+        setMsg(`✓ Hersteld: ${json.restoredItems ?? 0} hoofditem(s) en ${json.restoredGroups ?? 0} groep(en).`)
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
   if (!open || typeof document === 'undefined') return null
   return createPortal(
     <div style={{
@@ -167,8 +196,8 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
         </div>
         <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Kies een versie om verdwenen subitems uit terug te halen. De huidige top-level fields op je items
-          (status, owners, datums, notes) blijven zoals ze zijn — alleen ontbrekende subs worden bijgeplakt.
+          Kies een versie om verdwenen hoofditems, groepen of subitems terug te halen. Bestaande items en
+          recente wijzigingen blijven staan; Recovery voegt uitsluitend ontbrekende gegevens toe.
         </p>
       </div>
 
@@ -186,7 +215,7 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
             Nog geen snapshots voor dit bord. Auto-snapshots worden dagelijks aangemaakt zodra iemand de app opent.
           </p>
         ) : snapshots.map(s => (
-          <div key={s.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div key={s.id} style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 700 }}>
                 {fmtDate(s.snapshot_at)}
@@ -197,6 +226,13 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
                 {' · '}{s.groupCount ?? 0} groepen · {s.itemCount ?? 0} items · {s.subCount ?? 0} subs
               </div>
             </div>
+            <button onClick={() => herstelItems(s)} disabled={busy === s.id}
+              title="Zet alleen ontbrekende hoofditems en groepen terug; bestaande items veranderen niet."
+              style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--accent)',
+                background: 'var(--accent-light, rgba(88,150,255,0.18))', color: 'var(--text-primary)',
+                fontSize: 12, fontWeight: 700, cursor: busy === s.id ? 'wait' : 'pointer', flexShrink: 0 }}>
+              {busy === s.id ? 'Bezig…' : 'Herstel items'}
+            </button>
             <button onClick={() => herstel(s)} disabled={busy === s.id}
               style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--accent)',
                 background: 'var(--accent-light, rgba(88,150,255,0.18))', color: 'var(--text-primary)',
