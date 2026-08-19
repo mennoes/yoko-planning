@@ -123,16 +123,22 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
     : (project.estHours || 0) / owners
   const hoursPerDay = memberHours / projectDays
   const dayIntensity = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
+  const dayHeight = 0.1 + 0.9 * Math.sqrt(dayIntensity)
   // Dag-intensiteit alleen is niet genoeg: een project van 32u verspreid
   // over 10 dagen (3,2u/dag) en een project van 16u verspreid over 5
   // dagen (ook 3,2u/dag) kregen zo EXACT dezelfde hoogte, terwijl de een
-  // dubbel zoveel werk is. TOTAL_REF = 40u (± 1 werkweek) → volle hoogte;
-  // we nemen het MAX van dag-intensiteit en totaal-intensiteit zodat een
-  // korte felle meeting én een lang groot project allebei goed opvallen.
+  // dubbel zoveel werk is. TOTAL_REF = 40u (± 1 werkweek) → volle hoogte.
+  // LINEAIR i.p.v. sqrt — sqrt drukt juist de verschillen tussen grotere
+  // totalen samen (0.4 en 0.8 werden na sqrt+baseline maar 67% vs 90%,
+  // een te klein verschil voor 2x zoveel werk). Lineair houdt 16u vs 32u
+  // duidelijk uit elkaar (46% vs 82%).
   const TOTAL_REF_HOURS = 40
   const totalIntensity = Math.min(1, Math.max(0, memberHours / TOTAL_REF_HOURS))
-  const ratio = Math.max(dayIntensity, totalIntensity)
-  return 0.1 + 0.9 * Math.sqrt(ratio)
+  const totalHeight = 0.1 + 0.9 * totalIntensity
+  // MAX van beide zodat een korte felle meeting (hoge dag-intensiteit,
+  // laag totaal) én een lang groot project (laag tempo, hoog totaal)
+  // allebei goed opvallen.
+  return Math.max(dayHeight, totalHeight)
 }
 
 // ─── View-size presets ────────────────────────────────────────────────────────
