@@ -122,7 +122,16 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
     ? Number(project.ownerHours[memberId]) || 0
     : (project.estHours || 0) / owners
   const hoursPerDay = memberHours / projectDays
-  const ratio = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
+  const dayIntensity = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
+  // Dag-intensiteit alleen is niet genoeg: een project van 32u verspreid
+  // over 10 dagen (3,2u/dag) en een project van 16u verspreid over 5
+  // dagen (ook 3,2u/dag) kregen zo EXACT dezelfde hoogte, terwijl de een
+  // dubbel zoveel werk is. TOTAL_REF = 40u (± 1 werkweek) → volle hoogte;
+  // we nemen het MAX van dag-intensiteit en totaal-intensiteit zodat een
+  // korte felle meeting én een lang groot project allebei goed opvallen.
+  const TOTAL_REF_HOURS = 40
+  const totalIntensity = Math.min(1, Math.max(0, memberHours / TOTAL_REF_HOURS))
+  const ratio = Math.max(dayIntensity, totalIntensity)
   return 0.1 + 0.9 * Math.sqrt(ratio)
 }
 
