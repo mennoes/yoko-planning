@@ -20,6 +20,7 @@ export type TeamMemberExtra = {
 }
 
 const KEY = 'yoko-team-extras'
+const START_DATE_META_PREFIX = '__team_start_date__:'
 
 function readExtras(): TeamMemberExtra[] {
   if (typeof window === 'undefined') return []
@@ -128,13 +129,15 @@ export async function pullExtrasFromRemote(): Promise<boolean> {
   if (!await getCurrentUserId()) return false
   const { data, error } = await supabase.from('team_members_extra').select('*')
   if (error || !data) return false
-  const remote: TeamMemberExtra[] = (data as DbRow[]).map(r => ({
+  const remote: TeamMemberExtra[] = (data as DbRow[])
+    .filter(r => !r.id.startsWith(START_DATE_META_PREFIX))
+    .map(r => ({
     id:             r.id,
     name:           r.name,
     email:          r.email ?? '',
     weeklyCapacity: Number(r.weekly_capacity) || 0,
     color:          r.color,
-  }))
+    }))
   writeExtras(remote)
   if (mergeIntoTeamData(remote)) notify()
   return true
