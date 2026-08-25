@@ -56,6 +56,7 @@ export type BoardItem = {
   journal?:       JournalEntry[]
   source?:        'manual' | 'google'   // origin of this item
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
+  externalSyncedAt?: string             // gebruikt om de nieuwste Google-variant te kiezen
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
   links?:         ItemLink[]            // gekoppelde bestanden / externe URL's
   // Wanneer 't item subitems heeft volgt de timeline (startDate/endDate)

@@ -211,6 +211,16 @@ h1, h2, h3, h4, h5, h6 {
 /* Selection */
 ::selection { background: var(--accent-mid); color: var(--text-primary); }
 
+/* De compacte Google-meetingteller is een volledig custom knop. Safari en
+   Chromium tekenden na pointerfocus alsnog hun forse native blauwe/witte
+   focusring, waardoor één meeting visueel op twee gestapelde pills leek.
+   Pointerfocus blijft rustig; toetsenbordfocus houdt een duidelijke ring. */
+.planning-meeting-summary:focus { outline: none; }
+.planning-meeting-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Focus-highlight: gebruikt door BoardTable wanneer je via ?focus= naar
    een specifiek item linkt (bv. vanuit de planning). Kort gele flash zodat
    je oog naar de juiste rij wordt getrokken zonder dat het permanent leidt. */

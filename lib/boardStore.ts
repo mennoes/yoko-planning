@@ -209,8 +209,9 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     subitems:       dedupeSubitems(r.subitems as BoardItem['subitems']) ?? undefined,
     journal:        (r.journal as BoardItem['journal']) ?? undefined,
     source:         (r.source as BoardItem['source']) ?? undefined,
-    externalLink:   (r.external_link as string | undefined) ?? undefined,
     ...((r.extra as Record<string, unknown>) ?? {}),    // includes ownerHours
+    externalLink:     (r.external_link as string | undefined) ?? undefined,
+    externalSyncedAt: (r.external_synced_at as string | undefined) ?? undefined,
   } as BoardItem
 }
 
@@ -338,7 +339,7 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
 const STANDARD_FIELDS = new Set([
   'id','name','ownerIds','status','startDate','endDate','deadline','estHours',
   'dagen','notes','contactpersoon','uitzenddag','framelink','nummers','subitems','journal',
-  'source','externalLink',
+  'source','externalLink','externalSyncedAt',
   // 'ownerHours' is intentionally NOT here — it lives in the `extra` JSON
   // column since the board_items table has no dedicated column for it.
 ])

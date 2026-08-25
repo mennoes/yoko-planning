@@ -23,6 +23,7 @@ export type Project = {
   status: 'active' | 'done'
   source?: 'manual' | 'google'
   externalLink?: string
+  externalSyncedAt?: string
   meetLink?: string
   // Set on virtual projects produced by merging same-name Google items in
   // the planner. The detail panel uses it to render a sub-event list.
@@ -54,7 +55,7 @@ export const BOARD_COLORS = new Proxy({} as Record<string, string>, {
 // uren en gebruiken de parent-datums. Subitems met status='Done' slaan
 // we over zodat afgevinkte instances niet meer in totalen meetellen.
 export function groupsToProjects(boardName: string, groups: BoardGroup[]): Project[] {
-  return groups.flatMap(g =>
+  const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
         const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string }> | undefined) ?? []
@@ -112,6 +113,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               status:    ((si.status ?? '') === 'Done' || (i.status as string) === 'Done') ? 'done' : 'active',
               source:    (i.source as 'manual' | 'google' | undefined),
               externalLink: (i.externalLink as string | undefined),
+              externalSyncedAt: (i.externalSyncedAt as string | undefined),
               meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
               parentName: i.name as string,
             }
@@ -141,10 +143,58 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           status:    (i.status as string) === 'Done' ? 'done' : 'active',
           source:        (i.source as 'manual' | 'google' | undefined),
           externalLink:  (i.externalLink as string | undefined),
+          externalSyncedAt: (i.externalSyncedAt as string | undefined),
           meetLink:      (i.meetLink as string | undefined),
         }]
       })
   )
+
+  // Oudere sync-rijen kunnen nog geen source='google' hebben, terwijl de
+  // synchronisatietijd of Calendar-link wel ondubbelzinnig laat zien dat ze
+  // uit Google komen. Normaliseer die eerst; anders belandt de nieuwe rij in
+  // de G-teller en blijft de legacy-rij daarnaast als gewone gekleurde balk
+  // staan — dezelfde afspraak wordt dan twee keer getoond.
+  const isGoogleBacked = (p: Project): boolean =>
+    p.source === 'google' ||
+    Boolean(p.externalSyncedAt) ||
+    /(^|\.)calendar\.google\.com$/i.test(safeHost(p.externalLink))
+  const normalizedProjects = projects.map(p =>
+    isGoogleBacked(p) && p.source !== 'google' ? { ...p, source: 'google' as const } : p)
+
+  // Google kan bij een wijziging in deelnemers dezelfde afspraak tijdelijk
+  // onder een nieuwe technische serie-ID aanbieden. Dedupliceren op iCalUID
+  // helpt dan niet, maar de daadwerkelijke occurrence is nog steeds gelijk:
+  // dezelfde titel, datum en tijd. Toon daarvan alleen de laatst gesyncte rij.
+  // Handmatige items blijven volledig buiten deze deduplicatie.
+  const winnerByOccurrence = new Map<string, Project>()
+  const occurrenceKey = (p: Project): string | null => {
+    if (!isGoogleBacked(p) || (!p.startDate && !p.endDate)) return null
+    const title = p.name.toLowerCase().trim().replace(/\s*\(\d+\s*[x×]\)\s*$/u, '')
+    return [title, p.startDate ?? '', p.endDate ?? '', p.startTime ?? '', p.endTime ?? ''].join('|')
+  }
+  const syncTime = (p: Project): number => {
+    const ms = p.externalSyncedAt ? Date.parse(p.externalSyncedAt) : 0
+    return Number.isFinite(ms) ? ms : 0
+  }
+  for (const project of normalizedProjects) {
+    const key = occurrenceKey(project)
+    if (!key) continue
+    const current = winnerByOccurrence.get(key)
+    if (!current || syncTime(project) > syncTime(current) ||
+        (syncTime(project) === syncTime(current) && project.id < current.id)) {
+      winnerByOccurrence.set(key, project)
+    }
+  }
+  return normalizedProjects.filter(project => {
+    const key = occurrenceKey(project)
+    return !key || winnerByOccurrence.get(key)?.id === project.id
+  })
+}
+
+function safeHost(url: string | undefined): string {
+  if (!url) return ''
+  try { return new URL(url).hostname }
+  catch { return '' }
 }
 
 /** Returns the Monday of the week containing `date` */

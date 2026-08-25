@@ -18,6 +18,7 @@ export type TeamMember = {
   position:        number
   hidden:          boolean
   kind:            TeamKind
+  startDate:       string | null
 }
 
 type Row = {
@@ -29,6 +30,7 @@ type Row = {
   position:        number | null
   hidden:          boolean | null
   kind:            string | null
+  start_date:      string | null
 }
 
 function normalizeKind(k: string | null | undefined): TeamKind {
@@ -46,10 +48,12 @@ function rowToMember(r: Row): TeamMember {
     position:       Number(r.position ?? 0),
     hidden:         !!r.hidden,
     kind:           normalizeKind(r.kind),
+    startDate:      r.start_date ?? null,
   }
 }
 
 const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
+const START_DATE_META_PREFIX = '__team_start_date__:'
 function defaultKindFor(id: string): TeamKind {
   if (id === 'unassigned') return 'unassigned'
   if (YOKO_IDS.has(id))    return 'yoko'
@@ -59,7 +63,7 @@ function defaultKindFor(id: string): TeamKind {
 export async function pullTeam(): Promise<TeamMember[] | null> {
   if (!supabase) return null
   if (!await getCurrentUserId()) return null
-  const sel = 'id, name, email, color, weekly_capacity, position, hidden, kind'
+  const sel = 'id, name, email, color, weekly_capacity, position, hidden, kind, start_date'
   const { data, error } = await supabase
     .from('team_members')
     .select(sel)
@@ -70,17 +74,31 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
   // kind-classificatie vallen we terug op defaultKindFor(id) zodat
   // freelancers niet allemaal als 'yoko' verschijnen (wat zou gebeuren
   // als normalizeKind z'n default 'yoko' zou toepassen).
-  if (error && /kind/.test(error.message)) {
-    const fb = await supabase
+  if (error && /(kind|start_date)/.test(error.message)) {
+    const fbWithKind = await supabase
+      .from('team_members')
+      .select('id, name, email, color, weekly_capacity, position, hidden, kind')
+      .order('position', { ascending: true })
+    const fb = fbWithKind.error
+      ? await supabase
       .from('team_members')
       .select('id, name, email, color, weekly_capacity, position, hidden')
       .order('position', { ascending: true })
+      : fbWithKind
     if (!fb.error && fb.data) {
-      return (fb.data as Omit<Row, 'kind'>[]).map(r => {
-        const member = rowToMember({ ...r, kind: null })
-        member.kind = defaultKindFor(member.id)
+      const hasKind = !fbWithKind.error
+      const members = (fb.data as Array<Omit<Row, 'start_date'> & { kind?: string | null }>).map(r => {
+        const member = rowToMember({ ...r, kind: hasKind ? (r.kind ?? null) : null, start_date: null })
+        if (!hasKind) member.kind = defaultKindFor(member.id)
         return member
       })
+      const { data: metaRows } = await supabase
+        .from('team_members_extra')
+        .select('id, email')
+        .like('id', `${START_DATE_META_PREFIX}%`)
+      const starts = new Map(((metaRows as Array<{ id: string; email: string | null }> | null) ?? [])
+        .map(r => [r.id.slice(START_DATE_META_PREFIX.length), r.email] as const))
+      return members.map(member => ({ ...member, startDate: starts.get(member.id) || null }))
     }
   }
   return null
@@ -98,17 +116,29 @@ export async function upsertTeamMember(m: TeamMember): Promise<{ ok: boolean; er
     position:        m.position,
     hidden:          m.hidden,
     kind:            m.kind,
+    start_date:      m.startDate,
     updated_at:      new Date().toISOString(),
   }
   const { error } = await supabase.from('team_members').upsert(payload, { onConflict: 'id' })
   if (error) {
     // Fallback: migratie 0018 niet gedraaid → 'kind' kolom bestaat niet.
     // Probeer zonder kind zodat de rij in elk geval gemaakt wordt.
-    if (/kind/.test(error.message)) {
-      const { kind: _drop, ...sansKind } = payload
-      void _drop
-      const second = await supabase.from('team_members').upsert(sansKind, { onConflict: 'id' })
+    if (/(kind|start_date)/.test(error.message)) {
+      const missingStartDate = /start_date/.test(error.message)
+      const missingKind = /kind/.test(error.message)
+      const { kind: _kind, start_date: _startDate, ...basePayload } = payload
+      void _kind; void _startDate
+      const compatiblePayload = missingStartDate && !missingKind
+        ? { ...basePayload, kind: payload.kind }
+        : missingKind && !missingStartDate
+          ? { ...basePayload, start_date: payload.start_date }
+          : basePayload
+      let second = await supabase.from('team_members').upsert(compatiblePayload, { onConflict: 'id' })
+      if (second.error && compatiblePayload !== basePayload) {
+        second = await supabase.from('team_members').upsert(basePayload, { onConflict: 'id' })
+      }
       if (!second.error) {
+        await saveLegacyStartDate(m.id, m.startDate)
         return { ok: true, error: 'kind_column_missing_run_0018' }
       }
       return { ok: false, error: `${error.message} — én fallback faalde: ${second.error.message}` }
@@ -122,7 +152,25 @@ export async function deleteTeamMember(id: string): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
   const { error } = await supabase.from('team_members').delete().eq('id', id)
+  await supabase.from('team_members_extra').delete().eq('id', `${START_DATE_META_PREFIX}${id}`)
   return !error
+}
+
+async function saveLegacyStartDate(memberId: string, startDate: string | null): Promise<void> {
+  if (!supabase) return
+  const id = `${START_DATE_META_PREFIX}${memberId}`
+  if (!startDate) {
+    await supabase.from('team_members_extra').delete().eq('id', id)
+    return
+  }
+  await supabase.from('team_members_extra').upsert({
+    id,
+    name: 'Team startdatum',
+    email: startDate,
+    weekly_capacity: 0,
+    color: '#9aadbd',
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'id' })
 }
 
 // Seed-helper: vult team_members aan met leden uit data/team.json die er
@@ -148,14 +196,15 @@ export async function ensureTeamSeed(): Promise<void> {
       position:        existing.size + i,
       hidden:          false,
       kind:            defaultKindFor(m.id),
+      start_date:      null,
       updated_at:      new Date().toISOString(),
     }))
   if (missing.length === 0) return
   const { error } = await supabase.from('team_members').upsert(missing, { onConflict: 'id' })
-  if (error && /kind/.test(error.message)) {
+  if (error && /(kind|start_date)/.test(error.message)) {
     // Migratie 0018 (kind-kolom) nog niet gedraaid → probeer zonder.
-    const sansKind = missing.map(({ kind: _drop, ...rest }) => { void _drop; return rest })
-    await supabase.from('team_members').upsert(sansKind, { onConflict: 'id' })
+    const legacyRows = missing.map(({ kind: _kind, start_date: _startDate, ...rest }) => { void _kind; void _startDate; return rest })
+    await supabase.from('team_members').upsert(legacyRows, { onConflict: 'id' })
   }
 }
 
@@ -163,6 +212,10 @@ export function subscribeRemoteTeam(onChange: () => void): () => void {
   if (!supabase) return () => {}
   const ch = supabase.channel('team_members')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members' }, () => onChange())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members_extra' }, payload => {
+      const id = String((payload.new as { id?: string } | null)?.id ?? (payload.old as { id?: string } | null)?.id ?? '')
+      if (id.startsWith(START_DATE_META_PREFIX)) onChange()
+    })
     .subscribe()
   return () => { supabase!.removeChannel(ch) }
 }
@@ -180,5 +233,12 @@ export function fallbackTeam(): TeamMember[] {
       position:       i,
       hidden:         false,
       kind:           defaultKindFor(m.id),
+      startDate:      null,
     }))
+}
+
+export function isTeamMemberStarted(member: Pick<TeamMember, 'startDate'>, today = new Date()): boolean {
+  if (!member.startDate) return true
+  const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  return member.startDate <= localToday
 }

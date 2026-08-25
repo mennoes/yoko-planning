@@ -9,17 +9,18 @@
 
 'use client'
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { pullTeam, ensureTeamSeed, subscribeRemoteTeam, fallbackTeam, type TeamMember } from '@/lib/teamStore'
+import { pullTeam, ensureTeamSeed, subscribeRemoteTeam, fallbackTeam, isTeamMemberStarted, type TeamMember } from '@/lib/teamStore'
 
 const CACHE_KEY = 'yoko-team-members'
 
 type Ctx = {
   members: TeamMember[]
+  allMembers: TeamMember[]
   loading: boolean
   refresh: () => Promise<void>
 }
 
-const TeamCtx = createContext<Ctx>({ members: [], loading: true, refresh: async () => {} })
+const TeamCtx = createContext<Ctx>({ members: [], allMembers: [], loading: true, refresh: async () => {} })
 
 function loadCache(): TeamMember[] | null {
   if (typeof window === 'undefined') return null
@@ -38,6 +39,7 @@ function saveCache(members: TeamMember[]): void {
 export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [members, setMembers] = useState<TeamMember[]>(() => loadCache() ?? fallbackTeam())
   const [loading, setLoading] = useState(true)
+  const [today, setToday] = useState(() => new Date())
 
   const refresh = useCallback(async () => {
     const rows = await pullTeam()
@@ -63,8 +65,13 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; off() }
   }, [refresh])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setToday(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   return (
-    <TeamCtx.Provider value={{ members, loading, refresh }}>
+    <TeamCtx.Provider value={{ members: members.filter(member => isTeamMemberStarted(member, today)), allMembers: members, loading, refresh }}>
       {children}
     </TeamCtx.Provider>
   )

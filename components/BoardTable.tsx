@@ -2553,27 +2553,6 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
             return <OwnerDistributionSection item={item} owners={owners} total={total} onUpdate={onUpdate} />
           })()}
 
-          {/* Notities = vroeger "Opmerkingen"-thread. Inline-textarea bovenin
-              voor een snelle losse notitie (item.notes), daaronder de
-              threaded variant voor reactions/mentions. Eén concept,
-              twee invoer-modi. */}
-          {(typeof item.notes === 'string' || item.notes === undefined) && (
-            <div style={{ marginBottom: 14 }}>
-              <textarea
-                defaultValue={item.notes ?? ''}
-                onBlur={e => { if (e.target.value !== (item.notes ?? '')) onUpdate({ notes: e.target.value }) }}
-                placeholder="Snelle notitie…"
-                rows={2}
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  padding: '8px 11px', borderRadius: 8,
-                  border: '1px solid var(--border)', background: 'var(--bg-card)',
-                  color: 'var(--text-primary)', fontSize: 13.5, fontFamily: 'inherit',
-                  resize: 'vertical', outline: 'none',
-                }} />
-            </div>
-          )}
-
           {/* Notities-thread (voorheen "Opmerkingen") */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>

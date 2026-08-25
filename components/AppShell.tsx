@@ -286,11 +286,10 @@ function Inner({ children }: { children: ReactNode }) {
       } catch {}
     }
     tick('mount')
-    // Interval-tick blijft 30 min als tab zichtbaar is; achtergrondtabs
-    // slaan de tick over (visibility-check in tick zelf). Als de user
-    // van tab wisselt vuurt visibilitychange 'n directe verse sync zodat
-    // 't gevoel niet trager wordt bij terugkomen.
-    const id = setInterval(() => tick('interval'), 30 * 60 * 1000)
+    // Iedere 5 minuten verversen zolang de planner zichtbaar is. Google-
+    // wijzigingen zoals verplaatsen, annuleren of deelnemers aanpassen
+    // mogen niet een halfuur als oude planning blijven staan.
+    const id = setInterval(() => tick('interval'), 5 * 60 * 1000)
     function onVisibility() {
       if (typeof document === 'undefined') return
       if (document.visibilityState === 'visible') tick('visibility')
