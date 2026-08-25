@@ -5883,12 +5883,12 @@ export default function PlanningPage() {
             pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
           }} />
           <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-            position: 'absolute', top: 8,
+            position: 'absolute', top: 4,
             ...(todayEdge === 'left' ? { left: nameW + namePad + 6 } : { right: 6 }),
-            zIndex: 80, padding: '5px 9px', borderRadius: 999, border: 'none',
+            zIndex: 80, padding: '2px 9px', borderRadius: 999, border: 'none',
             background: 'var(--yellow)', color: '#1a1a1a',
-            boxShadow: '0 3px 10px rgba(216, 182, 46, 0.45)',
-            fontSize: 9.5, fontWeight: 900, letterSpacing: '0.06em', cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(216,182,46,0.4)',
+            fontSize: 9.5, fontWeight: 800, lineHeight: 1.2, letterSpacing: '0.08em', cursor: 'pointer',
           }}>
             VANDAAG {todayEdge === 'left' ? '←' : '→'}
           </button>
@@ -5967,6 +5967,7 @@ export default function PlanningPage() {
                 padding: '2px 0',
                 background: 'var(--yellow)', color: '#1a1a1a',
                 fontSize: 9.5, fontWeight: 800,
+                lineHeight: 1.2,
                 letterSpacing: '0.08em', textAlign: 'center',
                 borderRadius: 999,
                 boxShadow: '0 2px 6px rgba(216, 182, 46, 0.4)',
