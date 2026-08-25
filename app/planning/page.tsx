@@ -2018,19 +2018,33 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
               {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
             {sorted.map(meeting => (
-              <button key={meeting.id} onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
-                onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
-                onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 9,
-                  padding: '8px 9px', border: 'none', borderRadius: 7, background: 'transparent',
-                  color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
-                <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
-                  {meeting.startTime ?? 'Hele dag'}
-                </span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
-                  {meeting.name}
-                </span>
-              </button>
+              <div key={meeting.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <button onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
+                  onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
+                  style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start', gap: 9,
+                    padding: '8px 9px', border: 'none', borderRadius: 7, background: 'transparent',
+                    color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
+                    {meeting.startTime ?? 'Hele dag'}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
+                    {meeting.name}
+                  </span>
+                </button>
+                {meeting.externalLink && (
+                  <a href={meeting.externalLink} target="_blank" rel="noopener noreferrer"
+                    onClick={ev => ev.stopPropagation()}
+                    aria-label={`Open ${meeting.name} in Google Calendar`}
+                    title="Open in Google Calendar"
+                    style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      gap: 3, minWidth: 38, height: 27, padding: '0 6px', borderRadius: 6,
+                      border: '1px solid rgba(216,182,46,0.35)', background: 'rgba(216,182,46,0.14)',
+                      color: '#765f00', fontSize: 9.5, fontWeight: 850, textDecoration: 'none' }}>
+                    G <span aria-hidden>↗</span>
+                  </a>
+                )}
+              </div>
             ))}
             {pinned && <div style={{ padding: '5px 8px 3px', fontSize: 10.5, color: 'var(--text-muted)' }}>Kies een meeting om details te openen</div>}
           </div>
