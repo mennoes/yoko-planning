@@ -5910,7 +5910,11 @@ export default function PlanningPage() {
           nooit de verticale layout van de sticky headers eronder. */}
       {(todayEdge || nowOffset !== null) && (
         <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-          position: 'absolute', top: 4,
+          // Plaats het label in de vrije strook ONDER de datum-/dagheaders
+          // en boven de workload-bollen. Dagweergave heeft daarnaast nog
+          // een maandgroeprij, dus krijgt een grotere offset. Beide edge-
+          // varianten gebruiken exact dezelfde top en verspringen niet.
+          position: 'absolute', top: zoom === 'dag' ? 82 : 48,
           ...(todayEdge === 'left'
             ? { left: nameW + namePad + 6 }
             : todayEdge === 'right'
