@@ -5997,9 +5997,11 @@ export default function PlanningPage() {
           {/* Month grouping row (only for week/day zoom) — sticky-left bevat
               de complete zoom-toolbar (vertical pill + Alles + h-slider
               stacked) zodat 't visueel één blok is. De col-header-rij
-              eronder houdt een lege sticky-left cell aan voor de border. */}
+              eronder houdt een lege sticky-left cell aan voor de border.
+              Beide header-rijen staan boven de sticky persoonscellen (z=20),
+              anders bedekken namen zoals Menno de toolbar bij verticaal scrollen. */}
           {monthGroups && (
-            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, background: stickyBg, alignItems: 'stretch' }}>
+            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 25, background: stickyBg, alignItems: 'stretch' }}>
               <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '4px 8px 0 4px', gap: 4 }}>
                 {/* Verticale balk-hoogte zoom — absolute zodat 'ie de hele
                     sticky-left strook van zowel monthGroups als col-header
@@ -6082,7 +6084,7 @@ export default function PlanningPage() {
           )}
 
           {/* Column header row */}
-          <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 11, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
+          <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 24, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
             <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: monthGroups && !isMobile ? 40 : 4, paddingRight: 8, paddingTop: 0, paddingBottom: 4 }}>
               {!monthGroups && (
                 <button onClick={() => {
