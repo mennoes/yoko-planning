@@ -1,10 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import teamData from '@/data/team.json'
+import { useTeam } from './TeamContext'
 import { QUICK_REACTIONS } from '@/lib/commentsStore'
-
-const MEMBERS = teamData.members as Array<{ id: string; name: string }>
 
 /**
  * Compacte rij met reactie-chips onder een opmerking. Bestaande reacties
@@ -18,10 +16,11 @@ export function ReactionRow({ reactions, currentMemberId, onToggle }: {
   onToggle: (emoji: string) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const { allMembers } = useTeam()
   const entries = Object.entries(reactions ?? {}).filter(([, ids]) => ids.length > 0)
 
   function tooltip(ids: string[]): string {
-    const names = ids.map(id => MEMBERS.find(m => m.id === id)?.name?.split(' ')[0] ?? id)
+    const names = ids.map(id => allMembers.find(m => m.id === id)?.name?.split(' ')[0] ?? id)
     return names.join(', ')
   }
 

@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import teamData from '@/data/team.json'
 import { useTeamPhotos } from './TeamPhotosContext'
 import { useProfile } from './ProfileContext'
+import { useTeam } from './TeamContext'
 
 // Single source of truth for rendering a member avatar.
 // Resolves photo in this order:
@@ -26,8 +26,9 @@ export function UserAvatar({
 }) {
   const { profile }   = useProfile()
   const { getPhoto }  = useTeamPhotos()
+  const { allMembers } = useTeam()
   const isMe          = profile?.memberId === memberId
-  const member        = teamData.members.find(m => m.id === memberId)
+  const member        = allMembers.find(m => m.id === memberId)
   const color         = member?.color ?? '#9DB1A4'
   const name          = member?.name ?? '?'
   const initials      = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()

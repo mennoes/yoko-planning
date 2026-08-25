@@ -1,11 +1,10 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import teamData from '@/data/team.json'
+import { useTeam } from './TeamContext'
 import { loadAllItemsFlat, formatItemRef, type ItemRefResolved } from '@/lib/itemRefs'
 
 type Member = { id: string; name: string; color?: string }
-const MEMBERS: Member[] = teamData.members as Member[]
 
 function MentionAvatar({ id, name, color }: { id: string; name: string; color?: string }) {
   const [failed, setFailed] = useState(false)
@@ -49,6 +48,11 @@ export function MentionTextarea({
   autoFocus?: boolean
   onSubmit?: () => void
 }) {
+  // Live team-lijst (Supabase-backed, of de nep-lijst op /demo — zie
+  // TeamContext) i.p.v. de statische team.json-import: zo kan deze
+  // mention-picker nooit een team tonen dat niet bij de huidige
+  // sessie/route hoort.
+  const { members: MEMBERS } = useTeam()
   const ref = useRef<HTMLTextAreaElement>(null)
   const [mode, setMode] = useState<Mode | null>(null)
   const [filter, setFilter] = useState('')

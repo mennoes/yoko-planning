@@ -1,0 +1,8 @@
+{
+  "members": [
+    { "id": "demo-sam",   "name": "Sam",   "email": "", "weeklyCapacity": 40, "color": "#B0C6EB" },
+    { "id": "demo-robin", "name": "Robin", "email": "", "weeklyCapacity": 32, "color": "#9DB1A4" },
+    { "id": "demo-jules", "name": "Jules", "email": "", "weeklyCapacity": 40, "color": "#C09BCA" },
+    { "id": "demo-noa",   "name": "Noa",   "email": "", "weeklyCapacity": 24, "color": "#D8B62E" }
+  ]
+}

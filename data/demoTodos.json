@@ -1,0 +1,59 @@
+{
+  "sections": [
+    {
+      "id": "komend",
+      "title": "Komend",
+      "emoji": "🗓",
+      "items": [
+        { "id": "d1", "text": "Merkfilm — laatste feedbackronde inplannen", "done": false },
+        { "id": "d2", "text": "Huisstijl-presentatie voorbereiden", "done": false }
+      ]
+    },
+    {
+      "id": "ideeen",
+      "title": "Ideeën",
+      "emoji": "💡",
+      "items": [
+        { "id": "d3", "text": "Nieuwsbrief-format opzetten", "done": false },
+        { "id": "d4", "text": "Podcast-cover restylen", "done": false }
+      ]
+    },
+    {
+      "id": "demo-sam",
+      "title": "Sam",
+      "emoji": "🧑",
+      "kind": "personal",
+      "items": [
+        { "id": "d5", "text": "Facturen vorige maand versturen", "done": false },
+        { "id": "d6", "text": "Intake nieuwe klant voorbereiden", "done": false }
+      ]
+    },
+    {
+      "id": "demo-robin",
+      "title": "Robin",
+      "emoji": "🧑",
+      "kind": "personal",
+      "items": [
+        { "id": "d7", "text": "Editsjabloon opschonen", "done": false }
+      ]
+    },
+    {
+      "id": "demo-jules",
+      "title": "Jules",
+      "emoji": "🧑",
+      "kind": "personal",
+      "items": [
+        { "id": "d8", "text": "Moodboard delen met klant", "done": false }
+      ]
+    },
+    {
+      "id": "demo-noa",
+      "title": "Noa",
+      "emoji": "🧑",
+      "kind": "personal",
+      "items": [
+        { "id": "d9", "text": "Social-cutdowns exporteren", "done": false }
+      ]
+    }
+  ]
+}

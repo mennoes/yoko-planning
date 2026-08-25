@@ -9,7 +9,9 @@
 
 'use client'
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 import { pullTeam, ensureTeamSeed, subscribeRemoteTeam, fallbackTeam, isTeamMemberStarted, type TeamMember } from '@/lib/teamStore'
+import { isDemoPath, DEMO_MEMBERS } from '@/lib/demoFixtures'
 
 const CACHE_KEY = 'yoko-team-members'
 
@@ -37,20 +39,34 @@ function saveCache(members: TeamMember[]): void {
 }
 
 export function TeamProvider({ children }: { children: React.ReactNode }) {
-  const [members, setMembers] = useState<TeamMember[]>(() => loadCache() ?? fallbackTeam())
-  const [loading, setLoading] = useState(true)
+  const pathname = usePathname()
+  const demo = isDemoPath(pathname)
+  const [members, setMembers] = useState<TeamMember[]>(() => demo ? DEMO_MEMBERS : (loadCache() ?? fallbackTeam()))
+  const [loading, setLoading] = useState(!demo)
   const [today, setToday] = useState(() => new Date())
 
   const refresh = useCallback(async () => {
+    if (demo) return
     const rows = await pullTeam()
     if (rows) {
       setMembers(rows)
       saveCache(rows)
     }
     setLoading(false)
-  }, [])
+  }, [demo])
+
+  // Publieke /demo-route: vast nep-team, nooit Supabase raken en nooit de
+  // gedeelde 'yoko-team-members'-cache lezen/schrijven — anders zou een
+  // demo-bezoek in dezelfde browser als een echte sessie het echte
+  // team-overzicht tijdelijk met nep-namen kunnen overschrijven.
+  useEffect(() => {
+    if (!demo) return
+    setMembers(DEMO_MEMBERS)
+    setLoading(false)
+  }, [demo])
 
   useEffect(() => {
+    if (demo) return
     let cancelled = false
     async function init() {
       // Seed-check: lege Supabase-tabel krijgt eenmalig de team.json-set
@@ -63,7 +79,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     init()
     const off = subscribeRemoteTeam(() => { refresh() })
     return () => { cancelled = true; off() }
-  }, [refresh])
+  }, [demo, refresh])
 
   useEffect(() => {
     const timer = window.setInterval(() => setToday(new Date()), 60_000)

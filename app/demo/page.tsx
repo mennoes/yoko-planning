@@ -1,290 +1,1573 @@
 'use client'
 
-// Publieke, interactieve demo van Yoko Planner — bedoeld om te delen
-// (bv. op LinkedIn). Volledig losstaand van de echte app:
-//   - GEEN Supabase-calls, GEEN Google-sync, GEEN echte klant- of
-//     teamdata — alles hier komt uit demoData.ts (verzonnen).
-//   - Persistie is puur lokaal (demoStore.ts → localStorage), dus elke
-//     bezoeker krijgt zijn eigen sandbox die nooit iemand anders raakt.
-import { useEffect, useMemo, useState } from 'react'
-import { DEMO_MEMBERS, type DemoStatus, type DemoTask } from './demoData'
-import { loadDemoState, saveDemoState, resetDemoState, type DemoState } from './demoStore'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useProfile } from '@/components/ProfileContext'
+import { useTeam } from '@/components/TeamContext'
+import { useMemberPopup } from '@/components/MemberPopup'
+import { useIsMobile } from '@/lib/useIsMobile'
+import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconAlert } from '@/components/Icon'
+import { UserAvatar } from '@/components/UserAvatar'
+import { VacationButton } from '@/components/VacationButton'
+import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
+import { saveDocs, loadDocs } from '@/lib/navStore'
+// DEMO-VARIANT van app/page.tsx (Home) — zelfde component, databron
+// vervangen door verzonnen fixtures i.p.v. de echte borden/team/todos.
+// Geen Supabase-sync. Zie app/demo/planning/page.tsx voor hetzelfde patroon.
+import todosData from '@/data/demoTodos.json'
+import {
+  loadSections as loadTodoSectionsStore,
+  saveSections as saveTodoSectionsStore,
+  mergeSections as mergeTodoSections,
+  pullFromRemote as pullTodos,
+  onTodosUpdate,
+  type Section as TodoSection,
+  type TodoItem as TodoStoreItem,
+} from '@/lib/demoTodosStore'
+import { mergeMemberTodoItems } from '@/lib/demoTodoProjectSeed'
+import teamData  from '@/data/demoTeam.json'
+import { buildDemoBoards } from '@/lib/demoFixtures'
+import { loadGroups, saveGroups } from '@/lib/boardStore'
+import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
+import { setVrijDaysFromProjects } from '@/lib/vrijDays'
+import {
+  CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
+  effectiveCategory,
+  loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
+  isVrijTitle,
+  type WorkloadCategory,
+} from '@/lib/workloadCategory'
+import { loadProfileDaysOff, lookupDaysOff, onProfileDaysOffChange } from '@/lib/profileDaysOff'
+import type { BoardGroup, BoardItem } from '@/lib/boards'
 
-const STATUS_ORDER: DemoStatus[] = ['Not started', 'Working on...', 'Done']
-const STATUS_BG: Record<DemoStatus, string> = {
-  'Not started':    'rgba(154,149,144,0.18)',
-  'Working on...':  'rgba(255,123,36,0.18)',
-  'Done':           'rgba(0,200,117,0.18)',
+const RAW: Record<string, { groups: unknown[] }> = buildDemoBoards()
+
+type TodoItem = { id: string; text: string; done: boolean }
+
+type SectionId = 'taken' | 'werkdruk' | 'team' | 'deadlines' | 'overload' | 'documenten' | 'paginas'
+// DEMO: 'paginas' (Kantoor/Team/Accounts/HR-links) en 'documenten'
+// (+Nieuw document → /pages/[id]) bewust weggelaten — die wijzen naar
+// echte, auth-gated routes buiten /demo en zouden een bezoeker op een
+// login-scherm laten stranden.
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload']
+
+type RemoteProfile = {
+  member_id:       string | null
+  name:            string | null
+  vacation_until:  string | null
+  days_off:        string[] | null
+  weekly_capacity: number | null
 }
-const STATUS_FG: Record<DemoStatus, string> = {
-  'Not started':   '#9A9590',
-  'Working on...': '#ff7b24',
-  'Done':          '#037f4c',
+
+const NL_DAY_CODES = ['sun','mon','tue','wed','thu','fri','sat']
+const DAY_NL: Record<string, string> = { mon: 'maandag', tue: 'dinsdag', wed: 'woensdag', thu: 'donderdag', fri: 'vrijdag', sat: 'zaterdag', sun: 'zondag' }
+
+const QUICK_LINKS: { groups: { name: string; items: { label: string; href: string; emoji: string }[] }[] } = {
+  groups: [
+    {
+      name: 'Algemeen',
+      items: [
+        { label: 'Kantoor',         href: '/kantoor',         emoji: '🏢' },
+        { label: 'Team',            href: '/team',            emoji: '👥' },
+        { label: 'Accounts',        href: '/accounts',        emoji: '🔑' },
+        { label: 'Tools',           href: '/pages/tools',     emoji: '🎨' },
+        { label: 'Samenwerkingen',  href: '/pages/samenwerkingen', emoji: '❤️' },
+      ],
+    },
+    {
+      name: 'HR',
+      items: [
+        { label: 'Vakantieaanvragen', href: '/pages/vakantie',  emoji: '🏝' },
+        { label: 'Loonstroken',       href: '/pages/loonstroken', emoji: '💰' },
+      ],
+    },
+  ],
 }
 
-const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
-function fmt(d: Date): string { return `${d.getDate()} ${NL_MON[d.getMonth()]}` }
-function addDays(base: Date, n: number): Date {
-  const d = new Date(base); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return d
+const NL_MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
+
+// groupsToProjects is verhuisd naar lib/workload.ts zodat home en planning
+// exact dezelfde explosion-logica gebruiken. Belangrijk verschil met de
+// oude home-only versie: subitems met eigen datums (bv. de 34 instances
+// van een wekelijkse meeting) worden nu als losse projects opgeleverd
+// met hun eigen korte duur, in plaats van als één multi-week parent.
+
+function fmtDate(iso: string) {
+  const d = new Date(iso)
+  return `${d.getDate()} ${NL_MONTHS[d.getMonth()]}`
+}
+function deadlineColor(iso: string | null): { bg: string; fg: string } | null {
+  if (!iso) return null
+  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
+  if (days < 0)  return { bg: 'rgba(196,69,58,0.15)',  fg: '#C4453A' }
+  if (days <= 3) return { bg: 'rgba(196,69,58,0.15)',  fg: '#C4453A' }
+  if (days <= 7) return { bg: 'rgba(255,123,36,0.15)', fg: '#ff7b24' }
+  return null
+}
+function fmtRelative(iso: string) {
+  const now = Date.now(), then = new Date(iso).getTime()
+  const diff = Math.floor((now - then) / 60000)
+  if (diff < 1)    return 'zojuist'
+  if (diff < 60)   return `${diff}m geleden`
+  if (diff < 1440) return `${Math.floor(diff / 60)}u geleden`
+  return fmtDate(iso)
 }
 
-// Venster: 7 dagen terug t/m 27 dagen vooruit t.o.v. 'vandaag' (35 dagen).
-const WIN_BACK  = 7
-const WIN_FWD   = 27
-const WIN_TOTAL = WIN_BACK + WIN_FWD + 1
-
-function barHeight(task: DemoTask): number {
-  const days = Math.max(1, task.endOffset - task.startOffset + 1)
-  const perDay = task.estHours / days
-  const dayH = 0.1 + 0.9 * Math.sqrt(Math.min(1, perDay / 8))
-  const totalH = 0.1 + 0.9 * Math.min(1, task.estHours / 40)
-  const ratio = Math.max(dayH, totalH)
-  return Math.round(26 + ratio * 42)
+// ─── Greeting summary helpers ────────────────────────────────────────────────
+// Used to build a short, concrete recap under the greeting: which projects
+// the user works on this week, who they collaborate with, and a tone for
+// last and next week's load.
+function joinAnd(names: string[]): string {
+  if (names.length === 0) return ''
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} en ${names[1]}`
+  return `${names.slice(0, -1).join(', ')} en ${names[names.length - 1]}`
+}
+function pastTone(hours: number, cap: number): string {
+  const r = Math.round
+  if (hours <= 0)          return 'vorige week stond er niets op de planning'
+  if (hours > cap * 1.05)  return `vorige week was pittig (${r(hours)}u 💪)`
+  if (hours >= cap * 0.85) return `vorige week zat lekker vol (${r(hours)}u)`
+  if (hours >= cap * 0.5)  return `vorige week was prima behapbaar (${r(hours)}u)`
+  return `vorige week was rustig (${r(hours)}u)`
+}
+function nextTone(hours: number, cap: number): string {
+  const r = Math.round
+  if (hours <= 0)          return 'volgende week is nog leeg ✨'
+  if (hours > cap * 1.05)  return `volgende week schiet je over je cap met ${r(hours)}u — pas op je tempo`
+  if (hours >= cap * 0.85) return `volgende week wordt vol (${r(hours)}u)`
+  if (hours >= cap * 0.5)  return `volgende week zit prima (${r(hours)}u)`
+  return `volgende week is wat rustiger (${r(hours)}u)`
+}
+function helpHint({ slack, others }: { slack: number; others: { member: { name: string }; pct: number }[] }): string | null {
+  if (slack < 4 || others.length === 0) return null
+  const top   = others[0]
+  const first = top.member.name.split(' ')[0]
+  return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
 }
 
-function nextStatus(s: DemoStatus): DemoStatus {
-  return STATUS_ORDER[(STATUS_ORDER.indexOf(s) + 1) % STATUS_ORDER.length]
-}
+type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean; parentName?: string }
 
-export default function DemoPage() {
-  const [state, setState]       = useState<DemoState | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
-  const [newTodo, setNewTodo]   = useState('')
+type Category = WorkloadCategory
 
-  useEffect(() => { setState(loadDemoState()) }, [])
+// Workload row. Click → opens the detail popover (with a category picker
+// and an explicit "Open agenda" link). Hover on desktop also previews the
+// popover. The row never navigates by itself — only the link inside does.
+function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
+  item: WorkloadItem
+  override: Category | null
+  onSetCategory: (id: string, cat: Category | null) => void
+  onToggleDone: (item: WorkloadItem, next: boolean) => void
+}) {
+  const router = useRouter()
+  const [hoverRow, setHoverRow] = useState(false)
+  const [hoverPop, setHoverPop] = useState(false)
+  const rowRef = useRef<HTMLLIElement>(null)
+  const [popPos, setPopPos] = useState<{ top: number; left: number; placeAbove: boolean } | null>(null)
+  const cat       = effectiveCategory(item, override)
+  const dotColor  = CAT_COLOR[cat]
+  const catLabel  = CAT_LABEL[cat]
+  const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : '—'
+  const range = item.startDate || item.endDate
+    ? `${fmt(item.startDate)} – ${fmt(item.endDate)}`
+    : 'Geen datums'
 
-  // 'Vandaag' schuift mee op basis van verstreken tijd sinds de eerste
-  // keer dat deze browser de demo seedde — zo blijft de tijdlijn kloppen
-  // ook als iemand na een paar dagen terugkomt, zonder de taken zelf te
-  // verplaatsen.
-  const todayOffset = useMemo(() => {
-    if (!state) return 0
-    const ms = Date.now() - new Date(state.seededAt).getTime()
-    return Math.floor(ms / 86400000)
-  }, [state])
+  // Popover blijft alleen open op hover (desktop). Tap/klik op de row
+  // navigeert naar de bord-pagina en opent daar de volledige detail-drawer
+  // — dat is wat de gebruiker echt nodig heeft, niet alleen een mini-popup.
+  const popoverOpen = hoverRow || hoverPop
 
-  const weekLabels = useMemo(() => {
-    const out: { label: string; leftPct: number }[] = []
-    for (let w = -Math.floor(WIN_BACK / 7); w * 7 <= WIN_FWD; w++) {
-      const offset = w * 7
-      if (offset < -WIN_BACK) continue
-      const d = addDays(new Date(), offset)
-      out.push({ label: fmt(d), leftPct: ((offset + WIN_BACK) / WIN_TOTAL) * 100 })
+  // Bereken positie op basis van de row: voorkomt clipping door card-overflow
+  // (we renderen de popover via een portal in document.body) en flipt boven
+  // de row als-ie anders onder de viewport zou vallen.
+  useEffect(() => {
+    if (!popoverOpen || !rowRef.current) { setPopPos(null); return }
+    const place = () => {
+      const r = rowRef.current?.getBoundingClientRect()
+      if (!r) return
+      const popH = 260   // geschatte hoogte — flip-trigger is een kwestie van smaak
+      const room = window.innerHeight - r.bottom
+      const placeAbove = room < popH && r.top > popH
+      setPopPos({
+        top:  placeAbove ? r.top - 4 : r.bottom + 4,
+        left: r.left,
+        placeAbove,
+      })
     }
-    return out
-  }, [])
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [popoverOpen])
 
-  if (!state) return <main style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Laden…</main>
+  const rowVisualStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '4px 6px', margin: '0 -6px', borderRadius: 6,
+    textDecoration: 'none',
+    background: hoverRow ? 'var(--bg-hover)' : 'transparent',
+    transition: 'background 0.12s, opacity 0.12s',
+    width: '100%', textAlign: 'left',
+    border: 'none', font: 'inherit', color: 'inherit',
+    cursor: 'pointer',
+    opacity: item.done ? 0.55 : 1,
+  }
 
-  const update = (next: DemoState) => { setState(next); saveDemoState(next) }
-  const updateTask = (id: string, patch: Partial<DemoTask>) => {
-    update({ ...state, tasks: state.tasks.map(t => t.id === id ? { ...t, ...patch } : t) })
+  function openDetail() {
+    // Naar de bord-pagina met focus + drawer-param. BoardRow leest 'drawer'
+    // uit de URL en opent zijn detail-drawer automatisch zodra de juiste
+    // rij gerenderd is — geen extra klik nodig.
+    const url = `/projects/${item.board}?focus=${encodeURIComponent(item.rawItemId)}&drawer=${encodeURIComponent(item.rawItemId)}`
+    router.push(url)
   }
-  const toggleTodo = (id: string) => {
-    update({ ...state, todos: state.todos.map(t => t.id === id ? { ...t, done: !t.done } : t) })
-  }
-  const addTodo = (text: string) => {
-    const t = text.trim()
-    if (!t) return
-    update({ ...state, todos: [...state.todos, { id: `d${Date.now()}`, text: t, done: false }] })
-    setNewTodo('')
-  }
-  const doReset = () => { setSelected(null); update(resetDemoState()) }
 
-  const clients = [...new Set(state.tasks.map(t => t.client))]
-  const selectedTask = state.tasks.find(t => t.id === selected) ?? null
-  const vandaagLeftPct = (WIN_BACK / WIN_TOTAL) * 100
+  const rowContent = (
+    <>
+      <span title={catLabel} style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+      {item.startTime && (
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+          fontVariantNumeric: 'tabular-nums', flexShrink: 0, minWidth: 36 }}>
+          {item.startTime.slice(0,5)}
+        </span>
+      )}
+      <span style={{ fontSize: 13,
+        color: cat === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)',
+        fontWeight: cat === 'maken' ? 500 : 400, flex: 1, minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        textDecoration: item.done ? 'line-through' : 'none' }}>
+        {item.name}
+        {item.parentName && item.parentName !== item.name && (
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6, fontSize: 11.5 }}>
+            ↳ {item.parentName}
+          </span>
+        )}
+      </span>
+      {item.meetLink && (
+        <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
+          title="Open Google Meet"
+          onClick={e => e.stopPropagation()}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '1px 6px 1px 5px', borderRadius: 4,
+            background: '#00ac47', color: '#fff',
+            fontSize: 9.5, fontWeight: 700, lineHeight: 1.3, flexShrink: 0,
+            textDecoration: 'none' }}>
+          Meet<span style={{ fontSize: 8, opacity: 0.85 }}>↗</span>
+        </a>
+      )}
+      {item.source === 'google' && (
+        <a href={item.externalLink} target="_blank" rel="noopener noreferrer"
+          title="Open in Google Calendar"
+          onClick={e => e.stopPropagation()}
+          style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textDecoration: 'none' }}>G</a>
+      )}
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, minWidth: 32, textAlign: 'right' }}>{item.hours}u</span>
+    </>
+  )
 
   return (
-    <main style={{ maxWidth: 1080, margin: '0 auto', padding: '40px 24px 100px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--accent)' }} />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Live demo · geen echte data
-          </span>
-        </div>
-        <button onClick={doReset}
-          style={{ padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}>
-          ↺ Reset demo
-        </button>
-      </div>
-      <h1 style={{ fontSize: 34, fontWeight: 700, margin: '2px 0 8px', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-        Yoko Planner
-      </h1>
-      <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: '0 0 28px', maxWidth: 620, lineHeight: 1.5 }}>
-        Klik op een balk om de uren of status te wijzigen — je ziet de hoogte en de teamdruk direct meebewegen.
-        Alles hieronder is verzonnen en wordt alleen lokaal in jouw browser bewaard.
-      </p>
-
-      {/* ── Tijdlijn ─────────────────────────────────────────────────── */}
-      <section style={{ marginBottom: 32 }}>
-        <div style={{ position: 'relative', height: 22, marginBottom: 6 }}>
-          {weekLabels.map((w, i) => (
-            <span key={i} style={{ position: 'absolute', left: `${w.leftPct}%`, fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>{w.label}</span>
-          ))}
-        </div>
-        <div style={{ position: 'relative', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 12, padding: '14px 0', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${vandaagLeftPct}%`, width: 2, background: 'var(--accent)', opacity: 0.6 }} />
-          {clients.map(client => {
-            const tasks = state.tasks.filter(t => t.client === client)
-            const color = tasks[0]?.color ?? 'var(--accent)'
-            return (
-              <div key={client} style={{ padding: '6px 20px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>{client}</span>
-                </div>
-                <div style={{ position: 'relative', height: 78 }}>
-                  {tasks.map(t => {
-                    // Task-offsets zijn t.o.v. het seed-moment; het venster
-                    // verschuift mee met todayOffset zodat 'vandaag' altijd
-                    // op de vandaag-lijn blijft staan, ook bij een bezoek
-                    // een paar dagen na de eerste keer.
-                    const windowStart = todayOffset - WIN_BACK
-                    const windowEnd   = todayOffset + WIN_FWD
-                    const clampedStart = Math.max(t.startOffset, windowStart)
-                    const clampedEnd   = Math.min(t.endOffset, windowEnd)
-                    if (clampedEnd < clampedStart) return null
-                    const leftPct  = ((clampedStart - windowStart) / WIN_TOTAL) * 100
-                    const widthPct = ((clampedEnd - clampedStart + 1) / WIN_TOTAL) * 100
-                    const h = barHeight(t)
-                    const isSel = selected === t.id
-                    const isDone = t.status === 'Done'
-                    return (
-                      <button key={t.id}
-                        onClick={() => setSelected(isSel ? null : t.id)}
-                        title={`${t.name} · ${t.estHours}u`}
-                        style={{
-                          position: 'absolute', left: `${leftPct}%`, width: `${Math.max(widthPct, 3)}%`,
-                          top: 0, height: h, minWidth: 26,
-                          background: t.color + (isDone ? '55' : '33'),
-                          border: `1.5px solid ${isSel ? t.color : t.color + '80'}`,
-                          borderRadius: 7, cursor: 'pointer', textAlign: 'left',
-                          padding: '4px 8px', overflow: 'hidden',
-                          boxShadow: isSel ? `0 0 0 2px ${t.color}55` : 'none',
-                          opacity: isDone ? 0.6 : 1,
-                        }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: isDone ? 'line-through' : 'none' }}>
-                          {t.name}
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t.estHours}u</div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ── Edit-paneel voor geselecteerde taak ─────────────────────── */}
-      {selectedTask && (
-        <section style={{
-          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-          background: 'var(--bg-card)', border: `1px solid ${selectedTask.color}55`, borderRadius: 12,
-          padding: '12px 18px', marginBottom: 32,
-        }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: selectedTask.color, flexShrink: 0 }} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1, minWidth: 140 }}>{selectedTask.name}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Uren</span>
-            <button onClick={() => updateTask(selectedTask.id, { estHours: Math.max(1, selectedTask.estHours - 2) })}
-              style={miniBtn}>−</button>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', minWidth: 28, textAlign: 'center' }}>{selectedTask.estHours}u</span>
-            <button onClick={() => updateTask(selectedTask.id, { estHours: selectedTask.estHours + 2 })}
-              style={miniBtn}>+</button>
+    <li ref={rowRef} data-workload-row={item.id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}
+        onMouseEnter={() => setHoverRow(true)} onMouseLeave={() => setHoverRow(false)}>
+      {/* Checkbox: project Done/onDone togglen vanuit de werkdruk-widget.
+          stopPropagation zodat de row-klik niet ook navigeert. */}
+      <input type="checkbox" checked={item.done}
+        onClick={e => e.stopPropagation()}
+        onChange={e => { e.stopPropagation(); onToggleDone(item, e.target.checked) }}
+        title={item.done ? 'Markeer als nog niet klaar' : 'Markeer als Done'}
+        style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
+      <button type="button" onClick={openDetail} style={rowVisualStyle}>
+        {rowContent}
+      </button>
+      {popoverOpen && popPos && typeof document !== 'undefined' && createPortal(
+        <div data-workload-row={item.id}
+          onMouseEnter={() => setHoverPop(true)} onMouseLeave={() => setHoverPop(false)}
+          style={{ position: 'fixed', top: popPos.top, left: popPos.left,
+            transform: popPos.placeAbove ? 'translateY(-100%)' : 'none', zIndex: 9050,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: '10px 12px', minWidth: 240, maxWidth: 320,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
+            fontSize: 12, lineHeight: 1.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{catLabel}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{item.board}</span>
           </div>
-          <button onClick={() => updateTask(selectedTask.id, { status: nextStatus(selectedTask.status) })}
-            style={{
-              fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 999, cursor: 'pointer',
-              background: STATUS_BG[selectedTask.status], color: STATUS_FG[selectedTask.status], border: 'none',
-            }}>{selectedTask.status} ↻</button>
-          <button onClick={() => setSelected(null)} style={{ ...miniBtn, borderRadius: 6, padding: '4px 10px', width: 'auto' }}>Sluiten</button>
-        </section>
-      )}
-
-      {/* ── Team-werkdruk ────────────────────────────────────────────── */}
-      <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px' }}>Team deze week</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
-          {DEMO_MEMBERS.map(m => {
-            const hours = memberWeekHours(m.id, state.tasks, todayOffset)
-            const pct = Math.min(1, hours / m.weeklyCapacity)
-            const barColor = pct > 0.9 ? '#C9483D' : pct > 0.6 ? 'var(--accent)' : '#6FA181'
-            return (
-              <div key={m.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span style={{
-                    width: 26, height: 26, borderRadius: '50%', background: m.color + '30', border: `1.5px solid ${m.color}`,
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: m.color,
-                  }}>{m.name.charAt(0)}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-muted)' }}>{hours}/{m.weeklyCapacity}u</span>
-                </div>
-                <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-hover)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${pct * 100}%`, background: barColor, borderRadius: 3, transition: 'width 0.2s' }} />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ── Todo-lijst ───────────────────────────────────────────────── */}
-      <section style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px' }}>Jouw taken</h2>
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 12, overflow: 'hidden' }}>
-          {state.todos.map((t, i) => (
-            <div key={t.id} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
-              borderBottom: i < state.todos.length - 1 ? '1px solid var(--border-light)' : 'none',
-            }}>
-              <button onClick={() => toggleTodo(t.id)}
-                style={{
-                  width: 18, height: 18, borderRadius: 4, border: '2px solid var(--border)',
-                  background: t.done ? 'var(--accent)' : 'transparent', flexShrink: 0, padding: 0, cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11,
-                }}>{t.done ? '✓' : ''}</button>
-              <span style={{ fontSize: 13, color: t.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: t.done ? 'line-through' : 'none' }}>{t.text}</span>
+          {item.parentName && item.parentName !== item.name && (
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+              ↳ in {item.parentName}
             </div>
-          ))}
-          <form onSubmit={e => { e.preventDefault(); addTodo(newTodo) }} style={{ padding: '10px 16px', display: 'flex', gap: 8 }}>
-            <input value={newTodo} onChange={e => setNewTodo(e.target.value)} placeholder="+ Voeg een taak toe…"
-              style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-light)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }} />
-          </form>
-        </div>
-      </section>
-
-      <footer style={{ paddingTop: 16, borderTop: '1px solid var(--border-light)', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
-        Demo-omgeving van Yoko Planner · verzonnen data, alleen bewaard in jouw browser · niet gedeeld of gesynchroniseerd
-      </footer>
-    </main>
+          )}
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{item.name}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+            <span>{range}</span>
+            <span><strong style={{ color: 'var(--text-primary)' }}>{item.hours}u</strong> deze week</span>
+          </div>
+          <div style={{ marginTop: 10, marginBottom: 5, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Categorie</div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {ALL_CATEGORIES.map(c => {
+              const active = cat === c
+              const color  = CAT_COLOR[c]
+              return (
+                <button key={c} type="button"
+                  onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, c) }}
+                  style={{
+                    flex: '1 1 calc(50% - 3px)', padding: '5px 6px', borderRadius: 6,
+                    border: active ? `1.5px solid ${color}` : '1px solid var(--border)',
+                    background: active ? `${color}22` : 'var(--bg-card)',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 11, fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+                  {CAT_LABEL[c]}
+                </button>
+              )
+            })}
+          </div>
+          {override && (
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, null) }}
+              style={{ marginTop: 6, fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+              Reset naar automatisch
+            </button>
+          )}
+          <Link href={`/projects/${item.board}`}
+            style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
+              fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
+              background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
+            Open agenda →
+          </Link>
+        </div>,
+        document.body,
+      )}
+    </li>
   )
 }
 
-const miniBtn: React.CSSProperties = {
-  width: 22, height: 22, borderRadius: 6, border: '1px solid var(--border-light)',
-  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 700,
-  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+const card: React.CSSProperties = {
+  background: 'var(--bg-card)', borderRadius: 14,
+  border: '1px solid var(--border-light)', overflow: 'hidden',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.04)',
+}
+const cardHeader: React.CSSProperties = {
+  padding: '14px 18px 12px', borderBottom: '1px solid var(--border-light)',
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  background: 'var(--overlay-faint)',
+}
+const cardLink: React.CSSProperties = {
+  fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none',
+  fontWeight: 600, letterSpacing: '0.02em',
 }
 
-function memberWeekHours(memberId: string, tasks: DemoTask[], todayOffset: number): number {
-  const dow = (new Date().getDay() + 6) % 7 // 0=ma..6=zo
-  const weekStart = todayOffset - dow
-  const weekEnd   = todayOffset + (6 - dow)
-  let total = 0
-  for (const t of tasks) {
-    if (!t.ownerIds.includes(memberId)) continue
-    const days = Math.max(1, t.endOffset - t.startOffset + 1)
-    const perOwner = t.estHours / Math.max(1, t.ownerIds.length)
-    const perDay = perOwner / days
-    const overlapStart = Math.max(t.startOffset, weekStart)
-    const overlapEnd   = Math.min(t.endOffset, weekEnd)
-    if (overlapEnd < overlapStart) continue
-    total += perDay * (overlapEnd - overlapStart + 1)
+export default function HomePage() {
+  const { profile }    = useProfile()
+  const { members: liveTeam } = useTeam()
+  const { showMember } = useMemberPopup()
+  const router         = useRouter()
+  const isMobile       = useIsMobile()
+  // Helper: classificeer als yoko-crew op basis van team_members.kind,
+  // fallback hardcoded set. Wordt gebruikt voor 'Team vandaag'.
+  const HARDCODED_YOKO = new Set(['menno','vincent','odette','anne-fleur','kars'])
+  const isYokoCrew = (id: string): boolean => {
+    const fromDb = liveTeam.find(m => m.id === id)?.kind
+    if (fromDb) return fromDb === 'yoko'
+    return HARDCODED_YOKO.has(id)
   }
-  return Math.round(total * 10) / 10
+
+  const [recentPages,  setRecentPages]  = useState<PageDoc[]>([])
+  const [myTodos,      setMyTodos]      = useState<TodoStoreItem[]>([])
+  const [newTodoText,  setNewTodoText]  = useState('')
+  // Per-bucket-iso user-override voor de week-collapse op de home-widget.
+  // false=expliciet ingeklapt, true=expliciet open, missing=default (open
+  // voor <2 weken vooruit, dicht voor 2+ weken).
+  const [homeWeekToggle, setHomeWeekToggle] = useState<Record<string, boolean>>({})
+  const [weekHours,    setWeekHours]    = useState(0)
+  const [weekCapacity, setWeekCapacity] = useState(40)
+  const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }[]>([])
+  const [weekOffset,   setWeekOffset]   = useState(0)
+  const [hydrated,     setHydrated]     = useState(false)
+  const [editOrder,    setEditOrder]    = useState(false)
+  const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
+  // Bump re-render zodra de profileDaysOff-cache wijzigt (bv. iemand
+  // klikt op /team Manuels vrijdag uit). Anders blijft 'Team vandaag'
+  // op de oude status hangen tot een handmatige refresh.
+  const [daysOffTick, setDaysOffTick] = useState(0)
+  useEffect(() => {
+    const bump = () => setDaysOffTick(n => n + 1)
+    const off = onProfileDaysOffChange(bump)
+    // Cross-tab: localStorage 'storage' event vuurt in andere tabs
+    // wanneer dezelfde key wijzigt. Pakt /team-toggle in tab A → home
+    // re-render in tab B.
+    function onStorage(e: StorageEvent) {
+      if (e.key === 'yoko-profile-days-off') bump()
+    }
+    // Dag-wissel-detectie: wanneer de gebruiker 't tabblad vrijdag opent
+    // en zondag terugkomt zonder hard-refresh blijft statusFor op de
+    // vrijdag-todayIso hangen — visibilitychange + focus geeft 'm een
+    // re-render zodat 'weekend' / 'beschikbaar' meteen klopt.
+    function onWake() { bump() }
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('focus', onWake)
+    document.addEventListener('visibilitychange', onWake)
+    return () => {
+      off()
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('focus', onWake)
+      document.removeEventListener('visibilitychange', onWake)
+    }
+  }, [])
+  const [profilesById, setProfilesById] = useState<Record<string, RemoteProfile>>({})
+  const [allProjects,  setAllProjects]  = useState<Project[]>([])
+  const [deadlineItems, setDeadlineItems] = useState<{ board: string; item: BoardItem }[]>([])
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, Category>>({})
+
+  const memberId = profile?.memberId ?? ''
+
+  useEffect(() => {
+    setCategoryOverrides(loadCategoryOverrides())
+    setRecentPages(loadRecentPages().slice(0, 9))
+
+    // My todos: lees uit de live todosStore (zelfde bron als /todos pagina)
+    // i.p.v. de statische initial-data JSON. Subscribe op updates zodat
+    // wijzigingen op /todos hier meteen verschijnen.
+    // Daarnaast vullen we aan met openstaande project-items (loadMyOpen-
+    // Projects) — anders zou de home-card minder items tonen dan /todos
+    // wanneer de auto-seed daar nog niet is gedraaid (user heeft /todos
+    // nooit geopend in deze sessie).
+    function mergeStoredWithProjects(stored: TodoStoreItem[]): TodoStoreItem[] {
+      return mergeMemberTodoItems(stored, memberId)
+    }
+
+    function loadMine() {
+      const fallback: TodoSection[] = todosData.sections as TodoSection[]
+      const sections = loadTodoSectionsStore(fallback)
+      const s = sections.find(x => x.id === memberId)
+      const stored = (s?.items ?? []) as TodoStoreItem[]
+      setMyTodos(mergeStoredWithProjects(stored))
+    }
+    loadMine()
+    pullTodos().then(remote => {
+      if (remote) {
+        const fallback: TodoSection[] = todosData.sections as TodoSection[]
+        const local = loadTodoSectionsStore(fallback)
+        const merged = mergeTodoSections(local, remote)
+        const s = merged.find(x => x.id === memberId)
+        const stored = (s?.items ?? []) as TodoStoreItem[]
+        setMyTodos(mergeStoredWithProjects(stored))
+      }
+    }).catch(() => {})
+    const offTodos = onTodosUpdate(loadMine)
+
+    // Load all boards once for team status / deadlines / workload widgets
+    const projectList: Project[] = []
+    const allDeadlines: { board: string; item: BoardItem }[] = []
+    const now = Date.now(); const weekAhead = now + 7 * 86400000
+    for (const [name, raw] of Object.entries(RAW)) {
+      const groups = loadGroups(name, raw.groups as BoardGroup[])
+      projectList.push(...groupsToProjects(name, groups))
+      for (const g of groups) for (const item of g.items) {
+        if (!item.deadline) continue
+        const dl = new Date(item.deadline as string).getTime()
+        if (dl >= now - 86400000 && dl <= weekAhead) {
+          allDeadlines.push({ board: name, item })
+        }
+      }
+    }
+    setAllProjects(projectList)
+    // Vrij-events cachen voor de countWorkdays-checks zodat memberContributions
+    // ze direct kan overslaan in de werkdruk-berekening.
+    setVrijDaysFromProjects(projectList)
+    allDeadlines.sort((a, b) => new Date(a.item.deadline as string).getTime() - new Date(b.item.deadline as string).getTime())
+    setDeadlineItems(allDeadlines)
+
+    // Workload data per week is recomputed in a separate effect on weekOffset
+    // Capacity: prefer the override the user set in the planning tool
+    // (localStorage 'yoko-capacities'), fall back to teamData default.
+    let cap =
+      liveTeam.find(m => m.id === memberId)?.weeklyCapacity
+      ?? teamData.members.find(m => m.id === memberId)?.weeklyCapacity
+      ?? 40
+    try {
+      const raw = localStorage.getItem('yoko-capacities')
+      if (raw) {
+        const map = JSON.parse(raw) as Record<string, number>
+        if (memberId in map) cap = map[memberId]
+      }
+    } catch {}
+    // Géén extra schaling op days_off — weeklyCapacity is al wat de user
+    // daadwerkelijk werkt (Menno zet 32u in als hij 4 dagen werkt).
+    // Dubbele schaling zou er 25.6u van maken.
+    setWeekCapacity(cap)
+
+    // Restore mobile section order — demo-eigen key (niet 'home-sections-
+    // order', dat is de echte-app-key) + 'paginas' altijd uitgefilterd,
+    // ook als een oudere demo-sessie 'm ooit wel opsloeg.
+    try {
+      const saved = localStorage.getItem('home-demo-sections-order')
+      if (saved) {
+        const parsed: SectionId[] = (JSON.parse(saved) as SectionId[]).filter((id): id is SectionId => id !== 'paginas' && id !== 'documenten')
+        if (Array.isArray(parsed) && DEFAULT_SECTION_ORDER.every(id => parsed.includes(id))) {
+          setSectionOrder(parsed)
+        }
+      }
+    } catch {}
+
+    setHydrated(true)
+
+    return () => { offTodos() }
+  }, [memberId])
+
+  // Recompute the workload list whenever the week offset (or the project list
+  // / member changes). Lets the user step through previous/next weeks.
+  useEffect(() => {
+    if (!memberId) { setWeekItems([]); setWeekHours(0); return }
+    const base = getWeekStart(new Date())
+    const week = new Date(base); week.setDate(week.getDate() + weekOffset * 7)
+    const contribs = memberContributions(allProjects, memberId, week)
+    setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
+    // Items blijven op hun start-dag staan. Eerdere variant schoof
+    // ongoing items naar 'vandaag', waardoor afgelopen dagen leeg
+    // raakten en uit de lijst verdwenen. Nu zie je ook gisteren en
+    // eerder deze week terug — gerendered met fade zodat duidelijk is
+    // dat 't verleden is.
+    // Eén item per project, geclampt naar 'vandaag binnen 't project-
+    // bereik'. Logica:
+    //  - Loopt 't project NU (start <= today <= end): day = today
+    //  - Project al voorbij (end < today): day = end (laatste actieve dag)
+    //  - Project begint nog (today < start): day = start
+    // Zo verschuift 'n ma-wo project op maandag naar maandag, op dinsdag
+    // naar dinsdag, en blijft 't dan op woensdag op woensdag staan. Past
+    // days tonen niet meer dezelfde lopende items, alleen items die op
+    // die dag écht zijn afgerond.
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const todayD = new Date(todayIso)
+    const wStart = new Date(week)
+    const wEnd   = new Date(week); wEnd.setDate(wEnd.getDate() + 7)
+    // Lokale 'done'-vinkjes uit de werkdruk-widget; deze worden NIET
+    // naar de agenda gepusht — alleen visueel afgevinkt in deze widget.
+    let werkdrukDone: Set<string> = new Set()
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('yoko-werkdruk-done-flags') : null
+      if (raw) werkdrukDone = new Set(JSON.parse(raw) as string[])
+    } catch {}
+    setWeekItems(contribs.map(c => {
+      const sd = c.project.startDate ? new Date(c.project.startDate) : null
+      const ed = c.project.endDate   ? new Date(c.project.endDate)   : sd
+      let ref: Date
+      if (sd && ed) {
+        if (todayD < sd) ref = sd
+        else if (todayD > ed) ref = ed
+        else ref = todayD
+      } else if (sd) {
+        ref = sd
+      } else {
+        ref = wStart
+      }
+      // Buiten de zichtbare week vallen we terug op de project-start (zo
+      // verschuift een 'vorige-week-view' niet plots ongeoorloofd).
+      if (ref < wStart) ref = sd ?? wStart
+      if (ref >= wEnd && ed) ref = ed
+      const day = (ref.getDay() + 6) % 7
+      const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
+        ? c.project.id.slice(c.project.board.length + 2)
+        : c.project.id
+      return {
+        id: c.project.id,
+        rawItemId,
+        name: c.project.name, board: c.project.board, hours: c.hours, day,
+        startDate: c.project.startDate, endDate: c.project.endDate,
+        startTime: c.project.startTime, endTime: c.project.endTime,
+        source: c.project.source, externalLink: c.project.externalLink,
+        meetLink: c.project.meetLink,
+        done: c.project.status === 'done' || werkdrukDone.has(`${c.project.board}:${rawItemId}`),
+        parentName: c.project.parentName,
+      }
+    }))
+  }, [memberId, weekOffset, allProjects])
+
+  // Re-load category overrides if another view changes them.
+  useEffect(() => {
+    return onCategoryOverridesChange(() => setCategoryOverrides(loadCategoryOverrides()))
+  }, [])
+
+  // DEMO: geen Supabase-profielen-pull — nep-team heeft geen vakantie/
+  // dagen-off-data, profilesById blijft leeg (widgets degraderen netjes).
+  void setProfilesById
+
+  function setItemCategory(id: string, cat: Category | null) {
+    setCategoryOverrides(setCategoryOverride(id, cat))
+  }
+
+  // Voeg een nieuwe todo toe vanuit de home 'Jouw taken'-kaart aan de eigen
+  // sectie in de todosStore. Houdt dezelfde data-bron aan als /todos zodat
+  // de telling daar meteen klopt.
+  function addHomeTodo(text: string) {
+    const t = text.trim()
+    if (!t || !memberId) return
+    const fallback: TodoSection[] = todosData.sections as TodoSection[]
+    const sections = loadTodoSectionsStore(fallback)
+    let found = false
+    const next = sections.map(s => {
+      if (s.id !== memberId) return s
+      found = true
+      return {
+        ...s,
+        items: [...s.items, { id: `home-${Date.now()}`, text: t, done: false }],
+      }
+    })
+    // Nog geen eigen sectie? Maak 'm aan zodat de todo ergens kan landen.
+    const finalSections: TodoSection[] = found ? next : [
+      ...next,
+      {
+        id: memberId,
+        title: profile?.name ?? memberId,
+        emoji: '👤',
+        items: [{ id: `home-${Date.now()}`, text: t, done: false }],
+      },
+    ]
+    saveTodoSectionsStore(finalSections)
+    setNewTodoText('')
+    const mine = finalSections.find(s => s.id === memberId)
+    if (mine) setMyTodos(mergeMemberTodoItems(mine.items as TodoStoreItem[], memberId))
+  }
+
+  // Tikt een todo op de eigen sectie aan/uit vanuit de home-widget zodat
+  // 'r een checkbox-klik direct opslaat in dezelfde store als /todos.
+  function toggleHomeTodo(id: string) {
+    if (!memberId) return
+    const fallback: TodoSection[] = todosData.sections as TodoSection[]
+    const sections = loadTodoSectionsStore(fallback)
+    const next = sections.map(s => s.id === memberId
+      ? { ...s, items: s.items.map(i => i.id === id ? { ...i, done: !i.done } : i) }
+      : s)
+    saveTodoSectionsStore(next)
+    const mine = next.find(s => s.id === memberId)
+    if (mine) setMyTodos(mergeMemberTodoItems(mine.items as TodoStoreItem[], memberId))
+  }
+
+  // Tick een workload-item Done (of un-Done): laadt het juiste bord, zet
+  // Lokaal-only afvinken: de werkdruk-widget krijgt een strike-through
+  // maar de agenda blijft ONGEMOEID. Eerder zetten we de agenda-status
+  // ook op 'Done', maar dat overschrijft een conscious keuze in de
+  // agenda (waar de gebruiker zelf bepaalt wanneer iets Done is) en
+  // gaf onverwachte side-effects. Persisteer alleen lokaal zodat een
+  // refresh de fade behoudt zonder de echte agenda-status te muteren.
+  async function toggleWorkloadDone(it: WorkloadItem, next: boolean) {
+    setWeekItems(items => items.map(w => w.id === it.id ? { ...w, done: next } : w))
+    try {
+      const KEY = 'yoko-werkdruk-done-flags'
+      const raw = window.localStorage.getItem(KEY)
+      const set = new Set<string>(raw ? JSON.parse(raw) as string[] : [])
+      const flagKey = `${it.board}:${it.rawItemId}`
+      if (next) set.add(flagKey); else set.delete(flagKey)
+      window.localStorage.setItem(KEY, JSON.stringify([...set]))
+    } catch {}
+  }
+
+  function moveSection(id: SectionId, dir: -1 | 1) {
+    setSectionOrder(prev => {
+      const idx = prev.indexOf(id)
+      const next = idx + dir
+      if (idx < 0 || next < 0 || next >= prev.length) return prev
+      const updated = [...prev]
+      updated[idx] = updated[next]; updated[next] = id
+      localStorage.setItem('home-demo-sections-order', JSON.stringify(updated))
+      return updated
+    })
+  }
+
+  function createNewPage() {
+    const id   = Date.now().toString()
+    const href = `/pages/${id}`
+    const docs = loadDocs()
+    saveDocs([...docs, { id, label: 'Naamloos document', href, icon: '📄' }])
+    router.push(href)
+  }
+
+  const hour      = new Date().getHours()
+  const greeting  = hour < 12 ? 'Goedemorgen' : hour < 18 ? 'Goedemiddag' : 'Goedenavond'
+  const firstName = profile?.name?.split(' ')[0] ?? ''
+  // Vrij/vakantie-todos uitfilteren — kunnen blijven hangen vanuit
+  // oude auto-seeds (voordat de filter erin zat). Check op naam-pattern
+  // én category-override; toepassen op zowel projectRef-name als text.
+  const isVrijTodo = (t: TodoStoreItem): boolean => {
+    if (t.projectRef) {
+      const refId = `${t.projectRef.board}__${t.projectRef.itemId}`
+      if (categoryOverrides[refId] === 'vrij') return true
+      if (isVrijTitle(t.projectRef.name ?? '')) return true
+    }
+    const firstLine = (t.text ?? '').split('\n')[0] ?? ''
+    return isVrijTitle(firstLine)
+  }
+  const openTodos = myTodos.filter(t => !t.done && !isVrijTodo(t))
+  const doneTodos = myTodos.filter(t => t.done && !isVrijTodo(t))
+
+  // Splits open-todos per week — zelfde logica als /todos zodat de
+  // home-widget dezelfde groepering toont. Geen projectRef of geen
+  // startDate → 'Deze week'. Anders: week van de startDate.
+  const homeWeekStartOf = (d: Date): Date => {
+    const x = new Date(d); x.setHours(0, 0, 0, 0)
+    const dow = (x.getDay() + 6) % 7
+    x.setDate(x.getDate() - dow); return x
+  }
+  const homeIsoWeekOf = (d: Date): number => {
+    const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+    const dayNum = (x.getUTCDay() + 6) % 7
+    x.setUTCDate(x.getUTCDate() - dayNum + 3)
+    const firstThursday = new Date(Date.UTC(x.getUTCFullYear(), 0, 4))
+    const diff = (x.getTime() - firstThursday.getTime()) / 86400000
+    return 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7)
+  }
+  const homeToday = new Date(); homeToday.setHours(0, 0, 0, 0)
+  const homeThisWeekStart = homeWeekStartOf(homeToday)
+  const homeWeekStartIsoFor = (t: TodoStoreItem): string => {
+    const tIso = homeThisWeekStart.toISOString().slice(0, 10)
+    if (!t.projectRef) return tIso
+    const sd = t.projectRef.startDate
+    if (!sd) return tIso
+    const s = new Date(sd); if (Number.isNaN(s.getTime())) return tIso
+    const ws = homeWeekStartOf(s)
+    return ws.getTime() < homeThisWeekStart.getTime() ? tIso : ws.toISOString().slice(0, 10)
+  }
+  type HomeBucket = { iso: string; label: string; items: TodoStoreItem[] }
+  const homeBuckets: HomeBucket[] = (() => {
+    const map = new Map<string, TodoStoreItem[]>()
+    for (const t of openTodos) {
+      const k = homeWeekStartIsoFor(t); const arr = map.get(k) ?? []
+      arr.push(t); map.set(k, arr)
+    }
+    const out: HomeBucket[] = []
+    const thisIso = homeThisWeekStart.toISOString().slice(0, 10)
+    const fmt = (x: Date) => x.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+    for (const iso of [...map.keys()].sort()) {
+      const d = new Date(iso); const wk = homeIsoWeekOf(d)
+      const mEnd = new Date(d); mEnd.setDate(mEnd.getDate() + 4)
+      const label = iso === thisIso ? `Deze week · W${wk}` : `W${wk} · ${fmt(d)} – ${fmt(mEnd)}`
+      out.push({ iso, label, items: map.get(iso) ?? [] })
+    }
+    return out
+  })()
+  const homeWeeksFromThis = (iso: string): number => {
+    const d = new Date(iso)
+    return Math.round((d.getTime() - homeThisWeekStart.getTime()) / (7 * 86400000))
+  }
+  const pct       = weekCapacity > 0 ? Math.min(weekHours / weekCapacity, 1) : 0
+  const barColor  = pct > 0.9 ? '#e2445c' : pct > 0.6 ? 'var(--accent)' : '#00c875'
+
+  if (!hydrated) return null
+
+  // ─── Team status helpers ────────────────────────────────────────────────────
+  const todayCode = NL_DAY_CODES[new Date().getDay()]
+  // Localstorage-cache (profileDaysOff) is sinds /team de bron-van-
+  // waarheid voor werkdagen. lookupDaysOff probeert id én naam-key
+  // (set door /team via setProfileDaysOff). Zo werkt 't ook wanneer
+  // /team en /home verschillende ids gebruiken voor hetzelfde lid.
+  void daysOffTick  // forceer re-read na storage/event-tick
+  void loadProfileDaysOff()  // touchen zodat tick echt re-read triggert
+  const todayIso = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d })()
+  type Status = { kind: 'vacation' | 'free' | 'available'; detail?: string }
+  function statusFor(memberIdLocal: string, memberName?: string): Status {
+    const p = profilesById[memberIdLocal]
+    if (p?.vacation_until) {
+      const until = new Date(p.vacation_until)
+      until.setHours(23, 59, 59, 999)
+      if (until.getTime() >= Date.now()) {
+        const fmt = until.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+        return { kind: 'vacation', detail: `terug ${fmt}` }
+      }
+    }
+    const localOff = lookupDaysOff(memberIdLocal, memberName)
+    if (localOff.includes(todayIso)) return { kind: 'free', detail: 'vrij vandaag' }
+    if (p?.days_off?.includes(todayCode)) return { kind: 'free', detail: 'vrij vandaag' }
+    // Weekend (za=6, zo=7) is impliciet vrij — /team toggelt alleen
+    // Mon-Fri, dus za/zo staan nooit in days_off maar zijn standaard
+    // wel vrije dagen. Anders zou iedereen op zaterdag/zondag als
+    // 'beschikbaar' getoond worden.
+    if (todayIso === 6) return { kind: 'free', detail: 'weekend' }
+    if (todayIso === 7) return { kind: 'free', detail: 'weekend' }
+    return { kind: 'available' }
+  }
+
+  // Hours per member this week — list = alle leden waarvan
+  // team_members.kind = 'yoko'; fallback op hardcoded set voor
+  // pre-DB / extras. Zo verschijnt Manuel direct in 'Team vandaag'
+  // zodra-ie via /team-admin is toegevoegd.
+  const allMembersForHome: Array<{ id: string; name: string; color?: string; weeklyCapacity?: number }> = (() => {
+    const seen = new Set<string>()
+    const out: Array<{ id: string; name: string; color?: string; weeklyCapacity?: number }> = []
+    for (const m of liveTeam) {
+      if (m.hidden || m.id === 'unassigned') continue
+      seen.add(m.id)
+      out.push({ id: m.id, name: m.name, color: m.color, weeklyCapacity: m.weeklyCapacity })
+    }
+    for (const m of teamData.members) {
+      if (seen.has(m.id) || m.id === 'unassigned') continue
+      out.push(m)
+    }
+    return out
+  })()
+  const yokoMembers = allMembersForHome.filter(m => isYokoCrew(m.id))
+  const weekStartTeam = getWeekStart(new Date())
+  const memberHoursThisWeek: Record<string, number> = {}
+  for (const m of yokoMembers) {
+    const contribs = memberContributions(allProjects, m.id, weekStartTeam)
+    memberHoursThisWeek[m.id] = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+  }
+  // Geen extra cap-schaling op days_off — weeklyCapacity is al wat de
+  // gebruiker daadwerkelijk werkt. Vrije dagen worden al gerespecteerd
+  // door de uren-distributie (die geeft 0u op off-days, dus 't totaal
+  // dat in de week-cellen verschijnt klopt al). Dubbele schaling zou
+  // 32u-cap nóg eens 4/5 maken = 25.6u, wat klopt niet.
+  const overloaded = yokoMembers
+    .map(m => {
+      const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const hrs = memberHoursThisWeek[m.id] ?? 0
+      return { member: m, hours: hrs, cap, pct: cap > 0 ? Math.round((hrs / cap) * 100) : 0 }
+    })
+    .filter(x => x.hours > x.cap)
+    .sort((a, b) => b.pct - a.pct)
+
+  // Team-totaal KPIs deze week (zelfde getal als bovenin /planning) zodat
+  // je op één plek kunt zien hoeveel het team al volgepland staat.
+  const teamKpis = (() => {
+    let totalHours = 0
+    let totalCap = 0
+    for (const m of yokoMembers) {
+      const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const hrs = memberHoursThisWeek[m.id] ?? 0
+      totalHours += hrs
+      totalCap += cap
+    }
+    const pctUsed = totalCap > 0 ? Math.round((totalHours / totalCap) * 100) : 0
+    return {
+      totalHours: Math.round(totalHours * 10) / 10,
+      totalCap,
+      pctUsed,
+    }
+  })()
+
+  const myLastWeekStart = new Date(weekStartTeam); myLastWeekStart.setDate(myLastWeekStart.getDate() - 7)
+  const myNextWeekStart = new Date(weekStartTeam); myNextWeekStart.setDate(myNextWeekStart.getDate() + 7)
+  const myThisContribs = memberId
+    ? memberContributions(allProjects, memberId, weekStartTeam).slice().sort((a, b) => b.hours - a.hours)
+    : []
+  const myLastHours = memberId
+    ? Math.round(memberContributions(allProjects, memberId, myLastWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
+    : 0
+  const myNextHours = memberId
+    ? Math.round(memberContributions(allProjects, memberId, myNextWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
+    : 0
+  const myThisHours = Math.round(myThisContribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
+
+  const firstNameOf = (id: string) =>
+    liveTeam.find(m => m.id === id)?.name?.split(' ')[0]
+    ?? teamData.members.find(m => m.id === id)?.name?.split(' ')[0]
+    ?? null
+  const r1 = (n: number) => Math.round(n * 10) / 10
+  const cat = (c: typeof myThisContribs[number]) => effectiveCategory(
+    { name: c.project.name, hours: c.hours, source: c.project.source },
+    categoryOverrides[c.project.id],
+  )
+  const makenContribs = myThisContribs.filter(c => cat(c) === 'maken')
+
+  // ── Day-aware partition: where are we in the week? ─────────────────────
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const todayDay  = (today.getDay() + 6) % 7  // Mon=0..Sun=6
+  const isWeekend = todayDay >= 5
+
+  type GroupedProj = {
+    name: string
+    hours: number
+    ownerIds: Set<string>
+    startDay: number | null
+  }
+
+  // Combine contribs that share a project name (subitems / split bars) into
+  // one entry. Track the earliest start day so we can place the project in
+  // the past / today / future bucket.
+  const grouped = new Map<string, GroupedProj>()
+  for (const c of makenContribs) {
+    const key = c.project.name.trim().toLowerCase()
+    const sd  = c.project.startDate ? new Date(c.project.startDate) : null
+    const day = sd && !isNaN(sd.getTime()) ? (sd.getDay() + 6) % 7 : null
+    const cur = grouped.get(key)
+    if (cur) {
+      cur.hours += c.hours
+      for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
+      if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
+    } else {
+      grouped.set(key, { name: c.project.name, hours: c.hours,
+        ownerIds: new Set(c.project.ownerIds || []), startDay: day })
+    }
+  }
+  const groupedArr = [...grouped.values()].sort((a, b) => b.hours - a.hours)
+
+  const withNamesOf = (p: GroupedProj) => [...p.ownerIds]
+    .filter(id => id !== memberId)
+    .map(firstNameOf)
+    .filter((n): n is string => Boolean(n))
+
+  const pastProjects   = groupedArr.filter(p => p.startDay !== null && p.startDay <  todayDay).slice(0, 2)
+  const todayProjects  = groupedArr.filter(p => p.startDay === todayDay).slice(0, 2)
+  const futureProjects = groupedArr.filter(p => p.startDay !== null && p.startDay >  todayDay).slice(0, 2)
+  const weekendProjects = isWeekend ? groupedArr.slice(0, 3) : []
+
+  // Items that should have been wrapped up by today but are still active.
+  // Limited to the past 14 days so we don't surface ancient projects.
+  const fortnightAgoMs = today.getTime() - 14 * 86400000
+  const behindSchedule = memberId
+    ? allProjects
+        .filter(p => p.status !== 'done' && (p.ownerIds || []).includes(memberId))
+        .filter(p => {
+          if (!p.endDate) return false
+          const e = new Date(p.endDate); e.setHours(23, 59, 59, 999)
+          return e.getTime() < today.getTime() && e.getTime() >= fortnightAgoMs
+        })
+        .slice(0, 2)
+    : []
+
+  const meetingHours  = r1(myThisContribs.filter(c => cat(c) === 'meeting').reduce((s, c) => s + c.hours, 0))
+  const overheadHours = r1(myThisContribs.filter(c => cat(c) === 'overhead').reduce((s, c) => s + c.hours, 0))
+
+  const otherSegments: string[] = []
+  if (meetingHours  >= 0.5) otherSegments.push(`${meetingHours}u aan meetings`)
+  if (overheadHours >= 0.5) otherSegments.push(`${overheadHours}u overhead`)
+  const otherInfo = otherSegments.length > 0 ? joinAnd(otherSegments) : ''
+
+  const hasAnyWeekProject = pastProjects.length + todayProjects.length + futureProjects.length + weekendProjects.length > 0
+  const showSummary = !!memberId && (hasAnyWeekProject || weekCapacity > 0 || behindSchedule.length > 0)
+  const tonePast    = weekCapacity > 0 ? pastTone(myLastHours, weekCapacity) : ''
+  const toneNext    = weekCapacity > 0 ? nextTone(myNextHours, weekCapacity) : ''
+  const tonePastCap = tonePast ? tonePast[0].toUpperCase() + tonePast.slice(1) : ''
+  const help        = memberId
+    ? helpHint({ slack: weekCapacity - myThisHours, others: overloaded.filter(o => o.member.id !== memberId) })
+    : null
+
+  // Render a comma/and-joined list of bold project names with collaborator hints.
+  const renderProjects = (items: GroupedProj[], showCollabs = true) => items.map((p, i) => {
+    const wn = showCollabs ? withNamesOf(p) : []
+    return (
+      <span key={p.name}>
+        {i > 0 && (i === items.length - 1 ? ' en ' : ', ')}
+        <strong style={{ color: '#000' }}>{p.name}</strong>
+        {wn.length > 0 && <> (met {joinAnd(wn)})</>}
+      </span>
+    )
+  })
+
+  const sections: Record<SectionId, React.ReactNode> = {
+    taken: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconCheckList size={isMobile ? 17 : 15} />Jouw taken</h2>
+          <Link href="/demo/todos" style={cardLink}>Alle →</Link>
+        </div>
+        {memberId ? (
+          <div style={{ padding: '6px 0 10px' }}>
+            {openTodos.length === 0 ? (
+              <p style={{ padding: '10px 20px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen open taken 🎉</p>
+            ) : homeBuckets.map(bucket => {
+              const weeksOut    = homeWeeksFromThis(bucket.iso)
+              const collapsible = weeksOut >= 2
+              const override    = homeWeekToggle[bucket.iso]
+              const expanded    = override === undefined ? !collapsible : override
+              return (
+                <div key={bucket.iso} style={{ marginBottom: 2 }}>
+                  <div
+                    onClick={collapsible ? () => setHomeWeekToggle(t => ({ ...t, [bucket.iso]: !expanded })) : undefined}
+                    style={{
+                      padding: '4px 20px 2px', fontSize: 10, fontWeight: 600,
+                      color: 'var(--text-muted)', textTransform: 'uppercase',
+                      letterSpacing: '0.06em', userSelect: 'none',
+                      cursor: collapsible ? 'pointer' : 'default',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                    }}>
+                    {collapsible && (
+                      <span style={{ fontSize: 8, lineHeight: 1, transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.12s', color: 'var(--text-muted)' }}>▶</span>
+                    )}
+                    <span>{bucket.label}</span>
+                    <span style={{ fontWeight: 500, opacity: 0.7 }}>· {bucket.items.length}</span>
+                  </div>
+                  {expanded && bucket.items.map(t => (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '3px 20px 3px 26px' }}>
+                      <button onClick={() => toggleHomeTodo(t.id)}
+                        title={t.done ? 'Markeer als open' : 'Markeer als afgerond'}
+                        style={{
+                          width: 18, height: 18, borderRadius: 4,
+                          border: '2px solid var(--border)',
+                          background: t.done ? 'var(--accent)' : 'transparent',
+                          flexShrink: 0, marginTop: 1, padding: 0,
+                          cursor: 'pointer', display: 'inline-flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 11, lineHeight: 1,
+                        }}>{t.done ? '✓' : ''}</button>
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                        {(() => {
+                          const lines = (t.text ?? '').split('\n')
+                          return <>
+                            <span>{lines[0]}</span>
+                            {lines.slice(1).map((l, i) => (
+                              <span key={i} style={{ fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 500, lineHeight: 1.2 }}>{l}</span>
+                            ))}
+                          </>
+                        })()}
+                      </span>
+                      {t.projectRef && (
+                        <Link href={`/projects/${t.projectRef.board}`}
+                          title={`Open ${t.projectRef.board}-agenda`}
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            flexShrink: 0, fontSize: 9.5, fontWeight: 700,
+                            letterSpacing: '0.05em', textTransform: 'uppercase',
+                            padding: '2px 6px', borderRadius: 10,
+                            background: (BOARD_COLORS[t.projectRef.board] ?? '#888') + '22',
+                            border: `1px solid ${BOARD_COLORS[t.projectRef.board] ?? '#888'}55`,
+                            color: BOARD_COLORS[t.projectRef.board] ?? 'var(--text-muted)',
+                            textDecoration: 'none', marginTop: 1,
+                          }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 2, background: BOARD_COLORS[t.projectRef.board] ?? '#888' }} />
+                          {t.projectRef.board}
+                        </Link>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+            {doneTodos.length > 0 && <div style={{ padding: '4px 20px', fontSize: 12, color: 'var(--text-muted)' }}>✓ {doneTodos.length} afgerond</div>}
+            {/* Snelle invoer — direct vanuit home een taak aan jezelf
+                toewijzen, zelfde bron als /todos pagina. */}
+            <form onSubmit={e => { e.preventDefault(); addHomeTodo(newTodoText) }}
+              style={{ padding: '8px 20px 0', display: 'flex', gap: 8 }}>
+              <input value={newTodoText} onChange={e => setNewTodoText(e.target.value)}
+                placeholder="+ Voeg toe of typ /…"
+                style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 6,
+                  border: '1px solid var(--border-light)', background: 'var(--bg-base)',
+                  color: 'var(--text-primary)', outline: 'none' }} />
+              {newTodoText.trim() && (
+                <button type="submit"
+                  style={{ padding: '6px 12px', borderRadius: 6, border: 'none',
+                    background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer' }}>
+                  Toevoegen
+                </button>
+              )}
+            </form>
+          </div>
+        ) : (
+          <p style={{ padding: '14px 20px', fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Stel je profiel in om taken te zien.</p>
+        )}
+      </div>
+    ),
+    werkdruk: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <IconHourglass size={isMobile ? 17 : 15} />
+              Werkdruk
+            </span>
+            {/* Kleine datumlabel zodat je in één oogopslag ziet om welke week
+                het gaat — vooral handig na een paar klikken op </>. */}
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', letterSpacing: 0 }}>
+              {(() => {
+                const base = getWeekStart(new Date())
+                const monday = new Date(base); monday.setDate(monday.getDate() + weekOffset * 7)
+                const friday = new Date(monday); friday.setDate(friday.getDate() + 4)
+                const sameMonth = monday.getMonth() === friday.getMonth()
+                const monStr = monday.toLocaleDateString('nl-NL', sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' })
+                const friStr = friday.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                return `${monStr} – ${friStr}`
+              })()}
+            </span>
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => setWeekOffset(o => o - 1)}
+              title="Vorige week"
+              style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>‹</button>
+            <button onClick={() => setWeekOffset(0)}
+              title="Naar deze week"
+              style={{ background: weekOffset === 0 ? 'var(--accent-light)' : 'transparent', border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 6, color: weekOffset === 0 ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', padding: '3px 9px', fontSize: 11, fontWeight: 600, minWidth: 90, textAlign: 'center' }}>
+              {weekOffset === 0 ? 'Deze week' : weekOffset === -1 ? 'Vorige week' : weekOffset === 1 ? 'Volgende week' : `${weekOffset > 0 ? '+' : ''}${weekOffset} weken`}
+            </button>
+            <button onClick={() => setWeekOffset(o => o + 1)}
+              title="Volgende week"
+              style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>›</button>
+            <Link href="/demo/planning" style={{ ...cardLink, marginLeft: 4 }}>Planning →</Link>
+          </div>
+        </div>
+        <div style={{ padding: '16px 20px 14px' }}>
+          {memberId ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 10 }}>
+                <span style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>{weekHours}</span>
+                <span style={{ fontSize: 15, color: 'var(--text-muted)' }}>/ {weekCapacity} uur</span>
+                {weekCapacity > 0 && weekHours > weekCapacity && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#C4453A', background: 'rgba(196,69,58,0.15)', padding: '2px 8px', borderRadius: 10, marginLeft: 'auto' }}>
+                    ⚠ Overbelast
+                  </span>
+                )}
+              </div>
+              {weekItems.length === 0 ? (
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen gepland werk</p>
+              ) : (() => {
+                const catOf = (i: WorkloadItem) => effectiveCategory(i, categoryOverrides[i.id])
+                const meetingHours  = weekItems.filter(i => catOf(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
+                const overheadHours = weekItems.filter(i => catOf(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
+                const makenHours    = weekItems.filter(i => catOf(i) === 'maken').reduce((s, i) => s + i.hours, 0)
+                const vrijHours     = weekItems.filter(i => catOf(i) === 'vrij').reduce((s, i) => s + i.hours, 0)
+                const total = meetingHours + overheadHours + makenHours + vrijHours
+                const r = (n: number) => Math.round(n * 10) / 10
+                const cap = Math.max(weekCapacity, total)  // bar is at least the total so overflow stays visible
+                return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* One bar: segments per category, relative to capacity */}
+                  <div>
+                    <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: 'var(--border)', marginBottom: 8 }}>
+                      <div style={{ width: cap > 0 ? `${(makenHours/cap)*100}%` : 0, background: '#5fa06e', transition: 'width 0.4s ease' }} />
+                      <div style={{ width: cap > 0 ? `${(overheadHours/cap)*100}%` : 0, background: '#9aadbd', transition: 'width 0.4s ease' }} />
+                      <div style={{ width: cap > 0 ? `${(meetingHours/cap)*100}%` : 0, background: '#D8B62E', transition: 'width 0.4s ease' }} />
+                      <div style={{ width: cap > 0 ? `${(vrijHours/cap)*100}%` : 0, background: '#3db883', transition: 'width 0.4s ease' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5fa06e' }} />
+                        <strong style={{ color: 'var(--text-primary)' }}>{r(makenHours)}u</strong> maken
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9aadbd' }} />
+                        <strong style={{ color: 'var(--text-primary)' }}>{r(overheadHours)}u</strong> overhead
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#D8B62E' }} />
+                        <strong style={{ color: 'var(--text-primary)' }}>{r(meetingHours)}u</strong> meetings
+                      </span>
+                      {vrijHours > 0 && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3db883' }} />
+                          <strong style={{ color: 'var(--text-primary)' }}>{r(vrijHours)}u</strong> vrij
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {(['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'] as const).map((dayLabel, dayIdx) => {
+                    const dayItems = weekItems.filter(i => i.day === dayIdx).slice().sort((a, b) => {
+                      const aT = a.startTime ?? null
+                      const bT = b.startTime ?? null
+                      if (aT && !bT) return -1
+                      if (!aT && bT) return 1
+                      if (aT && bT) return aT.localeCompare(bT)
+                      return a.name.localeCompare(b.name)
+                    })
+                    if (dayItems.length === 0) return null
+                    const dayTotal = Math.round(dayItems.reduce((s, i) => s + i.hours, 0) * 10) / 10
+                    // Verleden-dagen in de huidige week subtiel uitfaden
+                    // zodat duidelijk is dat 't gepasseerd is — items
+                    // blijven nuttig voor terugkijken.
+                    const isPast = weekOffset === 0 && dayIdx < todayDay
+                    return (
+                      <div key={dayIdx} style={{ opacity: isPast ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>{dayLabel}{isPast ? ' · geweest' : ''}</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{dayTotal}u</span>
+                        </div>
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {dayItems.map((item, i) => (
+                            <WorkloadItemRow key={i} item={item}
+                              override={categoryOverrides[item.id] ?? null}
+                              onSetCategory={setItemCategory}
+                              onToggleDone={toggleWorkloadDone} />
+                          ))}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                </div>
+                )
+              })()}
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Stel je profiel in om werkdruk te zien.</p>
+          )}
+        </div>
+      </div>
+    ),
+    team: (() => {
+      // Splits Yoko-team (vaste medewerkers) en freelancers. Freelancers
+      // tonen we ALLEEN als ze vandaag werk hebben (eigenaar van een
+      // project waarvan today binnen [startDate, endDate] valt). Anders
+      // wordt de lijst een onbruikbaar lange waslijst van inactieve
+      // freelancers waarmee je nooit hebt gewerkt.
+      const todayIso = new Date().toISOString().slice(0, 10)
+      const hasWorkToday = (memberId: string) => allProjects.some(p => {
+        if (!p.ownerIds.includes(memberId)) return false
+        const s = p.startDate; const e = p.endDate ?? s
+        if (!s) return false
+        return todayIso >= s && todayIso <= (e ?? s)
+      })
+      const activeFreelancers = allMembersForHome.filter(m =>
+        !isYokoCrew(m.id) && m.id !== 'unassigned' && hasWorkToday(m.id)
+      )
+      const yokoAvail = yokoMembers.filter(m => statusFor(m.id, m.name).kind === 'available').length
+      const flAvail   = activeFreelancers.filter(m => statusFor(m.id, m.name).kind === 'available').length
+      const totalCount = yokoMembers.length + activeFreelancers.length
+      const totalAvail = yokoAvail + flAvail
+      const renderRow = (m: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }) => {
+        const s = statusFor(m.id, m.name)
+        const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
+                   : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
+                   :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
+        return (
+          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
+            <UserAvatar memberId={m.id} size={22} />
+            <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {m.name}
+            </Link>
+            <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+              {tone.label}
+            </span>
+          </div>
+        )
+      }
+      const subHeader = (label: string, count: number, avail: number) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 18px 2px', marginTop: 2 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {avail}/{count}</span>
+        </div>
+      )
+      return (
+        <div style={card}>
+          {/* Header klikbaar — springt naar /team waar je werkdagen + cap
+              kunt aanpassen. Voorheen moest je dat zelf opzoeken. */}
+          <Link href="/team" style={{ textDecoration: 'none', color: 'inherit' }}
+            title="Open Team-pagina (werkdagen + capaciteit)">
+            <div style={{ ...cardHeader, cursor: 'pointer', transition: 'background 0.12s' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconUsers size={isMobile ? 17 : 15} />Team vandaag
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>›</span>
+              </h2>
+            </div>
+          </Link>
+          <div style={{ padding: '6px 0 10px' }}>
+            {subHeader('Studio Yoko', yokoMembers.length, yokoAvail)}
+            {yokoMembers.map(renderRow)}
+            {activeFreelancers.length > 0 && (
+              <>
+                {subHeader('Freelancers vandaag', activeFreelancers.length, flAvail)}
+                {activeFreelancers.map(renderRow)}
+              </>
+            )}
+          </div>
+        </div>
+      )
+    })(),
+    deadlines: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconClock size={isMobile ? 17 : 15} />Deadlines deze week</h2>
+        </div>
+        <div style={{ padding: '6px 0 10px' }}>
+          {deadlineItems.length === 0 ? (
+            <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Geen deadlines de komende 7 dagen.</p>
+          ) : deadlineItems.slice(0, 8).map(({ board, item }) => {
+            const ms = new Date(item.deadline as string).getTime()
+            const days = Math.round((ms - Date.now()) / 86400000)
+            const tone = days < 0 ? { bg: 'rgba(196,69,58,0.15)', fg: '#C4453A' }
+                       : days <= 1 ? { bg: 'rgba(196,69,58,0.15)', fg: '#C4453A' }
+                       : days <= 3 ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400' }
+                       :              { bg: 'transparent', fg: 'var(--text-muted)' }
+            const owners = (item.ownerIds ?? []).slice(0, 3)
+            return (
+              <Link key={`${board}-${item.id}`} href={`/projects/${board}`} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[board] ?? 'var(--accent)', flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                <div style={{ display: 'flex', flexShrink: 0 }}>
+                  {owners.map((id, i) => (
+                    <span key={id} style={{ marginLeft: i === 0 ? 0 : -6 }}>
+                      <UserAvatar memberId={id} size={20} style={{ border: '2px solid var(--bg-card)' }} borderless={false} />
+                    </span>
+                  ))}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                  {days < 0 ? `${Math.abs(days)}d te laat` : days === 0 ? 'vandaag' : `${days}d`}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+    ),
+    overload: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconAlert size={isMobile ? 17 : 15} />Overbelast deze week</h2>
+          {/* Team-totaal KPI bij de Overbelast-widget zodat je in 1 oogopslag
+              ziet hoe het team ervoor staat, niet alleen wie 't drukst heeft. */}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <strong style={{ color: teamKpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 14, fontWeight: 800 }}>
+              {teamKpis.pctUsed}%
+            </strong>
+            <span style={{ color: 'var(--text-muted)' }}>{teamKpis.totalHours}/{teamKpis.totalCap}u</span>
+          </span>
+        </div>
+        <div style={{ padding: '6px 0 10px' }}>
+          {overloaded.length === 0 ? (
+            <p style={{ padding: '10px 18px', fontSize: 13, color: 'var(--text-muted)', margin: 0, fontStyle: 'italic' }}>Iedereen onder cap deze week 👌</p>
+          ) : overloaded.map(o => (
+            <div key={o.member.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
+              <UserAvatar memberId={o.member.id} size={22} />
+              <Link href={`/profile/${o.member.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {o.member.name}
+              </Link>
+              <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(o.pct, 100)}%`, background: '#C4453A' }} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#C4453A', background: 'rgba(196,69,58,0.15)', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                {o.hours}u / {o.cap}u
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+    paginas: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>📑 Pagina&apos;s</h2>
+        </div>
+        <div style={{ padding: '6px 0 12px' }}>
+          {QUICK_LINKS.groups.map((g, gi) => (
+            <div key={g.name} style={{ marginTop: gi === 0 ? 4 : 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '4px 18px 4px' }}>
+                {g.name}
+              </div>
+              {g.items.map(item => (
+                <Link key={item.href} href={item.href}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 18px', textDecoration: 'none', color: 'var(--text-primary)', fontSize: 14 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ fontSize: 16 }}>{item.emoji}</span>
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+    documenten: (
+      <div style={card}>
+        <div style={cardHeader}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconDocument size={isMobile ? 17 : 15} />Meest recente documenten</h2>
+          <button onClick={createNewPage} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#000', cursor: 'pointer', fontSize: 12, fontWeight: 800 }}>+ Nieuw</button>
+        </div>
+        {recentPages.length === 0 ? (
+          <div style={{ padding: '28px 20px', textAlign: 'center' }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 14px' }}>Nog geen documenten.</p>
+            <button onClick={createNewPage} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', cursor: 'pointer', fontSize: 13, fontWeight: 800 }}>+ Nieuw document</button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 0 }}>
+            {recentPages.map(page => (
+              <Link key={page.id} href={`/pages/${page.id}`}
+                style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 12px', textDecoration: 'none', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ fontSize: 22 }}>{page.emoji}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page.title || 'Naamloos'}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtRelative(page.updatedAt)}</span>
+              </Link>
+            ))}
+            <button onClick={createNewPage}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-muted)', minHeight: 90 }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}
+            >
+              <span style={{ fontSize: 22 }}>+</span>
+              <span style={{ fontSize: 12 }}>Nieuw document</span>
+            </button>
+          </div>
+        )}
+      </div>
+    ),
+  }
+
+  return (
+    <div style={{ maxWidth: 1160, padding: isMobile ? '60px 16px 60px' : '48px 40px 100px' }}>
+
+      {/* ── Greeting ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 18,
+        marginBottom: showSummary ? (isMobile ? 14 : 22) : (isMobile ? 18 : 40) }}>
+        {memberId && (
+          <UserAvatar memberId={memberId} size={isMobile ? 44 : 60}
+            onClick={e => showMember(memberId, e)} />
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={{ fontSize: isMobile ? 22 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em',
+            // Op mobiel forceren we één regel — "Goedemiddag, Menno" mag
+            // niet over twee regels lopen, dat oogde rommelig. Bij echt
+            // smalle schermen of een lange naam komt er een ellipsis.
+            whiteSpace: isMobile ? 'nowrap' : 'normal',
+            overflow:   isMobile ? 'hidden' : undefined,
+            textOverflow: isMobile ? 'ellipsis' : undefined }}>
+            {greeting}{firstName ? `, ${firstName}` : ''}
+          </h1>
+          <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
+            {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          {/* Vakantie-chip op mobiel onder de datum (ruimte schaars); op
+              desktop verhuist 'ie naar rechts naast de groet zodat 'ie op
+              dezelfde hoogte staat als de samenvattings-balk eronder. */}
+          {memberId && isMobile && (
+            <div style={{ marginTop: 10 }}>
+              <VacationButton variant="chip" />
+            </div>
+          )}
+        </div>
+        {memberId && !isMobile && (
+          <div style={{ flexShrink: 0 }}>
+            <VacationButton variant="chip" />
+          </div>
+        )}
+        {isMobile && (
+          <button onClick={() => setEditOrder(o => !o)}
+            title={editOrder ? 'Klaar met sorteren' : 'Kaarten herordenen'}
+            aria-label={editOrder ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+            style={{ padding: editOrder ? '6px 10px' : '6px 9px',
+              borderRadius: 8, border: '1px solid var(--border)',
+              background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
+              color: editOrder ? '#fff' : 'var(--text-secondary)',
+              fontSize: 13, fontWeight: 700, lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}>
+            {editOrder ? 'Klaar' : '↕'}
+          </button>
+        )}
+      </div>
+
+      {/* ── Yellow week summary card ── */}
+      {showSummary && (
+        <div style={{
+          background: 'var(--yellow)',
+          padding: isMobile ? '16px 18px' : '20px 26px',
+          borderRadius: 16,
+          marginBottom: isMobile ? 18 : 32,
+        }}>
+          {/* Wat-deze-week + vandaag + rest van de week → één paragraaf.
+              Daarnaast / Check even / Capaciteit-tip → elk hun eigen alinea
+              zodat het bij langere tekst leesbaar blijft. */}
+          <div style={{ fontSize: isMobile ? 14 : 15, color: '#1a1a1a', lineHeight: 1.6, maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p style={{ margin: 0 }}>
+              {isWeekend ? (
+                <>
+                  Lekker weekend!
+                  {weekendProjects.length > 0 && (
+                    <> Deze week ging het vooral over {renderProjects(weekendProjects)}.</>
+                  )}
+                </>
+              ) : (
+                <>
+                  {pastProjects.length > 0 && (
+                    <>Tot nu toe deze week heb je gewerkt aan {renderProjects(pastProjects)}. </>
+                  )}
+                  {todayProjects.length > 0 && (
+                    <>
+                      {pastProjects.length > 0 ? 'Vandaag staat ' : 'Vandaag begint met '}
+                      {renderProjects(todayProjects)} op de planning.{' '}
+                    </>
+                  )}
+                  {futureProjects.length > 0 && (
+                    <>
+                      {(pastProjects.length > 0 || todayProjects.length > 0)
+                        ? 'Voor de rest van de week komt nog '
+                        : 'Deze week komt nog '}
+                      {renderProjects(futureProjects)}.
+                    </>
+                  )}
+                </>
+              )}
+            </p>
+            {otherInfo && (
+              <p style={{ margin: 0 }}>Daarnaast staat er {otherInfo} op de planning.</p>
+            )}
+            {behindSchedule.length > 0 && (
+              <p style={{ margin: 0 }}>
+                Check even:{' '}
+                {behindSchedule.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 && (i === behindSchedule.length - 1 ? ' en ' : ', ')}
+                    <strong style={{ color: '#000' }}>{p.name}</strong>
+                  </span>
+                ))}
+                {' '}{behindSchedule.length === 1 ? 'staat' : 'staan'} nog op actief terwijl de einddatum al voorbij is — afronden? ⏳
+              </p>
+            )}
+            {(tonePast || help) && (
+              <p style={{ margin: 0 }}>
+                {tonePast && <>{tonePastCap}, {toneNext}.</>}
+                {help && <> {help}</>}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {sectionOrder.map((id, i) => (
+            <div key={id}>
+              {editOrder && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
+                  <button onClick={() => moveSection(id, -1)} disabled={i === 0}
+                    style={reorderBtn(i === 0)}>↑</button>
+                  <button onClick={() => moveSection(id, 1)} disabled={i === sectionOrder.length - 1}
+                    style={reorderBtn(i === sectionOrder.length - 1)}>↓</button>
+                </div>
+              )}
+              {sections[id]}
+            </div>
+          ))}
+        </div>
+      ) : (
+        // Masonry-style two-column flow on desktop. Each card sizes to its
+        // own content; the browser fills the left column first, then balances
+        // into the right. Single column on mobile.
+        <div style={{
+          columnCount: isMobile ? 1 : 2,
+          columnGap: 18,
+        }}>
+          {(['taken','werkdruk','team','deadlines','overload','documenten','paginas'] as SectionId[])
+            .filter(id => sectionOrder.includes(id))
+            .map(id => (
+              <div key={id} style={{ breakInside: 'avoid', marginBottom: 18 }}>
+                {sections[id]}
+              </div>
+            ))}
+        </div>
+      )}
+
+    </div>
+  )
 }
+
+const reorderBtn = (disabled: boolean): React.CSSProperties => ({
+  width: 36, height: 36, borderRadius: 8,
+  border: '1px solid var(--border)',
+  background: disabled ? 'var(--bg-hover)' : 'var(--bg-card)',
+  color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
+  fontSize: 16, fontWeight: 700,
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  opacity: disabled ? 0.4 : 1,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  padding: 0,
+})
