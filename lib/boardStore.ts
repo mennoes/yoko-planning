@@ -190,7 +190,40 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
 }
 
 // ─── Remote sync ─────────────────────────────────────────────────────────────
+type GoogleDbRow = {
+  id?: string
+  source?: string | null
+  ical_uid?: string | null
+  external_id?: string | null
+  calendar_id?: string | null
+  external_link?: string | null
+  external_synced_at?: string | null
+  name?: string | null
+  start_date?: string | null
+  extra?: Record<string, unknown> | null
+}
+
+// Legacy Google-rijen missen soms source='google', maar dragen nog wel een
+// stabiele Calendar-identiteit. Normaliseer dit vóór alle bord/planning-
+// berekeningen; anders telt dezelfde afspraak één keer als G-meeting én nog
+// eens als gewone gekleurde projectbalk mee.
+function isGoogleDbRow(r: GoogleDbRow): boolean {
+  if (r.source === 'google') return true
+  if (r.ical_uid || r.calendar_id || r.external_id) return true
+  if (typeof r.id === 'string' && /(^|_)it_g_|^gcal_/i.test(r.id)) return true
+  const link = r.external_link ?? ''
+  try {
+    const host = new URL(link).hostname.toLowerCase()
+    if (host === 'calendar.google.com' || host === 'meet.google.com') return true
+    if ((host === 'google.com' || host === 'www.google.com') && /\/calendar\//i.test(new URL(link).pathname)) return true
+  } catch {}
+  return typeof r.extra?.meetLink === 'string' && /(^|\.)meet\.google\.com$/i.test((() => {
+    try { return new URL(String(r.extra?.meetLink)).hostname } catch { return '' }
+  })())
+}
+
 function rowToItem(r: Record<string, unknown>): BoardItem {
+  const googleBacked = isGoogleDbRow(r as GoogleDbRow)
   return {
     id:        String(r.id),
     name:      (r.name as string) ?? '',
@@ -208,7 +241,7 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     nummers:        (r.nummers as number | undefined) ?? undefined,
     subitems:       dedupeSubitems(r.subitems as BoardItem['subitems']) ?? undefined,
     journal:        (r.journal as BoardItem['journal']) ?? undefined,
-    source:         (r.source as BoardItem['source']) ?? undefined,
+    source:         googleBacked ? 'google' : ((r.source as BoardItem['source']) ?? undefined),
     ...((r.extra as Record<string, unknown>) ?? {}),    // includes ownerHours
     externalLink:     (r.external_link as string | undefined) ?? undefined,
     externalSyncedAt: (r.external_synced_at as string | undefined) ?? undefined,
@@ -264,24 +297,35 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   //
   // Aggressieve dedupe-strategie voor Google-items: bouw één key per
   // rij door eerst iCalUID, dan external_id, dan name+startDate te
-  // proberen. Eén winner per key (rij met kortste id wint → meestal
-  // de canonical 'it_g_{iCalUID}'). Duplicaten worden weggefilterd in
-  // de UI; de DB blijft intact zodat herstel mogelijk is.
-  type GoogleRow = { id: string; source?: string; ical_uid?: string | null; external_id?: string | null; name?: string; start_date?: string | null }
+  // proberen. Eén vaste winner per key: eerst de canonical
+  // `it_g_{iCalUID}`, daarna de laatst gesyncte variant. Duplicaten worden
+  // vóór de urenberekening weggefilterd; de DB blijft intact voor herstel.
+  type GoogleRow = GoogleDbRow & { id: string; name?: string; start_date?: string | null }
   function dedupeKey(row: GoogleRow): string | null {
-    if (row.source !== 'google') return null
+    if (!isGoogleDbRow(row)) return null
     if (row.ical_uid) return `ical:${row.ical_uid}`
     if (row.external_id) return `ext:${row.external_id}`
-    if (row.name && row.start_date) return `ns:${row.name.toLowerCase().trim()}|${row.start_date}`
+    const startTime = typeof row.extra?.startTime === 'string' ? row.extra.startTime : ''
+    if (row.name && row.start_date) return `ns:${row.name.toLowerCase().trim()}|${row.start_date}|${startTime}`
     return null
   }
-  const winners = new Map<string, string>()  // key -> chosen row id
+  function preferGoogleRow(candidate: GoogleRow, current: GoogleRow): boolean {
+    const canonical = (row: GoogleRow) => !!row.ical_uid && row.id === `it_g_${row.ical_uid}`
+    if (canonical(candidate) !== canonical(current)) return canonical(candidate)
+    const parsedCandidate = candidate.external_synced_at ? Date.parse(candidate.external_synced_at) : 0
+    const parsedCurrent = current.external_synced_at ? Date.parse(current.external_synced_at) : 0
+    const candidateSync = Number.isFinite(parsedCandidate) ? parsedCandidate : 0
+    const currentSync = Number.isFinite(parsedCurrent) ? parsedCurrent : 0
+    if (candidateSync !== currentSync) return candidateSync > currentSync
+    return candidate.id < current.id
+  }
+  const winners = new Map<string, GoogleRow>()
   for (const r of itemRows) {
     const row = r as GoogleRow
     const k = dedupeKey(row)
     if (!k) continue
     const cur = winners.get(k)
-    if (!cur || row.id.length < cur.length) winners.set(k, row.id)
+    if (!cur || preferGoogleRow(row, cur)) winners.set(k, row)
   }
   const itemsByGroup = new Map<string, BoardItem[]>()
   for (const r of itemRows) {
@@ -289,7 +333,7 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     const k = dedupeKey(row)
     if (k) {
       const winner = winners.get(k)
-      if (winner && winner !== row.id) continue
+      if (winner && winner.id !== row.id) continue
     }
     const it = rowToItem(row)
     const gid = String((row as unknown as { group_id: string }).group_id)
@@ -367,6 +411,12 @@ function itemToRow(boardName: string, groupId: string, position: number, item: B
     nummers:        item.nummers ?? null,
     subitems:       dedupeSubitems(item.subitems) ?? [],
     journal:        item.journal ?? [],
+    // Bronvelden expliciet meenemen. Vooral bij genormaliseerde legacy
+    // Google-rijen backfillt de eerstvolgende bord-save zo source='google',
+    // zodat alle clients voortaan dezelfde classificatie gebruiken.
+    source:             item.source ?? null,
+    external_link:      item.externalLink ?? null,
+    external_synced_at: item.externalSyncedAt ?? null,
     extra,
     position,
     updated_at: new Date().toISOString(),

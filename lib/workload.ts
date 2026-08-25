@@ -156,8 +156,11 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   // staan — dezelfde afspraak wordt dan twee keer getoond.
   const isGoogleBacked = (p: Project): boolean =>
     p.source === 'google' ||
+    /__it_g_|__gcal_/i.test(p.id) ||
+    Boolean(p.meetLink) ||
     Boolean(p.externalSyncedAt) ||
-    /(^|\.)calendar\.google\.com$/i.test(safeHost(p.externalLink))
+    /(^|\.)(calendar|meet)\.google\.com$/i.test(safeHost(p.externalLink)) ||
+    (/^(www\.)?google\.com$/i.test(safeHost(p.externalLink)) && /\/calendar\//i.test(safePath(p.externalLink)))
   const normalizedProjects = projects.map(p =>
     isGoogleBacked(p) && p.source !== 'google' ? { ...p, source: 'google' as const } : p)
 
@@ -194,6 +197,12 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
 function safeHost(url: string | undefined): string {
   if (!url) return ''
   try { return new URL(url).hostname }
+  catch { return '' }
+}
+
+function safePath(url: string | undefined): string {
+  if (!url) return ''
+  try { return new URL(url).pathname }
   catch { return '' }
 }
 
