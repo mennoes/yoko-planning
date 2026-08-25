@@ -5482,9 +5482,26 @@ export default function PlanningPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
           <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
-                Planning
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
+                  Planning
+                </h1>
+                <div style={segGroup}>
+                  {(['compact', 'large'] as ViewSize[]).map(v => (
+                    <button key={v} onClick={() => {
+                        if (v === viewSize) return
+                        const el = gridRef.current
+                        if (el) {
+                          const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
+                          pendingAnchorRef.current = { colIdx: idx }
+                        }
+                        setViewSize(v)
+                      }} style={segBtn(viewSize === v)}>
+                      {v === 'compact' ? 'Compact' : 'Standaard'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
                 {todayLabel}
               </div>
@@ -5511,7 +5528,7 @@ export default function PlanningPage() {
         )}
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, flexWrap: isMobile ? 'nowrap' : 'wrap', marginBottom: isMobile ? 6 : 16 }}>
+        <div style={{ display: isMobile ? 'flex' : 'none', alignItems: 'center', gap: 6, flexWrap: 'nowrap', marginBottom: 6 }}>
           {/* Overzicht en Week zijn samengesmolten in één continue zoom:
               de kolom-breedte-slider stuurt zowel kolommen als zoom-niveau.
               Voorbij de bovengrens van de week-zoom-slider klapt 'ie auto-
@@ -5567,80 +5584,7 @@ export default function PlanningPage() {
                 <IconMore size={18} />
               </button>
             </>
-          ) : (
-            <>
-              {/* View size segmented (desktop) */}
-              <span style={separator} />
-              <div style={segGroup}>
-                {(['compact', 'large'] as ViewSize[]).map(v => (
-                  <button key={v} onClick={() => {
-                      if (v === viewSize) return
-                      // Anker bij de today-line zodat een toggle compact <->
-                      // standaard niet de hele timeline laat verspringen.
-                      const el = gridRef.current
-                      if (el) {
-                        const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
-                        pendingAnchorRef.current = { colIdx: idx }
-                      }
-                      setViewSize(v)
-                    }} style={segBtn(viewSize === v)}>
-                    {v === 'compact' ? 'Compact' : 'Standaard'}
-                  </button>
-                ))}
-              </div>
-
-              {/* Eén rustig menu voor filters, beheer en secundaire acties. */}
-              <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, position: 'relative' }}>
-                <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
-                  style={ghostBtn(overflowOpen)}>
-                  <IconMore size={16} style={{ marginRight: 6 }} />Menu
-                </button>
-                {overflowOpen && (
-                  <>
-                    <div onClick={() => setOverflowOpen(false)}
-                      style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
-                    <div style={{
-                      position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 101,
-                      background: 'var(--bg-card)', border: '1px solid var(--border)',
-                      borderRadius: 8, padding: 4, minWidth: 220,
-                      boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
-                      display: 'flex', flexDirection: 'column', gap: 2,
-                    }}>
-                      <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}>
-                        <span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item
-                      </button>
-                      <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
-                      <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}>
-                        <IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
-                      </button>
-                      <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}>
-                        <IconBoard size={14} /> Agenda&apos;s
-                      </button>
-                      <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}>
-                        <IconHourglass size={14} /> Capaciteit
-                      </button>
-                      <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}>
-                        <IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}
-                      </button>
-                      <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
-                      <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }}
-                        style={overflowItemStyle}>
-                        <IconDownload size={14} /> Exporteer als iCal
-                      </button>
-                      <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }}
-                        style={overflowItemStyle}>
-                        <IconShare size={14} /> Deelbare link maken
-                      </button>
-                      <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }}
-                        style={overflowItemStyle}>
-                        <IconRange size={14} /> Verschuif projecten
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
-          )}
+          ) : null}
         </div>
 
         {/* Mobile-only KPI bar: weggehaald — KPIs staan nu inline naast
@@ -6003,14 +5947,60 @@ export default function PlanningPage() {
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 25, background: stickyBg, alignItems: 'stretch' }}>
               <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '4px 8px 0 4px', gap: 4 }}>
-                {/* Verticale balk-hoogte zoom — absolute zodat 'ie de hele
-                    sticky-left strook van zowel monthGroups als col-header
-                    overspant; geen lege ruimte tussen Alles en de
-                    col-header-slider. */}
+                {/* Menu helemaal links, vóór de twee zoomregelaars. */}
+                {!isMobile && (
+                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', position: 'relative', flexShrink: 0 }}>
+                    <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
+                      style={{ ...ghostBtn(overflowOpen), padding: '6px 8px', height: 34 }}>
+                      <IconMore size={15} style={{ marginRight: 4 }} />Menu
+                    </button>
+                    {overflowOpen && (
+                      <>
+                        <div onClick={() => setOverflowOpen(false)}
+                          style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                        <div style={{
+                          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 101,
+                          background: 'var(--bg-card)', border: '1px solid var(--border)',
+                          borderRadius: 8, padding: 4, minWidth: 220,
+                          boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
+                          display: 'flex', flexDirection: 'column', gap: 2,
+                        }}>
+                          <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}>
+                            <span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item
+                          </button>
+                          <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                          <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}>
+                            <IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
+                          </button>
+                          <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}>
+                            <IconBoard size={14} /> Agenda&apos;s
+                          </button>
+                          <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}>
+                            <IconHourglass size={14} /> Capaciteit
+                          </button>
+                          <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}>
+                            <IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}
+                          </button>
+                          <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                          <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }} style={overflowItemStyle}>
+                            <IconDownload size={14} /> Exporteer als iCal
+                          </button>
+                          <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }} style={overflowItemStyle}>
+                            <IconShare size={14} /> Deelbare link maken
+                          </button>
+                          <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }} style={overflowItemStyle}>
+                            <IconRange size={14} /> Verschuif projecten
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                {/* Verticale balkhoogte; blijft als eerste zoomregelaar staan. */}
                 {!isMobile && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'center', gap: 1,
-                    position: 'absolute', left: 4, top: 4, height: 58, zIndex: 23,
+                    position: 'absolute', left: 68, top: 4, height: 58, zIndex: 23,
                     padding: '2px 3px', borderRadius: 8, width: 26,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
                     title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
@@ -6023,7 +6013,25 @@ export default function PlanningPage() {
                       style={{ width: 18, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                   </div>
                 )}
-                {!isMobile && <div style={{ width: 32, flexShrink: 0 }} />}
+                {!isMobile && <div style={{ width: 30, flexShrink: 0 }} />}
+                {/* Horizontale tijdlijnzoom tussen verticale zoom en Alles. */}
+                {!isMobile && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, width: 92, height: 34,
+                    padding: '0 4px', borderRadius: 8, flexShrink: 0,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
+                    <button onClick={() => anchoredColWZoom(z => z - 10)} title="Smaller (sneltoets: −)"
+                      style={{ width: 16, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>−</button>
+                    <input type="range"
+                      min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
+                      max={zoom === 'week' ? WEEK_ZOOM_MAX : VIRTUAL_MAX}
+                      step={5}
+                      value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                      title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                      style={{ flex: 1, minWidth: 0, accentColor: 'var(--accent)' }} />
+                    <button onClick={() => anchoredColWZoom(z => z + 10)} title="Breder (sneltoets: +)"
+                      style={{ width: 16, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
+                  </div>
+                )}
                 <button onClick={() => {
                     if (expanded.size >= team.length) setExpanded(new Set())
                     else setExpanded(new Set(team.map(m => m.id)))
@@ -6124,7 +6132,7 @@ export default function PlanningPage() {
                   </button>
                 </>
               )}
-              {!isMobile && (
+              {!isMobile && !monthGroups && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%',
                   padding: '4px 10px', borderRadius: 8,
                   background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
@@ -6646,9 +6654,6 @@ function ghostBtn(active: boolean): React.CSSProperties {
     cursor: 'pointer',
     transition: 'background 0.15s, color 0.15s, border-color 0.15s',
   }
-}
-const separator: React.CSSProperties = {
-  width: 1, height: 22, background: 'var(--border-light)', display: 'inline-block', margin: '0 2px',
 }
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
