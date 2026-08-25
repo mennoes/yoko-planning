@@ -5362,7 +5362,11 @@ export default function PlanningPage() {
   const nameW       = isMobile ? 70  : NAME_W
   const namePad     = isMobile ? 6   : NAME_PAD
   const totalWidth  = nameW + namePad + cols.reduce((s, c) => s + c.widthPx, 0)
-  const monthGroups = zoom !== 'maand' ? getMonthGroupsFromCols(cols) : null
+  // In het weekoverzicht is de maandregel dubbelop: iedere kolom toont de
+  // volledige datumband al. Alleen de dagweergave houdt maandgroepen nodig.
+  // Daardoor verhuist de compacte zoom-/uitklapbalk in weekmodus naar de
+  // anders lege linker weekheader en winnen we een volledige headerregel.
+  const monthGroups = zoom === 'dag' ? getMonthGroupsFromCols(cols) : null
   const stickyBg    = 'var(--bg-base)'
 
   // Navigation step
@@ -6129,13 +6133,23 @@ export default function PlanningPage() {
               const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
               const isWeekStart = zoom === 'dag' && dow === 1
               return (
-              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
+              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: zoom === 'week' ? '6px 2px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
-                <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
-                <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
+                {zoom === 'week' ? (
+                  <div style={{ fontSize: 10.5, fontWeight: col.isCurrent ? 700 : 600,
+                    color: col.isCurrent ? 'var(--text-primary)' : 'var(--text-muted)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
+                    {col.label2} <span style={{ opacity: 0.8 }}>({col.label1})</span>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
+                    <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
+                  </>
+                )}
                 {zoom === 'week' && (
-                  <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 3, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
                     <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
                   </div>
                 )}
