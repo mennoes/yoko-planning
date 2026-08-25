@@ -1958,7 +1958,12 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
     const rect = anchorRef.current?.getBoundingClientRect()
     if (rect) {
       const cardW = 300
-      setPos({ top: rect.bottom + 7, left: Math.max(8, Math.min(rect.left, window.innerWidth - cardW - 8)) })
+      const cardH = Math.min(360, 42 + sorted.length * 50)
+      const below = rect.bottom + 7
+      const top = below + cardH <= window.innerHeight - 8
+        ? below
+        : Math.max(8, rect.top - cardH - 7)
+      setPos({ top, left: Math.max(8, Math.min(rect.left, window.innerWidth - cardW - 8)) })
     }
     setHovered(true)
   }
@@ -1971,7 +1976,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
   return (
     <>
       <button ref={anchorRef}
-        onMouseEnter={show} onMouseLeave={scheduleClose}
+        onPointerEnter={show} onPointerLeave={scheduleClose}
         onClick={ev => {
           ev.stopPropagation()
           if (meetings.length === 1) onOpen(meetings[0])
@@ -1981,20 +1986,22 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
         style={{
           position: 'absolute', left: left + 2, top: 2,
           width: Math.max(18, width - 4), height: 18,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
           padding: '0 3px', borderRadius: 5,
           border: `1px solid ${open ? 'rgba(216,182,46,0.7)' : 'rgba(216,182,46,0.35)'}`,
-          background: open ? 'rgba(216,182,46,0.18)' : 'rgba(216,182,46,0.09)',
-          color: 'var(--text-secondary)', fontSize: 9.5, fontWeight: 800,
-          whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 20,
+          background: open ? 'rgba(216,182,46,0.26)' : 'rgba(216,182,46,0.14)',
+          color: '#765f00', fontSize: 9.5, fontWeight: 850,
+          whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
+          pointerEvents: 'auto',
         }}>
-        <span aria-hidden style={{ width: 11, height: 11, borderRadius: '50%', background: '#D8B62E', color: '#1a1a1a', flexShrink: 0, fontSize: 7, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>G</span>
-        {meetings.length}
+        <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
+        <span aria-hidden style={{ opacity: 0.45 }}>·</span>
+        <span>{meetings.length}</span>
       </button>
       {open && pos && typeof document !== 'undefined' && createPortal(
         <>
           {pinned && <div onClick={() => setPinned(false)} style={{ position: 'fixed', inset: 0, zIndex: 8998 }} />}
-          <div onMouseEnter={cancelClose} onMouseLeave={() => { if (!pinned) scheduleClose() }}
+          <div onPointerEnter={cancelClose} onPointerLeave={() => { if (!pinned) scheduleClose() }}
             style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 8999, width: 300,
               background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
               padding: 6, boxShadow: '0 16px 40px rgba(0,0,0,0.30), 0 2px 6px rgba(0,0,0,0.12)' }}>
@@ -2003,6 +2010,8 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
             </div>
             {sorted.map(meeting => (
               <button key={meeting.id} onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
+                onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
+                onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
                 style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 9,
                   padding: '8px 9px', border: 'none', borderRadius: 7, background: 'transparent',
                   color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
