@@ -1247,8 +1247,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     }
   }
 
-  // Verberg eerder geïmporteerde events zodra ze binnen het actieve
-  // sync-window niet meer relevant zijn. Twee gevallen:
+  // Detecteer eerder geïmporteerde events die één persoonlijke agenda niet
+  // meer relevant vindt. We bewaren dit alleen als diagnose; verderop leggen
+  // we uit waarom één kalender deze gedeelde rij niet zelfstandig mag
+  // verbergen. Twee gevallen:
   //  1. Google levert het event nog wel, maar het antwoord is niet langer Ja.
   //  2. Google levert de oude event/serie-ID helemaal niet meer terug, bv.
   //     nadat deelnemers, recurrence of datum zijn aangepast.
@@ -1319,13 +1321,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     .filter(r => !r.deleted_at && r.external_id && !fetchedExternalIds.has(r.external_id) && liesInActiveWindow(r))
     .map(r => r.id)
   const irrelevantIds = Array.from(new Set([...noLongerAcceptedIds, ...noLongerReturnedIds]))
-  if (irrelevantIds.length > 0) {
-    const hiddenAt = new Date().toISOString()
-    await admin
-      .from('board_items')
-      .update({ deleted_at: hiddenAt, updated_at: hiddenAt })
-      .in('id', irrelevantIds)
-  }
+  // NIET hier soft-deleten. Dezelfde meeting kan in meerdere persoonlijke
+  // agenda's staan, terwijl alle agenda's één canonical board_item delen.
+  // Eén agenda kan de afspraak niet meer teruggeven (of de eigenaar kan
+  // declined zijn), terwijl een andere Yoko-deelnemer nog gewoon accepted
+  // is. Per-calendar cleanup maakte de uiteindelijke zichtbaarheid daardoor
+  // afhankelijk van welke sync als laatste draaide: eerst verscheen de groep,
+  // enkele seconden later verdween hij weer. Geldige events worden hierboven
+  // nog steeds geüpsert/revived; expliciet verwijderen blijft via de UI gaan.
+  void irrelevantIds
 
   // Auto-categoriseer items met 'Vrij'/'Vakantie'/'Verlof'/etc. in de titel
   // als category='vrij' in workload_categories. De classifier doet dit op de
@@ -1377,7 +1381,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // (Papierbak) drawer herstelbaar.
   void existing
   void seenIds
-  const removed = irrelevantIds.length + duplicateIds.size
+  const removed = duplicateIds.size
 
   // VERWIJDERD: de oude 'auto-cleanup non-google rows met dezelfde naam
   // als een synced Google item' veegde handmatige projecten weg zodra

@@ -1101,7 +1101,15 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
 // week). Saturday/Sunday events are clipped to the end of Friday so weekends
 // don't waste horizontal space.
 function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
-  const days = Math.floor((d.getTime() - gridStart.getTime()) / 86400000)
+  // Gebruik kalenderdagen, niet verstreken milliseconden. De grid begint
+  // maanden vóór vandaag; zodra daar een zomer-/wintertijdgrens tussen zit,
+  // is `getTime()` één uur korter/langer dan N × 24u. Math.floor schoof dan
+  // alle datums na de DST-wissel één volledige dagslice naar links (woensdag
+  // verscheen onder dinsdag). Date.UTC op alleen Y/M/D blijft DST-neutraal.
+  const calendarDay = (value: Date) => Date.UTC(
+    value.getFullYear(), value.getMonth(), value.getDate(),
+  ) / 86400000
+  const days = calendarDay(d) - calendarDay(gridStart)
   const weekIdx = Math.floor(days / 7)
   const dowMon = ((days % 7) + 7) % 7  // 0=Mon..6=Sun (gridStart is a Mon)
   const cellInWeek = Math.min(dowMon, 5) // Sat/Sun snap to col-end
@@ -1993,6 +2001,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
           color: '#765f00', fontSize: 9.5, fontWeight: 850,
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
           pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
+          outline: 'none', boxShadow: 'none',
         }}>
         <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
         <span aria-hidden style={{ opacity: 0.45 }}>·</span>
@@ -5486,21 +5495,6 @@ export default function PlanningPage() {
                 <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
                   Planning
                 </h1>
-                <div style={segGroup}>
-                  {(['compact', 'large'] as ViewSize[]).map(v => (
-                    <button key={v} onClick={() => {
-                        if (v === viewSize) return
-                        const el = gridRef.current
-                        if (el) {
-                          const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
-                          pendingAnchorRef.current = { colIdx: idx }
-                        }
-                        setViewSize(v)
-                      }} style={segBtn(viewSize === v)}>
-                      {v === 'compact' ? 'Compact' : 'Standaard'}
-                    </button>
-                  ))}
-                </div>
               </div>
               <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
                 {todayLabel}
@@ -5518,11 +5512,57 @@ export default function PlanningPage() {
               </span>
             </div>
           </div>
-          <div style={segGroup}>
-            <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
-            <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
-            <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
-            <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start' }}>
+            <div style={{ ...segGroup, height: 34, alignItems: 'stretch' }}>
+              {(['compact', 'large'] as ViewSize[]).map(v => (
+                <button key={v} onClick={() => {
+                    if (v === viewSize) return
+                    const el = gridRef.current
+                    if (el) {
+                      const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
+                      pendingAnchorRef.current = { colIdx: idx }
+                    }
+                    setViewSize(v)
+                  }} style={{ ...segBtn(viewSize === v), height: 32, display: 'inline-flex', alignItems: 'center' }}>
+                  {v === 'compact' ? 'Compact' : 'Standaard'}
+                </button>
+              ))}
+            </div>
+            <div style={{ ...segGroup, height: 34, alignItems: 'stretch' }}>
+              <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
+              <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
+              <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
+              <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
+            </div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', height: 34 }}>
+              <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
+                style={{ ...ghostBtn(overflowOpen), padding: '6px 9px', height: 34, display: 'inline-flex', alignItems: 'center' }}>
+                <IconMore size={16} style={{ marginRight: 4 }} />Menu
+              </button>
+              {overflowOpen && (
+                <>
+                  <div onClick={() => setOverflowOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 101,
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: 4, minWidth: 220,
+                    boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
+                    display: 'flex', flexDirection: 'column', gap: 2,
+                  }}>
+                    <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}><span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item</button>
+                    <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                    <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}><IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}</button>
+                    <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}><IconBoard size={14} /> Agenda&apos;s</button>
+                    <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}><IconHourglass size={14} /> Capaciteit</button>
+                    <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}><IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}</button>
+                    <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                    <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }} style={overflowItemStyle}><IconDownload size={14} /> Exporteer als iCal</button>
+                    <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }} style={overflowItemStyle}><IconShare size={14} /> Deelbare link maken</button>
+                    <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }} style={overflowItemStyle}><IconRange size={14} /> Verschuif projecten</button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
         )}
@@ -5912,10 +5952,10 @@ export default function PlanningPage() {
                 left: nowOffset, width: 0,
                 borderLeft: '2px solid var(--yellow)',
                 pointerEvents: 'none',
-                // Onder sticky naamcellen houden als extra bescherming;
-                // de geklemde randversie hierboven neemt het over zodra
-                // vandaag de naamkolom nadert.
-                zIndex: 10,
+                // Boven beide sticky header-rijen (z=24/25), maar onder de
+                // VANDAAG-pill (z=50). Zo blijft de lijn ononderbroken door
+                // maand- en weekheaders heen lopen.
+                zIndex: 40,
                 boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
               }} />
               {/* VANDAAG-pill als SEPARATE sibling — eigen sticky-top, hoge
@@ -5947,60 +5987,11 @@ export default function PlanningPage() {
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 25, background: stickyBg, alignItems: 'stretch' }}>
               <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '4px 8px 0 4px', gap: 4 }}>
-                {/* Menu helemaal links, vóór de twee zoomregelaars. */}
-                {!isMobile && (
-                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', position: 'relative', flexShrink: 0 }}>
-                    <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
-                      style={{ ...ghostBtn(overflowOpen), padding: '6px 8px', height: 34 }}>
-                      <IconMore size={15} style={{ marginRight: 4 }} />Menu
-                    </button>
-                    {overflowOpen && (
-                      <>
-                        <div onClick={() => setOverflowOpen(false)}
-                          style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
-                        <div style={{
-                          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 101,
-                          background: 'var(--bg-card)', border: '1px solid var(--border)',
-                          borderRadius: 8, padding: 4, minWidth: 220,
-                          boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
-                          display: 'flex', flexDirection: 'column', gap: 2,
-                        }}>
-                          <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}>
-                            <span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item
-                          </button>
-                          <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
-                          <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}>
-                            <IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}>
-                            <IconBoard size={14} /> Agenda&apos;s
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}>
-                            <IconHourglass size={14} /> Capaciteit
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}>
-                            <IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}
-                          </button>
-                          <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
-                          <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }} style={overflowItemStyle}>
-                            <IconDownload size={14} /> Exporteer als iCal
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }} style={overflowItemStyle}>
-                            <IconShare size={14} /> Deelbare link maken
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }} style={overflowItemStyle}>
-                            <IconRange size={14} /> Verschuif projecten
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
                 {/* Verticale balkhoogte; blijft als eerste zoomregelaar staan. */}
                 {!isMobile && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'center', gap: 1,
-                    position: 'absolute', left: 68, top: 4, height: 58, zIndex: 23,
+                    position: 'absolute', left: 4, top: 4, height: 58, zIndex: 23,
                     padding: '2px 3px', borderRadius: 8, width: 26,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
                     title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
