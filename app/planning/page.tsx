@@ -1101,7 +1101,15 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
 // week). Saturday/Sunday events are clipped to the end of Friday so weekends
 // don't waste horizontal space.
 function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
-  const days = Math.floor((d.getTime() - gridStart.getTime()) / 86400000)
+  // Gebruik kalenderdagen, niet verstreken milliseconden. De grid begint
+  // maanden vóór vandaag; zodra daar een zomer-/wintertijdgrens tussen zit,
+  // is `getTime()` één uur korter/langer dan N × 24u. Math.floor schoof dan
+  // alle datums na de DST-wissel één volledige dagslice naar links (woensdag
+  // verscheen onder dinsdag). Date.UTC op alleen Y/M/D blijft DST-neutraal.
+  const calendarDay = (value: Date) => Date.UTC(
+    value.getFullYear(), value.getMonth(), value.getDate(),
+  ) / 86400000
+  const days = calendarDay(d) - calendarDay(gridStart)
   const weekIdx = Math.floor(days / 7)
   const dowMon = ((days % 7) + 7) % 7  // 0=Mon..6=Sun (gridStart is a Mon)
   const cellInWeek = Math.min(dowMon, 5) // Sat/Sun snap to col-end
@@ -1993,6 +2001,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
           color: '#765f00', fontSize: 9.5, fontWeight: 850,
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
           pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
+          outline: 'none', boxShadow: 'none',
         }}>
         <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
         <span aria-hidden style={{ opacity: 0.45 }}>·</span>
