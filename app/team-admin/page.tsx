@@ -59,13 +59,14 @@ type FilterKind = 'all' | 'yoko' | 'freelance' | 'unassigned' | 'hidden'
 
 export default function TeamAdminPage() {
   const { isAuthenticated, authChecked } = useProfile()
-  const { members, refresh } = useTeam()
+  const { allMembers: members, refresh } = useTeam()
   const [adding, setAdding] = useState(false)
   const [filter, setFilter] = useState<FilterKind>('all')
   const dragFromRef = useRef<string | null>(null)
   const [draft, setDraft] = useState<TeamMember>({
     id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false,
     kind: 'yoko',
+    startDate: null,
   })
 
   if (!authChecked) return <Shell><p style={{ color: 'var(--text-muted)' }}>Laden…</p></Shell>
@@ -109,7 +110,7 @@ export default function TeamAdminPage() {
     if (email && draft.kind !== 'unassigned') {
       sendInvite(email, draft.name).catch(() => {})
     }
-    setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false, kind: 'yoko' })
+    setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false, kind: 'yoko', startDate: null })
   }
 
   async function updateField(id: string, patch: Partial<TeamMember>) {
@@ -260,6 +261,16 @@ export default function TeamAdminPage() {
               type="number" min={0} max={80} step={4}
               style={{ ...inputStyle, width: 100 }} />
 
+            <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Startdatum</label>
+            <div>
+              <input value={draft.startDate ?? ''}
+                onChange={e => setDraft(d => ({ ...d, startDate: e.target.value || null }))}
+                type="date" style={{ ...inputStyle, width: 180 }} />
+              <span style={{ marginLeft: 10, fontSize: 11.5, color: 'var(--text-muted)' }}>
+                Automatisch zichtbaar vanaf deze dag
+              </span>
+            </div>
+
             <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Kleur</label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {PRESET_COLORS.map(c => (
@@ -322,13 +333,14 @@ export default function TeamAdminPage() {
           <div key={label} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, padding: '0 2px' }}>{label} · {rows.length}</div>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 88px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 100px 80px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
                 <span></span>
                 <span></span>
                 <span>Naam</span>
                 <span>Email</span>
                 <span>Id</span>
                 <span>Uren/wk</span>
+                <span>Start</span>
                 <span>Team</span>
                 <span>Status</span>
                 <span>Login</span>
@@ -411,7 +423,7 @@ function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn
         onDropOn()
       }}
       onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
-      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.2fr 1.4fr 1fr 80px 110px 100px 88px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
+      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 100px 80px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
         borderBottom: dropHover ? '2px solid var(--accent)' : '1px solid var(--border-light)',
         background: dropHover ? 'var(--accent-light)' : 'transparent',
         cursor: draggable ? 'grab' : 'default',
@@ -430,6 +442,9 @@ function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn
         onBlur={() => blurField('weeklyCapacity', parseFloat(hours) || 0, member.weeklyCapacity)}
         type="number" min={0} max={80} step={4}
         style={{ ...cellInput, width: 70 }} />
+      <input value={member.startDate ?? ''} onChange={e => onChange({ startDate: e.target.value || null })}
+        type="date" title="Vanaf deze dag automatisch zichtbaar in de planner"
+        style={{ ...cellInput, fontSize: 11.5 }} />
       <select value={member.kind} disabled={member.id === 'unassigned'}
         onChange={e => onChange({ kind: e.target.value as TeamKind })}
         style={{ ...cellInput, padding: '4px 6px', cursor: member.id === 'unassigned' ? 'not-allowed' : 'pointer' }}>

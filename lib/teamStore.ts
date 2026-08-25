@@ -18,6 +18,7 @@ export type TeamMember = {
   position:        number
   hidden:          boolean
   kind:            TeamKind
+  startDate:       string | null
 }
 
 type Row = {
@@ -29,6 +30,7 @@ type Row = {
   position:        number | null
   hidden:          boolean | null
   kind:            string | null
+  start_date:      string | null
 }
 
 function normalizeKind(k: string | null | undefined): TeamKind {
@@ -46,6 +48,7 @@ function rowToMember(r: Row): TeamMember {
     position:       Number(r.position ?? 0),
     hidden:         !!r.hidden,
     kind:           normalizeKind(r.kind),
+    startDate:      r.start_date ?? null,
   }
 }
 
@@ -59,7 +62,7 @@ function defaultKindFor(id: string): TeamKind {
 export async function pullTeam(): Promise<TeamMember[] | null> {
   if (!supabase) return null
   if (!await getCurrentUserId()) return null
-  const sel = 'id, name, email, color, weekly_capacity, position, hidden, kind'
+  const sel = 'id, name, email, color, weekly_capacity, position, hidden, kind, start_date'
   const { data, error } = await supabase
     .from('team_members')
     .select(sel)
@@ -70,14 +73,14 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
   // kind-classificatie vallen we terug op defaultKindFor(id) zodat
   // freelancers niet allemaal als 'yoko' verschijnen (wat zou gebeuren
   // als normalizeKind z'n default 'yoko' zou toepassen).
-  if (error && /kind/.test(error.message)) {
+  if (error && /(kind|start_date)/.test(error.message)) {
     const fb = await supabase
       .from('team_members')
       .select('id, name, email, color, weekly_capacity, position, hidden')
       .order('position', { ascending: true })
     if (!fb.error && fb.data) {
       return (fb.data as Omit<Row, 'kind'>[]).map(r => {
-        const member = rowToMember({ ...r, kind: null })
+        const member = rowToMember({ ...r, kind: null, start_date: null })
         member.kind = defaultKindFor(member.id)
         return member
       })
@@ -98,16 +101,17 @@ export async function upsertTeamMember(m: TeamMember): Promise<{ ok: boolean; er
     position:        m.position,
     hidden:          m.hidden,
     kind:            m.kind,
+    start_date:      m.startDate,
     updated_at:      new Date().toISOString(),
   }
   const { error } = await supabase.from('team_members').upsert(payload, { onConflict: 'id' })
   if (error) {
     // Fallback: migratie 0018 niet gedraaid → 'kind' kolom bestaat niet.
     // Probeer zonder kind zodat de rij in elk geval gemaakt wordt.
-    if (/kind/.test(error.message)) {
-      const { kind: _drop, ...sansKind } = payload
-      void _drop
-      const second = await supabase.from('team_members').upsert(sansKind, { onConflict: 'id' })
+    if (/(kind|start_date)/.test(error.message)) {
+      const { kind: _kind, start_date: _startDate, ...legacyPayload } = payload
+      void _kind; void _startDate
+      const second = await supabase.from('team_members').upsert(legacyPayload, { onConflict: 'id' })
       if (!second.error) {
         return { ok: true, error: 'kind_column_missing_run_0018' }
       }
@@ -148,14 +152,15 @@ export async function ensureTeamSeed(): Promise<void> {
       position:        existing.size + i,
       hidden:          false,
       kind:            defaultKindFor(m.id),
+      start_date:      null,
       updated_at:      new Date().toISOString(),
     }))
   if (missing.length === 0) return
   const { error } = await supabase.from('team_members').upsert(missing, { onConflict: 'id' })
-  if (error && /kind/.test(error.message)) {
+  if (error && /(kind|start_date)/.test(error.message)) {
     // Migratie 0018 (kind-kolom) nog niet gedraaid → probeer zonder.
-    const sansKind = missing.map(({ kind: _drop, ...rest }) => { void _drop; return rest })
-    await supabase.from('team_members').upsert(sansKind, { onConflict: 'id' })
+    const legacyRows = missing.map(({ kind: _kind, start_date: _startDate, ...rest }) => { void _kind; void _startDate; return rest })
+    await supabase.from('team_members').upsert(legacyRows, { onConflict: 'id' })
   }
 }
 
@@ -180,5 +185,12 @@ export function fallbackTeam(): TeamMember[] {
       position:       i,
       hidden:         false,
       kind:           defaultKindFor(m.id),
+      startDate:      null,
     }))
+}
+
+export function isTeamMemberStarted(member: Pick<TeamMember, 'startDate'>, today = new Date()): boolean {
+  if (!member.startDate) return true
+  const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  return member.startDate <= localToday
 }
