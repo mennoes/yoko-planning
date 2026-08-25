@@ -5885,28 +5885,36 @@ export default function PlanningPage() {
 
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
+          het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
+          zodat lijn en label nooit over namen/profielfoto's lopen. */}
       {todayEdge && (
-        <>
-          {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
-              het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
-              zodat lijn en label nooit over namen/profielfoto's lopen. */}
           <div aria-hidden style={{
             position: 'absolute', top: 0, bottom: 0,
             ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
             width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
             pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
           }} />
-          <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-            position: 'absolute', top: 4,
-            ...(todayEdge === 'left' ? { left: nameW + namePad + 6 } : { right: 6 }),
-            zIndex: 80, padding: '2px 9px', borderRadius: 999, border: 'none',
-            background: 'var(--yellow)', color: '#1a1a1a',
-            boxShadow: '0 2px 6px rgba(216,182,46,0.4)',
-            fontSize: 9.5, fontWeight: 800, lineHeight: 1.2, letterSpacing: '0.08em', cursor: 'pointer',
-          }}>
-            VANDAAG {todayEdge === 'left' ? '←' : '→'}
-          </button>
-        </>
+      )}
+      {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
+          verandert bij horizontaal scrollen alleen de x-positie/tekst en
+          nooit de verticale layout van de sticky headers eronder. */}
+      {(todayEdge || nowOffset !== null) && (
+        <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
+          position: 'absolute', top: 4,
+          ...(todayEdge === 'left'
+            ? { left: nameW + namePad + 6 }
+            : todayEdge === 'right'
+              ? { right: 6 }
+              : { left: (nowOffset ?? 0) - visibleGridRange.start - 32, width: 64 }),
+          zIndex: 80, padding: todayEdge ? '2px 9px' : '2px 0', borderRadius: 999, border: 'none',
+          background: 'var(--yellow)', color: '#1a1a1a',
+          boxShadow: '0 2px 6px rgba(216,182,46,0.4)',
+          fontSize: 9.5, fontWeight: 800, lineHeight: 1.2, letterSpacing: '0.08em', cursor: 'pointer',
+          whiteSpace: 'nowrap', textAlign: 'center',
+        }}>
+          VANDAAG {todayEdge === 'left' ? '←' : todayEdge === 'right' ? '→' : ''}
+        </button>
       )}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
         onWheel={(ev) => {
@@ -5969,24 +5977,6 @@ export default function PlanningPage() {
                 zIndex: 40,
                 boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
               }} />
-              {/* VANDAAG-pill als SEPARATE sibling — eigen sticky-top, hoge
-                  z-index zodat 'ie BOVEN de kolom-headers (z=12) blijft
-                  hangen, ook al ligt de lijn eronder onder de sticky cellen.
-                  Voorheen zat 'ie als child binnen de lijn-div, en daarmee
-                  opgesloten in de stacking context van z=3 — kolom-header
-                  schoof 'm onzichtbaar. */}
-              <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-                position: 'sticky', top: 4,
-                marginLeft: nowOffset - 32, width: 64,
-                padding: '2px 0',
-                background: 'var(--yellow)', color: '#1a1a1a',
-                fontSize: 9.5, fontWeight: 800,
-                lineHeight: 1.2,
-                letterSpacing: '0.08em', textAlign: 'center',
-                borderRadius: 999,
-                boxShadow: '0 2px 6px rgba(216, 182, 46, 0.4)',
-                zIndex: 50, cursor: 'pointer', border: 'none',
-              }}>VANDAAG</button>
             </>
           )}
 
