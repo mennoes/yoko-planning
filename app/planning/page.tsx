@@ -1975,7 +1975,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
 
   return (
     <>
-      <button ref={anchorRef}
+      <button ref={anchorRef} className="planning-meeting-summary"
         onPointerEnter={show} onPointerLeave={scheduleClose}
         onClick={ev => {
           ev.stopPropagation()
@@ -1992,7 +1992,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
           background: open ? 'rgba(216,182,46,0.26)' : 'rgba(216,182,46,0.14)',
           color: '#765f00', fontSize: 9.5, fontWeight: 850,
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
-          pointerEvents: 'auto',
+          pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
         }}>
         <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
         <span aria-hidden style={{ opacity: 0.45 }}>·</span>
