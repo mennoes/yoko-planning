@@ -872,8 +872,8 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
           </span>
         )}
         {item.projectRef && (
-          <Link href={`/projects/${item.projectRef.board}`}
-            title={`Open ${item.projectRef.board}-agenda`}
+          <Link href="/demo/planning"
+            title={`Open ${item.projectRef.board} in Planning`}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '1px 7px', borderRadius: 10,
               background: (BOARD_COLORS[item.projectRef.board] ?? '#888') + '22',
