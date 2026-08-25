@@ -1938,6 +1938,89 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   )
 }
 
+function MeetingDaySummary({ meetings, left, width, onOpen }: {
+  meetings: Project[]; left: number; width: number; onOpen: (project: Project) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const anchorRef = useRef<HTMLButtonElement>(null)
+  const closeTimer = useRef<number | null>(null)
+  const sorted = [...meetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
+  const open = meetings.length > 1 && (hovered || pinned)
+
+  const cancelClose = () => {
+    if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
+    closeTimer.current = null
+  }
+  const show = () => {
+    cancelClose()
+    const rect = anchorRef.current?.getBoundingClientRect()
+    if (rect) {
+      const cardW = 300
+      setPos({ top: rect.bottom + 7, left: Math.max(8, Math.min(rect.left, window.innerWidth - cardW - 8)) })
+    }
+    setHovered(true)
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = window.setTimeout(() => setHovered(false), 120)
+  }
+  useEffect(() => () => cancelClose(), [])
+
+  return (
+    <>
+      <button ref={anchorRef}
+        onMouseEnter={show} onMouseLeave={scheduleClose}
+        onClick={ev => {
+          ev.stopPropagation()
+          if (meetings.length === 1) onOpen(meetings[0])
+          else { show(); setPinned(true) }
+        }}
+        aria-label={`${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}`}
+        style={{
+          position: 'absolute', left: left + 2, top: 2,
+          width: Math.max(18, width - 4), height: 18,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+          padding: '0 3px', borderRadius: 5,
+          border: `1px solid ${open ? 'rgba(216,182,46,0.7)' : 'rgba(216,182,46,0.35)'}`,
+          background: open ? 'rgba(216,182,46,0.18)' : 'rgba(216,182,46,0.09)',
+          color: 'var(--text-secondary)', fontSize: 9.5, fontWeight: 800,
+          whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 20,
+        }}>
+        <span aria-hidden style={{ width: 11, height: 11, borderRadius: '50%', background: '#D8B62E', color: '#1a1a1a', flexShrink: 0, fontSize: 7, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>G</span>
+        {meetings.length}
+      </button>
+      {open && pos && typeof document !== 'undefined' && createPortal(
+        <>
+          {pinned && <div onClick={() => setPinned(false)} style={{ position: 'fixed', inset: 0, zIndex: 8998 }} />}
+          <div onMouseEnter={cancelClose} onMouseLeave={() => { if (!pinned) scheduleClose() }}
+            style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 8999, width: 300,
+              background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+              padding: 6, boxShadow: '0 16px 40px rgba(0,0,0,0.30), 0 2px 6px rgba(0,0,0,0.12)' }}>
+            <div style={{ padding: '5px 7px 7px', fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {meetings.length} meetings
+            </div>
+            {sorted.map(meeting => (
+              <button key={meeting.id} onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
+                style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 9,
+                  padding: '8px 9px', border: 'none', borderRadius: 7, background: 'transparent',
+                  color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
+                <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
+                  {meeting.startTime ?? 'Hele dag'}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
+                  {meeting.name}
+                </span>
+              </button>
+            ))}
+            {pinned && <div style={{ padding: '5px 8px 3px', fontSize: 10.5, color: 'var(--text-muted)' }}>Kies een meeting om details te openen</div>}
+          </div>
+        </>, document.body)}
+    </>
+  )
+}
+
 function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, onDragMove, onDragEnd, onBarClick, onReassign }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   team?: TeamMember[]
@@ -2397,22 +2480,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const dayStart = new Date(`${day}T00:00:00`)
         const daySlice = colW / 5
         const left = dateToWeekPx(dayStart, gridStart, colW)
-        const sortedMeetings = [...dayMeetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
-        const details = sortedMeetings.map(p => `${p.startTime ? `${p.startTime} · ` : ''}${p.name}`).join('\n')
         return (
-          <button key={`meeting-summary-${day}`} title={details} onClick={() => onBarClick(sortedMeetings[0])}
-            style={{
-              position: 'absolute', left: left + 2, top: 2,
-              width: Math.max(18, daySlice - 4), height: 18,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              padding: '0 3px', borderRadius: 5,
-              border: '1px solid rgba(216,182,46,0.35)', background: 'rgba(216,182,46,0.09)',
-              color: 'var(--text-muted)', fontSize: 9.5, fontWeight: 700,
-              whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 20,
-            }}>
-            <span aria-hidden style={{ width: 11, height: 11, borderRadius: '50%', background: '#D8B62E', color: '#1a1a1a', flexShrink: 0, fontSize: 7, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>G</span>
-            {dayMeetings.length} {dayMeetings.length === 1 ? 'meeting' : 'meetings'}
-          </button>
+          <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} left={left} width={daySlice} onOpen={onBarClick} />
         )
       })}
       {/* Meetings hangen nu bovenop project-balken — geen aparte divider
