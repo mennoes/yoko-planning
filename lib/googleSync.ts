@@ -121,7 +121,7 @@ type GoogleCalRow = {
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
 type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
-type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 type Rule     = { pattern: string; board_id: string }
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
@@ -697,7 +697,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // overschrijven bij de volgende Google-sync.
   const { data: existingRows } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, start_date, end_date, deleted_at')
+    .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
@@ -790,7 +790,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // null om de row weer zichtbaar te maken.
     const { data: sharedRows } = await admin
       .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date, deleted_at')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, name, start_date, deleted_at')
       .eq('source', 'google')
       .in('ical_uid', Array.from(new Set(wantedICals)))
     for (const r of (sharedRows as ItemRow[] | null) ?? []) {
@@ -809,7 +809,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   {
     const { data: legacyRows } = await admin
       .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, name, start_date')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, name, start_date')
       .eq('source', 'google')
       .eq('external_user_id', cal.user_id)
       .is('ical_uid', null)
@@ -865,6 +865,19 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // per event, gedeeld door alle teamleden.
     const newId = icalUid ? `it_g_${icalUid}` : `it_g_${extId}_${cal.user_id.slice(0, 8)}`
     return { row: undefined, id: newId }
+  }
+
+  // Een canonical rij kan via iCalUID door meerdere teamagenda's worden
+  // gevonden. Alleen de agenda die de canonical rij oorspronkelijk heeft
+  // aangemaakt mag daarom de per-agenda external_id verversen. Dit is wel
+  // noodzakelijk wanneer Google na verplaatsen/bewerken een nieuwe event-id
+  // uitdeelt: met de oude id zou de cleanup hieronder dezelfde rij direct na
+  // de succesvolle upsert weer als "niet teruggekomen" verbergen.
+  function externalIdFor(row: ItemRow | undefined, freshId: string): string {
+    if (!row) return freshId
+    const belongsToThisCalendar = row.external_user_id === cal.user_id
+      && row.calendar_id === cal.calendar_id
+    return belongsToThisCalendar ? freshId : (row.external_id ?? freshId)
   }
 
   const seenExt: Set<string> = new Set()
@@ -988,16 +1001,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         // handmatig gesleept item bij elke sync terug naar bovenaan.
         position:            existingRow?.position ?? 9999,
         source:              'google',
-        // external_id/calendar_id NIET overschrijven als er al een rij
-        // bestaat. Die behoren bij de gebruiker die als EERSTE deze rij
-        // aanmaakte — overschrijven zou hun lookup-via-ev.id breken en
-        // race-condities veroorzaken. Bij een nieuwe rij vullen we ze in.
-        external_id:         existingRow?.external_id ?? ev.id,
+        // Per-agenda velden blijven van de gebruiker die de canonical rij
+        // als eerste aanmaakte. Alleen diezelfde agenda mag external_id
+        // verversen wanneer Google na een wijziging een nieuwe id uitdeelt.
+        external_id:         externalIdFor(existingRow, ev.id),
         ical_uid:            icalUid,
         external_link:       (existingRow as { external_link?: string | null } | undefined)?.external_link ?? ev.htmlLink ?? null,
         external_synced_at:  new Date().toISOString(),
         external_user_id:    existingRow?.external_user_id ?? cal.user_id,
-        calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
+        calendar_id:         existingRow?.calendar_id ?? cal.calendar_id,
         // Revive soft-deleted rijen — als een eerdere bug 'm verstopt heeft,
         // moet 'ie weer terugkomen zodra Google z'n update binnenpakt.
         deleted_at:          null,
@@ -1212,13 +1224,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // bij elke sync terug naar bovenaan.
       position:            existingRow?.position ?? 9999,
       source:              'google',
-      // Per-user velden NIET overschrijven (zie single-event-branch).
-      external_id:         existingRow?.external_id ?? groupKey,
+      // Per-agenda velden: zelfde eigenaarsregel als de single-event-branch.
+      external_id:         externalIdFor(existingRow, groupKey),
       ical_uid:            icalUid,
       external_link:       (existingRow as { external_link?: string | null } | undefined)?.external_link ?? sorted[0].htmlLink ?? null,
       external_synced_at:  new Date().toISOString(),
       external_user_id:    existingRow?.external_user_id ?? cal.user_id,
-      calendar_id:         (existingRow as { calendar_id?: string } | undefined)?.calendar_id ?? cal.calendar_id,
+      calendar_id:         existingRow?.calendar_id ?? cal.calendar_id,
       deleted_at:          null,
       updated_at:          new Date().toISOString(),
     })
@@ -1298,6 +1310,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       .in('id', [...duplicateIds])
   }
   const noLongerReturnedIds = existing
+    // `existing` is de snapshot van vóór de upsert. Een verplaatste of
+    // gewijzigde Google-afspraak kan daarin nog z'n oude external_id hebben,
+    // terwijl dezelfde canonical rij hierboven al succesvol is bijgewerkt.
+    // Een rij die deze ronde is geüpsert mag nooit in dezelfde ronde worden
+    // verborgen.
+    .filter(r => !canonicalIds.has(r.id))
     .filter(r => !r.deleted_at && r.external_id && !fetchedExternalIds.has(r.external_id) && liesInActiveWindow(r))
     .map(r => r.id)
   const irrelevantIds = Array.from(new Set([...noLongerAcceptedIds, ...noLongerReturnedIds]))
