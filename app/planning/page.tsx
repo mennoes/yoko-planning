@@ -1972,6 +1972,26 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // small individual dots/bars rather than one stretched merge.
   const owned = projects.filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
 
+  // Google-meetings worden in Overzicht niet langer als balken gestapeld.
+  // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
+  // terwijl een hover de concrete afspraken en tijden laat zien.
+  const googleMeetings = (hideMeetings ? [] : owned).filter(p => p.source === 'google' && effectiveCategory({
+    name: p.name, hours: p.estHours || 0, source: p.source,
+  }, overrides[p.id]) === 'meeting')
+  const meetingsByDay = new Map<string, Project[]>()
+  if (zoom === 'week') {
+    for (const p of googleMeetings) {
+      const day = p.startDate ?? p.endDate
+      if (!day) continue
+      const dow = new Date(`${day}T12:00:00`).getDay()
+      if (dow === 0 || dow === 6) continue
+      const list = meetingsByDay.get(day) ?? []
+      list.push(p)
+      meetingsByDay.set(day, list)
+    }
+  }
+  const meetingSummaryHeight = meetingsByDay.size > 0 ? 22 : 0
+
   const rawBars = owned.map(p => {
       // Orphan-date bars (alleen startDate óf alleen endDate) vroeger:
       // fallback naar grid-start/grid-end → bar strekt zich uit over de
@@ -2040,8 +2060,10 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       //      heeft gezet (override), OF
       //   2. 't echt 'n Google-event is (source==='google').
       const explicitCat = overrides[p.id]
-      const isMeeting = explicitCat === 'meeting'
-        || (p.source === 'google' && (p.estHours || 0) > 0 && (p.estHours || 0) <= 2)
+      const isMeeting = effectiveCategory({ name: p.name, hours: p.estHours || 0, source: p.source }, explicitCat) === 'meeting'
+      // Google-meetings zitten voortaan in de compacte dagteller hierboven,
+      // niet meer als losse gekleurde balken tussen het projectwerk.
+      if (p.source === 'google' && isMeeting) return null
       if (hideMeetings && isMeeting) return null
       return { p, left, width, packWidth, isMeeting, durationDays: projDays }
     })
@@ -2210,7 +2232,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   usedLanes.forEach((orig, idx) => laneRemap.set(orig, idx))
   const bars: Single[] = packedBars.map(b => ({ ...b, lane: laneRemap.get(b.lane) ?? b.lane }))
 
-  if (bars.length === 0 && vrijBars.length === 0) return null
+  if (bars.length === 0 && vrijBars.length === 0 && meetingsByDay.size === 0) return null
 
   // Echte 2D-gap-packing: lane-nummers bepalen alleen de stabiele
   // plaatsingsprioriteit, niet meer de uiteindelijke Y-positie. Voor
@@ -2350,25 +2372,49 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // blies anders de rij-hoogte op voor ÉLKE week, óók rustige weken die
   // daar niets mee te maken hebben — precies de 'grote lege ruimte
   // onder een enkel 8u-item' die gerapporteerd werd. Venster van ±90
-  // dagen rond vandaag: alleen balken die (mede) in dat venster vallen
+  // drie weken rond vandaag: alleen balken die (mede) in dat venster vallen
   // tellen mee voor de container-hoogte. Balken ver buiten het venster
   // houden hun eigen correcte top/hoogte (skyline hierboven raakt daar
   // niet aan), maar mogen de referentie voor de rest van de tijdlijn
   // niet meer opblazen.
-  const WINDOW_DAYS = 90
+  const WINDOW_DAYS = 21
   const windowPx = (WINDOW_DAYS * 86400000) / msPerPx
   const todayPx  = (Date.now() - gridStartMs) / msPerPx
   const windowed = placed.filter(r => r.start < todayPx + windowPx && r.end > todayPx - windowPx)
   const baseHeight = windowed.length > 0
-    ? Math.max(...windowed.map(r => r.bottom)) + BAR_GAP_S
+    ? Math.max(...windowed.map(r => r.bottom)) + BAR_GAP_S + meetingSummaryHeight
     : BASELINE_AVAIL_H + BAR_GAP_S * 2
-  const height = bars.length === 0 ? Math.max(Math.round(36 * RS), baseHeight) : baseHeight
+  const height = bars.length === 0
+    ? Math.max(Math.round(36 * RS), baseHeight + meetingSummaryHeight)
+    : baseHeight
 
   return (
     <div style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
+      {[...meetingsByDay.entries()].map(([day, dayMeetings]) => {
+        const dayStart = new Date(`${day}T00:00:00`)
+        const daySlice = colW / 5
+        const left = dateToWeekPx(dayStart, gridStart, colW)
+        const sortedMeetings = [...dayMeetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
+        const details = sortedMeetings.map(p => `${p.startTime ? `${p.startTime} · ` : ''}${p.name}`).join('\n')
+        return (
+          <button key={`meeting-summary-${day}`} title={details} onClick={() => onBarClick(sortedMeetings[0])}
+            style={{
+              position: 'absolute', left: left + 2, top: 2,
+              width: Math.max(18, daySlice - 4), height: 18,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              padding: '0 3px', borderRadius: 5,
+              border: '1px solid rgba(216,182,46,0.35)', background: 'rgba(216,182,46,0.09)',
+              color: 'var(--text-muted)', fontSize: 9.5, fontWeight: 700,
+              whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 20,
+            }}>
+            <span aria-hidden style={{ width: 11, height: 11, borderRadius: '50%', background: '#D8B62E', color: '#1a1a1a', flexShrink: 0, fontSize: 7, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>G</span>
+            {dayMeetings.length} {dayMeetings.length === 1 ? 'meeting' : 'meetings'}
+          </button>
+        )
+      })}
       {/* Meetings hangen nu bovenop project-balken — geen aparte divider
           meer nodig. */}
       {/* Vrij-balken renderen we als volledige-hoogte achtergrond per
@@ -2471,7 +2517,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
               // uitkomt — een vaste absolute maat i.p.v. 100% van de
               // (wisselende) rij-hoogte, anders zou vrij op een drukke
               // dag ineens hoger ogen dan op een rustige dag.
-              position: 'absolute', top: 2,
+               position: 'absolute', top: 2 + meetingSummaryHeight,
               height: Math.max(20, BASELINE_AVAIL_H),
               left: b.left + 2, width: Math.max(20, b.width - 4),
               background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
@@ -2512,7 +2558,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
               laneIdx={b.lane}
               scaleByHours={zoom === 'week' || zoom === 'maand'}
               barHeightOverride={barH}
-              topOverride={barTops.get(b.p.id)}
+               topOverride={(barTops.get(b.p.id) ?? 0) + meetingSummaryHeight}
               onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
