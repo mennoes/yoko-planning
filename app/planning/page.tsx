@@ -2030,7 +2030,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
   )
 }
 
-function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, onDragMove, onDragEnd, onBarClick, onReassign }: {
+function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onReassign }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   team?: TeamMember[]
   zoom: ZoomLevel
@@ -2038,6 +2038,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Verticale zoom-schaal (1.0 = default). Schaalt BAR_H/BAR_GAP/PROJECT_LANE_H
   // zodat bars hoger/lager worden zonder dat de lane-pack logic verandert.
   rowScale?: number
+  visibleStartPx?: number
+  visibleEndPx?: number
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
@@ -2464,15 +2466,17 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // blies anders de rij-hoogte op voor ÉLKE week, óók rustige weken die
   // daar niets mee te maken hebben — precies de 'grote lege ruimte
   // onder een enkel 8u-item' die gerapporteerd werd. Venster van ±90
-  // drie weken rond vandaag: alleen balken die (mede) in dat venster vallen
+  // drie weken rond het zichtbare deel: alleen balken die (mede) in dat venster vallen
   // tellen mee voor de container-hoogte. Balken ver buiten het venster
   // houden hun eigen correcte top/hoogte (skyline hierboven raakt daar
   // niet aan), maar mogen de referentie voor de rest van de tijdlijn
   // niet meer opblazen.
   const WINDOW_DAYS = 21
   const windowPx = (WINDOW_DAYS * 86400000) / msPerPx
-  const todayPx  = (Date.now() - gridStartMs) / msPerPx
-  const windowed = placed.filter(r => r.start < todayPx + windowPx && r.end > todayPx - windowPx)
+  const todayPx = (Date.now() - gridStartMs) / msPerPx
+  const viewportStart = visibleStartPx ?? todayPx
+  const viewportEnd = visibleEndPx ?? todayPx
+  const windowed = placed.filter(r => r.start < viewportEnd + windowPx && r.end > viewportStart - windowPx)
   const baseHeight = windowed.length > 0
     ? Math.max(...windowed.map(r => r.bottom)) + BAR_GAP_S + meetingSummaryHeight
     : BASELINE_AVAIL_H + BAR_GAP_S * 2
@@ -4443,6 +4447,7 @@ export default function PlanningPage() {
   const gridRef = useRef<HTMLDivElement>(null)
   const dragScrollRef = useRef<{ startX: number; scrollLeft: number } | null>(null)
   const [isDragScrolling, setIsDragScrolling] = useState(false)
+  const [visibleGridRange, setVisibleGridRange] = useState({ start: 0, end: 0 })
   const initialScrollDoneRef = useRef(false)
   // Pending scroll-anker — wanneer ingesteld voor een re-render past de
   // useEffect onderaan scrollLeft aan zodat de today-line op screenX blijft.
@@ -4890,27 +4895,38 @@ export default function PlanningPage() {
     initialScrollDoneRef.current = true
   }, [zoom, colW, colOffset])
 
-  // Persist scrollLeft elke keer dat de gebruiker scrolt. Throttle via een
-  // simpele microtask zodat we niet bij elke pixel een localStorage-write doen.
+  // Houd ook het werkelijk zichtbare horizontale venster bij. De hoogte van
+  // iedere persoonsrij wordt daarop afgestemd, zodat items in oudere/toekomstige
+  // weken niet worden afgeknipt zodra de gebruiker van vandaag weg scrollt.
   useEffect(() => {
     const el = gridRef.current
     if (!el) return
     let queued = false
-    function onScroll() {
+    function updateVisibleRange() {
       if (queued) return
       queued = true
       requestAnimationFrame(() => {
         queued = false
-        const cur = gridRef.current?.scrollLeft
-        if (cur == null) return
+        const grid = gridRef.current
+        if (!grid) return
+        const cur = grid.scrollLeft
+        setVisibleGridRange(prev => {
+          const next = { start: cur, end: cur + grid.clientWidth }
+          return prev.start === next.start && prev.end === next.end ? prev : next
+        })
         try {
           window.localStorage.setItem('planning-scroll-left', String(cur))
           window.localStorage.setItem('planning-scroll-left-at', String(Date.now()))
         } catch {}
       })
     }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    updateVisibleRange()
+    el.addEventListener('scroll', updateVisibleRange, { passive: true })
+    window.addEventListener('resize', updateVisibleRange)
+    return () => {
+      el.removeEventListener('scroll', updateVisibleRange)
+      window.removeEventListener('resize', updateVisibleRange)
+    }
   }, [])
 
   // Pending anker toepassen: na een zoom-wissel komt nowOffset opnieuw uit
@@ -6458,6 +6474,8 @@ export default function PlanningPage() {
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars memberId={member.id} projects={effectiveProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         rowScale={rowScale}
+                        visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
+                        visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
                         onReassign={handleReassignOwner} />
                     </div>
