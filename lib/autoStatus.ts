@@ -11,12 +11,11 @@ import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 
 const WORKING = 'Working on...'
 const DONE    = 'Done'
-// Google-events worden agressiever opgeruimd dan zelf-gemaakte items:
-// zodra de dag erna is, mogen ze op Done. Handmatige items raken we NIET
-// automatisch op Done — de gebruiker wil zelf bepalen wanneer een eigen
-// project klaar is. Voor overdue manual items krijg je een notificatie
-// via notifyOverdueItems zonder status-mutatie.
-const AUTO_DONE_AFTER_DAYS_GOOGLE = 0
+// Vrij/vakantie-items mogen de dag erna automatisch naar Done. Google-
+// afspraken handelen hun status uitsluitend in googleSync af (met daar één
+// consistente 3-dagenregel); deze client-sweep mag ze niet na de eerste
+// render uit Meetings & doorlopend verplaatsen.
+const AUTO_DONE_AFTER_DAYS_VRIJ = 0
 
 function isLive(start: string | null | undefined, end: string | null | undefined, today: string): boolean {
   if (!start) return false
@@ -30,29 +29,22 @@ function needsAuto(status: string | undefined | null): boolean {
   return s === '' || s === 'Not started'
 }
 
-// Auto-Done — ALLEEN voor Google-events zodra de dag erna is (>0 dagen
-// voorbij). Handmatige items raken we NOOIT automatisch aan: de gebruiker
-// wil zelf bepalen wanneer een eigen project Done is. Voor overdue manual
-// items sturen we een 'klaar?'-notificatie via notifyOverdueItems, zonder
-// status te muteren.
+// Auto-Done — alleen voor Vrij/vakantie. Google-events worden door de
+// server-sync afgehandeld; gewone handmatige items bepaalt de gebruiker zelf.
 function shouldAutoDone(
   status: string | undefined | null,
   end: string | null | undefined,
   today: string,
-  source: 'manual' | 'google' | undefined | null,
   isVrij: boolean,
 ): boolean {
   const s = (status ?? '').trim()
   if (s === DONE || s === 'Stuck') return false
-  // Vrij/vakantie-items mogen óók auto-Done worden zodra de dag erna
-  // is — net als Google-events. Een 'vrij'-item dat geweest is heeft
-  // immers geen open-status meer nodig.
-  if (source !== 'google' && !isVrij) return false
+  if (!isVrij) return false
   if (!end) return false
   const endTs   = Date.parse(end)
   const todayTs = Date.parse(today)
   if (Number.isNaN(endTs) || Number.isNaN(todayTs)) return false
-  return (todayTs - endTs) / 86400000 > AUTO_DONE_AFTER_DAYS_GOOGLE
+  return (todayTs - endTs) / 86400000 > AUTO_DONE_AFTER_DAYS_VRIJ
 }
 
 export async function applyAutoStatus(): Promise<{ changed: number }> {
@@ -76,19 +68,13 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
         // Subitems eerst — die rollen niet automatisch op naar de parent
         // (zie eerdere keuze), maar mogen wel zelf hun status oppikken.
         //  - Loopt vandaag → Working on...
-        //  - End-datum > 3 dagen voorbij → Done. Vangt Google-instances op
-        //    die nog niet in een sync-pass zaten. Stuck/Done blijven.
+        //  - Voor Vrij/vakantie: eind-datum voorbij → Done.
+        //    Stuck/Done blijven altijd ongewijzigd.
         if (item.subitems && item.subitems.length > 0) {
           let subChanged = false
-          // Subitems van een Google-parent (recurring instances) tellen als
-          // Google-source — die mogen agressief Done worden zodra de dag
-          // erna is. Voor subitems onder een handmatige parent valt het
-          // terug op de subitem's eigen source-veld of 'manual'.
-          const subSource: 'manual' | 'google' | undefined = item.source === 'google' ? 'google' : undefined
           const subs: SubItem[] = item.subitems.map(sub => {
-            const effSource = subSource ?? (sub as { source?: 'manual' | 'google' }).source
             const subVrij   = isItemVrij(sub.id, sub.name) || isItemVrij(item.id, item.name)
-            if (shouldAutoDone(sub.status, sub.endDate ?? sub.startDate, today, effSource, subVrij)) {
+            if (shouldAutoDone(sub.status, sub.endDate ?? sub.startDate, today, subVrij)) {
               subChanged = true
               return { ...sub, status: DONE }
             }
@@ -104,11 +90,9 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
             boardChanged = true
           }
         }
-        // Parent-item: Google-events die voorbij zijn (één-off of recurring
-        // waarvan de laatste instance gepasseerd is) op Done; live items
-        // krijgen Working on…; handmatige items vallen alleen onder de
-        // 3-dagen-regel zodat zelf-aangemaakt werk niet ongezien wegglijdt.
-        if (shouldAutoDone(mutated.status, mutated.endDate ?? mutated.startDate, today, mutated.source, isItemVrij(mutated.id, mutated.name))) {
+        // Parent-item: alleen Vrij/vakantie automatisch afronden. Live items
+        // krijgen Working on…; Google-Done wordt centraal in googleSync gezet.
+        if (shouldAutoDone(mutated.status, mutated.endDate ?? mutated.startDate, today, isItemVrij(mutated.id, mutated.name))) {
           mutated = { ...mutated, status: DONE }
           changed++
           boardChanged = true
