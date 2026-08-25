@@ -8,6 +8,7 @@ import { TeamProvider } from './TeamContext'
 import { MemberPopupProvider } from './MemberPopup'
 import { UndoProvider } from './UndoContext'
 import Sidebar from './Sidebar'
+import DemoShell from './DemoShell'
 import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
@@ -102,7 +103,7 @@ function Inner({ children }: { children: ReactNode }) {
     // Wait for the initial session check before redirecting — otherwise a hard
     // refresh on a deep link bounces to /login and back.
     if (!authChecked) return
-    if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share') && !pathname.startsWith('/auth')) {
+    if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share') && !pathname.startsWith('/auth') && !pathname.startsWith('/demo')) {
       const next = pathname + (typeof window !== 'undefined' ? window.location.search : '')
       router.replace(`/login?next=${encodeURIComponent(next)}`)
     }
@@ -310,6 +311,20 @@ function Inner({ children }: { children: ReactNode }) {
       <>
         <ThemeApply />
         <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0 }}>{children}</main>
+      </>
+    )
+  }
+
+  // /demo: eigen lichte navigatie-schil i.p.v. de echte Sidebar (die
+  // SearchPalette/NotificationBell/FeedbackBubble/TimerIndicator/comments
+  // meesleept — allemaal aan een echt account gebonden). Geen
+  // ProfileSetup, geen auth-redirect; ProfileProvider/TeamProvider geven
+  // hier al een vaste nep-identiteit + nep-team (zie lib/demoFixtures.ts).
+  if (pathname.startsWith('/demo')) {
+    return (
+      <>
+        <ThemeApply />
+        <DemoShell>{children}</DemoShell>
       </>
     )
   }

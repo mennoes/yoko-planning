@@ -1,10 +1,12 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import type { UserProfile } from '@/lib/profile'
 import { loadProfile, saveProfile } from '@/lib/profile'
 import { supabase, hasSupabase, requiresAuth, type DbProfile } from '@/lib/supabase'
 import { clearAuthCache } from '@/lib/sync'
+import { isDemoPath, DEMO_PROFILE } from '@/lib/demoFixtures'
 
 type Ctx = {
   profile:    UserProfile | null
@@ -29,6 +31,8 @@ function dbToProfile(db: DbProfile): UserProfile {
 }
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
+  const demo = isDemoPath(pathname)
   const [profile,         setProfileState] = useState<UserProfile | null>(null)
   const [loaded,          setLoaded]       = useState(false)
   const [editOpen,        setEditOpen]     = useState(false)
@@ -36,15 +40,27 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   // When auth IS required and we have a supabase client, we wait for session.
   const [isAuthenticated, setIsAuthenticated] = useState(!requiresAuth)
 
+  // ── Publieke /demo-route: nooit Supabase of het echte localStorage-
+  // profiel raken — vaste nep-identiteit, altijd 'klaar', nooit auth nodig.
+  // De demo-pagina's zelf bieden een eigen profiel-switcher (tussen de
+  // vier nep-teamleden) die alleen React-state bijwerkt, geen Supabase.
+  useEffect(() => {
+    if (!demo) return
+    setProfileState(DEMO_PROFILE)
+    setLoaded(true)
+  }, [demo])
+
   // ── Without supabase client (no config): use localStorage ──────────────────
   useEffect(() => {
+    if (demo) return
     if (supabase) return
     setProfileState(loadProfile())
     setLoaded(true)
-  }, [])
+  }, [demo])
 
   // ── With Supabase: keep auth state and load profile if signed in ───────────
   useEffect(() => {
+    if (demo) return
     if (!supabase) return
     // Always start by loading local profile so the UI has something
     const local = loadProfile(); if (local) setProfileState(local)
@@ -96,9 +112,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [demo])
 
   async function setProfile(p: UserProfile) {
+    // Demo-bezoeker switcht tussen de vier nep-profielen (via de demo-
+    // profielkiezer) — puur React-state, NOOIT naar de echte 'yoko-profile'
+    // localStorage-key of Supabase schrijven. Anders overschrijft een demo-
+    // sessie in dezelfde browser straks het échte profiel van de gebruiker.
+    if (demo) { setProfileState(p); return }
     saveProfile(p)
     setProfileState(p)
     setEditOpen(false)
@@ -127,6 +148,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    if (demo) return
     if (hasSupabase && supabase) {
       await supabase.auth.signOut()
     } else {
@@ -139,13 +161,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     <ProfileCtx.Provider value={{
       profile,
       setProfile,
-      needsSetup: loaded && (!profile || !profile.memberId),
+      needsSetup: demo ? false : loaded && (!profile || !profile.memberId),
       openEdit:   () => setEditOpen(true),
       editOpen,
       closeEdit:  () => setEditOpen(false),
       signOut,
-      isAuthenticated,
-      authChecked: loaded,
+      isAuthenticated: demo ? true : isAuthenticated,
+      authChecked: demo ? true : loaded,
     }}>
       {children}
     </ProfileCtx.Provider>
