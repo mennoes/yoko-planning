@@ -117,7 +117,7 @@ type GoogleCalRow = {
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
 type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
-type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 type Rule     = { pattern: string; board_id: string }
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
@@ -693,7 +693,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // overschrijven bij de volgende Google-sync.
   const { data: existingRows } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra')
+    .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, position, est_hours, extra, start_date, end_date, deleted_at')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
@@ -1231,24 +1231,38 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     }
   }
 
-  // Verberg eerder geïmporteerde events zodra het Google-antwoord niet meer
-  // "Ja" is. `existing` is hierboven al beperkt tot deze gebruiker en deze
-  // kalender, zodat een sync nooit de Google-items van een teamgenoot wist.
-  // We raken alleen events aan die Google in het huidige sync-window leverde;
-  // oudere items buiten dat window blijven, net als bij de bestaande cleanup.
+  // Verberg eerder geïmporteerde events zodra ze binnen het actieve
+  // sync-window niet meer relevant zijn. Twee gevallen:
+  //  1. Google levert het event nog wel, maar het antwoord is niet langer Ja.
+  //  2. Google levert de oude event/serie-ID helemaal niet meer terug, bv.
+  //     nadat deelnemers, recurrence of datum zijn aangepast.
+  // `existing` is hierboven al beperkt tot deze gebruiker en kalender. De
+  // datumcheck bij geval 2 beschermt historische rijen buiten het window.
   const fetchedExternalIds = new Set<string>()
   for (const ev of events) fetchedExternalIds.add(ev.recurringEventId ?? ev.id)
   const acceptedExternalIds = new Set<string>()
   for (const ev of validEvents) acceptedExternalIds.add(ev.recurringEventId ?? ev.id)
   const noLongerAcceptedIds = existing
-    .filter(r => r.external_id && fetchedExternalIds.has(r.external_id) && !acceptedExternalIds.has(r.external_id))
+    .filter(r => !r.deleted_at && r.external_id && fetchedExternalIds.has(r.external_id) && !acceptedExternalIds.has(r.external_id))
     .map(r => r.id)
-  if (noLongerAcceptedIds.length > 0) {
+
+  const windowStart = timeMin.slice(0, 10)
+  const windowEnd = timeMax.slice(0, 10)
+  const liesInActiveWindow = (r: ItemRow): boolean => {
+    const start = r.start_date ?? r.end_date
+    const end = r.end_date ?? r.start_date
+    return !!start && !!end && end >= windowStart && start <= windowEnd
+  }
+  const noLongerReturnedIds = existing
+    .filter(r => !r.deleted_at && r.external_id && !fetchedExternalIds.has(r.external_id) && liesInActiveWindow(r))
+    .map(r => r.id)
+  const irrelevantIds = Array.from(new Set([...noLongerAcceptedIds, ...noLongerReturnedIds]))
+  if (irrelevantIds.length > 0) {
     const hiddenAt = new Date().toISOString()
     await admin
       .from('board_items')
       .update({ deleted_at: hiddenAt, updated_at: hiddenAt })
-      .in('id', noLongerAcceptedIds)
+      .in('id', irrelevantIds)
   }
 
   // Auto-categoriseer items met 'Vrij'/'Vakantie'/'Verlof'/etc. in de titel
@@ -1301,7 +1315,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // (Papierbak) drawer herstelbaar.
   void existing
   void seenIds
-  const removed = noLongerAcceptedIds.length
+  const removed = irrelevantIds.length
 
   // VERWIJDERD: de oude 'auto-cleanup non-google rows met dezelfde naam
   // als een synced Google item' veegde handmatige projecten weg zodra
