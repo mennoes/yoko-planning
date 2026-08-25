@@ -81,10 +81,14 @@ function isPastByDays(end: string | null | undefined, days: number): boolean {
   return Date.now() - endTs > days * 86400000
 }
 
-function resolveStatus(existing: string | null | undefined, end: string | null | undefined): string {
+function resolveStatus(existing: string | null | undefined, end: string | null | undefined, previousEnd?: string | null): string {
   const prev = (existing ?? '').trim()
   // Stuck nooit overschrijven — daar wil de gebruiker bewust naar kijken.
   if (prev === 'Stuck') return prev
+  // Een Google-afspraak die na een eerdere datum opnieuw is ingepland, is
+  // niet langer het oude afgeronde item. Maak 'm weer actief als de nieuwe
+  // datum niet opnieuw ruimschoots voorbij is.
+  if (prev === 'Done' && previousEnd && end && previousEnd !== end && !isPastByDays(end, AUTO_DONE_AFTER_DAYS)) return ''
   // Door gebruiker handmatig op Done gezet? Laat staan.
   if (prev === 'Done') return prev
   if (isPastByDays(end, AUTO_DONE_AFTER_DAYS)) return 'Done'
@@ -896,7 +900,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // een Done-groep of ander bord heeft gesleept, mag Google die niet
       // weer terugsturen naar de target-groep volgens de route-regels.
       const keepBoard = existingRow?.board_id ?? targetBoard
-      const newStatus = resolveStatus(existingRow?.status, end ?? start)
+      const newStatus = resolveStatus(existingRow?.status, end ?? start, existingRow?.end_date)
       // Vrij/Vakantie-events bundelen we in een eigen Vrij-groep zodat
       // afwezigheid meteen herkenbaar is in het bord. Done heeft daarna
       // voorrang (events kunnen oud-en-afgehandeld zijn). Anders volgen we
@@ -1253,6 +1257,46 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const end = r.end_date ?? r.start_date
     return !!start && !!end && end >= windowStart && start <= windowEnd
   }
+
+  // Eén actuele zichtbare rij per Google-event. Gedeelde afspraken bestaan
+  // in meerdere persoonlijke agenda's; oudere syncversies konden daardoor
+  // een tweede row achterlaten. Zodra één versie zojuist uit Google is
+  // bijgewerkt, verbergen we alle andere live rows met dezelfde stabiele
+  // iCalUID of hetzelfde Google event-id. Dit is gerichter dan dedupen op
+  // titel/datum en raakt dus geen gelijknamige, legitieme afspraken.
+  const canonicalIds = new Set(upserts.map(u => String(u.id)))
+  const canonicalByICal = new Map<string, string>()
+  const canonicalByExt = new Map<string, string>()
+  for (const u of upserts) {
+    const id = String(u.id)
+    if (typeof u.ical_uid === 'string' && u.ical_uid) canonicalByICal.set(u.ical_uid, id)
+    if (typeof u.external_id === 'string' && u.external_id) canonicalByExt.set(u.external_id, id)
+  }
+  const duplicateIds = new Set<string>()
+  if (canonicalByICal.size > 0) {
+    const { data: rows } = await admin.from('board_items')
+      .select('id, ical_uid').eq('source', 'google').is('deleted_at', null)
+      .in('ical_uid', [...canonicalByICal.keys()])
+    for (const row of (rows as Array<{ id: string; ical_uid: string | null }> | null) ?? []) {
+      const winner = row.ical_uid ? canonicalByICal.get(row.ical_uid) : null
+      if (winner && row.id !== winner && !canonicalIds.has(row.id)) duplicateIds.add(row.id)
+    }
+  }
+  if (canonicalByExt.size > 0) {
+    const { data: rows } = await admin.from('board_items')
+      .select('id, external_id').eq('source', 'google').is('deleted_at', null)
+      .in('external_id', [...canonicalByExt.keys()])
+    for (const row of (rows as Array<{ id: string; external_id: string | null }> | null) ?? []) {
+      const winner = row.external_id ? canonicalByExt.get(row.external_id) : null
+      if (winner && row.id !== winner && !canonicalIds.has(row.id)) duplicateIds.add(row.id)
+    }
+  }
+  if (duplicateIds.size > 0) {
+    const hiddenAt = new Date().toISOString()
+    await admin.from('board_items')
+      .update({ deleted_at: hiddenAt, updated_at: hiddenAt })
+      .in('id', [...duplicateIds])
+  }
   const noLongerReturnedIds = existing
     .filter(r => !r.deleted_at && r.external_id && !fetchedExternalIds.has(r.external_id) && liesInActiveWindow(r))
     .map(r => r.id)
@@ -1315,7 +1359,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // (Papierbak) drawer herstelbaar.
   void existing
   void seenIds
-  const removed = irrelevantIds.length
+  const removed = irrelevantIds.length + duplicateIds.size
 
   // VERWIJDERD: de oude 'auto-cleanup non-google rows met dezelfde naam
   // als een synced Google item' veegde handmatige projecten weg zodra
