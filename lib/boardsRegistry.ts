@@ -6,6 +6,15 @@
 import type { BoardConfig, ColumnDef } from './boards'
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
+import { isOnDemoRoute, notifyDemoBlocked, DEMO_BOARD_IDS } from './demoFixtures'
+
+// Verzonnen bord-config voor /demo — zelfde vorm als de echte 5 borden,
+// zodat de 'Agenda's'-sectie in de (hergebruikte) Sidebar er precies zo
+// uitziet, maar met nep-klantnamen i.p.v. de echte.
+const DEMO_FALLBACK: BoardConfig[] = [
+  { id: DEMO_BOARD_IDS[0], name: DEMO_BOARD_IDS[0], emoji: '🎬', color: '#B0C6EB', columns: [] },
+  { id: DEMO_BOARD_IDS[1], name: DEMO_BOARD_IDS[1], emoji: '🎨', color: '#D8935B', columns: [] },
+]
 
 const LS_KEY = 'yoko-boards-registry'
 const UPDATE_EVENT = 'yoko-boards-registry-update'
@@ -63,6 +72,7 @@ const FALLBACK: BoardConfig[] = [
 let cached: BoardConfig[] | null = null
 
 function readCache(): BoardConfig[] {
+  if (isOnDemoRoute()) return DEMO_FALLBACK
   if (cached) return cached
   if (typeof window === 'undefined') return FALLBACK
   try {
@@ -90,6 +100,7 @@ function writeCache(boards: BoardConfig[]): void {
 // zodat de wijziging bij alle gebruikers terugkomt. Heeft geen effect op
 // andere borden of overige board-config-velden.
 export async function setBoardColumns(boardId: string, columns: ColumnDef[]): Promise<void> {
+  if (isOnDemoRoute()) { notifyDemoBlocked(); return }
   const current = readCache()
   const idx = current.findIndex(b => b.id === boardId)
   if (idx < 0) return
@@ -116,6 +127,7 @@ export function onBoardsRegistryUpdate(handler: () => void): () => void {
 type Row = { id: string; name: string; emoji: string | null; color: string | null; columns: ColumnDef[] | null; position: number | null }
 
 export async function pullBoardsFromRemote(): Promise<boolean> {
+  if (isOnDemoRoute()) return false
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
   const { data, error } = await supabase
@@ -138,6 +150,7 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
 }
 
 export async function upsertBoard(cfg: BoardConfig, position: number): Promise<boolean> {
+  if (isOnDemoRoute()) { notifyDemoBlocked(); return false }
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
   const { error } = await supabase.from('boards').upsert({
@@ -153,6 +166,7 @@ export async function upsertBoard(cfg: BoardConfig, position: number): Promise<b
 }
 
 export async function deleteBoard(id: string): Promise<boolean> {
+  if (isOnDemoRoute()) { notifyDemoBlocked(); return false }
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
   const { error } = await supabase.from('boards').delete().eq('id', id)
@@ -161,6 +175,7 @@ export async function deleteBoard(id: string): Promise<boolean> {
 
 let boardsChannel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
 export function subscribeRemoteBoards(): () => void {
+  if (isOnDemoRoute()) return () => {}
   if (!supabase) return () => {}
   if (boardsChannel) return () => {}
   const ch = supabase.channel('boards')

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
+import { isOnDemoRoute } from './demoFixtures'
 
 export type PageDoc = {
   id: string
@@ -24,11 +25,16 @@ const MAX_RECENT = 50
 
 // ─── Doc folders (subfolders inside the Documenten section) ──────────────────
 export function loadDocFolders(): DocFolder[] {
+  // /demo start altijd leeg — een gedeelde localStorage-cache van een
+  // échte sessie in dezelfde browser mag hier nooit doorheen schemeren
+  // (paginanamen/inhoud kunnen alles bevatten).
+  if (isOnDemoRoute()) return []
   if (typeof window === 'undefined') return []
   try { const s = localStorage.getItem(FOLDERS_KEY); return s ? JSON.parse(s) : [] } catch { return [] }
 }
 
 export function saveDocFolders(folders: DocFolder[]): void {
+  if (isOnDemoRoute()) return
   if (typeof window === 'undefined') return
   localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
   window.dispatchEvent(new CustomEvent('yoko-pages-update'))
@@ -60,6 +66,7 @@ export function deletePage(id: string): void {
 }
 
 export function loadRecentPageIds(): string[] {
+  if (isOnDemoRoute()) return []
   if (typeof window === 'undefined') return []
   try {
     const s = localStorage.getItem(RECENT_KEY)

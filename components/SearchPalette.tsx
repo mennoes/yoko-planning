@@ -14,10 +14,16 @@ import vlaanderenRaw from '@/data/boards/vlaanderen.json'
 import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import { pullAccounts } from '@/lib/accountsStore'
 import type { BoardGroup } from '@/lib/boards'
+import { isOnDemoRoute, buildDemoBoards, demoNavigate } from '@/lib/demoFixtures'
 
-const BOARD_RAW: Record<string, { groups: unknown[] }> = {
+const REAL_BOARD_RAW: Record<string, { groups: unknown[] }> = {
   yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
   vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
+}
+// /demo doorzoekt de verzonnen borden i.p.v. de echte 5 — anders zou
+// zoeken hier (via de fallback-seed) altijd echte klantdata tonen.
+function boardRaw(): Record<string, { groups: unknown[] }> {
+  return isOnDemoRoute() ? buildDemoBoards() : REAL_BOARD_RAW
 }
 
 type Result = {
@@ -33,7 +39,8 @@ type TodoSection = { id: string; title: string; emoji: string; items: { id: stri
 
 function loadTodoSections(): TodoSection[] {
   if (typeof window === 'undefined') return []
-  try { const s = localStorage.getItem('yoko-todos'); return s ? JSON.parse(s) : [] } catch { return [] }
+  const key = isOnDemoRoute() ? 'yoko-demo-todos-sections' : 'yoko-todos'
+  try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : [] } catch { return [] }
 }
 
 export default function SearchPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -102,8 +109,9 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
     }
 
     // Board items
+    const raw = boardRaw()
     for (const board of BOARD_NAMES) {
-      const groups = loadGroups(board, BOARD_RAW[board].groups as BoardGroup[])
+      const groups = loadGroups(board, (raw[board]?.groups as BoardGroup[] | undefined) ?? [])
       for (const g of groups) for (const item of g.items) {
         all.push({ id: `board-${board}-${item.id}`, title: item.name, subtitle: `${board} · ${g.name}`, href: `/projects/${board}`, emoji: '📌' })
       }
@@ -149,7 +157,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
 
   function go(r: Result) {
     if (r.action) { r.action(); return }
-    onClose(); router.push(r.href)
+    onClose(); demoNavigate(router, r.href)
   }
 
   function quickAddTodo() {
@@ -159,8 +167,8 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
     let inbox = sections.find(s => s.id === 'inbox')
     if (!inbox) { inbox = { id: 'inbox', title: 'Inbox', emoji: '📥', items: [] }; sections.unshift(inbox) }
     inbox.items = [...inbox.items, { id: Date.now().toString(), text, done: false }]
-    localStorage.setItem('yoko-todos', JSON.stringify(sections))
-    onClose(); router.push('/todos')
+    localStorage.setItem(isOnDemoRoute() ? 'yoko-demo-todos-sections' : 'yoko-todos', JSON.stringify(sections))
+    onClose(); demoNavigate(router, '/todos')
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -205,7 +213,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
                   + Voeg <strong>&ldquo;{query.trim()}&rdquo;</strong> toe als todo (Inbox)
                 </button>
               )}
-              <button onClick={() => { onClose(); router.push('/pages/vakantie') }}
+              <button onClick={() => { onClose(); demoNavigate(router, '/pages/vakantie') }}
                 style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 14, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 16 }}>🏝</span>
                 <span style={{ fontWeight: 600 }}>Vakantie aanvragen</span>

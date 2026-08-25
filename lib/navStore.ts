@@ -39,6 +39,17 @@ const DEFAULT_PROJECTS: NavItem[] = [
   { id: 'dienjaar',   label: 'Dienjaar',  href: '/projects/dienjaar',   color: '#00c875' },
 ]
 
+// /demo mag nooit de echte klantnamen tonen in de 'Agenda's'-sectie —
+// verzonnen borden i.p.v. DEFAULT_PROJECTS. isOnDemoRoute leest
+// window.location rechtstreeks (dit bestand is geen React-component).
+function isOnDemoRoute(): boolean {
+  return typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')
+}
+const DEMO_PROJECTS: NavItem[] = [
+  { id: 'Noorderlicht Media', label: 'Noorderlicht Media', href: '/demo/planning', color: '#B0C6EB' },
+  { id: 'Kaap Studio',        label: 'Kaap Studio',        href: '/demo/planning', color: '#D8935B' },
+]
+
 function load<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
   try {
@@ -65,11 +76,11 @@ function reconcileDocsList(items: NavItem[]): NavItem[] {
   return missing.length > 0 ? [...withoutLegacyTrash, ...missing] : withoutLegacyTrash
 }
 
-export function loadDocs():     NavItem[] { return reconcileDocsList(load(DOCS_KEY, DEFAULT_DOCS)) }
-export function loadProjects(): NavItem[] { return load(PROJECTS_KEY, DEFAULT_PROJECTS) }
+export function loadDocs():     NavItem[] { return isOnDemoRoute() ? DEFAULT_DOCS : reconcileDocsList(load(DOCS_KEY, DEFAULT_DOCS)) }
+export function loadProjects(): NavItem[] { return isOnDemoRoute() ? DEMO_PROJECTS : load(PROJECTS_KEY, DEFAULT_PROJECTS) }
 
-export function saveDocs(items: NavItem[])     { save(DOCS_KEY,     items) }
-export function saveProjects(items: NavItem[]) { save(PROJECTS_KEY, items) }
+export function saveDocs(items: NavItem[])     { if (!isOnDemoRoute()) save(DOCS_KEY,     items) }
+export function saveProjects(items: NavItem[]) { if (!isOnDemoRoute()) save(PROJECTS_KEY, items) }
 
 // ─── Unified sidebar sections (dynamic folders) ───────────────────────────────
 export type SidebarSection = {
@@ -83,7 +94,7 @@ const SECTIONS_KEY = 'yoko-sidebar-sections-v3'
 
 function defaultSections(): SidebarSection[] {
   return [
-    { id: 'agendas', name: "Agenda's",   type: 'projects', items: load(PROJECTS_KEY, DEFAULT_PROJECTS) },
+    { id: 'agendas', name: "Agenda's",   type: 'projects', items: loadProjects() },
     { id: 'pagina',  name: "Pagina's",   type: 'docs',     items: load(DOCS_KEY,     DEFAULT_DOCS)     },
     { id: 'docs2',   name: 'Documenten', type: 'pages',    items: [] },
   ]
@@ -107,6 +118,10 @@ function reconcileDocsItems(sections: SidebarSection[]): SidebarSection[] {
 }
 
 export function loadSections(): SidebarSection[] {
+  // /demo slaat de gedeelde localStorage-cache (mogelijk gevuld door een
+  // échte sessie in dezelfde browser) altijd over — anders lekt een
+  // hernoemde/aangepaste sidebar van de echte gebruiker door in de demo.
+  if (isOnDemoRoute()) return defaultSections()
   if (typeof window === 'undefined') return defaultSections()
   try {
     const raw = localStorage.getItem(SECTIONS_KEY)
@@ -117,6 +132,7 @@ export function loadSections(): SidebarSection[] {
 
 export function saveSections(sections: SidebarSection[]): void {
   if (typeof window === 'undefined') return
+  if (isOnDemoRoute()) return
   localStorage.setItem(SECTIONS_KEY, JSON.stringify(sections))
   window.dispatchEvent(new CustomEvent('yoko-nav-update'))
 }
