@@ -4225,6 +4225,7 @@ export default function PlanningPage() {
   const [shareOpen,    setShareOpen]    = useState(false)
   const [copiedBoard,  setCopiedBoard]  = useState<string | null>(null)
   const [overflowOpen, setOverflowOpen] = useState(false)
+  const [todayEdge, setTodayEdge] = useState<'left' | 'right' | null>(null)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
   const [freelancersOpen, setFreelancersOpen] = useState<boolean>(() => {
@@ -4255,11 +4256,17 @@ export default function PlanningPage() {
   // 100 = standaard, 180 = ruim. Wordt als prop doorgegeven aan
   // TimelineBars/WeekTimeGrid/DraggableBar.
   const [rowZoomPct, setRowZoomPct] = useState<number>(() => {
-    if (typeof window === 'undefined') return 100
-    const v = parseFloat(localStorage.getItem('planning-row-zoom') ?? '100')
-    return Number.isFinite(v) ? Math.max(70, Math.min(180, v)) : 100
+    if (typeof window === 'undefined') return 70
+    // Eenmalige nieuwe compacte standaard. Daarna onthouden we weer gewoon
+    // iedere persoonlijke aanpassing.
+    if (localStorage.getItem('planning-row-zoom-default-v2') !== '1') return 70
+    const v = parseFloat(localStorage.getItem('planning-row-zoom') ?? '70')
+    return Number.isFinite(v) ? Math.max(70, Math.min(180, v)) : 70
   })
-  useEffect(() => { localStorage.setItem('planning-row-zoom', String(rowZoomPct)) }, [rowZoomPct])
+  useEffect(() => {
+    localStorage.setItem('planning-row-zoom', String(rowZoomPct))
+    localStorage.setItem('planning-row-zoom-default-v2', '1')
+  }, [rowZoomPct])
   const rowScale = rowZoomPct / 100
   const [hideMeetings, setHideMeetings] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
@@ -5293,6 +5300,30 @@ export default function PlanningPage() {
     return null
   }, [cols, nameW, namePad])
 
+  // Als vandaag horizontaal buiten beeld valt, toon een klikbare indicator
+  // tegen de betreffende rand. Zo blijft de richting naar vandaag zichtbaar.
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const update = () => {
+      if (nowOffset === null) {
+        const nowMs = Date.now()
+        const first = cols[0]?.rangeStart.getTime()
+        const last = cols[cols.length - 1]?.rangeEnd.getTime()
+        setTodayEdge(first != null && nowMs < first ? 'left' : last != null && nowMs > last ? 'right' : null)
+        return
+      }
+      const screenX = nowOffset - el.scrollLeft
+      if (screenX < nameW + namePad) setTodayEdge('left')
+      else if (screenX > el.clientWidth) setTodayEdge('right')
+      else setTodayEdge(null)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
+  }, [nowOffset, cols, nameW, namePad])
+
   // Formatted current date for header subtitle
   const today = new Date()
   const todayLabel = today.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -5333,7 +5364,6 @@ export default function PlanningPage() {
           <div style={segGroup}>
             <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
             <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
-            <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Vandaag</button>
             <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
             <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
           </div>
@@ -5390,7 +5420,6 @@ export default function PlanningPage() {
             <>
               <div style={{ ...segGroup, marginLeft: 'auto' }}>
                 <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
-                <button onClick={goToday}  style={segBtn(false, 'var(--accent)', 700)}>Nu</button>
                 <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
               </div>
               <button onClick={() => setOverflowOpen(true)} aria-label="Meer acties"
@@ -5400,23 +5429,6 @@ export default function PlanningPage() {
             </>
           ) : (
             <>
-              <span style={separator} />
-              <button onClick={() => setPeopleOpen(true)} style={ghostBtn(filterMembers.size > 0)}>
-                <IconUsers size={14} style={{ marginRight: 6 }} />Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
-              </button>
-              <button onClick={() => setAgendasOpen(true)} style={ghostBtn(false)}>
-                <IconBoard size={14} style={{ marginRight: 6 }} />Agenda&apos;s
-              </button>
-              <span style={separator} />
-              <button onClick={() => setUrenOpen(true)} style={ghostBtn(false)}>
-                <IconHourglass size={14} style={{ marginRight: 6 }} />Capaciteit
-              </button>
-              {/* Meetings-knop verhuisd naar naast Vandaag (bovenaan). */}
-              <span style={separator} />
-              <button onClick={() => setNewItemOpen(true)} style={{ ...ghostBtn(false), background: 'var(--accent)', color: '#000', borderColor: 'var(--accent)' }}>
-                + Nieuw item
-              </button>
-
               {/* View size segmented (desktop) */}
               <span style={separator} />
               <div style={segGroup}>
@@ -5437,14 +5449,11 @@ export default function PlanningPage() {
                 ))}
               </div>
 
-              {/* Right-most: Sorteren + overflow (Exporteer + Deel + Verschuif) */}
+              {/* Eén rustig menu voor filters, beheer en secundaire acties. */}
               <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, position: 'relative' }}>
-                <button onClick={() => setEditOrder(o => !o)} title="Volgorde teamleden" style={ghostBtn(editOrder)}>
-                  <IconSort size={14} style={{ marginRight: 6 }} />{editOrder ? 'Klaar' : 'Sorteren'}
-                </button>
                 <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
                   style={ghostBtn(overflowOpen)}>
-                  <IconMore size={16} />
+                  <IconMore size={16} style={{ marginRight: 6 }} />Menu
                 </button>
                 {overflowOpen && (
                   <>
@@ -5457,6 +5466,23 @@ export default function PlanningPage() {
                       boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
                       display: 'flex', flexDirection: 'column', gap: 2,
                     }}>
+                      <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}>
+                        <span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item
+                      </button>
+                      <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                      <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}>
+                        <IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
+                      </button>
+                      <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}>
+                        <IconBoard size={14} /> Agenda&apos;s
+                      </button>
+                      <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}>
+                        <IconHourglass size={14} /> Capaciteit
+                      </button>
+                      <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}>
+                        <IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}
+                      </button>
+                      <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                       <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }}
                         style={overflowItemStyle}>
                         <IconDownload size={14} /> Exporteer als iCal
@@ -5482,7 +5508,7 @@ export default function PlanningPage() {
       </header>
 
       {/* ── Mobile overflow menu ── */}
-      {overflowOpen && (
+      {isMobile && overflowOpen && (
         <Popup title="Acties" onClose={() => setOverflowOpen(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {[
@@ -5723,6 +5749,19 @@ export default function PlanningPage() {
       })()}
 
       {/* ── Grid — only this scrolls (both axes) ── */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      {todayEdge && (
+        <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
+          position: 'absolute', top: 8, [todayEdge]: 8, zIndex: 80,
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '5px 9px', borderRadius: 999, border: 'none',
+          background: 'var(--yellow)', color: '#1a1a1a',
+          boxShadow: '0 3px 10px rgba(216, 182, 46, 0.45)',
+          fontSize: 9.5, fontWeight: 900, letterSpacing: '0.06em', cursor: 'pointer',
+        }}>
+          {todayEdge === 'left' ? '←' : '→'} VANDAAG
+        </button>
+      )}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
         onWheel={(ev) => {
           // Cmd/Ctrl + wheel → verticale zoom (bar-hoogte). Trackpad-pinch
@@ -5733,7 +5772,7 @@ export default function PlanningPage() {
           const delta = ev.deltaY > 0 ? -5 : 5
           setRowZoomPct(p => Math.max(70, Math.min(180, p + delta)))
         }}
-        style={{ flex: 1, overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
+        style={{ height: '100%', overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
         <div style={{ minWidth: totalWidth, position: 'relative' }}>
 
           {/* Mobile title-rij — staat IN de scrollable area zodat 'ie
@@ -5773,7 +5812,7 @@ export default function PlanningPage() {
                   kolommen). Eerder z=14: dan bleef de lijn ergens achter
                   een sticky achtergrond hangen en zag de gebruiker een
                   gat in 't midden. z=30 trekt 'm door tot aan de pill (z=50). */}
-              <div aria-hidden data-today-marker style={{
+              <div data-today-marker style={{
                 position: 'absolute', top: 0, bottom: 0,
                 left: nowOffset, width: 0,
                 borderLeft: '2px solid var(--yellow)',
@@ -5787,7 +5826,7 @@ export default function PlanningPage() {
                   Voorheen zat 'ie als child binnen de lijn-div, en daarmee
                   opgesloten in de stacking context van z=3 — kolom-header
                   schoof 'm onzichtbaar. */}
-              <div aria-hidden style={{
+              <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
                 position: 'sticky', top: 4,
                 marginLeft: nowOffset - 32, width: 64,
                 padding: '2px 0',
@@ -5796,8 +5835,8 @@ export default function PlanningPage() {
                 letterSpacing: '0.08em', textAlign: 'center',
                 borderRadius: 999,
                 boxShadow: '0 2px 6px rgba(216, 182, 46, 0.4)',
-                zIndex: 50, pointerEvents: 'none',
-              }}>VANDAAG</div>
+                zIndex: 50, cursor: 'pointer', border: 'none',
+              }}>VANDAAG</button>
             </>
           )}
 
@@ -5814,19 +5853,18 @@ export default function PlanningPage() {
                     col-header-slider. */}
                 {!isMobile && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    justifyContent: 'space-between',
-                    position: 'absolute', left: 4, top: 4, bottom: -40, zIndex: 23,
-                    padding: '4px 4px', borderRadius: 8, width: 30,
+                    justifyContent: 'center', gap: 1,
+                    position: 'absolute', left: 4, top: 4, height: 58, zIndex: 23,
+                    padding: '2px 3px', borderRadius: 8, width: 26,
                     background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
                     title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
-                    <span aria-hidden style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1 }}>↕</span>
                     <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
                       title="Hogere balken"
-                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)' }}>{rowZoomPct}%</span>
+                      style={{ width: 18, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1 }}>{rowZoomPct}</span>
                     <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
                       title="Lagere balken"
-                      style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
+                      style={{ width: 18, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
                   </div>
                 )}
                 {!isMobile && <div style={{ width: 32, flexShrink: 0 }} />}
@@ -5859,17 +5897,6 @@ export default function PlanningPage() {
                     native dropdown niet betrouwbaar opent binnen sticky
                     parents in alle browsers. */}
                 <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
-                {/* 'Vandaag' verhuisd naar links boven, naast de zoom-
-                    controls — meer logisch dan helemaal rechtsboven. */}
-                <button onClick={goToday} title="Spring naar vandaag"
-                  style={{
-                    padding: '4px 10px', borderRadius: 6, marginLeft: 4,
-                    background: 'var(--accent)', border: 'none',
-                    color: '#000', fontSize: 11.5, fontWeight: 500,
-                    cursor: 'pointer', flexShrink: 0,
-                  }}>
-                  Vandaag
-                </button>
                 {/* Meetings-toggle — ontbrak hier terwijl 't wél in de
                     maand/kwartaal-header stond, waardoor de knop in de
                     (meest gebruikte) week/dag-zoom onvindbaar was. */}
@@ -5922,15 +5949,6 @@ export default function PlanningPage() {
               {!monthGroups && (
                 <>
                   <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
-                  <button onClick={goToday} title="Spring naar vandaag"
-                    style={{
-                      padding: '4px 10px', borderRadius: 6, marginRight: 6,
-                      background: 'var(--accent)', border: 'none',
-                      color: '#000', fontSize: 11.5, fontWeight: 500,
-                      cursor: 'pointer', flexShrink: 0,
-                    }}>
-                    Vandaag
-                  </button>
                   {/* Meetings-toggle direct rechts naast Vandaag zodat je 'm
                       binnen handbereik hebt. */}
                   <button onClick={() => setHideMeetings(v => !v)}
@@ -6366,6 +6384,7 @@ export default function PlanningPage() {
           {projects.length} items · {team.length} teamleden · {Object.keys(BOARD_COLORS).length} agenda&apos;s
           {!isMobile && <> · sleep een balk om datums te verschuiven · klik voor details</>}
         </div>
+      </div>
       </div>
 
       {detailProject && (
