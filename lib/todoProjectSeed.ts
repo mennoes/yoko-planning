@@ -27,6 +27,7 @@ export type ProjectSeedLink = {
   name:   string
   startDate?: string | null
   endDate?:   string | null
+  status?:    string | null
 }
 
 const RAW: Record<string, { groups: BoardGroup[] }> = {
@@ -48,8 +49,9 @@ export function loadAllTodoProjects(): ProjectSeedLink[] {
         board, itemId: item.id, name: item.name,
         startDate: item.startDate ?? null,
         endDate: item.endDate ?? null,
+        status: item.status ?? null,
       })
-      const subs = (item.subitems as Array<{ name?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+      const subs = (item.subitems as Array<{ name?: string; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
       subs.forEach((sub, idx) => {
         out.push({
           board,
@@ -57,6 +59,7 @@ export function loadAllTodoProjects(): ProjectSeedLink[] {
           name: sub.name ?? item.name,
           startDate: sub.startDate ?? null,
           endDate: sub.endDate ?? sub.startDate ?? null,
+          status: sub.status ?? null,
         })
       })
     }

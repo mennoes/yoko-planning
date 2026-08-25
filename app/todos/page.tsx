@@ -334,8 +334,17 @@ function TodoCard({
   }
   const thisWeekStart = weekStartOf(todayDate)
   const projectDates = new Map<string, { start: string | null; end: string | null }>()
+  const childDatesByParent = new Map<string, Array<{ start: string | null; end: string | null; status: string | null }>>()
   for (const p of allProjects) {
-    projectDates.set(`${p.board}:${p.itemId}`, { start: p.startDate ?? null, end: p.endDate ?? null })
+    const key = `${p.board}:${p.itemId}`
+    projectDates.set(key, { start: p.startDate ?? null, end: p.endDate ?? null })
+    const marker = p.itemId.lastIndexOf('__si')
+    if (marker > 0) {
+      const parentKey = `${p.board}:${p.itemId.slice(0, marker)}`
+      const children = childDatesByParent.get(parentKey) ?? []
+      children.push({ start: p.startDate ?? null, end: p.endDate ?? p.startDate ?? null, status: p.status ?? null })
+      childDatesByParent.set(parentKey, children)
+    }
   }
   // Per item: welke week-start hoort 'ie bij?
   // - geen projectRef of geen datum → deze week
@@ -344,7 +353,21 @@ function TodoCard({
   const weekStartIsoForItem = (i: TodoItem): string => {
     const tIso = thisWeekStart.toISOString().slice(0, 10)
     if (!i.projectRef) return tIso
-    const d = projectDates.get(`${i.projectRef.board}:${i.projectRef.itemId}`)
+    const projectKey = `${i.projectRef.board}:${i.projectRef.itemId}`
+    const d = projectDates.get(projectKey)
+    // Bij een langlopend hoofdproject zijn de concrete subitems leidend.
+    // Pak het eerste subitem dat deze week of later nog speelt; zo belandt
+    // een oud gestart project niet automatisch eeuwig onder 'Deze week'.
+    const relevantChild = (childDatesByParent.get(projectKey) ?? [])
+      .filter(child => (child.status ?? '').toLowerCase() !== 'done' && (!child.end || child.end >= tIso))
+      .sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''))[0]
+    if (relevantChild?.start) {
+      const childStart = new Date(relevantChild.start)
+      if (!Number.isNaN(childStart.getTime())) {
+        const childWeek = weekStartOf(childStart)
+        return childWeek.getTime() < thisWeekStart.getTime() ? tIso : childWeek.toISOString().slice(0, 10)
+      }
+    }
     if (!d?.start) return tIso
     const s = new Date(d.start)
     if (Number.isNaN(s.getTime())) return tIso
@@ -357,6 +380,18 @@ function TodoCard({
     if (!showWeekSplit) return [{ iso: '', label: '', items: open }]
     const map = new Map<string, TodoItem[]>()
     for (const it of open) {
+      if (it.projectRef) {
+        const projectKey = `${it.projectRef.board}:${it.projectRef.itemId}`
+        const children = childDatesByParent.get(projectKey)
+        // Een hoofdproject mét geplande subitems, maar zonder één open
+        // subitem vanaf deze week, heeft nu geen concrete todo en blijft weg.
+        if (children && children.length > 0) {
+          const hasRelevantChild = children.some(child =>
+            (child.status ?? '').toLowerCase() !== 'done' &&
+            (!child.end || child.end >= thisWeekStart.toISOString().slice(0, 10)))
+          if (!hasRelevantChild) continue
+        }
+      }
       const k = weekStartIsoForItem(it)
       const arr = map.get(k) ?? []
       arr.push(it); map.set(k, arr)
