@@ -102,7 +102,7 @@ function Inner({ children }: { children: ReactNode }) {
     // Wait for the initial session check before redirecting — otherwise a hard
     // refresh on a deep link bounces to /login and back.
     if (!authChecked) return
-    if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share') && !pathname.startsWith('/auth')) {
+    if (requiresAuth && !isAuthenticated && pathname !== '/login' && !pathname.startsWith('/share') && !pathname.startsWith('/auth') && !pathname.startsWith('/demo')) {
       const next = pathname + (typeof window !== 'undefined' ? window.location.search : '')
       router.replace(`/login?next=${encodeURIComponent(next)}`)
     }
@@ -305,8 +305,8 @@ function Inner({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Login + share + auth routes: geen sidebar, geen ProfileSetup, geen auth-redirect
-  if (pathname === '/login' || pathname.startsWith('/share') || pathname.startsWith('/auth')) {
+  // Login + share + auth + demo routes: geen sidebar, geen ProfileSetup, geen auth-redirect
+  if (pathname === '/login' || pathname.startsWith('/share') || pathname.startsWith('/auth') || pathname.startsWith('/demo')) {
     return (
       <>
         <ThemeApply />
