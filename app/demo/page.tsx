@@ -47,11 +47,11 @@ const RAW: Record<string, { groups: unknown[] }> = buildDemoBoards()
 type TodoItem = { id: string; text: string; done: boolean }
 
 type SectionId = 'taken' | 'werkdruk' | 'team' | 'deadlines' | 'overload' | 'documenten' | 'paginas'
-// DEMO: 'paginas' (Kantoor/Team/Accounts/HR-links) en 'documenten'
-// (+Nieuw document → /pages/[id]) bewust weggelaten — die wijzen naar
-// echte, auth-gated routes buiten /demo en zouden een bezoeker op een
-// login-scherm laten stranden.
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload']
+// DEMO: 'paginas' (Kantoor/Team/Accounts/HR-quicklinks) bewust weggelaten
+// — die wijzen naar echte, auth-gated routes zonder demo-equivalent.
+// 'documenten' (recente pagina's / + Nieuw document) werkt inmiddels wél
+// — /demo/pages/[id] bestaat — dus die blijft gewoon staan.
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload', 'documenten']
 
 type RemoteProfile = {
   member_id:       string | null
@@ -218,10 +218,8 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
   }
 
   function openDetail() {
-    // DEMO: geen bord-detail-drawer beschikbaar — Planning toont hetzelfde
-    // item wél (klik 'm daar open) i.p.v. naar de echte, auth-gated
-    // bord-pagina te springen.
-    router.push('/demo/planning')
+    const url = `/demo/projects/${encodeURIComponent(item.board)}?focus=${encodeURIComponent(item.rawItemId)}&drawer=${encodeURIComponent(item.rawItemId)}`
+    router.push(url)
   }
 
   const rowContent = (
@@ -335,11 +333,11 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
               Reset naar automatisch
             </button>
           )}
-          <Link href="/demo/planning"
+          <Link href={`/demo/projects/${encodeURIComponent(item.board)}`}
             style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
               fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
               background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
-            Open in Planning →
+            Open agenda →
           </Link>
         </div>,
         document.body,
@@ -509,7 +507,7 @@ export default function HomePage() {
     try {
       const saved = localStorage.getItem('home-demo-sections-order')
       if (saved) {
-        const parsed: SectionId[] = (JSON.parse(saved) as SectionId[]).filter((id): id is SectionId => id !== 'paginas' && id !== 'documenten')
+        const parsed: SectionId[] = (JSON.parse(saved) as SectionId[]).filter((id): id is SectionId => id !== 'paginas')
         if (Array.isArray(parsed) && DEFAULT_SECTION_ORDER.every(id => parsed.includes(id))) {
           setSectionOrder(parsed)
         }
@@ -682,7 +680,7 @@ export default function HomePage() {
 
   function createNewPage() {
     const id   = Date.now().toString()
-    const href = `/pages/${id}`
+    const href = `/demo/pages/${id}`
     const docs = loadDocs()
     saveDocs([...docs, { id, label: 'Naamloos document', href, icon: '📄' }])
     router.push(href)
@@ -1017,8 +1015,8 @@ export default function HomePage() {
                         })()}
                       </span>
                       {t.projectRef && (
-                        <Link href="/demo/planning"
-                          title={`Open ${t.projectRef.board} in Planning`}
+                        <Link href={`/demo/projects/${encodeURIComponent(t.projectRef.board)}`}
+                          title={`Open ${t.projectRef.board}-agenda`}
                           onClick={e => e.stopPropagation()}
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -1280,7 +1278,7 @@ export default function HomePage() {
                        :              { bg: 'transparent', fg: 'var(--text-muted)' }
             const owners = (item.ownerIds ?? []).slice(0, 3)
             return (
-              <Link key={`${board}-${item.id}`} href="/demo/planning" style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
+              <Link key={`${board}-${item.id}`} href={`/demo/projects/${encodeURIComponent(board)}`} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[board] ?? 'var(--accent)', flexShrink: 0 }} />

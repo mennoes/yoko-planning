@@ -2,6 +2,7 @@
 
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
+import { isOnDemoRoute } from './demoFixtures'
 
 export type CommentReply = {
   id:        string
@@ -34,11 +35,17 @@ export function toggleReaction(reply: CommentReply, emoji: string, memberId: str
 }
 
 const KEY        = 'yoko-comments'
-const EVENT_NAME = 'yoko-comments-update'
+const DEMO_KEY    = 'yoko-demo-comments'
+const EVENT_NAME  = 'yoko-comments-update'
+// /demo krijgt z'n eigen key + event, zodat comments in de demo nooit de
+// gedeelde 'yoko-comments'-cache van een échte sessie in dezelfde
+// browser lezen/overschrijven, en nooit naar Supabase pushen.
+function activeKey(): string { return isOnDemoRoute() ? DEMO_KEY : KEY }
+function activeEvent(): string { return isOnDemoRoute() ? 'yoko-demo-comments-update' : EVENT_NAME }
 
 export function loadAllComments(): CommentThread[] {
   if (typeof window === 'undefined') return []
-  try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : [] } catch { return [] }
+  try { const s = localStorage.getItem(activeKey()); return s ? JSON.parse(s) : [] } catch { return [] }
 }
 
 export function loadCommentsFor(contextId: string): CommentThread[] {
@@ -51,8 +58,8 @@ export function loadComment(id: string): CommentThread | undefined {
 
 function writeCache(all: CommentThread[]) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(KEY, JSON.stringify(all)) } catch {}
-  window.dispatchEvent(new CustomEvent(EVENT_NAME))
+  try { localStorage.setItem(activeKey(), JSON.stringify(all)) } catch {}
+  window.dispatchEvent(new CustomEvent(activeEvent()))
 }
 
 function inferKind(contextId: string): string {
@@ -79,10 +86,11 @@ export function deleteComment(id: string): void {
 
 export function onCommentsUpdate(handler: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
-  window.addEventListener(EVENT_NAME, handler)
+  const evt = activeEvent()
+  window.addEventListener(evt, handler)
   window.addEventListener('storage', handler)
   return () => {
-    window.removeEventListener(EVENT_NAME, handler)
+    window.removeEventListener(evt, handler)
     window.removeEventListener('storage', handler)
   }
 }
@@ -166,6 +174,7 @@ function schedulePull() {
 }
 
 export function subscribeRemoteComments(): () => void {
+  if (isOnDemoRoute()) return () => {}
   if (!supabase) return () => {}
   if (channel) return () => {}
   channel = supabase.channel('comments:all')
