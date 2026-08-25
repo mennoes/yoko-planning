@@ -3245,14 +3245,9 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               {project.name}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              in → <Link
-                href={`/projects/${project.board}?focus=${encodeURIComponent(project.id.slice(project.board.length + 2))}`}
-                title="Open op het bord"
-                style={{ color, fontWeight: 600, textDecoration: 'none' }}
-                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
-                {project.board}
-              </Link>{project.group ? <> · {project.group}</> : null}
+              {/* DEMO: geen bord-tabelweergave beschikbaar — platte tekst i.p.v. link. */}
+              in → <span style={{ color, fontWeight: 600 }}>{project.board}</span>
+              {project.group ? <> · {project.group}</> : null}
               {rawItem?.source === 'google' && <span style={{ marginLeft: 8, color: '#a05400' }}>· Bewerk in Google Calendar</span>}
             </div>
             {project.parentName && project.parentName !== project.name && (

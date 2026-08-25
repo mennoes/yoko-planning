@@ -218,11 +218,10 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
   }
 
   function openDetail() {
-    // Naar de bord-pagina met focus + drawer-param. BoardRow leest 'drawer'
-    // uit de URL en opent zijn detail-drawer automatisch zodra de juiste
-    // rij gerenderd is — geen extra klik nodig.
-    const url = `/projects/${item.board}?focus=${encodeURIComponent(item.rawItemId)}&drawer=${encodeURIComponent(item.rawItemId)}`
-    router.push(url)
+    // DEMO: geen bord-detail-drawer beschikbaar — Planning toont hetzelfde
+    // item wél (klik 'm daar open) i.p.v. naar de echte, auth-gated
+    // bord-pagina te springen.
+    router.push('/demo/planning')
   }
 
   const rowContent = (
@@ -336,11 +335,11 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
               Reset naar automatisch
             </button>
           )}
-          <Link href={`/projects/${item.board}`}
+          <Link href="/demo/planning"
             style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
               fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
               background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
-            Open agenda →
+            Open in Planning →
           </Link>
         </div>,
         document.body,
@@ -1018,8 +1017,8 @@ export default function HomePage() {
                         })()}
                       </span>
                       {t.projectRef && (
-                        <Link href={`/projects/${t.projectRef.board}`}
-                          title={`Open ${t.projectRef.board}-agenda`}
+                        <Link href="/demo/planning"
+                          title={`Open ${t.projectRef.board} in Planning`}
                           onClick={e => e.stopPropagation()}
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -1226,9 +1225,10 @@ export default function HomePage() {
         return (
           <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
             <UserAvatar memberId={m.id} size={22} />
-            <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {/* DEMO: geen profielpagina beschikbaar — platte tekst i.p.v. link. */}
+            <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {m.name}
-            </Link>
+            </span>
             <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
               {tone.label}
             </span>
@@ -1243,20 +1243,13 @@ export default function HomePage() {
       )
       return (
         <div style={card}>
-          {/* Header klikbaar — springt naar /team waar je werkdagen + cap
-              kunt aanpassen. Voorheen moest je dat zelf opzoeken. */}
-          <Link href="/team" style={{ textDecoration: 'none', color: 'inherit' }}
-            title="Open Team-pagina (werkdagen + capaciteit)">
-            <div style={{ ...cardHeader, cursor: 'pointer', transition: 'background 0.12s' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-              <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <IconUsers size={isMobile ? 17 : 15} />Team vandaag
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>›</span>
-              </h2>
-            </div>
-          </Link>
+          {/* DEMO: geen Team-beheerpagina beschikbaar — kop niet klikbaar. */}
+          <div style={cardHeader}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <IconUsers size={isMobile ? 17 : 15} />Team vandaag
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
+            </h2>
+          </div>
           <div style={{ padding: '6px 0 10px' }}>
             {subHeader('Studio Yoko', yokoMembers.length, yokoAvail)}
             {yokoMembers.map(renderRow)}
@@ -1287,7 +1280,7 @@ export default function HomePage() {
                        :              { bg: 'transparent', fg: 'var(--text-muted)' }
             const owners = (item.ownerIds ?? []).slice(0, 3)
             return (
-              <Link key={`${board}-${item.id}`} href={`/projects/${board}`} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
+              <Link key={`${board}-${item.id}`} href="/demo/planning" style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[board] ?? 'var(--accent)', flexShrink: 0 }} />
@@ -1327,9 +1320,10 @@ export default function HomePage() {
           ) : overloaded.map(o => (
             <div key={o.member.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
               <UserAvatar memberId={o.member.id} size={22} />
-              <Link href={`/profile/${o.member.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {/* DEMO: geen profielpagina beschikbaar — platte tekst i.p.v. link. */}
+              <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {o.member.name}
-              </Link>
+              </span>
               <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${Math.min(o.pct, 100)}%`, background: '#C4453A' }} />
               </div>
