@@ -64,9 +64,11 @@ function isValidCategory(c: unknown): c is WorkloadCategory {
 export function classifyItem(item: { name: string; hours: number; source?: string }): WorkloadCategory {
   const n = item.name || ''
   if (VRIJ_PATTERNS.some(re => re.test(n))) return 'vrij'
+  // Alles wat rechtstreeks uit Google Agenda komt is een agenda-afspraak
+  // en wordt in Planning compact als meeting samengevat, ongeacht duur of
+  // titel. Vrij/vakantie blijft hierboven bewust de uitzondering.
+  if (item.source === 'google') return 'meeting'
   if (MEETING_PATTERNS.some(re => re.test(n))) return 'meeting'
-  // Short Google events without a clear "maken" name → meeting
-  if (item.source === 'google' && item.hours > 0 && item.hours <= 1.5) return 'meeting'
   if (OVERHEAD_PATTERNS.some(re => re.test(n))) return 'overhead'
   return 'maken'
 }
@@ -75,6 +77,9 @@ export function effectiveCategory(
   item: { name: string; hours: number; source?: string },
   override?: WorkloadCategory | null,
 ): WorkloadCategory {
+  // Google Agenda blijft altijd meeting; alleen een bewuste Vrij-markering
+  // mag die bronclassificatie overrulen.
+  if (item.source === 'google') return override === 'vrij' ? 'vrij' : classifyItem(item)
   if (isValidCategory(override)) return override
   return classifyItem(item)
 }

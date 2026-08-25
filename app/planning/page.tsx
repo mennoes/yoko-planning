@@ -2067,9 +2067,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Google-meetings worden in Overzicht niet langer als balken gestapeld.
   // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
   // terwijl een hover de concrete afspraken en tijden laat zien.
-  const googleMeetings = (hideMeetings ? [] : owned).filter(p => p.source === 'google' && effectiveCategory({
-    name: p.name, hours: p.estHours || 0, source: p.source,
-  }, overrides[p.id]) === 'meeting')
+  const googleMeetings = (hideMeetings ? [] : owned).filter(p =>
+    p.source === 'google' && !isVrijTitle(p.name))
   const meetingsByDay = new Map<string, Project[]>()
   if (zoom === 'week') {
     for (const p of googleMeetings) {
@@ -2152,7 +2151,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       //      heeft gezet (override), OF
       //   2. 't echt 'n Google-event is (source==='google').
       const explicitCat = overrides[p.id]
-      const isMeeting = effectiveCategory({ name: p.name, hours: p.estHours || 0, source: p.source }, explicitCat) === 'meeting'
+      const isMeeting = (p.source === 'google' && !isVrijTitle(p.name))
+        || effectiveCategory({ name: p.name, hours: p.estHours || 0, source: p.source }, explicitCat) === 'meeting'
       // Google-meetings zitten voortaan in de compacte dagteller hierboven,
       // niet meer als losse gekleurde balken tussen het projectwerk.
       if (p.source === 'google' && isMeeting) return null
