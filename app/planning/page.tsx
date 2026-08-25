@@ -1947,7 +1947,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
   const anchorRef = useRef<HTMLButtonElement>(null)
   const closeTimer = useRef<number | null>(null)
   const sorted = [...meetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
-  const open = meetings.length > 1 && (hovered || pinned)
+  const open = hovered || pinned
 
   const cancelClose = () => {
     if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
@@ -2006,7 +2006,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
               background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
               padding: 6, boxShadow: '0 16px 40px rgba(0,0,0,0.30), 0 2px 6px rgba(0,0,0,0.12)' }}>
             <div style={{ padding: '5px 7px 7px', fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {meetings.length} meetings
+              {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
             {sorted.map(meeting => (
               <button key={meeting.id} onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
