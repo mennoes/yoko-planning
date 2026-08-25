@@ -5488,31 +5488,12 @@ export default function PlanningPage() {
         {/* Title + nav — desktop only; op mobiel scrollt 't mee bovenin de
             grid (zie title-row in de scrollable area). */}
         {!isMobile && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
-                  Planning
-                </h1>
-              </div>
-              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                {todayLabel}
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 4, fontSize: 13, color: 'var(--text-secondary)' }}>
-              <span>
-                <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
-                <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>{kpis.totalHours}/{kpis.totalCap}u</span>
-              </span>
-              <span style={{ width: 1, height: 12, background: 'var(--border)' }} />
-              <span>
-                <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
-                <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>deadl.</span>
-              </span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 7, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, marginRight: 4, letterSpacing: '-0.04em', lineHeight: 1 }}>
+              Planning
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ ...segGroup, height: 34, alignItems: 'stretch' }}>
               {(['compact', 'large'] as ViewSize[]).map(v => (
                 <button key={v} onClick={() => {
@@ -5563,6 +5544,22 @@ export default function PlanningPage() {
                 </>
               )}
             </div>
+          </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 18, fontSize: 12, color: 'var(--text-muted)' }}>
+            <span style={{ textTransform: 'capitalize' }}>{todayLabel}</span>
+            <span aria-hidden style={{ width: 1, height: 12, background: 'var(--border)' }} />
+            <span>
+              <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 13, fontWeight: 800 }}>
+                Deze week: {kpis.pctUsed}%
+              </strong>
+              <span style={{ marginLeft: 5 }}>{kpis.totalHours}/{kpis.totalCap}u</span>
+            </span>
+            <span aria-hidden style={{ width: 1, height: 12, background: 'var(--border)' }} />
+            <span>
+              <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 13, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+              <span style={{ marginLeft: 4 }}>deadline{kpis.deadlinesThis === 1 ? '' : 's'}</span>
+            </span>
           </div>
         </div>
         )}
