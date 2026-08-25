@@ -18,32 +18,37 @@ export type DocFolder = {
   emoji?: string
 }
 
-const PREFIX     = 'yoko-page-'
-const RECENT_KEY = 'yoko-recent-pages'
+const PREFIX      = 'yoko-page-'
+const RECENT_KEY  = 'yoko-recent-pages'
 const FOLDERS_KEY = 'yoko-doc-folders'
-const MAX_RECENT = 50
+const MAX_RECENT  = 50
+// /demo krijgt een volledig eigen prefix/key — nooit de gedeelde
+// 'yoko-page-*'/'yoko-recent-pages' van een échte sessie in dezelfde
+// browser lezen óf overschrijven.
+function pagePrefix(): string { return isOnDemoRoute() ? 'yoko-demo-page-' : PREFIX }
+function recentKey(): string { return isOnDemoRoute() ? 'yoko-demo-recent-pages' : RECENT_KEY }
 
 // ─── Doc folders (subfolders inside the Documenten section) ──────────────────
+// /demo krijgt een eigen key — start dus leeg (niet de gedeelde cache van
+// een échte sessie in dezelfde browser), maar mappen die je in de demo
+// zelf aanmaakt blijven wél gewoon werken/bewaard.
+function foldersKey(): string { return isOnDemoRoute() ? 'yoko-demo-doc-folders' : FOLDERS_KEY }
+
 export function loadDocFolders(): DocFolder[] {
-  // /demo start altijd leeg — een gedeelde localStorage-cache van een
-  // échte sessie in dezelfde browser mag hier nooit doorheen schemeren
-  // (paginanamen/inhoud kunnen alles bevatten).
-  if (isOnDemoRoute()) return []
   if (typeof window === 'undefined') return []
-  try { const s = localStorage.getItem(FOLDERS_KEY); return s ? JSON.parse(s) : [] } catch { return [] }
+  try { const s = localStorage.getItem(foldersKey()); return s ? JSON.parse(s) : [] } catch { return [] }
 }
 
 export function saveDocFolders(folders: DocFolder[]): void {
-  if (isOnDemoRoute()) return
   if (typeof window === 'undefined') return
-  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders))
+  localStorage.setItem(foldersKey(), JSON.stringify(folders))
   window.dispatchEvent(new CustomEvent('yoko-pages-update'))
 }
 
 export function loadPage(id: string): PageDoc | null {
   if (typeof window === 'undefined') return null
   try {
-    const s = localStorage.getItem(PREFIX + id)
+    const s = localStorage.getItem(pagePrefix() + id)
     return s ? JSON.parse(s) : null
   } catch { return null }
 }
@@ -52,24 +57,25 @@ export function savePage(doc: PageDoc): void {
   if (typeof window === 'undefined') return
   writeLocal(doc)
   window.dispatchEvent(new CustomEvent('yoko-pages-update'))
-  // Fire-and-forget remote push
-  pushPageToRemote(doc).catch(() => { /* offline-tolerant */ })
+  // Fire-and-forget remote push — pushPageToRemote is auth-gated en dus
+  // sowieso een no-op op /demo, maar we slaan de aanroep hier ook meteen
+  // over.
+  if (!isOnDemoRoute()) pushPageToRemote(doc).catch(() => { /* offline-tolerant */ })
 }
 
 export function deletePage(id: string): void {
   if (typeof window === 'undefined') return
-  localStorage.removeItem(PREFIX + id)
+  localStorage.removeItem(pagePrefix() + id)
   const ids = loadRecentPageIds().filter(i => i !== id)
-  localStorage.setItem(RECENT_KEY, JSON.stringify(ids))
+  localStorage.setItem(recentKey(), JSON.stringify(ids))
   window.dispatchEvent(new CustomEvent('yoko-pages-update'))
-  deletePageRemote(id).catch(() => {})
+  if (!isOnDemoRoute()) deletePageRemote(id).catch(() => {})
 }
 
 export function loadRecentPageIds(): string[] {
-  if (isOnDemoRoute()) return []
   if (typeof window === 'undefined') return []
   try {
-    const s = localStorage.getItem(RECENT_KEY)
+    const s = localStorage.getItem(recentKey())
     return s ? JSON.parse(s) : []
   } catch { return [] }
 }
@@ -94,13 +100,14 @@ function rowToDoc(r: Record<string, unknown>): PageDoc {
 
 function writeLocal(doc: PageDoc) {
   if (typeof window === 'undefined') return
-  localStorage.setItem(PREFIX + doc.id, JSON.stringify(doc))
+  localStorage.setItem(pagePrefix() + doc.id, JSON.stringify(doc))
   const ids = loadRecentPageIds().filter(id => id !== doc.id)
   ids.unshift(doc.id)
-  localStorage.setItem(RECENT_KEY, JSON.stringify(ids.slice(0, MAX_RECENT)))
+  localStorage.setItem(recentKey(), JSON.stringify(ids.slice(0, MAX_RECENT)))
 }
 
 export async function pullPagesFromRemote(): Promise<boolean> {
+  if (isOnDemoRoute()) return false
   if (!supabase) return false
   const uid = await getCurrentUserId()
   if (!uid) return false
@@ -143,6 +150,7 @@ export async function deletePageRemote(id: string): Promise<boolean> {
 
 let pagesChannelOn = false
 export function subscribeRemotePages(): () => void {
+  if (isOnDemoRoute()) return () => {}
   if (!supabase || pagesChannelOn) return () => {}
   pagesChannelOn = true
   const ch = supabase.channel('public:pages')

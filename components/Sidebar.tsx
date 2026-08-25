@@ -30,7 +30,7 @@ import {
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
 import { NotificationBell } from './NotificationBell'
-import { isOnDemoRoute, notifyDemoBlocked } from '@/lib/demoFixtures'
+import { isOnDemoRoute } from '@/lib/demoFixtures'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -173,11 +173,10 @@ function PagesSectionItems({ pathname }: { pathname: string }) {
   }, [])
 
   function createNewIn(folderId: string | null) {
-    if (isOnDemoRoute()) { notifyDemoBlocked(); return }
     const id  = Date.now().toString()
     const now = new Date().toISOString()
     savePage({ id, title: '', content: '', emoji: '📄', createdAt: now, updatedAt: now, folderId })
-    router.push(`/pages/${id}`)
+    router.push(isOnDemoRoute() ? `/demo/pages/${id}` : `/pages/${id}`)
   }
   function addFolder() {
     const name = folderDraft.trim()
