@@ -13,6 +13,13 @@ export function resetDemoBoards(): void {
     saveGroups(id, fresh[id]?.groups ?? [])
   }
   if (typeof window !== 'undefined') {
-    try { window.localStorage.removeItem('yoko-demo-todos') } catch {}
+    try {
+      window.localStorage.removeItem('yoko-demo-todos')
+      window.localStorage.removeItem('yoko-demo-todos-sections')
+      window.localStorage.removeItem('yoko-demo-todos-removed-projects')
+      window.localStorage.removeItem('yoko-demo-profile')
+      window.localStorage.removeItem('yoko-demo-comments')
+      window.localStorage.removeItem('home-demo-sections-order')
+    } catch {}
   }
 }

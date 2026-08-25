@@ -1,8 +1,13 @@
 'use client'
 
 import { supabase } from './supabase'
+import { isOnDemoRoute, notifyDemoBlocked } from './demoFixtures'
 
 async function authHeaders(): Promise<Record<string, string> | null> {
+  // /demo heeft nooit een echte sessie — laat dat meteen zien met de
+  // 'dit kan niet in deze versie'-toast i.p.v. een stille/onduidelijke
+  // 'niet ingelogd'-fout verderop in elke aanroepende functie.
+  if (isOnDemoRoute()) { notifyDemoBlocked(); return null }
   if (!supabase) return null
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -12,7 +17,7 @@ async function authHeaders(): Promise<Record<string, string> | null> {
 
 export async function startGoogleOAuth(boardId: string | null): Promise<void> {
   const headers = await authHeaders()
-  if (!headers) throw new Error('niet ingelogd')
+  if (!headers) { if (isOnDemoRoute()) return; throw new Error('niet ingelogd') }
   const res = await fetch('/api/google/auth', {
     method: 'POST', headers, body: JSON.stringify({ boardId }),
   })

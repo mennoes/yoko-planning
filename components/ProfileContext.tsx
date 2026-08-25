@@ -41,12 +41,18 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(!requiresAuth)
 
   // ── Publieke /demo-route: nooit Supabase of het echte localStorage-
-  // profiel raken — vaste nep-identiteit, altijd 'klaar', nooit auth nodig.
-  // De demo-pagina's zelf bieden een eigen profiel-switcher (tussen de
-  // vier nep-teamleden) die alleen React-state bijwerkt, geen Supabase.
+  // profiel raken — vaste nep-identiteit uit een EIGEN, geïsoleerde
+  // localStorage-key (zodat 'bewerk mijn profiel' de sessie overleeft
+  // zonder ooit de echte 'yoko-profile'-key aan te raken), altijd
+  // 'klaar', nooit auth nodig.
   useEffect(() => {
     if (!demo) return
-    setProfileState(DEMO_PROFILE)
+    let initial = DEMO_PROFILE
+    try {
+      const raw = window.localStorage.getItem('yoko-demo-profile')
+      if (raw) initial = JSON.parse(raw) as UserProfile
+    } catch {}
+    setProfileState(initial)
     setLoaded(true)
   }, [demo])
 
@@ -115,11 +121,15 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, [demo])
 
   async function setProfile(p: UserProfile) {
-    // Demo-bezoeker switcht tussen de vier nep-profielen (via de demo-
-    // profielkiezer) — puur React-state, NOOIT naar de echte 'yoko-profile'
-    // localStorage-key of Supabase schrijven. Anders overschrijft een demo-
-    // sessie in dezelfde browser straks het échte profiel van de gebruiker.
-    if (demo) { setProfileState(p); return }
+    // Demo-bezoeker bewerkt/switcht z'n profiel — bewaard in een EIGEN
+    // 'yoko-demo-profile'-key, NOOIT de echte 'yoko-profile'-key of
+    // Supabase. Anders overschrijft een demo-sessie in dezelfde browser
+    // straks het échte profiel van de gebruiker.
+    if (demo) {
+      setProfileState(p)
+      try { window.localStorage.setItem('yoko-demo-profile', JSON.stringify(p)) } catch {}
+      return
+    }
     saveProfile(p)
     setProfileState(p)
     setEditOpen(false)
