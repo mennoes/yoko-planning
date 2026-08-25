@@ -5875,16 +5875,27 @@ export default function PlanningPage() {
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       {todayEdge && (
-        <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-          position: 'absolute', top: 8, [todayEdge]: 8, zIndex: 80,
-          display: 'flex', alignItems: 'center', gap: 5,
-          padding: '5px 9px', borderRadius: 999, border: 'none',
-          background: 'var(--yellow)', color: '#1a1a1a',
-          boxShadow: '0 3px 10px rgba(216, 182, 46, 0.45)',
-          fontSize: 9.5, fontWeight: 900, letterSpacing: '0.06em', cursor: 'pointer',
-        }}>
-          {todayEdge === 'left' ? '←' : '→'} VANDAAG
-        </button>
+        <>
+          {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
+              het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
+              zodat lijn en label nooit over namen/profielfoto's lopen. */}
+          <div aria-hidden style={{
+            position: 'absolute', top: 0, bottom: 0,
+            ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
+            width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
+            pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
+          }} />
+          <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
+            position: 'absolute', top: 8,
+            ...(todayEdge === 'left' ? { left: nameW + namePad + 6 } : { right: 6 }),
+            zIndex: 80, padding: '5px 9px', borderRadius: 999, border: 'none',
+            background: 'var(--yellow)', color: '#1a1a1a',
+            boxShadow: '0 3px 10px rgba(216, 182, 46, 0.45)',
+            fontSize: 9.5, fontWeight: 900, letterSpacing: '0.06em', cursor: 'pointer',
+          }}>
+            VANDAAG {todayEdge === 'left' ? '←' : '→'}
+          </button>
+        </>
       )}
       <div ref={gridRef} onMouseDown={onGridMouseDown}
         onWheel={(ev) => {
@@ -5929,7 +5940,7 @@ export default function PlanningPage() {
           {/* "Now" indicator — yoko-yellow vertical line at today's exact
               position with a VANDAAG pill at the top so the marker is hard
               to miss when scrolling through time. */}
-          {nowOffset !== null && (
+          {nowOffset !== null && !todayEdge && (
             <>
               {/* De lijn zelf: hoge z-index zodat 'ie BOVEN ALLES doorloopt
                   (kolom-headers, maand-groepen, en zelfs de sticky naam-
@@ -5941,7 +5952,10 @@ export default function PlanningPage() {
                 left: nowOffset, width: 0,
                 borderLeft: '2px solid var(--yellow)',
                 pointerEvents: 'none',
-                zIndex: 30,
+                // Onder sticky naamcellen houden als extra bescherming;
+                // de geklemde randversie hierboven neemt het over zodra
+                // vandaag de naamkolom nadert.
+                zIndex: 10,
                 boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
               }} />
               {/* VANDAAG-pill als SEPARATE sibling — eigen sticky-top, hoge
