@@ -52,9 +52,7 @@ export function demoSafeHref(href: string): string | null {
   if (href.startsWith('/demo')) return href
   const [base, query] = href.split('?')
   if (DEMO_EQUIVALENTS[base]) return DEMO_EQUIVALENTS[base] + (query ? `?${query}` : '')
-  if (base.startsWith('/projects/')) return '/demo' + base
-  if (base.startsWith('/pages/')) return '/demo' + base
-  if (base.startsWith('/profile/')) return '/demo' + base
+  if (base.startsWith('/projects/')) return '/demo/planning'
   return null
 }
 
@@ -78,15 +76,32 @@ export const DEMO_PROFILE: UserProfile = {
   memberId: 'demo-sam', name: 'Sam', color: '#B0C6EB', photo: null,
 }
 
-// ─── 'Gezichten' voor de nep-teamleden ──────────────────────────────────────
-// Echte (gestockte model-)portretfoto's i.p.v. lettertje-cirkels — random-
-// user.me is precies hiervoor bedoeld (stabiele, vaste URL's per index,
-// puur illustratief, nooit een echt persoon die aan onze data hangt).
+// ─── Willekeurige 'gezichten' voor de nep-teamleden ────────────────────────
+// Simpele, eigen (geen externe dienst) SVG-avatars i.p.v. platte letter-
+// cirkels — elk teamlid krijgt een net iets andere vorm/uitdrukking.
+function faceSvg(bg: string, variant: number): string {
+  const faces = [
+    // ronde ogen, brede glimlach
+    '<circle cx="34" cy="42" r="5" fill="#1a1714"/><circle cx="66" cy="42" r="5" fill="#1a1714"/><path d="M32 60 Q50 76 68 60" stroke="#1a1714" stroke-width="5" fill="none" stroke-linecap="round"/>',
+    // ovale ogen, kleine glimlach + wenkbrauwen
+    '<ellipse cx="34" cy="42" rx="4" ry="6" fill="#1a1714"/><ellipse cx="66" cy="42" rx="4" ry="6" fill="#1a1714"/><path d="M26 32 Q34 27 42 32M58 32 Q66 27 74 32" stroke="#1a1714" stroke-width="3.5" fill="none" stroke-linecap="round"/><path d="M38 62 Q50 70 62 62" stroke="#1a1714" stroke-width="5" fill="none" stroke-linecap="round"/>',
+    // knipoog, brede grijns
+    '<circle cx="34" cy="42" r="5" fill="#1a1714"/><path d="M60 42 Q66 38 72 42" stroke="#1a1714" stroke-width="4.5" fill="none" stroke-linecap="round"/><path d="M30 58 Q50 78 70 58" stroke="#1a1714" stroke-width="5" fill="none" stroke-linecap="round"/>',
+    // vierkante bril, rechte mond
+    '<rect x="24" y="34" width="20" height="16" rx="6" fill="none" stroke="#1a1714" stroke-width="3.5"/><rect x="56" y="34" width="20" height="16" rx="6" fill="none" stroke="#1a1714" stroke-width="3.5"/><line x1="44" y1="42" x2="56" y2="42" stroke="#1a1714" stroke-width="3.5"/><line x1="38" y1="64" x2="62" y2="64" stroke="#1a1714" stroke-width="5" stroke-linecap="round"/>',
+  ]
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="50" fill="${bg}"/>
+    ${faces[variant % faces.length]}
+  </svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
 export const DEMO_PHOTOS: Record<string, string> = {
-  'demo-sam':   'https://randomuser.me/api/portraits/men/32.jpg',
-  'demo-robin': 'https://randomuser.me/api/portraits/women/44.jpg',
-  'demo-jules': 'https://randomuser.me/api/portraits/men/67.jpg',
-  'demo-noa':   'https://randomuser.me/api/portraits/women/23.jpg',
+  'demo-sam':   faceSvg('#B0C6EB', 0),
+  'demo-robin': faceSvg('#9DB1A4', 1),
+  'demo-jules': faceSvg('#C09BCA', 2),
+  'demo-noa':   faceSvg('#D8B62E', 3),
 }
 
 // ─── Boards ─────────────────────────────────────────────────────────────────
@@ -105,14 +120,13 @@ function sub(id: string, name: string, ownerIds: string[], status: string, start
   return { id, name, ownerIds, status, startDate: iso(startOffset), endDate: iso(endOffset), estHours }
 }
 
-function item(id: string, name: string, ownerIds: string[], status: string, opts: { startOffset?: number; endOffset?: number; estHours?: number; subitems?: SubItem[]; deadlineOffset?: number } = {}): BoardItem {
-  const { startOffset, endOffset, estHours, subitems, deadlineOffset } = opts
+function item(id: string, name: string, ownerIds: string[], status: string, opts: { startOffset?: number; endOffset?: number; estHours?: number; subitems?: SubItem[] } = {}): BoardItem {
+  const { startOffset, endOffset, estHours, subitems } = opts
   return {
     id, name, ownerIds, status,
     startDate: startOffset != null ? iso(startOffset) : null,
     endDate:   endOffset   != null ? iso(endOffset)   : (startOffset != null ? iso(startOffset) : null),
-    deadline: deadlineOffset != null ? iso(deadlineOffset) : null,
-    estHours: estHours ?? 0, dagen: 0,
+    deadline: null, estHours: estHours ?? 0, dagen: 0,
     subitems,
   }
 }
@@ -132,16 +146,13 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
           id: 'g1', name: 'Lopende projecten', color: '#B0C6EB', items: [
             item('i1', 'Merkfilm — script + storyboard', ['demo-sam'], 'Done', { startOffset: -9, endOffset: -3, estHours: 24 }),
             item('i2', 'Merkfilm — edit', ['demo-robin'], 'Working on...', {
-              deadlineOffset: 5,
               subitems: [
                 sub('s1', 'Edit v1', ['demo-robin'], 'Working on...', 0, 6, 32),
                 sub('s2', 'Edit v2 — klantfeedback', ['demo-robin'], 'Not started', 9, 12, 12),
               ],
             }),
-            item('i3', 'Social cutdowns (5x)', ['demo-noa'], 'Not started', { startOffset: 14, endOffset: 18, estHours: 14, deadlineOffset: 19 }),
+            item('i3', 'Social cutdowns (5x)', ['demo-noa'], 'Not started', { startOffset: 14, endOffset: 18, estHours: 14 }),
             item('i4', 'Kickoff volgend seizoen', ['demo-sam', 'demo-jules'], 'Not started', { startOffset: 3, endOffset: 3, estHours: 2 }),
-            item('i6', 'Merkfilm — klant-call + debrief', ['demo-sam'], 'Working on...', { startOffset: 0, endOffset: 1, estHours: 8, deadlineOffset: 2 }),
-            item('i7', 'Merkfilm — voice-over regelen', ['demo-sam'], 'Not started', { startOffset: 1, endOffset: 3, estHours: 10 }),
           ],
         },
         {
@@ -156,15 +167,14 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
         {
           id: 'g1', name: 'Lopende projecten', color: '#D8935B', items: [
             item('i1', 'Huisstijl — moodboard', ['demo-jules'], 'Done', { startOffset: -6, endOffset: -4, estHours: 10 }),
-            item('i2', 'Huisstijl — logo-varianten', ['demo-jules'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 20, deadlineOffset: 4 }),
+            item('i2', 'Huisstijl — logo-varianten', ['demo-jules'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 20 }),
             item('i3', 'Website', ['demo-sam', 'demo-jules'], 'Not started', {
-              deadlineOffset: 25,
               subitems: [
                 sub('s1', 'Wireframes', ['demo-sam', 'demo-jules'], 'Not started', 5, 11, 28),
                 sub('s2', 'Launch prep', ['demo-sam'], 'Not started', 18, 24, 16),
               ],
             }),
-            item('i4', 'Podcast S2 — aflevering 3 edit', ['demo-noa'], 'Working on...', { startOffset: -3, endOffset: 1, estHours: 12, deadlineOffset: 1 }),
+            item('i4', 'Podcast S2 — aflevering 3 edit', ['demo-noa'], 'Working on...', { startOffset: -3, endOffset: 1, estHours: 12 }),
             item('i5', 'Trailer volgend seizoen', ['demo-robin'], 'Not started', { startOffset: 14, endOffset: 20, estHours: 18 }),
           ],
         },

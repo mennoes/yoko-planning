@@ -30,7 +30,7 @@ import {
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
 import { NotificationBell } from './NotificationBell'
-import { isOnDemoRoute } from '@/lib/demoFixtures'
+import { isOnDemoRoute, notifyDemoBlocked } from '@/lib/demoFixtures'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -173,10 +173,11 @@ function PagesSectionItems({ pathname }: { pathname: string }) {
   }, [])
 
   function createNewIn(folderId: string | null) {
+    if (isOnDemoRoute()) { notifyDemoBlocked(); return }
     const id  = Date.now().toString()
     const now = new Date().toISOString()
     savePage({ id, title: '', content: '', emoji: '📄', createdAt: now, updatedAt: now, folderId })
-    router.push(isOnDemoRoute() ? `/demo/pages/${id}` : `/pages/${id}`)
+    router.push(`/pages/${id}`)
   }
   function addFolder() {
     const name = folderDraft.trim()
@@ -1406,7 +1407,20 @@ export default function Sidebar({
 
         {/* Footer — profile + theme + settings */}
         <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {profile?.memberId ? (
+          {profile?.memberId && isOnDemoRoute() ? (
+            // /demo: geen echte profielpagina — klik opent meteen de
+            // edit-modal (zelfde als de 'Profiel instellen'-knop), zodat
+            // een bezoeker z'n eigen naam/foto/avatar kan aanpassen.
+            <button onClick={openEdit} title="Mijn demo-profiel bewerken"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+              <UserAvatar memberId={profile.memberId} size={32} />
+              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {profile.name}
+              </span>
+            </button>
+          ) : profile?.memberId ? (
             <Link href={`/profile/${profile.memberId}`} title="Mijn profiel"
               style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', textAlign: 'left', textDecoration: 'none' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
