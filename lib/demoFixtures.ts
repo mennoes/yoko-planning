@@ -52,8 +52,7 @@ export function demoSafeHref(href: string): string | null {
   if (href.startsWith('/demo')) return href
   const [base, query] = href.split('?')
   if (DEMO_EQUIVALENTS[base]) return DEMO_EQUIVALENTS[base] + (query ? `?${query}` : '')
-  if (base.startsWith('/projects/')) return '/demo' + base
-  if (base.startsWith('/pages/')) return '/demo' + base
+  if (base.startsWith('/projects/')) return '/demo/planning'
   return null
 }
 
