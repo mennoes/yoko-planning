@@ -1255,7 +1255,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         // gedrag als bij top-level items). alignSelf:stretch overruled
         // de alignItems:center van de grid-row zodat de pill écht uitvult.
         return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden', flex: 1, minWidth: 0 }}>
-          <StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} />
+          <StatusCell value={subitem.status} onChange={v => onUpdate({
+            status: v,
+            ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
+              ? { statusOverride: v === 'Done' ? 'done' as const : 'active' as const }
+              : {}),
+          })} />
         </div>
       case 'timeline':
         return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
@@ -2767,7 +2772,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     const sourceItem = group.items.find(i => i.id === itemId)
     if (sourceItem?.source === 'google') {
       const keys = Object.keys(updates)
-      const allowed = keys.every(k => k === 'subitems' || k === 'status')
+      const allowed = keys.every(k => k === 'subitems' || k === 'status' || k === 'statusOverride')
       if (!allowed) {
         showToast('Bewerk dit item in Google Calendar — wijzigingen hier worden bij de volgende sync overschreven')
         return
@@ -2781,7 +2786,13 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
       ...group,
       items: group.items.map(i => {
         if (!(bulk ? selectedIds.has(i.id) : i.id === itemId)) return i
-        const merged: BoardItem = { ...i, ...updates }
+        const merged: BoardItem = {
+          ...i,
+          ...updates,
+          ...(i.source === 'google' && 'status' in updates
+            ? { statusOverride: updates.status === 'Done' ? 'done' : 'active' }
+            : {}),
+        }
         // estHours veranderd én item heeft ownerHours? Schaal de
         // verdeling proportioneel zodat de verhoudingen kloppen
         // met de nieuwe totalen — pie + cijfers blijven in sync.
@@ -4326,6 +4337,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       ...g,
       items: g.items.map(i => {
         let nextItem = selectedIds.has(i.id) ? { ...i, ...patch } : i
+        if (selectedIds.has(i.id) && i.source === 'google' && 'status' in patch) {
+          nextItem = { ...nextItem, statusOverride: patch.status === 'Done' ? 'done' : 'active' }
+        }
         // ownerIds/estHours consistency check ook in bulk-pad. Anders
         // raken ownerHours stale wanneer een bulk-owner-wijziging eigenaren
         // wegneemt of een bulk-uren-wijziging totalen verandert.
@@ -4354,7 +4368,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           }
         }
         if (hasSubPatch && nextItem.subitems && nextItem.subitems.length > 0) {
-          const subs = nextItem.subitems.map(s => selectedIds.has(s.id) ? { ...s, ...subPatch } : s)
+          const subs = nextItem.subitems.map(s => {
+            if (!selectedIds.has(s.id)) return s
+            const isGoogleSub = s.source === 'google' || !!s.externalLink || s.id.startsWith('si_g_')
+            return {
+              ...s,
+              ...subPatch,
+              ...(isGoogleSub && 'status' in subPatch
+                ? { statusOverride: subPatch.status === 'Done' ? 'done' as const : 'active' as const }
+                : {}),
+            }
+          })
           if (subs.some((s, idx) => s !== nextItem.subitems![idx])) nextItem = { ...nextItem, subitems: subs }
         }
         return nextItem
