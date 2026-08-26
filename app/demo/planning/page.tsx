@@ -2097,27 +2097,36 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
             <div style={{ padding: '5px 7px 7px', fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
-            {sorted.map(meeting => (
+            {sorted.map(meeting => {
+              const isDone = meeting.status === 'done'
+              return (
               <div key={meeting.id}
                 onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                 onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7 }}>
+                // Afgeronde meetings blijven zichtbaar — alleen gedempt,
+                // zelfde opacity-behandeling als normale (niet-Google) Done-
+                // items op hun balk. Afvinken mag niet onzichtbaar maken.
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7, opacity: isDone ? 0.5 : 1 }}>
                 <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
                   {meeting.startTime ?? 'Hele dag'}
                 </span>
                 <button onClick={ev => { ev.stopPropagation(); onDone(meeting) }}
-                  aria-label={`${meeting.name} afronden`}
-                  title="Afronden en naar Done verplaatsen — verdwijnt automatisch uit gekoppelde to do's"
+                  aria-label={isDone ? `${meeting.name} is afgerond` : `${meeting.name} afronden`}
+                  title={isDone ? 'Afgerond' : 'Afronden — verdwijnt automatisch uit gekoppelde to do’s'}
                   style={{ width: 17, height: 17, flexShrink: 0, padding: 0, borderRadius: 4,
-                    border: '1.5px solid var(--border-strong)', background: 'var(--bg-card)',
-                    color: 'var(--text-primary)', cursor: 'pointer' }} />
+                    border: `1.5px solid ${isDone ? 'var(--green)' : 'var(--border-strong)'}`,
+                    background: isDone ? 'var(--green)' : 'var(--bg-card)',
+                    color: '#fff', fontSize: 11, lineHeight: '14px', textAlign: 'center',
+                    cursor: 'pointer' }}>
+                  {isDone ? '✓' : ''}
+                </button>
                 <button onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
                   onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                   onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
                   style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start',
                     padding: '6px 3px', border: 'none', borderRadius: 7, background: 'transparent',
                     color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25, textDecoration: isDone ? 'line-through' : 'none' }}>
                     {meeting.name}
                   </span>
                 </button>
@@ -2134,7 +2143,8 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
                   </a>
                 )}
               </div>
-            ))}
+              )
+            })}
             {pinned && <div style={{ padding: '5px 8px 3px', fontSize: 10.5, color: 'var(--text-muted)' }}>Kies een meeting om details te openen</div>}
           </div>
         </>, document.body)}
@@ -2181,9 +2191,12 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   // Google-meetings worden in Overzicht niet langer als balken gestapeld.
   // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
-  // terwijl een hover de concrete afspraken en tijden laat zien.
+  // terwijl een hover de concrete afspraken en tijden laat zien. Afgeronde
+  // meetings blijven hier gewoon in staan — 'm afvinken mag 'm niet
+  // onzichtbaar maken, alleen gedempt tonen (net als normale items via
+  // hun opacity), zie de status-check in MeetingDaySummary hieronder.
   const googleMeetings = (hideMeetings ? [] : owned).filter(p =>
-    p.status !== 'done' && p.source === 'google' && !isVrijTitle(p.name))
+    p.source === 'google' && !isVrijTitle(p.name))
   const meetingsByDay = new Map<string, Project[]>()
   if (zoom === 'week') {
     for (const p of googleMeetings) {
