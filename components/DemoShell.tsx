@@ -20,9 +20,7 @@ import { FeedbackBubble } from './FeedbackBubble'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconMenu, IconSearch } from './Icon'
 import { NotificationBell } from './NotificationBell'
-import { UserAvatar } from './UserAvatar'
-import { useProfile } from './ProfileContext'
-import { DEMO_BLOCKED_EVENT, DEMO_MEMBERS, demoSafeHref, notifyDemoBlocked } from '@/lib/demoFixtures'
+import { DEMO_BLOCKED_EVENT, demoSafeHref, notifyDemoBlocked } from '@/lib/demoFixtures'
 import { resetDemoBoards } from '@/lib/demoBoardStore'
 
 export default function DemoShell({ children }: { children: React.ReactNode }) {
@@ -31,7 +29,6 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [notice, setNotice] = useState(false)
-  const { profile, setProfile } = useProfile()
 
   // Onderschept ELKE <a>-klik binnen de demo (capture-phase, vóór Next's
   // eigen Link-handler) — of het nou uit de hergebruikte Sidebar komt, uit
@@ -106,37 +103,6 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />
       <FeedbackBubble />
-
-      {/* Bekijk-als-switcher — wissel wie 'jij' bent in de demo, direct
-          boven de (hergebruikte) Sidebar-footer. Alleen desktop: op
-          mobile zit de sidebar achter de hamburger-drawer, geen vaste
-          linkerkolom om iets boven te plakken. */}
-      {!isMobile && (
-        <div style={{
-          position: 'fixed', bottom: 62, left: 12, zIndex: 40,
-          display: 'flex', flexDirection: 'column', gap: 6,
-        }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingLeft: 2 }}>
-            Bekijk als
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {DEMO_MEMBERS.map(m => {
-              const active = profile?.memberId === m.id
-              return (
-                <button key={m.id}
-                  onClick={() => setProfile({ memberId: m.id, name: m.name, color: m.color, photo: profile?.memberId === m.id ? profile.photo : null })}
-                  title={`Bekijk demo als ${m.name}`}
-                  style={{
-                    padding: 0, borderRadius: '50%', cursor: 'pointer', lineHeight: 0,
-                    background: 'none', border: active ? `2px solid ${m.color}` : '2px solid transparent',
-                  }}>
-                  <UserAvatar memberId={m.id} size={30} borderless={!active} />
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Live-demo label + reset — rechtsboven, uit de weg van de
           (hergebruikte) Sidebar-footer met profiel/thema/instellingen. Op

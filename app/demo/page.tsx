@@ -1223,9 +1223,10 @@ export default function HomePage() {
         return (
           <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
             <UserAvatar memberId={m.id} size={22} />
-            <Link href={`/demo/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {/* DEMO: geen profielpagina beschikbaar — platte tekst i.p.v. link. */}
+            <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {m.name}
-            </Link>
+            </span>
             <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
               {tone.label}
             </span>
@@ -1317,9 +1318,10 @@ export default function HomePage() {
           ) : overloaded.map(o => (
             <div key={o.member.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
               <UserAvatar memberId={o.member.id} size={22} />
-              <Link href={`/demo/profile/${o.member.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {/* DEMO: geen profielpagina beschikbaar — platte tekst i.p.v. link. */}
+              <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {o.member.name}
-              </Link>
+              </span>
               <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${Math.min(o.pct, 100)}%`, background: '#C4453A' }} />
               </div>
