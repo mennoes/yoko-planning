@@ -6205,7 +6205,12 @@ export default function PlanningPage() {
               const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
               const isWeekStart = zoom === 'dag' && dow === 1
               return (
-              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: zoom === 'week' ? '6px 2px' : '8px 2px', textAlign: 'center',
+              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0,
+                // Week-zoom: extra ruimte bovenaan zodat de datum/weekdagen
+                // niet onder de VANDAAG-pill (die er los bovenop zit) komen
+                // te zitten — de pill hangt op een vaste positie, dus de
+                // header zelf schuift een regel naar beneden i.p.v. andersom.
+                padding: zoom === 'week' ? '22px 2px 6px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 {zoom === 'week' ? (
