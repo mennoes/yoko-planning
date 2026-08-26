@@ -3939,7 +3939,18 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             __prorated: true,
           } as BoardItem
         }),
-    })).filter(g => g.items.length > 0)
+    })).filter(g => {
+      if (g.items.length > 0) return true
+      // De Google-bucket is vaste bordstructuur, geen zoekresultaat. Laat
+      // de kop daarom ook bij 0 matches staan; anders lijkt het alsof de
+      // hele groep door sync/realtime verdwenen is zodra een periode-,
+      // owner- of zoekfilter geen meeting overlaat.
+      const name = (g.name ?? '').toLowerCase().trim()
+      return name === 'meetings & doorlopend'
+        || name === 'meetings en doorlopend'
+        || name === 'meetings'
+        || name === 'doorlopend'
+    })
   }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter])
 
   const allOwners = useMemo(() => {
