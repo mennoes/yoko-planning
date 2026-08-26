@@ -218,7 +218,19 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
     .map(item => {
       if (!item.projectRef) return item
       const current = projectsByKey.get(`${item.projectRef.board}:${item.projectRef.itemId}`)
-      return current ? { ...item, projectRef: { ...item.projectRef, ...current } } : item
+      if (!current) return item
+      const relevantChild = (childrenByParent.get(`${current.board}:${current.itemId}`) ?? [])
+        .filter(child =>
+          (child.status ?? '').toLowerCase() !== 'done' &&
+          (!(child.endDate ?? child.startDate) || (child.endDate ?? child.startDate)! >= today))
+        .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))[0]
+      // Voor langlopende hoofdprojecten bepaalt het eerstvolgende concrete
+      // subitem de week. /todos deed dit al in zijn renderer; door de datum
+      // hier centraal te verrijken gebruikt Home exact dezelfde bucket.
+      const datedCurrent = relevantChild
+        ? { ...current, startDate: relevantChild.startDate, endDate: relevantChild.endDate }
+        : current
+      return { ...item, projectRef: { ...item.projectRef, ...datedCurrent } }
     })
     .filter(item => {
       const ref = item.projectRef
