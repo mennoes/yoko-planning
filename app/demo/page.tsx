@@ -47,11 +47,12 @@ const RAW: Record<string, { groups: unknown[] }> = buildDemoBoards()
 type TodoItem = { id: string; text: string; done: boolean }
 
 type SectionId = 'taken' | 'werkdruk' | 'team' | 'deadlines' | 'overload' | 'documenten' | 'paginas'
-// DEMO: 'paginas' (Kantoor/Team/Accounts/HR-links) en 'documenten'
-// (+Nieuw document → /pages/[id]) bewust weggelaten — die wijzen naar
-// echte, auth-gated routes buiten /demo en zouden een bezoeker op een
-// login-scherm laten stranden.
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload']
+// 'paginas' (Kantoor/Team/Accounts/Documenten-links) en 'documenten'
+// (+Nieuw document → /pages/[id]) stonden hier eerder uit omdat die naar
+// echte, auth-gated routes buiten /demo wezen. Kantoor/Team/Accounts/
+// Documenten hebben inmiddels allemaal een werkende /demo-variant, dus
+// beide secties horen er weer bij.
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload', 'documenten', 'paginas']
 
 type RemoteProfile = {
   member_id:       string | null
@@ -506,12 +507,11 @@ export default function HomePage() {
     setWeekCapacity(cap)
 
     // Restore mobile section order — demo-eigen key (niet 'home-sections-
-    // order', dat is de echte-app-key) + 'paginas'/'documenten' altijd
-    // uitgefilterd, ook als een oudere demo-sessie 'm ooit wel opsloeg.
+    // order', dat is de echte-app-key).
     try {
       const saved = localStorage.getItem('home-demo-sections-order')
       if (saved) {
-        const parsed: SectionId[] = (JSON.parse(saved) as SectionId[]).filter((id): id is SectionId => id !== 'paginas' && id !== 'documenten')
+        const parsed = JSON.parse(saved) as SectionId[]
         if (Array.isArray(parsed) && DEFAULT_SECTION_ORDER.every(id => parsed.includes(id))) {
           setSectionOrder(parsed)
         }

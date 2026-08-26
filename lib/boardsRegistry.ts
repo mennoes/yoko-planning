@@ -10,11 +10,38 @@ import { isOnDemoRoute, notifyDemoBlocked, DEMO_BOARD_IDS } from './demoFixtures
 
 // Verzonnen bord-config voor /demo — zelfde vorm als de echte 5 borden,
 // zodat de 'Agenda's'-sectie in de (hergebruikte) Sidebar er precies zo
-// uitziet, maar met nep-klantnamen i.p.v. de echte.
+// uitziet, maar met nep-klantnamen i.p.v. de echte. columns: [] liet de
+// borden eerder als kale naam-lijstjes ogen (geen Status/Owner/Timeline/
+// Est Time-kolommen zichtbaar) — dat week zichtbaar af van hoe elk echt
+// bord eruitziet, dus nu met dezelfde soort kolomset als de 5 echte
+// FALLBACK-borden hieronder.
 const DEMO_FALLBACK: BoardConfig[] = [
-  { id: DEMO_BOARD_IDS[0], name: DEMO_BOARD_IDS[0], emoji: '🎬', color: '#B0C6EB', columns: [] },
-  { id: DEMO_BOARD_IDS[1], name: DEMO_BOARD_IDS[1], emoji: '🎨', color: '#D8935B', columns: [] },
-  { id: DEMO_BOARD_IDS[2], name: DEMO_BOARD_IDS[2], emoji: '🎪', color: '#5FA8A0', columns: [] },
+  { id: DEMO_BOARD_IDS[0], name: DEMO_BOARD_IDS[0], emoji: '🎬', color: '#B0C6EB', columns: [
+    { key: 'ownerIds',  label: 'Owner',    type: 'owners',    width: 90  },
+    { key: 'status',    label: 'Status',   type: 'status',    width: 145 },
+    { key: 'timeline',  label: 'Timeline', type: 'daterange', width: 175 },
+    { key: 'deadline',  label: 'Deadline', type: 'date',      width: 105 },
+    { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
+    { key: 'dagen',     label: 'Dagen',    type: 'number',    width: 70  },
+    { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
+  ] },
+  { id: DEMO_BOARD_IDS[1], name: DEMO_BOARD_IDS[1], emoji: '🎨', color: '#D8935B', columns: [
+    { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
+    { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
+    { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
+    { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
+    { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
+    { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
+    { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
+  ] },
+  { id: DEMO_BOARD_IDS[2], name: DEMO_BOARD_IDS[2], emoji: '🎪', color: '#5FA8A0', columns: [
+    { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
+    { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
+    { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
+    { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
+    { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
+    { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
+  ] },
 ]
 
 const LS_KEY = 'yoko-boards-registry'

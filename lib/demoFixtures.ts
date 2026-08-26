@@ -244,6 +244,10 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
               ],
             }),
             item('i6', 'Vrijwilligersbriefing plannen', ['demo-liam'], 'Not started', { startOffset: 25, endOffset: 25, estHours: 3 }),
+            // Bewust boven Liams weekcapaciteit (16u) gepland deze week —
+            // zodat de 'Overbelast deze week'-widget op Home ook echt een
+            // voorbeeld toont i.p.v. altijd de lege 'iedereen onder cap'-staat.
+            item('i9', 'Spoedklus — geluidscheck techniek', ['demo-liam'], 'Working on...', { startOffset: 0, endOffset: 2, estHours: 20, deadlineOffset: 3 }),
           ],
         },
         {
@@ -290,5 +294,28 @@ export const DEMO_PAGES: DemoPageDoc[] = [
     id: 'demo-dp2', title: 'Onboarding nieuwe klant', emoji: '📋',
     content: 'Checklist voor een nieuwe klant: intake-gesprek, offerte, kickoff plannen, toegang tot gedeelde mappen regelen.',
     createdAt: '2026-05-14T09:00:00.000Z', updatedAt: '2026-05-14T09:00:00.000Z', folderId: 'demo-df1',
+  },
+  // Vaste id's ('tools'/'samenwerkingen'/'vakantie'/'loonstroken') — de
+  // 'Pagina's'-widget op Home linkt hier met een hardcoded /pages/<id>,
+  // dus deze moeten exact zo heten, niet 'demo-'-geprefixt zoals de rest.
+  {
+    id: 'tools', title: 'Tools', emoji: '🎨',
+    content: 'Software die we gebruiken: Adobe Creative Cloud, Figma, Notion, Slack, Google Workspace. Nieuwe licentie nodig? Vraag aan via Accounts.',
+    createdAt: '2026-04-01T09:00:00.000Z', updatedAt: '2026-04-01T09:00:00.000Z', folderId: null,
+  },
+  {
+    id: 'samenwerkingen', title: 'Samenwerkingen', emoji: '❤️',
+    content: 'Vaste freelancers en partners waar we regelmatig mee samenwerken, met specialisme en contactpersoon.',
+    createdAt: '2026-03-15T09:00:00.000Z', updatedAt: '2026-03-15T09:00:00.000Z', folderId: null,
+  },
+  {
+    id: 'vakantie', title: 'Vakantieaanvragen', emoji: '🏝',
+    content: 'Hoe je vrije dagen aanvraagt: minimaal 2 weken van tevoren via de knop "Vakantie aanvragen" op Home, akkoord van je lead, dan verschijnt \'ie in de planning.',
+    createdAt: '2026-02-10T09:00:00.000Z', updatedAt: '2026-02-10T09:00:00.000Z', folderId: null,
+  },
+  {
+    id: 'loonstroken', title: 'Loonstroken', emoji: '💰',
+    content: 'Loonstroken staan uiterlijk de 25e van de maand klaar. Vragen over je strook? Stuur een berichtje naar de administratie.',
+    createdAt: '2026-01-20T09:00:00.000Z', updatedAt: '2026-01-20T09:00:00.000Z', folderId: null,
   },
 ]
