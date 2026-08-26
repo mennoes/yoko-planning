@@ -462,6 +462,10 @@ export default function HomePage() {
       }
     }).catch(() => {})
     const offTodos = onTodosUpdate(loadMine)
+    // Een project dat elders (planning/agenda) op Done wordt gezet moet
+    // onmiddellijk uit Jouw taken verdwijnen, zonder eerst Home opnieuw
+    // te hoeven laden. Dezelfde board-update voedt ook /todos.
+    window.addEventListener('yoko-board-update', loadMine)
 
     // Load all boards once for team status / deadlines / workload widgets
     const projectList: Project[] = []
@@ -517,7 +521,10 @@ export default function HomePage() {
 
     setHydrated(true)
 
-    return () => { offTodos() }
+    return () => {
+      offTodos()
+      window.removeEventListener('yoko-board-update', loadMine)
+    }
   }, [memberId])
 
   // Recompute the workload list whenever the week offset (or the project list
