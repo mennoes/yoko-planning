@@ -55,7 +55,7 @@ function slugify(name: string): string {
     .replace(/-+/g, '-')
 }
 
-type FilterKind = 'all' | 'yoko' | 'freelance' | 'unassigned' | 'hidden'
+type FilterKind = 'all' | 'yoko' | 'freelance' | 'unassigned' | 'hidden' | 'inactive'
 
 export default function TeamAdminPage() {
   const { isAuthenticated, authChecked } = useProfile()
@@ -67,6 +67,7 @@ export default function TeamAdminPage() {
     id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false,
     kind: 'yoko',
     startDate: null,
+    inactive: false,
   })
 
   if (!authChecked) return <Shell><p style={{ color: 'var(--text-muted)' }}>Laden…</p></Shell>
@@ -110,7 +111,7 @@ export default function TeamAdminPage() {
     if (email && draft.kind !== 'unassigned') {
       sendInvite(email, draft.name).catch(() => {})
     }
-    setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false, kind: 'yoko', startDate: null })
+    setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false, kind: 'yoko', startDate: null, inactive: false })
   }
 
   async function updateField(id: string, patch: Partial<TeamMember>) {
@@ -163,6 +164,20 @@ export default function TeamAdminPage() {
     if (!current) return
     const res = await upsertTeamMember({ ...current, hidden: !current.hidden })
     if (!res.ok) { alert(`Wijzigen mislukt: ${res.error}`); return }
+    await refresh()
+  }
+
+  // Inactief = gestopt (bv. stage afgerond) — blijft zichtbaar, telt niet
+  // meer mee in actieve capaciteit (Planning groepeert 'm apart). Los van
+  // hidden: een inactief lid blijft gewoon zichtbaar in Team/Planning.
+  async function toggleInactive(id: string) {
+    const current = members.find(m => m.id === id)
+    if (!current) return
+    const res = await upsertTeamMember({ ...current, inactive: !current.inactive })
+    if (!res.ok) { alert(`Wijzigen mislukt: ${res.error}`); return }
+    if (res.error === 'inactive_column_missing_run_0037') {
+      alert(`Opgeslagen, maar de 'inactive' kolom mist nog. Run supabase/0037_team_member_inactive.sql in Supabase → SQL Editor om dit blijvend te bewaren.`)
+    }
     await refresh()
   }
 
@@ -304,6 +319,7 @@ export default function TeamAdminPage() {
           { id: 'freelance',   label: 'Freelance' },
           { id: 'unassigned',  label: 'Systeem' },
           { id: 'hidden',      label: 'Verborgen' },
+          { id: 'inactive',    label: 'Inactief' },
         ] as { id: FilterKind; label: string }[]).map(p => {
           const active = filter === p.id
           return (
@@ -321,19 +337,21 @@ export default function TeamAdminPage() {
 
       {(() => {
         const sorted = [...members].sort((a, b) => a.position - b.position)
-        const yoko       = sorted.filter(m => m.kind === 'yoko' && m.id !== 'unassigned' && (filter === 'hidden' ? m.hidden : !m.hidden))
-        const freelance  = sorted.filter(m => m.kind === 'freelance' && m.id !== 'unassigned' && (filter === 'hidden' ? m.hidden : !m.hidden))
+        const kindFilter = (m: TeamMember) =>
+          filter === 'hidden' ? m.hidden : filter === 'inactive' ? m.inactive : !m.hidden
+        const yoko       = sorted.filter(m => m.kind === 'yoko' && m.id !== 'unassigned' && kindFilter(m))
+        const freelance  = sorted.filter(m => m.kind === 'freelance' && m.id !== 'unassigned' && kindFilter(m))
         const unassigned = sorted.filter(m => m.id === 'unassigned' || m.kind === 'unassigned')
 
-        const showYoko       = filter === 'all' || filter === 'yoko'       || filter === 'hidden'
-        const showFreelance  = filter === 'all' || filter === 'freelance'  || filter === 'hidden'
+        const showYoko       = filter === 'all' || filter === 'yoko'       || filter === 'hidden' || filter === 'inactive'
+        const showFreelance  = filter === 'all' || filter === 'freelance'  || filter === 'hidden' || filter === 'inactive'
         const showSysteem    = filter === 'all' || filter === 'unassigned'
 
         const renderSection = (label: string, rows: TeamMember[], sectionKind: TeamKind) => rows.length === 0 ? null : (
           <div key={label} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, padding: '0 2px' }}>{label} · {rows.length}</div>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 100px 80px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 150px 80px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
                 <span></span>
                 <span></span>
                 <span>Naam</span>
@@ -351,6 +369,7 @@ export default function TeamAdminPage() {
                   onChange={patch => updateField(m.id, patch)}
                   onDelete={() => remove(m.id)}
                   onToggleHidden={() => toggleHidden(m.id)}
+                  onToggleInactive={() => toggleInactive(m.id)}
                   onDragStart={() => { dragFromRef.current = m.id }}
                   onDropOn={() => {
                     const from = dragFromRef.current
@@ -376,11 +395,12 @@ export default function TeamAdminPage() {
   )
 }
 
-function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn, onDragEnd }: {
+function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onDragStart, onDropOn, onDragEnd }: {
   member: TeamMember
   onChange: (patch: Partial<TeamMember>) => void
   onDelete: () => void
   onToggleHidden: () => void
+  onToggleInactive: () => void
   onDragStart?: () => void
   onDropOn?:    () => void
   onDragEnd?:   () => void
@@ -423,7 +443,7 @@ function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn
         onDropOn()
       }}
       onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
-      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 100px 80px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
+      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 150px 80px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
         borderBottom: dropHover ? '2px solid var(--accent)' : '1px solid var(--border-light)',
         background: dropHover ? 'var(--accent-light)' : 'transparent',
         cursor: draggable ? 'grab' : 'default',
@@ -452,15 +472,30 @@ function Row({ member, onChange, onDelete, onToggleHidden, onDragStart, onDropOn
         <option value="freelance">Freelance</option>
         <option value="unassigned">Systeem</option>
       </select>
-      <button onClick={onToggleHidden}
-        title={member.hidden ? 'Lid is verborgen — klik om weer zichtbaar te maken' : 'Lid is zichtbaar — klik om te verbergen (blijft bestaan)'}
-        style={{
-          padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)',
-          background: member.hidden ? 'var(--bg-hover)' : 'transparent',
-          color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-        }}>
-        {member.hidden ? '👁 Verborgen' : 'Zichtbaar'}
-      </button>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <button onClick={onToggleHidden}
+          title={member.hidden ? 'Lid is verborgen — klik om weer zichtbaar te maken' : 'Lid is zichtbaar — klik om te verbergen (blijft bestaan)'}
+          style={{
+            padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)',
+            background: member.hidden ? 'var(--bg-hover)' : 'transparent',
+            color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          }}>
+          {member.hidden ? '👁 Verborgen' : 'Zichtbaar'}
+        </button>
+        {member.id !== 'unassigned' && (
+          <button onClick={onToggleInactive}
+            title={member.inactive
+              ? 'Lid is inactief (gestopt) — klik om weer actief te maken'
+              : 'Lid telt mee in actieve capaciteit — klik om als inactief (gestopt) te markeren'}
+            style={{
+              padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)',
+              background: member.inactive ? 'var(--bg-hover)' : 'transparent',
+              color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            }}>
+            {member.inactive ? '💤 Inactief' : 'Actief'}
+          </button>
+        )}
+      </div>
       <button
         onClick={() => {
           if (!member.email) { window.alert('Geen email-adres voor dit lid — vul eerst de email in.'); return }

@@ -547,8 +547,14 @@ export default function TeamPage() {
             if (id === 'unassigned') return 'unassigned'
             return YOKO_IDS.has(id) ? 'yoko' : 'freelance'
           }
-          const yokoCards = all.filter(m => kindOf(m.id) === 'yoko')
-          const freeCards = all.filter(m => kindOf(m.id) === 'freelance')
+          // Inactief = gestopt (bv. stage afgerond) — telt niet meer mee
+          // bij Studio Yoko/Freelance, staat apart onderaan. Beheren
+          // (aan/uit) gaat via Team beheren, net als de Yoko/Freelance-
+          // indeling zelf.
+          const isInactive = (id: string) => !!liveMembers.find(lm => lm.id === id)?.inactive
+          const yokoCards     = all.filter(m => kindOf(m.id) === 'yoko' && !isInactive(m.id))
+          const freeCards     = all.filter(m => kindOf(m.id) === 'freelance' && !isInactive(m.id))
+          const inactiveCards = all.filter(m => isInactive(m.id))
 
           const DAY_TO_ISO: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
           const saveDaysOff = async (memberId: string, next: string[], memberName?: string) => {
@@ -606,8 +612,18 @@ export default function TeamPage() {
                   <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
                     Freelance · {freeCards.length}
                   </div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: inactiveCards.length > 0 ? 24 : 0 }}>
                     {freeCards.map(m => renderCard(m, true))}
+                  </div>
+                </>
+              )}
+              {inactiveCards.length > 0 && (
+                <>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
+                    Inactief · {inactiveCards.length}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', opacity: 0.7 }}>
+                    {inactiveCards.map(m => renderCard(m, true))}
                   </div>
                 </>
               )}
@@ -615,7 +631,7 @@ export default function TeamPage() {
           )
         })()}
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
-          Hover over een foto om te wijzigen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · indeling Yoko/Freelance wijzig je via <Link href="/team-admin" style={{ color: 'var(--accent)' }}>Team beheren</Link>
+          Hover over een foto om te wijzigen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · indeling Yoko/Freelance/Inactief wijzig je via <Link href="/team-admin" style={{ color: 'var(--accent)' }}>Team beheren</Link>
         </p>
       </div>
 

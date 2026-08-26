@@ -66,10 +66,10 @@ export function demoNavigate(router: { push: (href: string) => void }, href: str
 
 // ─── Team ───────────────────────────────────────────────────────────────────
 export const DEMO_MEMBERS: TeamMember[] = [
-  { id: 'demo-sam',   name: 'Sam',   email: '', color: '#B0C6EB', weeklyCapacity: 40, position: 0, hidden: false, kind: 'yoko',        startDate: null },
-  { id: 'demo-robin', name: 'Robin', email: '', color: '#9DB1A4', weeklyCapacity: 32, position: 1, hidden: false, kind: 'yoko',        startDate: null },
-  { id: 'demo-jules', name: 'Jules', email: '', color: '#C09BCA', weeklyCapacity: 40, position: 2, hidden: false, kind: 'freelance',  startDate: null },
-  { id: 'demo-noa',   name: 'Noa',   email: '', color: '#D8B62E', weeklyCapacity: 24, position: 3, hidden: false, kind: 'yoko',        startDate: null },
+  { id: 'demo-sam',   name: 'Sam',   email: '', color: '#B0C6EB', weeklyCapacity: 40, position: 0, hidden: false, kind: 'yoko',        startDate: null, inactive: false },
+  { id: 'demo-robin', name: 'Robin', email: '', color: '#9DB1A4', weeklyCapacity: 32, position: 1, hidden: false, kind: 'yoko',        startDate: null, inactive: false },
+  { id: 'demo-jules', name: 'Jules', email: '', color: '#C09BCA', weeklyCapacity: 40, position: 2, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
+  { id: 'demo-noa',   name: 'Noa',   email: '', color: '#D8B62E', weeklyCapacity: 24, position: 3, hidden: false, kind: 'yoko',        startDate: null, inactive: false },
 ]
 
 export const DEMO_PROFILE: UserProfile = {
