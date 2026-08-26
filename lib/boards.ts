@@ -18,6 +18,9 @@ export type SubItem = {
   // subitem, zodat 'Open in Google ↗' beschikbaar blijft.
   externalLink?: string | null
   source?:      'manual' | 'google'
+  // Expliciete gebruikerskeuze voor Google-sync. Met 'active' blijft een
+  // eerder afgeronde afspraak heropend, ook wanneer de datum >3 dagen oud is.
+  statusOverride?: 'active' | 'done'
   estHours:     number
   echtGewerkt?: number
 }
@@ -55,6 +58,7 @@ export type BoardItem = {
   subitems?:      SubItem[]
   journal?:       JournalEntry[]
   source?:        'manual' | 'google'   // origin of this item
+  statusOverride?: 'active' | 'done'
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
   externalSyncedAt?: string             // gebruikt om de nieuwste Google-variant te kiezen
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items

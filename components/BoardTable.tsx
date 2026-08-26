@@ -1255,7 +1255,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         // gedrag als bij top-level items). alignSelf:stretch overruled
         // de alignItems:center van de grid-row zodat de pill écht uitvult.
         return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden', flex: 1, minWidth: 0 }}>
-          <StatusCell value={subitem.status} onChange={v => onUpdate({ status: v })} />
+          <StatusCell value={subitem.status} onChange={v => onUpdate({
+            status: v,
+            ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
+              ? { statusOverride: v === 'Done' ? 'done' as const : 'active' as const }
+              : {}),
+          })} />
         </div>
       case 'timeline':
         return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
@@ -1441,6 +1446,25 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
                 ↗
               </button>
             )}
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onDelete() }}
+              title="Subitem verwijderen"
+              aria-label={`Subitem ${subitem.name} verwijderen`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 24, height: 24, padding: 0, flexShrink: 0,
+                border: 'none', borderRadius: 5, background: 'transparent',
+                color: hover ? 'var(--danger, #c4453a)' : 'var(--text-muted)',
+                cursor: 'pointer', fontSize: 18, lineHeight: 1,
+                opacity: hover ? 1 : 0.65,
+                transition: 'color 0.12s, background 0.12s, opacity 0.12s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              ×
+            </button>
             {subitem.meetLink && (
               <a href={subitem.meetLink} target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
@@ -1489,11 +1513,10 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           )}
         </div>
       ))}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%' }}>
-        {hover && (
-          <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
-        )}
-      </div>
+      {/* Actiekolom blijft bestaan voor uitlijning met parent-rijen. De
+          verwijderknop staat bewust naast de subitemnaam: in brede Agenda-
+          tabellen stond deze kolom vaak buiten beeld. */}
+      <div style={{ borderLeft: '1px solid var(--border)', height: '100%' }} />
     </div>
   )
 }
@@ -1533,8 +1556,11 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     // instance bij de volgende sync gewoon weer terug (leek alsof
     // verwijderen niet werkte). Alleen relevant voor source==='google';
     // handmatige subitems verdwijnen gewoon, geen tombstone nodig.
-    if (deleted?.source === 'google') {
-      const next = [...(dismissedInstanceIds ?? []), id]
+    const isGoogleInstance = deleted?.source === 'google'
+      || !!deleted?.externalLink
+      || id.startsWith('si_g_')
+    if (isGoogleInstance) {
+      const next = [...new Set([...(dismissedInstanceIds ?? []), id])]
       onUpdate(filtered, { dismissedInstanceIds: next })
     } else {
       onUpdate(filtered)
@@ -2746,7 +2772,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     const sourceItem = group.items.find(i => i.id === itemId)
     if (sourceItem?.source === 'google') {
       const keys = Object.keys(updates)
-      const allowed = keys.every(k => k === 'subitems' || k === 'status')
+      const allowed = keys.every(k => k === 'subitems' || k === 'status' || k === 'statusOverride')
       if (!allowed) {
         showToast('Bewerk dit item in Google Calendar — wijzigingen hier worden bij de volgende sync overschreven')
         return
@@ -2760,7 +2786,13 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
       ...group,
       items: group.items.map(i => {
         if (!(bulk ? selectedIds.has(i.id) : i.id === itemId)) return i
-        const merged: BoardItem = { ...i, ...updates }
+        const merged: BoardItem = {
+          ...i,
+          ...updates,
+          ...(i.source === 'google' && 'status' in updates
+            ? { statusOverride: updates.status === 'Done' ? 'done' : 'active' }
+            : {}),
+        }
         // estHours veranderd én item heeft ownerHours? Schaal de
         // verdeling proportioneel zodat de verhoudingen kloppen
         // met de nieuwe totalen — pie + cijfers blijven in sync.
@@ -4305,6 +4337,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       ...g,
       items: g.items.map(i => {
         let nextItem = selectedIds.has(i.id) ? { ...i, ...patch } : i
+        if (selectedIds.has(i.id) && i.source === 'google' && 'status' in patch) {
+          nextItem = { ...nextItem, statusOverride: patch.status === 'Done' ? 'done' : 'active' }
+        }
         // ownerIds/estHours consistency check ook in bulk-pad. Anders
         // raken ownerHours stale wanneer een bulk-owner-wijziging eigenaren
         // wegneemt of een bulk-uren-wijziging totalen verandert.
@@ -4333,7 +4368,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           }
         }
         if (hasSubPatch && nextItem.subitems && nextItem.subitems.length > 0) {
-          const subs = nextItem.subitems.map(s => selectedIds.has(s.id) ? { ...s, ...subPatch } : s)
+          const subs = nextItem.subitems.map(s => {
+            if (!selectedIds.has(s.id)) return s
+            const isGoogleSub = s.source === 'google' || !!s.externalLink || s.id.startsWith('si_g_')
+            return {
+              ...s,
+              ...subPatch,
+              ...(isGoogleSub && 'status' in subPatch
+                ? { statusOverride: subPatch.status === 'Done' ? 'done' as const : 'active' as const }
+                : {}),
+            }
+          })
           if (subs.some((s, idx) => s !== nextItem.subitems![idx])) nextItem = { ...nextItem, subitems: subs }
         }
         return nextItem
@@ -4359,9 +4404,34 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       ...g,
       items: g.items
         .filter(i => !selectedIds.has(i.id))
-        .map(i => i.subitems && i.subitems.some(s => selectedIds.has(s.id))
-          ? { ...i, subitems: i.subitems.filter(s => !selectedIds.has(s.id)) }
-          : i),
+        .map(i => {
+          if (!i.subitems?.some(s => selectedIds.has(s.id))) return i
+
+          // De losse ×-actie bewaart voor Google-instances een tombstone,
+          // zodat de periodieke Calendar-sync ze niet direct opnieuw als
+          // subitem aanmaakt. De bulkactie liep tot nu toe buiten die route:
+          // het subitem verdween kort uit de UI en kwam daarna weer terug.
+          // Bouw hier exact dezelfde dismissed-lijst op voor alle
+          // geselecteerde Google-subitems, inclusief oude rows die alleen
+          // aan hun si_g_-id of externalLink herkenbaar zijn.
+          const dismissed = new Set(
+            Array.isArray(i.dismissedInstanceIds)
+              ? (i.dismissedInstanceIds as string[])
+              : []
+          )
+          for (const sub of i.subitems) {
+            if (!selectedIds.has(sub.id)) continue
+            if (sub.source === 'google' || !!sub.externalLink || sub.id.startsWith('si_g_')) {
+              dismissed.add(sub.id)
+            }
+          }
+
+          return {
+            ...i,
+            subitems: i.subitems.filter(s => !selectedIds.has(s.id)),
+            ...(dismissed.size > 0 ? { dismissedInstanceIds: [...dismissed] } : {}),
+          }
+        }),
     })))
     for (const id of topLevelIdsToDelete) {
       softDeleteItem(id).catch(() => {})
