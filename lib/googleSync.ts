@@ -231,13 +231,33 @@ async function ensureDoneGroup(
   // Alleen ACTIEVE Done-groepen hergebruiken. Soft-deleted respecteren
   // we — de user heeft 'm bewust weggehaald. Als er dan alsnog 'n Done-
   // event moet landen, maken we een verse Done-groep aan.
-  const { data: rows } = await admin
+  //
+  // Eerst een EXACTE 'Done'-match; sommige borden hernoemden 'm ooit naar
+  // iets als 'Done S09' (seizoen/jaar-split). Zonder fallback matchte deze
+  // query dat nooit en maakte de sync stilletjes een NIEUWE, aparte 'Done'-
+  // groep aan zodra het eerste event auto-Done ging (3-dagenregel) — met
+  // als gevolg dat maanden aan afgeronde meetings in een obscure extra
+  // groep belandden i.p.v. de 'Done S09' die de gebruiker checkt. Zelfde
+  // klasse bug als client-side autoMoveDoneItems (lib/doneAutoMove.ts),
+  // maar hier los van gefixt — de server-sync gebruikt deze query, niet die
+  // client-helper.
+  const { data: exactRows } = await admin
     .from('board_groups').select('id, name, deleted_at')
     .eq('board_id', boardId)
     .ilike('name', 'done')
     .is('deleted_at', null)
     .limit(1)
-  const existing = (rows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
+  const exact = (exactRows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
+  if (exact) return exact.id
+
+  const { data: prefixRows } = await admin
+    .from('board_groups').select('id, name, deleted_at')
+    .eq('board_id', boardId)
+    .ilike('name', 'done%')
+    .is('deleted_at', null)
+    .order('position', { ascending: true })
+    .limit(1)
+  const existing = (prefixRows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
   if (existing) {
     return existing.id
   }
