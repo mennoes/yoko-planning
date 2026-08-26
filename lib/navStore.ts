@@ -48,6 +48,7 @@ function isOnDemoRoute(): boolean {
 const DEMO_PROJECTS: NavItem[] = [
   { id: 'Noorderlicht Media', label: 'Noorderlicht Media', href: '/demo/projects/Noorderlicht%20Media', color: '#B0C6EB' },
   { id: 'Kaap Studio',        label: 'Kaap Studio',        href: '/demo/projects/Kaap%20Studio',        color: '#D8935B' },
+  { id: 'Vuurtoren Events',   label: 'Vuurtoren Events',   href: '/demo/projects/Vuurtoren%20Events',   color: '#5FA8A0' },
 ]
 
 // Zelfde items als DEFAULT_DOCS, maar met /demo-hrefs (rechtstreeks i.p.v.

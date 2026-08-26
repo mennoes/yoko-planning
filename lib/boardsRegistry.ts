@@ -14,6 +14,7 @@ import { isOnDemoRoute, notifyDemoBlocked, DEMO_BOARD_IDS } from './demoFixtures
 const DEMO_FALLBACK: BoardConfig[] = [
   { id: DEMO_BOARD_IDS[0], name: DEMO_BOARD_IDS[0], emoji: '🎬', color: '#B0C6EB', columns: [] },
   { id: DEMO_BOARD_IDS[1], name: DEMO_BOARD_IDS[1], emoji: '🎨', color: '#D8935B', columns: [] },
+  { id: DEMO_BOARD_IDS[2], name: DEMO_BOARD_IDS[2], emoji: '🎪', color: '#5FA8A0', columns: [] },
 ]
 
 const LS_KEY = 'yoko-boards-registry'
