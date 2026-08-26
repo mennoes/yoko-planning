@@ -1347,9 +1347,14 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             width: 18, height: 28,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'grab', userSelect: 'none',
-            color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
-            opacity: 0, transition: 'opacity 0.12s',
-            zIndex: 5,
+            // Zelfde contrast-fix als de row-grip hierboven: tegen de
+            // achtergrond was text-secondary zonder eigen vlak nauwelijks
+            // te zien.
+            color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
+            opacity: 0, transition: 'opacity 0.12s, background 0.12s',
+            zIndex: 5, borderRadius: 4,
+            background: 'var(--bg-hover)',
+            border: '1px solid var(--border-strong)',
           }}>⠿</span>
       )}
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
@@ -3441,11 +3446,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     width: 14, height: 24,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: 'grab', userSelect: 'none',
-                    color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, lineHeight: 1,
+                    // text-primary i.p.v. text-secondary + een steviger rand:
+                    // tegen de lichte bg-hover-achtergrond was het ⠿-icoon in
+                    // text-secondary nauwelijks te onderscheiden.
+                    color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
                     opacity: 0, transition: 'opacity 0.12s, background 0.12s',
                     zIndex: 5, borderRadius: 4,
                     background: 'var(--bg-hover)',
-                    border: '1px solid var(--border)',
+                    border: '1px solid var(--border-strong)',
                     pointerEvents: 'auto',
                   }
                   // Naam-kolom eindigt op (32 + nameW). Comment-knop zit
