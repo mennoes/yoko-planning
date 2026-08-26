@@ -40,7 +40,7 @@ const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
 }
 const DEFAULT_MAIN = [
   { id: 'home',     href: '/',         label: 'Home' },
-  { id: 'planning', href: '/planning', label: 'Werklast' },
+  { id: 'planning', href: '/planning', label: 'Planning' },
   { id: 'todos',    href: '/todos',    label: "To do's" },
 ]
 type MainNavItem = typeof DEFAULT_MAIN[number]
@@ -1130,7 +1130,17 @@ export default function Sidebar({
       const savedMain = localStorage.getItem('sidebar-main-nav')
       if (savedMain) {
         const parsed = JSON.parse(savedMain) as MainNavItem[]
-        if (DEFAULT_MAIN.every(d => parsed.some(p => p.href === d.href))) setMainNavRaw(parsed)
+        if (DEFAULT_MAIN.every(d => parsed.some(p => p.href === d.href))) {
+          // Een oude standaardnaam kan in localStorage blijven hangen en
+          // anders de nieuwe productnaam voor altijd overschrijven. Alleen
+          // de bekende oude default migreren; eigen hernoemingen blijven.
+          const reconciled = parsed.map(item =>
+            item.href === '/planning' && item.label === 'Werklast'
+              ? { ...item, label: 'Planning' }
+              : item)
+          setMainNavRaw(reconciled)
+          localStorage.setItem('sidebar-main-nav', JSON.stringify(reconciled))
+        }
       }
     } catch {}
     setHydrated(true)

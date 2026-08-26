@@ -301,10 +301,13 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // bevestigd: item in groep 'Vrij' zonder naam-match → 40u compleet
   // verdwenen uit de werkdruk-totalen.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  const totalCalDays = Math.max(1, Math.floor((pE.getTime() - pS.getTime()) / 86400000) + 1)
+  // Gebruik voor de noemer exact dezelfde zichtbare werkdagen als voor de
+  // overlap. Anders verdwijnen weekend-aandelen uit de week-/dagtotalen.
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), isVrij ? undefined : memberId)
+  if (totalWork === 0) return 0
   const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
-  const fraction  = overlapWork / totalCalDays
+  const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
   const myShare = project.ownerHours && memberId in project.ownerHours
@@ -313,10 +316,7 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   return Math.round(fraction * myShare * 10) / 10
 }
 
-function memberHoursInCol(projects: Project[], memberId: string, col: Col) {
-  // Eén keer laden i.p.v. per project — deze functie loopt over alle
-  // projects × members × kolommen in de grid.
-  const overrides = loadCategoryOverrides()
+function memberHoursInCol(projects: Project[], memberId: string, col: Col, overrides = loadCategoryOverrides()) {
   return projects
     .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd, overrides[p.id]) }))
     .filter(c => c.hours > 0)
@@ -873,12 +873,6 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   const didDrag = useRef(false)
   const dpx = 7 / colW
 
-  // Volg de horizontale scroll-positie van de timeline-container zodat de
-  // titel mee kan schuiven (Google-Cal-stijl). Anders verdwijnt de tekst van
-  // brede bars onder de sticky linker-kolom zodra je rechts scrolt.
-  const barRef = useRef<HTMLDivElement | null>(null)
-  const scrollLeft = useScrollLeftOf(barRef)
-
   const isReadOnly = project.source === 'google'
 
   // Snapshot van alle member-rijen op het moment dat de drag start. Gebruiken
@@ -1043,9 +1037,11 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
   // tekst niet pal tegen de sticky kolomrand plakt.
   const barLeftAbs = g.left + 2
-  const wantShift  = scrollLeft + 8 - barLeftAbs
   const maxShift   = Math.max(0, g.width - 90)
-  const titleShift = Math.max(0, Math.min(wantShift, maxShift))
+  // De grid houdt --planner-scroll-left rechtstreeks op het scrollende
+  // DOM-element bij. CSS positioneert de titel daardoor zonder dat iedere
+  // balk een eigen listener en React-render nodig heeft.
+  const titleShift = `clamp(0px, calc(var(--planner-scroll-left, 0px) + 8px - ${barLeftAbs}px), ${maxShift}px)`
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
@@ -1091,7 +1087,6 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
         />
       )}
       <div
-        ref={barRef}
         onMouseDown={e => startDrag(e, 'move')}
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
         onMouseEnter={() => setHoverBar(true)}
@@ -1269,7 +1264,6 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   const HOUR_H     = Math.round(44 * HOUR_RS)
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<null | {
     p: Project; durMin: number; newIso: string; newStartMin: number;
   }>(null)
@@ -1293,15 +1287,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     mouseStartX: number; mouseStartY: number;
     moved: boolean;
   }>(null)
-  // ScrollLeft van de buitenste horizontaal-scrollende container houden we
-  // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
-  // naam blijft links in beeld zolang de pill nog door 't viewport loopt).
-  const scrollLeft = useScrollLeftOf(rootRef)
   // nameW is de sticky linker-kolom; titels moeten daar 8px naast komen.
   function titleOffsetFor(barLeft: number, barWidth: number, padLeft: number) {
-    const want = scrollLeft - barLeft + 8
     const max  = Math.max(0, barWidth - 90)
-    return Math.max(0, Math.min(want - padLeft, max))
+    return `clamp(0px, calc(var(--planner-scroll-left, 0px) + 8px - ${barLeft + padLeft}px), ${max}px)`
   }
 
   // Filter visible projects
@@ -1683,7 +1672,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
 
   return (
-    <div ref={rootRef}>
+    <div>
       {/* All-day banner — sticky-left cel toont 'De hele dag' OR de avatar
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
@@ -4986,6 +4975,8 @@ export default function PlanningPage() {
   // aan 't item). Cross-tab synced via storage events.
   const [ownerExcludesTick, setOwnerExcludesTick] = useState(0)
   useEffect(() => onOwnerExcludesChange(() => setOwnerExcludesTick(t => t + 1)), [])
+  const [categoryRevision, setCategoryRevision] = useState(0)
+  useEffect(() => onCategoryOverridesChange(() => setCategoryRevision(t => t + 1)), [])
 
   const effectiveProjects = useMemo(() => {
     let next = projects
@@ -5077,7 +5068,21 @@ export default function PlanningPage() {
     const el = gridRef.current
     if (!el) return
     let queued = false
+    let saveTimer: number | null = null
     function updateVisibleRange() {
+      const gridNow = gridRef.current
+      if (!gridNow) return
+      const immediateLeft = gridNow.scrollLeft
+      // Titelverschuiving loopt via één gedeelde CSS-variabele. Dit is een
+      // directe DOM-write en veroorzaakt geen React-render per balk.
+      gridNow.style.setProperty('--planner-scroll-left', `${immediateLeft}px`)
+      if (saveTimer != null) window.clearTimeout(saveTimer)
+      saveTimer = window.setTimeout(() => {
+        try {
+          window.localStorage.setItem('planning-scroll-left', String(gridNow.scrollLeft))
+          window.localStorage.setItem('planning-scroll-left-at', String(Date.now()))
+        } catch {}
+      }, 160)
       if (queued) return
       queued = true
       requestAnimationFrame(() => {
@@ -5087,12 +5092,13 @@ export default function PlanningPage() {
         const cur = grid.scrollLeft
         setVisibleGridRange(prev => {
           const next = { start: cur, end: cur + grid.clientWidth }
-          return prev.start === next.start && prev.end === next.end ? prev : next
+          // Row-height/packing heeft al een buffer van drie weken. Een
+          // update per kwart viewport is ruim voldoende en voorkomt een
+          // volledige planner-render op iedere pixel scroll.
+          const step = Math.max(80, grid.clientWidth * 0.25)
+          const widthChanged = Math.abs((prev.end - prev.start) - grid.clientWidth) > 1
+          return prev.end === 0 || widthChanged || Math.abs(prev.start - cur) >= step ? next : prev
         })
-        try {
-          window.localStorage.setItem('planning-scroll-left', String(cur))
-          window.localStorage.setItem('planning-scroll-left-at', String(Date.now()))
-        } catch {}
       })
     }
     updateVisibleRange()
@@ -5101,6 +5107,7 @@ export default function PlanningPage() {
     return () => {
       el.removeEventListener('scroll', updateVisibleRange)
       window.removeEventListener('resize', updateVisibleRange)
+      if (saveTimer != null) window.clearTimeout(saveTimer)
     }
   }, [])
 
@@ -5153,6 +5160,23 @@ export default function PlanningPage() {
   }, [zoom, colOffset])
 
   const cols = useMemo(() => buildCols(zoom, baseFrom, colW), [zoom, baseFrom, colW])
+
+  // Uren per persoon/kolom zijn duur om uit te rekenen (alle projecten ×
+  // teamleden × kolommen). Voorheen gebeurde dit opnieuw bij iedere gewone
+  // scroll-render. Cache de matrix totdat data, kolommen, team of categorieën
+  // daadwerkelijk veranderen.
+  const contributionsByCell = useMemo(() => {
+    const overrides = loadCategoryOverrides()
+    const result = new Map<string, ReturnType<typeof memberHoursInCol>>()
+    for (const member of team) {
+      for (const col of cols) {
+        result.set(`${member.id}\u0000${col.key}`, memberHoursInCol(effectiveProjects, member.id, col, overrides))
+      }
+    }
+    return result
+  }, [effectiveProjects, team, cols, categoryRevision])
+  const contributionsFor = (memberId: string, col: Col) =>
+    contributionsByCell.get(`${memberId}\u0000${col.key}`) ?? []
 
   // Capacity in the right unit per zoom
   function colCapacity(weeklyCapacity: number, memberId?: string): number {
@@ -6356,7 +6380,7 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
                       background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
                     {cols.map(col => {
-                      const contribs = memberHoursInCol(effectiveProjects, m.id, col)
+                      const contribs = contributionsFor(m.id, col)
                       const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                       const isWeekStart = col.rangeStart.getDay() === 1
                       // Klik op leeg deel van de cel → nieuw item op deze
@@ -6558,7 +6582,7 @@ export default function PlanningPage() {
 
                   {/* Week/day/month cells */}
                   {cols.map(col => {
-                    const contribs = memberHoursInCol(effectiveProjects, member.id, col)
+                    const contribs = contributionsFor(member.id, col)
                     const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                     // In Overzicht-zoom is een 'kolom' een hele week, dus
                     // weekend-highlighting is hier niet relevant.

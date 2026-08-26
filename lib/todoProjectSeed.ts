@@ -192,6 +192,15 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
   const removed = loadRemovedProjectKeys()
   const projects = loadAllTodoProjects()
   const projectsByKey = new Map(projects.map(p => [`${p.board}:${p.itemId}`, p]))
+  const childrenByParent = new Map<string, ProjectSeedLink[]>()
+  for (const project of projects) {
+    const marker = project.itemId.lastIndexOf('__si')
+    if (marker <= 0) continue
+    const parentKey = `${project.board}:${project.itemId.slice(0, marker)}`
+    const children = childrenByParent.get(parentKey) ?? []
+    children.push(project)
+    childrenByParent.set(parentKey, children)
+  }
   const extras: TodoItem[] = loadMyOpenProjects(memberId)
     .filter(p => !existingRefs.has(`project:${p.board}:${p.itemId}`))
     .filter(p => !removed.has(`${p.board}:${p.itemId}`))
@@ -204,11 +213,24 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
 
   const doneKeys = loadDoneTodoProjectKeys()
   const overrides = loadCategoryOverrides()
+  const today = new Date().toISOString().slice(0, 10)
   return dedupeTodoItems([...storedUnique, ...extras])
     .map(item => {
       if (!item.projectRef) return item
       const current = projectsByKey.get(`${item.projectRef.board}:${item.projectRef.itemId}`)
-      return current ? { ...item, projectRef: { ...item.projectRef, ...current } } : item
+      if (!current) return item
+      const relevantChild = (childrenByParent.get(`${current.board}:${current.itemId}`) ?? [])
+        .filter(child =>
+          (child.status ?? '').toLowerCase() !== 'done' &&
+          (!(child.endDate ?? child.startDate) || (child.endDate ?? child.startDate)! >= today))
+        .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))[0]
+      // Voor langlopende hoofdprojecten bepaalt het eerstvolgende concrete
+      // subitem de week. /todos deed dit al in zijn renderer; door de datum
+      // hier centraal te verrijken gebruikt Home exact dezelfde bucket.
+      const datedCurrent = relevantChild
+        ? { ...current, startDate: relevantChild.startDate, endDate: relevantChild.endDate }
+        : current
+      return { ...item, projectRef: { ...item.projectRef, ...datedCurrent } }
     })
     .filter(item => {
       const ref = item.projectRef
@@ -216,6 +238,19 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
         if (doneKeys.has(`${ref.board}:${ref.itemId}`)) return false
         if (overrides[`${ref.board}__${ref.itemId}`] === 'vrij') return false
         if (isVrijTitle(ref.name ?? '')) return false
+        // Een hoofdproject met concrete subitems is alleen nog een taak
+        // zolang minstens één subitem open en actueel/toekomstig is. Deze
+        // regel stond voorheen alleen in de renderer van /todos. Daardoor
+        // verborg To do's bv. Medialogica, terwijl Home hetzelfde opgeslagen
+        // item nog wél liet zien. Centraal filteren houdt beide pagina's
+        // werkelijk op dezelfde bron en selectie.
+        const children = childrenByParent.get(`${ref.board}:${ref.itemId}`)
+        if (children && children.length > 0) {
+          const hasRelevantChild = children.some(child =>
+            (child.status ?? '').toLowerCase() !== 'done' &&
+            (!(child.endDate ?? child.startDate) || (child.endDate ?? child.startDate)! >= today))
+          if (!hasRelevantChild) return false
+        }
       }
       return !isVrijTitle((item.text ?? '').split('\n')[0] ?? '')
     })

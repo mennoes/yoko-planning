@@ -57,17 +57,12 @@ function resolveAttendeeEmailWith(memberKeys: MemberKey[], email: string): strin
   return null
 }
 
-// Vooruitblik beperken tot 2 weken: anders explodeert een recurring meeting
-// als 30+ subitems en wordt het bord onleesbaar. De sync draait elke 5
-// minuten (én bij elke pageload), dus nieuwe instances binnen de horizon
-// komen automatisch binnen rollen zonder dat de gebruiker iets hoeft te
-// doen. 14 dagen geeft genoeg ruimte voor 'wat staat er deze + volgende
-// week'.
-const WINDOW_DAYS_FUTURE = 14   // 2 weken vooruit. Verder doortrekken
-// laat recurring meetings (zoals een wekelijkse Redactievergadering)
-// exploderen tot tientallen subitems — onleesbaar. Save-the-dates met
-// een datum verder dan 2 weken weg verschijnen vanzelf zodra ze
-// dichterbij komen; de sync draait elke 5 minuten.
+// Losse Google-afspraken moeten ruim vooruit vindbaar zijn (de bord-UI heeft
+// er expliciet een ingeklapte 'Opkomend'-sectie voor). Recurring reeksen
+// begrenzen we afzonderlijk: zo verdwijnen save-the-dates niet meer na twee
+// weken, zonder dat een wekelijkse reeks honderden subitems produceert.
+const WINDOW_DAYS_FUTURE = 180
+const RECURRING_DAYS_FUTURE = 56
 const WINDOW_DAYS_PAST   = 180  // 6 months back — zodat recurring meetings
                                  //   ook hun historische instances meenemen
 const AUTO_DONE_AFTER_DAYS = 3  // events waarvan de end-date > N dagen
@@ -751,15 +746,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   //  - de transparency 'transparent' is (in Google als "Free" gemarkeerd)
   //  - de gebruiker zelf niet expliciet 'accepted' heeft. Google toont dit als
   //    "Yes" / "Ja"; Maybe, No en onbeantwoorde uitnodigingen vallen af.
-  let skipCancelled = 0, skipNotAccepted = 0, skipNoStart = 0, skipSolo = 0, skipVrij = 0
+  let skipCancelled = 0, skipNotAccepted = 0, skipNoStart = 0, skipSolo = 0, skipVrij = 0, skipFarRecurring = 0
+  const recurringCutoff = new Date(now.getTime() + RECURRING_DAYS_FUTURE * 86400000).toISOString().slice(0, 10)
   const validEvents = events.filter(ev => {
     if (ev.status === 'cancelled') { skipCancelled++; return false }
     const self = ev.attendees?.find(a => a.self)
     // Google toont `accepted` als "Yes" / "Ja". Alle andere antwoorden
     // (Maybe, No en nog niet beantwoord) blijven buiten de planner.
-    if (self?.responseStatus !== 'accepted') { skipNotAccepted++; return false }
+    // Een gedeelde/teamkalender levert niet altijd een attendee met
+    // self=true. Alleen expliciet geweigerde/onbeantwoorde uitnodigingen
+    // overslaan; ontbreken van `self` is geen bewijs dat de afspraak weg
+    // moet. Dit was een belangrijke oorzaak van af en toe ontbrekende items.
+    if (self && self.responseStatus !== 'accepted') { skipNotAccepted++; return false }
     const { start } = eventDates(ev)
     if (!start) { skipNoStart++; return false }
+    if (ev.recurringEventId && start > recurringCutoff) { skipFarRecurring++; return false }
     // Vrij/vakantie/verlof in de Google-agenda is persoonlijk en hoort
     // niet in de planning-tool. User markeert eigen vrije dagen via
     // /team in de tool; importeren vanuit Google dubbelt 't onnodig.
@@ -769,7 +770,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     return true
   })
   // eslint-disable-next-line no-console
-  console.log(`[googleSync] cal=${cal.calendar_id} fetched=${events.length} valid=${validEvents.length} skip{cancelled:${skipCancelled},notAccepted:${skipNotAccepted},noStart:${skipNoStart},solo:${skipSolo},vrij:${skipVrij}}`)
+  console.log(`[googleSync] cal=${cal.calendar_id} fetched=${events.length} valid=${validEvents.length} skip{cancelled:${skipCancelled},notAccepted:${skipNotAccepted},noStart:${skipNoStart},solo:${skipSolo},vrij:${skipVrij},farRecurring:${skipFarRecurring}}`)
   const groupedByRec = new Map<string, GoogleEvent[]>()
   for (const ev of validEvents) {
     const key = ev.recurringEventId ?? ev.id
@@ -999,7 +1000,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         // Bestaande est_hours behouden — gebruiker mag uren bijstellen
         // via de planning-detail-popup (radial chart / Est Time veld).
         // Sync zou anders elke 5 min terugzetten naar de Google-default.
-        est_hours:          existingRow?.est_hours ?? (eventOwners.perPerson * finalOwners.length),
+        // Oude syncversies hebben bij sommige Google-items 0u opgeslagen.
+        // Google-uren zijn in de UI read-only, dus 0 was geen bewuste
+        // gebruikerskeuze: herstel die vanuit de actuele eventduur.
+        est_hours:          (existingRow?.est_hours ?? 0) > 0
+          ? existingRow!.est_hours
+          : (eventOwners.perPerson * finalOwners.length),
         dagen:              0,
         notes:              ev.description ?? null,
         contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
@@ -1011,8 +1017,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
           // verdeling. Time/Meet-velden blijven door de sync gemanaged.
           const exExtra = (existingRow?.extra ?? {}) as Record<string, unknown>
           const exOwnerHours = exExtra.ownerHours as Record<string, number> | undefined
+          const hasUsableOwnerHours = !!exOwnerHours && finalOwners.length > 0
+            && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
           return {
-            ownerHours: exOwnerHours && Object.keys(exOwnerHours).length > 0 ? exOwnerHours : ownerHoursMap,
+            ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
             ...(() => { const t = eventTimes(ev); return t.startTime || t.endTime ? { startTime: t.startTime, endTime: t.endTime } : {} })(),
             ...(ev.hangoutLink ? { meetLink: ev.hangoutLink } : {}),
           }
@@ -1150,7 +1158,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // syncs voor altijd hangen. Past-instances behouden we (gebruiker
     // kan terugkijken naar wat Done is).
     const syncedIds = new Set(subitems.map(s => s.id))
-    const cutoffIso = new Date(Date.now() + WINDOW_DAYS_FUTURE * 86400000).toISOString().slice(0, 10)
+    const cutoffIso = new Date(Date.now() + RECURRING_DAYS_FUTURE * 86400000).toISOString().slice(0, 10)
     const preserved = priorSubs.filter(s => {
       if (syncedIds.has(s.id)) return false  // vervangen door verse sync-data
       // Handmatige (niet-Google) subs: altijd behouden — ID prefix verschilt.
@@ -1226,7 +1234,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // est_hours bewaren als user 'm heeft bijgesteld in de planning-
       // detail-popup. Sync zou anders elke 5 min terugzetten op de uit
       // Google-duur berekende totaal.
-      est_hours:          existingRow?.est_hours ?? totalHours,
+      est_hours:          (existingRow?.est_hours ?? 0) > 0 ? existingRow!.est_hours : totalHours,
       dagen:              0,
       notes:              sorted[0].description ?? null,
       contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
@@ -1235,8 +1243,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       extra:              (() => {
         const exExtra = (existingRow?.extra ?? {}) as Record<string, unknown>
         const exOwnerHours = exExtra.ownerHours as Record<string, number> | undefined
+        const hasUsableOwnerHours = !!exOwnerHours && finalOwners.length > 0
+          && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
         return {
-          ownerHours: exOwnerHours && Object.keys(exOwnerHours).length > 0 ? exOwnerHours : ownerHoursMap,
+          ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
           ...(() => { const m = sorted.find(ev => ev.hangoutLink)?.hangoutLink; return m ? { meetLink: m } : {} })(),
         }
       })(),

@@ -354,13 +354,11 @@ export function projectHoursInWeek(
   const overlapStart = wStart > pStart ? wStart : pStart
   const overlapEnd   = wEnd   < pEnd   ? wEnd   : pEnd
 
-  // Verdeling alleen over werkdagen — weekenden krijgen 0u uit een
-  // project. Als 't project alleen weekend overspant (zeldzaam) krijgen
-  // we 0u terug, wat klopt: 't werk valt simpelweg niet in werkdagen.
-  // Verdeling per KALENDER-dag (incl. weekend), niet per werkdag. User-
-  // mental-model: 10u over 10 dagen = 1u/dag. Weekend-/vrije-dag-cellen
-  // tonen geen werk (countWorkdays skipt ze in de noemer), maar de
-  // hours-per-day rate blijft op total/calDays.
+  // Verdeel over dezelfde werkdagen die de planning daadwerkelijk toont.
+  // De oude kalenderdag-noemer telde weekenden wel mee, terwijl die dagen
+  // vervolgens nergens uren kregen. Daardoor werd bv. 10u van ma-zo als
+  // slechts 7,1u zichtbaar. Met dezelfde filter voor totaal én overlap
+  // blijft de som over alle zichtbare cellen exact gelijk aan myShare.
   //
   // EXCEPTION: vrij-events zelf moeten WEL meetellen — anders skipt
   // countWorkdays hun eigen dag weg en wordt een 8u vakantie 0u in de
@@ -380,11 +378,12 @@ export function projectHoursInWeek(
   // werkdruk-totalen, terwijl isVrijDayForMember het lid op die exacte
   // dagen al wél als 'vrij' had gemarkeerd via die groepsnaam.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  const totalCalDays = Math.max(1, Math.floor((pEnd.getTime() - pStart.getTime()) / 86400000) + 1)
+  const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime(), isVrij ? undefined : memberId)
+  if (totalWork === 0) return 0
   const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
 
-  const fraction        = overlapWork / totalCalDays
+  const fraction        = overlapWork / totalWork
   const result          = fraction * myShare
 
   return Math.round(result * 10) / 10
