@@ -11,11 +11,11 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconAlert } from '@/components/Icon'
 import { UserAvatar } from '@/components/UserAvatar'
 import { VacationButton } from '@/components/VacationButton'
-import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
-import { saveDocs, loadDocs } from '@/lib/navStore'
 // DEMO-VARIANT van app/page.tsx (Home) — zelfde component, databron
 // vervangen door verzonnen fixtures i.p.v. de echte borden/team/todos.
 // Geen Supabase-sync. Zie app/demo/planning/page.tsx voor hetzelfde patroon.
+import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
+import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/demoTodos.json'
 import {
   loadSections as loadTodoSectionsStore,
@@ -218,10 +218,12 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
   }
 
   function openDetail() {
-    // DEMO: geen bord-detail-drawer beschikbaar — Planning toont hetzelfde
-    // item wél (klik 'm daar open) i.p.v. naar de echte, auth-gated
-    // bord-pagina te springen.
-    router.push('/demo/planning')
+    // Naar de (demo-)bord-pagina met focus + drawer-param. BoardRow leest
+    // 'drawer' uit de URL en opent zijn detail-drawer automatisch zodra de
+    // juiste rij gerenderd is — geen extra klik nodig. router.push() gaat
+    // niet via de click-interceptor in DemoShell, dus /demo/ hier expliciet.
+    const url = `/demo/projects/${item.board}?focus=${encodeURIComponent(item.rawItemId)}&drawer=${encodeURIComponent(item.rawItemId)}`
+    router.push(url)
   }
 
   const rowContent = (
@@ -335,11 +337,11 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
               Reset naar automatisch
             </button>
           )}
-          <Link href="/demo/planning"
+          <Link href={`/projects/${item.board}`}
             style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
               fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
               background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
-            Open in Planning →
+            Open agenda →
           </Link>
         </div>,
         document.body,
@@ -504,8 +506,8 @@ export default function HomePage() {
     setWeekCapacity(cap)
 
     // Restore mobile section order — demo-eigen key (niet 'home-sections-
-    // order', dat is de echte-app-key) + 'paginas' altijd uitgefilterd,
-    // ook als een oudere demo-sessie 'm ooit wel opsloeg.
+    // order', dat is de echte-app-key) + 'paginas'/'documenten' altijd
+    // uitgefilterd, ook als een oudere demo-sessie 'm ooit wel opsloeg.
     try {
       const saved = localStorage.getItem('home-demo-sections-order')
       if (saved) {
@@ -964,7 +966,7 @@ export default function HomePage() {
       <div style={card}>
         <div style={cardHeader}>
           <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconCheckList size={isMobile ? 17 : 15} />Jouw taken</h2>
-          <Link href="/demo/todos" style={cardLink}>Alle →</Link>
+          <Link href="/todos" style={cardLink}>Alle →</Link>
         </div>
         {memberId ? (
           <div style={{ padding: '6px 0 10px' }}>
@@ -1017,8 +1019,8 @@ export default function HomePage() {
                         })()}
                       </span>
                       {t.projectRef && (
-                        <Link href="/demo/planning"
-                          title={`Open ${t.projectRef.board} in Planning`}
+                        <Link href={`/projects/${t.projectRef.board}`}
+                          title={`Open ${t.projectRef.board}-agenda`}
                           onClick={e => e.stopPropagation()}
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -1098,7 +1100,7 @@ export default function HomePage() {
             <button onClick={() => setWeekOffset(o => o + 1)}
               title="Volgende week"
               style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>›</button>
-            <Link href="/demo/planning" style={{ ...cardLink, marginLeft: 4 }}>Planning →</Link>
+            <Link href="/planning" style={{ ...cardLink, marginLeft: 4 }}>Planning →</Link>
           </div>
         </div>
         <div style={{ padding: '16px 20px 14px' }}>
@@ -1225,10 +1227,9 @@ export default function HomePage() {
         return (
           <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
             <UserAvatar memberId={m.id} size={22} />
-            {/* DEMO: geen profielpagina beschikbaar — platte tekst i.p.v. link. */}
-            <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {m.name}
-            </span>
+            </Link>
             <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
               {tone.label}
             </span>
@@ -1243,13 +1244,20 @@ export default function HomePage() {
       )
       return (
         <div style={card}>
-          {/* DEMO: geen Team-beheerpagina beschikbaar — kop niet klikbaar. */}
-          <div style={cardHeader}>
-            <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <IconUsers size={isMobile ? 17 : 15} />Team vandaag
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
-            </h2>
-          </div>
+          {/* Header klikbaar — springt naar /team waar je werkdagen + cap
+              kunt aanpassen. Voorheen moest je dat zelf opzoeken. */}
+          <Link href="/team" style={{ textDecoration: 'none', color: 'inherit' }}
+            title="Open Team-pagina (werkdagen + capaciteit)">
+            <div style={{ ...cardHeader, cursor: 'pointer', transition: 'background 0.12s' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <IconUsers size={isMobile ? 17 : 15} />Team vandaag
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>›</span>
+              </h2>
+            </div>
+          </Link>
           <div style={{ padding: '6px 0 10px' }}>
             {subHeader('Studio Yoko', yokoMembers.length, yokoAvail)}
             {yokoMembers.map(renderRow)}
@@ -1280,7 +1288,7 @@ export default function HomePage() {
                        :              { bg: 'transparent', fg: 'var(--text-muted)' }
             const owners = (item.ownerIds ?? []).slice(0, 3)
             return (
-              <Link key={`${board}-${item.id}`} href="/demo/planning" style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
+              <Link key={`${board}-${item.id}`} href={`/projects/${board}`} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[board] ?? 'var(--accent)', flexShrink: 0 }} />
@@ -1320,10 +1328,9 @@ export default function HomePage() {
           ) : overloaded.map(o => (
             <div key={o.member.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px' }}>
               <UserAvatar memberId={o.member.id} size={22} />
-              {/* DEMO: geen profielpagina beschikbaar — platte tekst i.p.v. link. */}
-              <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Link href={`/profile/${o.member.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {o.member.name}
-              </span>
+              </Link>
               <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${Math.min(o.pct, 100)}%`, background: '#C4453A' }} />
               </div>
