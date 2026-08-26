@@ -14,8 +14,14 @@
 import type { BoardGroup, BoardItem } from './boards'
 
 export function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
-  const doneIdx   = next.findIndex(g => g.name.toLowerCase() === 'done')
-  const doneGroup = doneIdx >= 0 ? next[doneIdx] : null
+  // Exacte 'Done' eerst; sommige borden hebben 'm nooit zo hernoemd na een
+  // seizoen/jaar-split (bv. 'Done S09', 'Done oud') — zonder deze fallback
+  // maakt elke pass een NIEUWE, aparte 'Done'-groep aan naast de bestaande,
+  // wat items in de praktijk onvindbaar maakt (twee 'Done'-achtige groepen,
+  // de nieuwe standaard ingeklapt).
+  const doneIdx = next.findIndex(g => g.name.toLowerCase() === 'done')
+  const fallbackIdx = doneIdx >= 0 ? -1 : next.findIndex(g => g.name.toLowerCase().startsWith('done'))
+  const doneGroup = doneIdx >= 0 ? next[doneIdx] : fallbackIdx >= 0 ? next[fallbackIdx] : null
 
   const additions: BoardItem[] = []
   const restorations = new Map<string, { item: BoardItem; targetGroupId: string }>()
@@ -67,8 +73,11 @@ export function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
         : g,
     )
   }
+  // Niet ingeklapt: dit is de EERSTE keer dat dit bord iets op Done zet,
+  // dus de gebruiker heeft de nieuwe groep nog nooit gezien — ingeklapt
+  // zou 'm meteen uit het oog laten verdwijnen.
   return [...updated, {
-    id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: true,
+    id: `g_done_${Date.now()}`, name: 'Done', color: '#9aa39a', collapsed: false,
     items: additions,
   }]
 }
