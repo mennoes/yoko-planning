@@ -23,7 +23,8 @@ import { IconMenu, IconSearch } from './Icon'
 import { NotificationBell } from './NotificationBell'
 import { UserAvatar } from './UserAvatar'
 import { useProfile } from './ProfileContext'
-import { DEMO_BLOCKED_EVENT, DEMO_MEMBERS, demoSafeHref, notifyDemoBlocked } from '@/lib/demoFixtures'
+import { useTeam } from './TeamContext'
+import { DEMO_BLOCKED_EVENT, demoSafeHref, notifyDemoBlocked } from '@/lib/demoFixtures'
 import { resetDemoBoards } from '@/lib/demoBoardStore'
 
 export default function DemoShell({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,12 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [notice, setNotice] = useState(false)
   const { profile, setProfile } = useProfile()
+  // useTeam() i.p.v. de statische DEMO_MEMBERS-import — zodat leden die een
+  // bezoeker zelf toevoegt/verwijdert via /demo/team-admin ook meteen in
+  // deze switcher verschijnen/verdwijnen (team-admin schrijft naar dezelfde
+  // localStorage-backed lijst die TeamContext op /demo uitleest).
+  const { members: liveTeam } = useTeam()
+  const bekijkAlsMembers = liveTeam.filter(m => m.id !== 'unassigned' && !m.hidden)
 
   // Onderschept ELKE <a>-klik binnen de demo (capture-phase, vóór Next's
   // eigen Link-handler) — of het nou uit de hergebruikte Sidebar komt, uit
@@ -131,7 +138,7 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
             Bekijk als
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
-            {DEMO_MEMBERS.map(m => {
+            {bekijkAlsMembers.map(m => {
               const active = profile?.memberId === m.id
               return (
                 <button key={m.id}
