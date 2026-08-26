@@ -2908,9 +2908,19 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     const t = Date.parse(s)
     return Number.isFinite(t) && t > opkomendCutoff
   }
-  const currentItems  = renderItems.filter(i => !isOpkomendItem(i))
+  // Afgerond-subsectie: Done-items blijven in hun eigen groep (worden niet
+  // meer naar een aparte Done-groep verplaatst — zie lib/doneAutoMove.ts),
+  // maar bundelen we hier client-side in hetzelfde soort inklapbare blok
+  // als Opkomend, zodat de hoofd-lijst niet dichtslibt met afgeronde
+  // items. Een groep die zelf al 'Done'-achtig heet (bv. 'Done S09') is
+  // per definitie een archief-groep — daar juist NIET verbergen, anders
+  // toont die groep standaard niks.
+  const isDoneGroup = group.name.toLowerCase().trim().startsWith('done')
+  const currentItems  = renderItems.filter(i => !isOpkomendItem(i) && (isDoneGroup || i.status !== 'Done'))
+  const doneItems     = isDoneGroup ? [] : renderItems.filter(i => !isOpkomendItem(i) && i.status === 'Done')
   const opkomendItems = renderItems.filter(i =>  isOpkomendItem(i))
   const [opkomendOpen, setOpkomendOpen] = useState(false)
+  const [doneOpen, setDoneOpen] = useState(false)
   // Onthoud welk item zojuist via 'Voeg item toe' is aangemaakt zodat de
   // bijbehorende rij direct in name-edit-modus opent (autoFocus + select).
   // Wordt na het eerste render geconsumeerd zodat een refresh of nieuwe
@@ -3481,6 +3491,30 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                         </span>
                       </button>
                       {opkomendOpen && opkomendItems.map(renderRow)}
+                    </>
+                  )}
+                  {doneItems.length > 0 && (
+                    <>
+                      <button type="button"
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); setDoneOpen(o => !o) }}
+                        style={{
+                          width: '100%', textAlign: 'left',
+                          background: 'var(--overlay-faint)', border: 'none',
+                          borderBottom: '1px solid var(--border)',
+                          padding: '9px 14px 9px 32px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
+                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                        }}>
+                        <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
+                          {doneOpen ? '▼' : '▶'}
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 2, background: 'var(--green)' }} />
+                          Afgerond ({doneItems.length})
+                        </span>
+                      </button>
+                      {doneOpen && doneItems.map(renderRow)}
                     </>
                   )}
                 </>

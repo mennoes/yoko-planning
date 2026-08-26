@@ -215,67 +215,6 @@ async function ensureDoorlopendGroup(
   return await ensureGoogleGroup(admin, boardId)
 }
 
-// Done-groep — gebruikers willen items die op Done staan terugzien in een
-// vaste Done-bucket, ook voor gcal-rijen. We hergebruiken een bestaande
-// groep met die naam (case-insensitive); anders maken we 'm onderaan aan.
-// Niet renummeren — Done hoort onderaan en de client behandelt 'm hetzelfde.
-async function ensureDoneGroup(
-  admin:   SupabaseClient,
-  boardId: string,
-): Promise<string> {
-  // Alleen ACTIEVE Done-groepen hergebruiken. Soft-deleted respecteren
-  // we — de user heeft 'm bewust weggehaald. Als er dan alsnog 'n Done-
-  // event moet landen, maken we een verse Done-groep aan.
-  //
-  // Eerst een EXACTE 'Done'-match; sommige borden hernoemden 'm ooit naar
-  // iets als 'Done S09' (seizoen/jaar-split). Zonder fallback matchte deze
-  // query dat nooit en maakte de sync stilletjes een NIEUWE, aparte 'Done'-
-  // groep aan zodra het eerste event auto-Done ging (3-dagenregel) — met
-  // als gevolg dat maanden aan afgeronde meetings in een obscure extra
-  // groep belandden i.p.v. de 'Done S09' die de gebruiker checkt. Zelfde
-  // klasse bug als client-side autoMoveDoneItems (lib/doneAutoMove.ts),
-  // maar hier los van gefixt — de server-sync gebruikt deze query, niet die
-  // client-helper.
-  const { data: exactRows } = await admin
-    .from('board_groups').select('id, name, deleted_at')
-    .eq('board_id', boardId)
-    .ilike('name', 'done')
-    .is('deleted_at', null)
-    .limit(1)
-  const exact = (exactRows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
-  if (exact) return exact.id
-
-  const { data: prefixRows } = await admin
-    .from('board_groups').select('id, name, deleted_at')
-    .eq('board_id', boardId)
-    .ilike('name', 'done%')
-    .is('deleted_at', null)
-    .order('position', { ascending: true })
-    .limit(1)
-  const existing = (prefixRows as { id: string; name: string; deleted_at: string | null }[] | null)?.[0]
-  if (existing) {
-    return existing.id
-  }
-
-  const { data: posRows } = await admin
-    .from('board_groups').select('position')
-    .eq('board_id', boardId)
-    .order('position', { ascending: false })
-    .limit(1)
-  const maxPos = (posRows as { position: number }[] | null)?.[0]?.position ?? -1
-
-  const newId = `g_done_${boardId}_${Date.now()}`
-  await admin.from('board_groups').insert({
-    id:        newId,
-    board_id:  boardId,
-    name:      'Done',
-    color:     '#9aa39a',
-    collapsed: true,
-    position:  maxPos + 1,
-  })
-  return newId
-}
-
 // Opkomend-subgroep voor meetings > 4 weken vooruit. Standaard ingeklapt
 // en visueel gepositioneerd DIRECT ONDER de Meetings & doorlopend-groep
 // zodat 't oogt als een sub-sectie van Meetings. Bestaande legacy
@@ -566,19 +505,6 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (cached) return cached
     const gid = await ensureDoorlopendGroup(admin, boardId)
     doorlopendCache.set(boardId, gid)
-    return gid
-  }
-
-  // Done-groep cache: zodra een event status='Done' krijgt routen we 'm
-  // hierheen i.p.v. naar Doorlopend/Losse projecten. De client doet hetzelfde
-  // via autoMoveDoneItems, maar dat draait pas bij user-acties — door hier
-  // ook te routen sluit het visueel direct na de sync aan.
-  const doneCache = new Map<string, string>()
-  async function getDoneGroupFor(boardId: string): Promise<string> {
-    const cached = doneCache.get(boardId)
-    if (cached) return cached
-    const gid = await ensureDoneGroup(admin, boardId)
-    doneCache.set(boardId, gid)
     return gid
   }
 
@@ -952,25 +878,26 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // Meetings & doorlopend-groep. De client rendert far-future items
       // (> 4 weken) in een client-side inklapbare 'Opkomend'-subsectie
       // binnen die groep — geen aparte database-groep meer.
-      const fallbackGroup = newStatus === 'Done'
-        ? await getDoneGroupFor(keepBoard)
-        : (isVrij
-            ? await getVrijGroupFor(keepBoard)
-            : await getMeetingsGroupFor(keepBoard))
-      // Done items ALTIJD naar de Done-bucket. Voor non-Done: bestaande
-      // meetings-groep respecteren; als het item in de Meetings-groep zit
-      // blijft 't daar. User-verplaatsingen (eigen groep) blijven respected.
+      // Done verplaatst niet meer naar een aparte Done-bucket — een item
+      // dat op Done gaat blijft gewoon in z'n huidige groep staan (of, voor
+      // een NIEUW item, in dezelfde Vrij/Meetings-default als altijd). Een
+      // losse Done-groep bracht afgeronde meetings op een plek die de
+      // gebruiker niet checkte, waardoor uren/meetings 'verdwenen' leken.
+      const fallbackGroup = isVrij
+        ? await getVrijGroupFor(keepBoard)
+        : await getMeetingsGroupFor(keepBoard)
+      // Bestaande meetings-groep respecteren ongeacht status; als het item
+      // in de Meetings-groep zit blijft 't daar. User-verplaatsingen (eigen
+      // groep) blijven respected, ook wanneer het item op Done staat.
       const existingGroupAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
       const meetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
       const inAutoBucket = existingGroupAlive && (
         existingRow!.group_id === meetingsGid
       )
       void isFarFuture
-      const keepGroup = newStatus === 'Done'
-        ? fallbackGroup
-        : (existingGroupAlive
-            ? (inAutoBucket ? fallbackGroup : existingRow!.group_id)
-            : fallbackGroup)
+      const keepGroup = existingGroupAlive
+        ? (inAutoBucket ? fallbackGroup : existingRow!.group_id)
+        : fallbackGroup
       const eventOwners = ownersForEvent(ev)
       // Vervang owner_ids met de VERSE set Yoko-attendees uit Google,
       // TENZIJ de gebruiker handmatig owners heeft aangepast via de UI —
@@ -1191,31 +1118,26 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // Manuele bord-verplaatsingen (keepBoard) blijven gerespecteerd.
     const isVrij = isVrijTitle(baseName)
     // Eerst kijken of de gebruiker dit item al naar een eigen groep heeft
-    // verplaatst — die keuze respecteren we. Alleen Done schuift er overheen
-    // (Done-bucket is altijd waar Done's horen). Vrij komt op de tweede plek;
-    // pas als 'ie nog niet bestaat (nieuw item) maken we 'm zelf aan.
-    // Zelfde regel als bij single-events: bestaande verplaatsing ALTIJD
-    // respecteren, ook bij Done. Default voor nieuwe recurring rijen is
+    // verplaatst — die keuze respecteren we, OOK bij Done (geen aparte
+    // Done-bucket meer, zie de toelichting bij fallbackGroup hierboven).
+    // Vrij komt op de tweede plek; pas als 'ie nog niet bestaat (nieuw
+    // item) maken we 'm zelf aan. Default voor nieuwe recurring rijen is
     // de gedeelde 'Meetings & doorlopend' bucket — daar landen óók
     // recurring meetings zodat losse en doorlopende meetings naast elkaar
     // staan i.p.v. in twee aparte groepen.
-    const recFallback = newStatus === 'Done'
-      ? await getDoneGroupFor(keepBoard)
-      : (isVrij
-          ? await getVrijGroupFor(keepBoard)
-          : await getMeetingsGroupFor(keepBoard))
-    // Done ALTIJD naar Done-bucket; non-Done respecteert existingRow als
-    // 't niet in de auto-Meetings-bucket zit.
+    const recFallback = isVrij
+      ? await getVrijGroupFor(keepBoard)
+      : await getMeetingsGroupFor(keepBoard)
+    // Bestaande groep respecteren als 't item niet in de auto-Meetings-
+    // bucket zit — ook bij Done.
     const recExistingAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
     const recMeetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
     const recInAutoBucket = recExistingAlive && (
       existingRow!.group_id === recMeetingsGid
     )
-    const keepGroup = newStatus === 'Done'
-      ? recFallback
-      : (recExistingAlive
-          ? (recInAutoBucket ? recFallback : existingRow!.group_id)
-          : recFallback)
+    const keepGroup = recExistingAlive
+      ? (recInAutoBucket ? recFallback : existingRow!.group_id)
+      : recFallback
     upserts.push({
       id,
       group_id:           keepGroup,
