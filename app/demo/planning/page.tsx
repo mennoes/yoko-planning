@@ -2126,8 +2126,8 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
                   {meeting.startTime ?? 'Hele dag'}
                 </span>
                 <button onClick={ev => { ev.stopPropagation(); onDone(meeting) }}
-                  aria-label={isDone ? `${meeting.name} is afgerond` : `${meeting.name} afronden`}
-                  title={isDone ? 'Afgerond' : 'Afronden — verdwijnt automatisch uit gekoppelde to do’s'}
+                  aria-label={isDone ? `${meeting.name} weer openen` : `${meeting.name} afronden`}
+                  title={isDone ? 'Afgerond — klik om ongedaan te maken' : 'Afronden — verdwijnt automatisch uit gekoppelde to do’s'}
                   style={{ width: 17, height: 17, flexShrink: 0, padding: 0, borderRadius: 4,
                     border: `1.5px solid ${isDone ? 'var(--green)' : 'var(--border-strong)'}`,
                     background: isDone ? 'var(--green)' : 'var(--bg-card)',
@@ -5397,15 +5397,19 @@ export default function PlanningPage() {
     })
   }
 
-  // Vinkje in het meetings-popovertje — zet een Google-item (of elk ander
-  // project) direct op Done, zonder eerst de detail-drawer te hoeven
-  // openen. handleDetailUpdate regelt de verhuizing naar de Done-groep;
-  // Todo's plukt 'm er via doneProjectKeys/isAutoDone vanzelf uit.
-  function markProjectDone(project: Project) {
-    handleDetailUpdate(project, project.startDate, project.endDate, { status: 'Done' })
-    logActivity('Afgerond', project.name, project.board)
+  // Vinkje in het meetings-popovertje — TOGGLET een Google-item (of elk
+  // ander project) tussen Done en niet-Done, zonder eerst de detail-drawer
+  // te hoeven openen. Voorheen zette dit ALTIJD op Done (nooit terug),
+  // waardoor een per ongeluk afgevinkte Google-meeting niet meer ongedaan
+  // te maken was. handleDetailUpdate regelt de status-write (en voor
+  // Google-items is 'status' een van de toegestane velden in commit()).
+  function toggleProjectDone(project: Project) {
+    const wasDone = project.status === 'done'
+    const nextStatus = wasDone ? '' : 'Done'
+    handleDetailUpdate(project, project.startDate, project.endDate, { status: nextStatus })
+    logActivity(wasDone ? 'Heropend' : 'Afgerond', project.name, project.board)
     const rawId = project.id.slice(project.board.length + 2).split('__si')[0]
-    logItemActivity(rawId, 'zette op Done', project.name).catch(() => {})
+    logItemActivity(rawId, wasDone ? 'zette terug op niet-afgerond' : 'zette op Done', project.name).catch(() => {})
   }
 
   function handleDetailDelete(project: Project) {
@@ -6570,7 +6574,7 @@ export default function PlanningPage() {
                         visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
                         visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
-                        onMarkDone={markProjectDone} onReassign={handleReassignOwner} />
+                        onMarkDone={toggleProjectDone} onReassign={handleReassignOwner} />
                     </div>
                   </div>
                 )}
