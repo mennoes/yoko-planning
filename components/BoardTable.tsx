@@ -1281,6 +1281,15 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
       case 'deadline':
         return <div style={cellBorder}><EditableCell value={subitem.deadline ?? null} inputType="date" onChange={v => onUpdate({ deadline: (v as string) || null })} /></div>
+      case 'dagen': {
+        // Zelfde gedrag als bij top-level items: altijd afgeleid van
+        // estHours ÷ 8, nooit los invulbaar. Zonder deze case viel 'dagen'
+        // door naar de generieke number-fallback hieronder, die een eigen
+        // subitem.dagen-veld liet typen dat nergens mee synchroniseerde —
+        // 'estHours' en 'dagen' liepen daardoor uit elkaar.
+        const days = Math.round(((subitem.estHours ?? 0) / 8) * 10) / 10
+        return <div style={cellBorder}><span title="Auto: uren ÷ 8" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{days || ''}</span></div>
+      }
       default:
         // Generieke fallback voor custom kolommen (text/url/date/number)
         // op subitems — schrijft naar dezelfde key zodat 't keysynced

@@ -6218,7 +6218,7 @@ export default function PlanningPage() {
                 // niet onder de VANDAAG-pill (die er los bovenop zit) komen
                 // te zitten — de pill hangt op een vaste positie, dus de
                 // header zelf schuift een regel naar beneden i.p.v. andersom.
-                padding: zoom === 'week' ? '22px 2px 6px' : '8px 2px', textAlign: 'center',
+                padding: zoom === 'week' ? '22px 2px 3px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 {zoom === 'week' ? (
@@ -6231,7 +6231,7 @@ export default function PlanningPage() {
                     {/* Weekdag-rijtje hoort uitsluitend hier, boven de weken —
                         dit is de kolomkop-rij, los van (en boven) de 'Team
                         Yoko'-sectiebalk verderop in de lijst. */}
-                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 3, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 1, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
                       <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
                     </div>
                   </>
@@ -6395,7 +6395,7 @@ export default function PlanningPage() {
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)', cursor: onClick ? 'pointer' : 'default', userSelect: 'none' }}>
                 <div style={{ position: 'sticky', left: 0, width: 'max-content',
-                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  padding: '6px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {onClick && (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'inline-block',
                       transform: isOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>▶</span>
@@ -6455,7 +6455,7 @@ export default function PlanningPage() {
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
                 <div style={{ position: 'sticky', left: 0, width: 'max-content',
-                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  padding: '6px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
                       // pos 2: iedereen in deze sectie staat individueel
