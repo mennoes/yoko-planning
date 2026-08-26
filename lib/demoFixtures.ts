@@ -37,9 +37,15 @@ export function notifyDemoBlocked(): void {
 // bord-tabel, ...) en toont in plaats daarvan de 'kan niet in de demo'-
 // toast (zie notifyDemoBlocked).
 const DEMO_EQUIVALENTS: Record<string, string> = {
-  '/':         '/demo',
-  '/planning': '/demo/planning',
-  '/todos':    '/demo/todos',
+  '/':            '/demo',
+  '/planning':    '/demo/planning',
+  '/todos':       '/demo/todos',
+  '/team':        '/demo/team',
+  '/team-admin':  '/demo/team-admin',
+  '/kantoor':     '/demo/kantoor',
+  '/budget':      '/demo/budget',
+  '/accounts':    '/demo/accounts',
+  '/geschiedenis': '/demo/geschiedenis',
 }
 
 /** Vertaalt een 'echte' href naar de demo-variant. Externe links (mailto:,

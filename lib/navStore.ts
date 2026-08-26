@@ -50,6 +50,20 @@ const DEMO_PROJECTS: NavItem[] = [
   { id: 'Kaap Studio',        label: 'Kaap Studio',        href: '/demo/projects/Kaap%20Studio',        color: '#D8935B' },
 ]
 
+// Zelfde items als DEFAULT_DOCS, maar met /demo-hrefs (rechtstreeks i.p.v.
+// via DemoShell's klik-interceptor) en ZONDER de visibleTo-restrictie op
+// Budget — die is gekoppeld aan echte member-id's ('menno'/'vincent') die
+// geen van de vier demo-profielen ooit kan matchen, waardoor Budget anders
+// voor iedere demo-bezoeker onzichtbaar in de sidebar zou blijven staan.
+const DEMO_DOCS: NavItem[] = [
+  { id: 'team',        label: 'Team',        href: '/demo/team',        icon: '👥' },
+  { id: 'team-admin',  label: 'Team beheren', href: '/demo/team-admin',  icon: '⚙️' },
+  { id: 'kantoor',     label: 'Kantoor',     href: '/demo/kantoor',     icon: '🏢' },
+  { id: 'budget',      label: 'Budget',      href: '/demo/budget',      icon: '💰' },
+  { id: 'accounts',    label: 'Accounts',    href: '/demo/accounts',    icon: '🔑' },
+  { id: 'snapshots',   label: 'Geschiedenis & herstel', href: '/demo/geschiedenis', icon: '📜' },
+]
+
 function load<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
   try {
@@ -76,7 +90,7 @@ function reconcileDocsList(items: NavItem[]): NavItem[] {
   return missing.length > 0 ? [...withoutLegacyTrash, ...missing] : withoutLegacyTrash
 }
 
-export function loadDocs():     NavItem[] { return isOnDemoRoute() ? DEFAULT_DOCS : reconcileDocsList(load(DOCS_KEY, DEFAULT_DOCS)) }
+export function loadDocs():     NavItem[] { return isOnDemoRoute() ? DEMO_DOCS : reconcileDocsList(load(DOCS_KEY, DEFAULT_DOCS)) }
 export function loadProjects(): NavItem[] { return isOnDemoRoute() ? DEMO_PROJECTS : load(PROJECTS_KEY, DEFAULT_PROJECTS) }
 
 export function saveDocs(items: NavItem[])     { if (!isOnDemoRoute()) save(DOCS_KEY,     items) }

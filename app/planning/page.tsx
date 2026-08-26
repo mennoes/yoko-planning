@@ -6262,11 +6262,23 @@ export default function PlanningPage() {
               const isWeekStart = zoom === 'dag' && dow === 1
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0,
-                // Week-zoom: extra ruimte bovenaan zodat de datum
+                // Week-zoom: extra ruimte bovenaan zodat de datum/weekdagen
                 // niet onder de VANDAAG-pill (die er los bovenop zit) komen
-                // te zitten. De weekdagen staan voortaan in de al bestaande
-                // Studio-Yoko-sectiebalk eronder, waardoor deze kop lager is.
-                padding: zoom === 'week' ? '22px 2px 5px' : '8px 2px', textAlign: 'center',
+                // te zitten — de pill hangt op een vaste positie, dus de
+                // header zelf schuift een regel naar beneden i.p.v. andersom.
+                //
+                // De weekdagen stonden even (kort) in de sectiebalk
+                // ('showWeekdays' op sectionHeader) om de kop-rij compacter
+                // te maken, maar die absolute positionering ging uit van de
+                // volledige virtuele kolom-breedte i.p.v. de daadwerkelijk
+                // gescrollde viewport — bij een horizontaal gescrolde
+                // Planning (bv. bij openen op 'vandaag', weken verderop dan
+                // kolom 0) landden de 'ma di wo do vr'-labels daardoor ver
+                // buiten beeld (negatieve x-positie), terwijl ze op de
+                // sectiebalk zelf ('TEAM YOKO' etc.) leken te overlappen.
+                // Terug naar hier, waar col's eigen widthPx/positie al
+                // correct is voor de zichtbare viewport.
+                padding: zoom === 'week' ? '22px 2px 3px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 {zoom === 'week' ? (
@@ -6275,6 +6287,9 @@ export default function PlanningPage() {
                       color: col.isCurrent ? 'var(--text-primary)' : 'var(--text-muted)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
                       {col.label2} <span style={{ opacity: 0.8 }}>({col.label1})</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 1, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
+                      <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
                     </div>
                   </>
                 ) : (
@@ -6488,7 +6503,7 @@ export default function PlanningPage() {
               // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
-            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; showWeekdays?: boolean }) => (
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number }) => (
               <div onClick={opts?.onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)',
@@ -6496,7 +6511,7 @@ export default function PlanningPage() {
                 {/* Label blijft tegen de linker rand kleven terwijl de balk
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
-                <div style={{ position: 'sticky', left: 0, width: opts?.showWeekdays ? nameW + namePad : 'max-content', boxSizing: 'border-box',
+                <div style={{ position: 'sticky', left: 0, width: 'max-content',
                   padding: '6px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
@@ -6516,20 +6531,6 @@ export default function PlanningPage() {
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
                 </div>
-                {opts?.showWeekdays && cols.map(col => (
-                  <div key={`weekdays-${col.key}`} style={{
-                    position: 'absolute', top: 0,
-                    left: nameW + namePad + cols.slice(0, cols.indexOf(col)).reduce((sum, c) => sum + c.widthPx, 0),
-                    width: col.widthPx, height: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-                    borderLeft: '1px solid var(--border-strong)',
-                    color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)',
-                    fontSize: 8.5, fontWeight: 650, letterSpacing: '0.04em',
-                    pointerEvents: 'none',
-                  }}>
-                    <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
-                  </div>
-                ))}
               </div>
             )
 
@@ -6661,7 +6662,7 @@ export default function PlanningPage() {
               )
             }
             if (yokoTeam.length > 0) {
-              out.push(<div key="hdr-yoko" style={{ position: 'relative' }}>{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, showWeekdays: zoom === 'week' })}</div>)
+              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos })}</div>)
               if (yokoTeamPos !== 0) {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }

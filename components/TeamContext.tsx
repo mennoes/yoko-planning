@@ -11,7 +11,8 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import { pullTeam, ensureTeamSeed, subscribeRemoteTeam, fallbackTeam, isTeamMemberStarted, type TeamMember } from '@/lib/teamStore'
-import { isDemoPath, DEMO_MEMBERS } from '@/lib/demoFixtures'
+import { isDemoPath } from '@/lib/demoFixtures'
+import { loadDemoTeamMembers } from '@/lib/demoTeamAdminStore'
 
 const CACHE_KEY = 'yoko-team-members'
 
@@ -41,12 +42,17 @@ function saveCache(members: TeamMember[]): void {
 export function TeamProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const demo = isDemoPath(pathname)
-  const [members, setMembers] = useState<TeamMember[]>(() => demo ? DEMO_MEMBERS : (loadCache() ?? fallbackTeam()))
+  const [members, setMembers] = useState<TeamMember[]>(() => demo ? loadDemoTeamMembers() : (loadCache() ?? fallbackTeam()))
   const [loading, setLoading] = useState(!demo)
   const [today, setToday] = useState(() => new Date())
 
   const refresh = useCallback(async () => {
-    if (demo) return
+    // Demo: geen Supabase — herlees gewoon de localStorage-backed lijst
+    // (app/demo/team-admin schrijft daar rechtstreeks naartoe) zodat
+    // add/edit/delete/reorder meteen doorwerken naar alle andere
+    // useTeam()-consumers (Planning, Todo's, ...) binnen dezelfde
+    // gemounte TeamProvider.
+    if (demo) { setMembers(loadDemoTeamMembers()); return }
     const rows = await pullTeam()
     if (rows) {
       setMembers(rows)
@@ -55,13 +61,16 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }, [demo])
 
-  // Publieke /demo-route: vast nep-team, nooit Supabase raken en nooit de
-  // gedeelde 'yoko-team-members'-cache lezen/schrijven — anders zou een
-  // demo-bezoek in dezelfde browser als een echte sessie het echte
-  // team-overzicht tijdelijk met nep-namen kunnen overschrijven.
+  // Publieke /demo-route: nooit Supabase raken en nooit de gedeelde
+  // 'yoko-team-members'-cache lezen/schrijven — anders zou een demo-
+  // bezoek in dezelfde browser als een echte sessie het echte
+  // team-overzicht tijdelijk met nep-namen kunnen overschrijven. Het
+  // team zelf is wel bewerkbaar (app/demo/team-admin) via een eigen,
+  // geïsoleerde 'yoko-demo-team-members'-key die terugvalt op de vaste
+  // DEMO_MEMBERS-fixtures — zie lib/demoTeamAdminStore.ts.
   useEffect(() => {
     if (!demo) return
-    setMembers(DEMO_MEMBERS)
+    setMembers(loadDemoTeamMembers())
     setLoading(false)
   }, [demo])
 

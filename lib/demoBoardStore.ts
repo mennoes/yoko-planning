@@ -22,6 +22,17 @@ export function resetDemoBoards(): void {
       window.localStorage.removeItem('home-demo-sections-order')
       window.localStorage.removeItem('yoko-demo-recent-pages')
       window.localStorage.removeItem('yoko-demo-doc-folders')
+      // Pagina's-secties (Team/Team beheren/Kantoor/Budget/Accounts/
+      // Geschiedenis) — elk hun eigen, volledig lokale demo-store.
+      window.localStorage.removeItem('yoko-demo-team-members')
+      window.localStorage.removeItem('yoko-demo-team-capacities')
+      window.localStorage.removeItem('yoko-demo-team-contacts')
+      window.localStorage.removeItem('yoko-demo-team-daysoff')
+      window.localStorage.removeItem('yoko-kantoor-demo')
+      window.localStorage.removeItem('yoko-demo-budget-entries')
+      window.localStorage.removeItem('yoko-demo-project-revenue')
+      window.localStorage.removeItem('yoko-demo-revenue-templates')
+      window.localStorage.removeItem('yoko-demo-accounts')
       // Losse pagina's staan elk onder een eigen 'yoko-demo-page-{id}'-key
       // (geen vaste lijst) — die vind je alleen door de hele localStorage
       // langs te lopen en op prefix te matchen.
