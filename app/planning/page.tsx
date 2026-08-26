@@ -669,6 +669,84 @@ function useScrollLeftOf(ref: { current: HTMLElement | null }): number {
   return scrollLeft
 }
 
+// Losse VANDAAG-pill + rand-indicator, buiten PlanningPage's eigen
+// render-cyclus. Leest scrollLeft via z'n eigen (RAF-throttled)
+// useScrollLeftOf-hook i.p.v. via top-level state op de pagina — zie de
+// toelichting bij de aanroep verderop voor waarom dat nodig is.
+function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }: {
+  gridRef: { current: HTMLDivElement | null }
+  nowOffset: number | null
+  nameW: number
+  namePad: number
+  zoom: ZoomLevel
+  cols: Col[]
+  goToday: () => void
+}) {
+  const scrollLeft = useScrollLeftOf(gridRef)
+  const [clientWidth, setClientWidth] = useState(0)
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const update = () => setClientWidth(el.clientWidth)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [gridRef])
+
+  const todayEdge: 'left' | 'right' | null = (() => {
+    if (nowOffset === null) {
+      const nowMs = Date.now()
+      const first = cols[0]?.rangeStart.getTime()
+      const last = cols[cols.length - 1]?.rangeEnd.getTime()
+      return first != null && nowMs < first ? 'left' : last != null && nowMs > last ? 'right' : null
+    }
+    const screenX = nowOffset - scrollLeft
+    if (screenX < nameW + namePad) return 'left'
+    if (screenX > clientWidth) return 'right'
+    return null
+  })()
+
+  if (!todayEdge && nowOffset === null) return null
+
+  return (
+    <>
+      {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
+          het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
+          zodat lijn en label nooit over namen/profielfoto's lopen. */}
+      {todayEdge && (
+        <div aria-hidden style={{
+          position: 'absolute', top: 0, bottom: 0,
+          ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
+          width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
+          pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
+        }} />
+      )}
+      {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
+          verandert bij horizontaal scrollen alleen de x-positie/tekst en
+          nooit de verticale layout van de sticky headers eronder. */}
+      <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
+        // Vandaag staat bovenaan, ter hoogte van de datum in de kolomkop
+        // (bv. 'aug. 24 - 30'). Dagweergave heeft daarnaast nog een
+        // maandgroeprij erboven, dus krijgt een grotere offset. Beide
+        // edge-varianten gebruiken exact dezelfde top en verspringen niet.
+        position: 'absolute', top: zoom === 'dag' ? 82 : 4,
+        ...(todayEdge === 'left'
+          ? { left: nameW + namePad + 6 }
+          : todayEdge === 'right'
+            ? { right: 6 }
+            : { left: (nowOffset ?? 0) - scrollLeft - 32, width: 64 }),
+        zIndex: 80, padding: todayEdge ? '2px 9px' : '2px 0', borderRadius: 999, border: 'none',
+        background: 'var(--yellow)', color: '#1a1a1a',
+        boxShadow: '0 2px 6px rgba(216,182,46,0.4)',
+        fontSize: 9.5, fontWeight: 800, lineHeight: 1.2, letterSpacing: '0.08em', cursor: 'pointer',
+        whiteSpace: 'nowrap', textAlign: 'center',
+      }}>
+        VANDAAG {todayEdge === 'left' ? '←' : todayEdge === 'right' ? '→' : ''}
+      </button>
+    </>
+  )
+}
+
 function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   team?: TeamMember[]
@@ -2116,7 +2194,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
   // terwijl een hover de concrete afspraken en tijden laat zien.
   const googleMeetings = (hideMeetings ? [] : owned).filter(p =>
-    p.source === 'google' && !isVrijTitle(p.name))
+    p.status !== 'done' && p.source === 'google' && !isVrijTitle(p.name))
   const meetingsByDay = new Map<string, Project[]>()
   if (zoom === 'week') {
     for (const p of googleMeetings) {
@@ -4419,7 +4497,6 @@ export default function PlanningPage() {
   const [shareOpen,    setShareOpen]    = useState(false)
   const [copiedBoard,  setCopiedBoard]  = useState<string | null>(null)
   const [overflowOpen, setOverflowOpen] = useState(false)
-  const [todayEdge, setTodayEdge] = useState<'left' | 'right' | null>(null)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
   // Team Yoko/Freelancers/Inactief-pijltje: 4-staps cyclus i.p.v. een platte
@@ -5562,29 +5639,18 @@ export default function PlanningPage() {
     return null
   }, [cols, nameW, namePad])
 
-  // Als vandaag horizontaal buiten beeld valt, toon een klikbare indicator
-  // tegen de betreffende rand. Zo blijft de richting naar vandaag zichtbaar.
-  useEffect(() => {
-    const el = gridRef.current
-    if (!el) return
-    const update = () => {
-      if (nowOffset === null) {
-        const nowMs = Date.now()
-        const first = cols[0]?.rangeStart.getTime()
-        const last = cols[cols.length - 1]?.rangeEnd.getTime()
-        setTodayEdge(first != null && nowMs < first ? 'left' : last != null && nowMs > last ? 'right' : null)
-        return
-      }
-      const screenX = nowOffset - el.scrollLeft
-      if (screenX < nameW + namePad) setTodayEdge('left')
-      else if (screenX > el.clientWidth) setTodayEdge('right')
-      else setTodayEdge(null)
-    }
-    update()
-    el.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update)
-    return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
-  }, [nowOffset, cols, nameW, namePad])
+  // todayEdge + de VANDAAG-pill zelf zijn verhuisd naar het losstaande
+  // <TodayMarker> component verderop — dat trackt scrollLeft via z'n EIGEN
+  // (RAF-throttled) useScrollLeftOf-hook i.p.v. via top-level state hier.
+  // Reden: dit component (PlanningPage) is enorm; elke setState hier
+  // (zoals het oude setTodayEdge, dat op praktisch elke scroll-tick vuurde)
+  // her-rendert de HELE pagina — alle rijen, alle balken. Voor de meeste
+  // balken maakt dat niet uit (die scrollen native mee, geen React-update
+  // nodig), maar de VANDAAG-pill zelf hangt BUITEN de scrollende container
+  // en moet dus WEL elke frame herpositioneerd worden. Als die reposition
+  // moet wachten op een render van de hele pagina, loopt de pill zichtbaar
+  // achter de rest van de tijdlijn aan — precies het 'vandaag-balk is traag'
+  // effect. Een geïsoleerd component her-rendert alleen zichzelf.
 
   // Formatted current date for header subtitle
   const today = new Date()
@@ -6005,41 +6071,7 @@ export default function PlanningPage() {
 
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-      {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
-          het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
-          zodat lijn en label nooit over namen/profielfoto's lopen. */}
-      {todayEdge && (
-          <div aria-hidden style={{
-            position: 'absolute', top: 0, bottom: 0,
-            ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
-            width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
-            pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
-          }} />
-      )}
-      {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
-          verandert bij horizontaal scrollen alleen de x-positie/tekst en
-          nooit de verticale layout van de sticky headers eronder. */}
-      {(todayEdge || nowOffset !== null) && (
-        <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-          // Vandaag staat bovenaan, ter hoogte van de datum in de kolomkop
-          // (bv. 'aug. 24 - 30'). Dagweergave heeft daarnaast nog een
-          // maandgroeprij erboven, dus krijgt een grotere offset. Beide
-          // edge-varianten gebruiken exact dezelfde top en verspringen niet.
-          position: 'absolute', top: zoom === 'dag' ? 82 : 4,
-          ...(todayEdge === 'left'
-            ? { left: nameW + namePad + 6 }
-            : todayEdge === 'right'
-              ? { right: 6 }
-              : { left: (nowOffset ?? 0) - visibleGridRange.start - 32, width: 64 }),
-          zIndex: 80, padding: todayEdge ? '2px 9px' : '2px 0', borderRadius: 999, border: 'none',
-          background: 'var(--yellow)', color: '#1a1a1a',
-          boxShadow: '0 2px 6px rgba(216,182,46,0.4)',
-          fontSize: 9.5, fontWeight: 800, lineHeight: 1.2, letterSpacing: '0.08em', cursor: 'pointer',
-          whiteSpace: 'nowrap', textAlign: 'center',
-        }}>
-          VANDAAG {todayEdge === 'left' ? '←' : todayEdge === 'right' ? '→' : ''}
-        </button>
-      )}
+      <TodayMarker gridRef={gridRef} nowOffset={nowOffset} nameW={nameW} namePad={namePad} zoom={zoom} cols={cols} goToday={goToday} />
       <div ref={gridRef} onMouseDown={onGridMouseDown}
         onWheel={(ev) => {
           // Cmd/Ctrl + wheel → verticale zoom (bar-hoogte). Trackpad-pinch
@@ -6082,8 +6114,11 @@ export default function PlanningPage() {
 
           {/* "Now" indicator — yoko-yellow vertical line at today's exact
               position with a VANDAAG pill at the top so the marker is hard
-              to miss when scrolling through time. */}
-          {nowOffset !== null && !todayEdge && (
+              to miss when scrolling through time. Rendert altijd wanneer
+              nowOffset bekend is (voorheen gegate op !todayEdge, maar die
+              state leeft nu geïsoleerd in <TodayMarker> hierboven) — buiten
+              beeld is deze lijn gewoon off-screen, geen visueel probleem. */}
+          {nowOffset !== null && (
             <>
               {/* De lijn zelf: hoge z-index zodat 'ie BOVEN ALLES doorloopt
                   (kolom-headers, maand-groepen, en zelfs de sticky naam-
