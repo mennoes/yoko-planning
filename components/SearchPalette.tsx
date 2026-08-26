@@ -15,7 +15,6 @@ import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import { pullAccounts } from '@/lib/accountsStore'
 import type { BoardGroup } from '@/lib/boards'
 import { isOnDemoRoute, buildDemoBoards, demoNavigate } from '@/lib/demoFixtures'
-import { loadDoneTodoProjectKeys } from '@/lib/todoProjectSeed'
 
 const REAL_BOARD_RAW: Record<string, { groups: unknown[] }> = {
   yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
@@ -36,10 +35,7 @@ type Result = {
   action?:  () => void  // wanneer gezet wordt deze i.p.v. de href uitgevoerd
 }
 
-type TodoSection = { id: string; title: string; emoji: string; items: {
-  id: string; text: string; done: boolean
-  projectRef?: { board: string; itemId: string }
-}[] }
+type TodoSection = { id: string; title: string; emoji: string; items: { id: string; text: string; done: boolean }[] }
 
 function loadTodoSections(): TodoSection[] {
   if (typeof window === 'undefined') return []
@@ -122,10 +118,8 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
     }
 
     // Todos
-    const doneProjectKeys = isOnDemoRoute() ? new Set<string>() : loadDoneTodoProjectKeys()
     for (const s of loadTodoSections()) for (const t of s.items) {
-      const linkedDone = !!t.projectRef && doneProjectKeys.has(`${t.projectRef.board}:${t.projectRef.itemId}`)
-      if (!t.done && !linkedDone) all.push({ id: `todo-${s.id}-${t.id}`, title: t.text, subtitle: `Todo · ${s.title}`, href: '/todos', emoji: '✅' })
+      if (!t.done) all.push({ id: `todo-${s.id}-${t.id}`, title: t.text, subtitle: `Todo · ${s.title}`, href: '/todos', emoji: '✅' })
     }
 
     // Accounts — alleen voor ingelogde gebruikers, achter Supabase RLS.
