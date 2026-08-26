@@ -79,6 +79,19 @@ const FALLBACK: BoardConfig[] = [
 
 let cached: BoardConfig[] | null = null
 
+// Zorgt dat de 5 kern-agenda's (yoko/pnp/nederland/vlaanderen/dienjaar)
+// nooit stil verdwijnen — niet als de localStorage-cache corrupt/incompleet
+// is, en niet als een remote pull van de 'boards'-tabel toevallig zonder
+// (een van) hen terugkomt. Zonder dit brak een corrupte cache zowel de
+// Planning-weergave (BOARD_NAMES mist het bord → geen items) als de eigen
+// bord-pagina (BOARD_CONFIGS[id] is undefined → page crasht meteen, vóór
+// de Sidebar zelfs maar rendert). Eigen/extra borden van de gebruiker
+// blijven gewoon staan; we vullen alleen aan wat ontbreekt.
+function withCoreBoards(boards: BoardConfig[]): BoardConfig[] {
+  const missing = FALLBACK.filter(f => !boards.some(b => b.id === f.id))
+  return missing.length > 0 ? [...boards, ...missing] : boards
+}
+
 function readCache(): BoardConfig[] {
   if (isOnDemoRoute()) return DEMO_FALLBACK
   if (cached) return cached
@@ -88,8 +101,8 @@ function readCache(): BoardConfig[] {
     if (raw) {
       const parsed = JSON.parse(raw) as BoardConfig[]
       if (Array.isArray(parsed) && parsed.length > 0) {
-        cached = parsed
-        return parsed
+        cached = withCoreBoards(parsed)
+        return cached
       }
     }
   } catch {}
@@ -144,13 +157,13 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
     .order('position', { ascending: true })
   if (error || !data) return false
   if (data.length === 0) return false
-  const boards: BoardConfig[] = (data as Row[]).map(r => ({
+  const boards: BoardConfig[] = withCoreBoards((data as Row[]).map(r => ({
     id:      r.id,
     name:    r.name ?? r.id,
     emoji:   r.emoji ?? '📋',
     color:   r.color ?? '#888',
     columns: Array.isArray(r.columns) ? r.columns : [],
-  }))
+  })))
   const next = JSON.stringify(boards)
   if (typeof window !== 'undefined' && localStorage.getItem(LS_KEY) === next) return true
   writeCache(boards)
