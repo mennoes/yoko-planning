@@ -4366,6 +4366,19 @@ export default function PlanningPage() {
     setDetailProject(p)
   }
   const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
+  // Elke setShadowDrag triggert effectiveProjects' volledige her-berekening
+  // (map/filter over ALLE projecten op ALLE borden + een localStorage-read
+  // voor owner-excludes) — prima op zichzelf, maar rauwe mousemove-events
+  // vuren makkelijk sneller dan het scherm ververst (soms 100+/s), waardoor
+  // die zware herberekening een sleepbeweging niet meer bijhoudt en vooral
+  // tekst zichtbaar achter de muis aan bleef 'schuiven'. RAF-throttle capt
+  // 'm op maximaal één keer per animatieframe — de balk zelf blijft
+  // instant volgen (die leest lokale ghost-state, niet shadowDrag).
+  const dragRafRef = useRef<number | null>(null)
+  function cancelPendingDragMove() {
+    if (dragRafRef.current != null) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = null }
+  }
+  useEffect(() => cancelPendingDragMove, [])
   const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
   const [peopleOpen,   setPeopleOpen]   = useState(false)
@@ -5030,7 +5043,11 @@ export default function PlanningPage() {
     setCapacity(memberId, capacity)
   }
   function handleDragMove(project: Project, s: string | null, e: string | null) {
-    setShadowDrag({ projectId: project.id, start: s, end: e })
+    cancelPendingDragMove()
+    dragRafRef.current = requestAnimationFrame(() => {
+      dragRafRef.current = null
+      setShadowDrag({ projectId: project.id, start: s, end: e })
+    })
   }
   // Hercalc estHours = werkdagen × 8 voor de gegeven datum-range. Gebruikt
   // dezelfde regel als de detail-drawer's autofillEstFromDates: na elke
@@ -5049,6 +5066,7 @@ export default function PlanningPage() {
   }
 
   function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
+    cancelPendingDragMove()
     setShadowDrag(null)
     const boardName  = project.board
     let rawId        = project.id.slice(boardName.length + 2)
@@ -5910,11 +5928,11 @@ export default function PlanningPage() {
           nooit de verticale layout van de sticky headers eronder. */}
       {(todayEdge || nowOffset !== null) && (
         <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-          // Plaats het label in de vrije strook ONDER de datum-/dagheaders
-          // en boven de workload-bollen. Dagweergave heeft daarnaast nog
-          // een maandgroeprij, dus krijgt een grotere offset. Beide edge-
-          // varianten gebruiken exact dezelfde top en verspringen niet.
-          position: 'absolute', top: zoom === 'dag' ? 82 : 48,
+          // Vandaag staat bovenaan, ter hoogte van de datum in de kolomkop
+          // (bv. 'aug. 24 - 30'). Dagweergave heeft daarnaast nog een
+          // maandgroeprij erboven, dus krijgt een grotere offset. Beide
+          // edge-varianten gebruiken exact dezelfde top en verspringen niet.
+          position: 'absolute', top: zoom === 'dag' ? 82 : 4,
           ...(todayEdge === 'left'
             ? { left: nameW + namePad + 6 }
             : todayEdge === 'right'
@@ -6141,11 +6159,19 @@ export default function PlanningPage() {
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 {zoom === 'week' ? (
-                  <div style={{ fontSize: 10.5, fontWeight: col.isCurrent ? 700 : 600,
-                    color: col.isCurrent ? 'var(--text-primary)' : 'var(--text-muted)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
-                    {col.label2} <span style={{ opacity: 0.8 }}>({col.label1})</span>
-                  </div>
+                  <>
+                    <div style={{ fontSize: 10.5, fontWeight: col.isCurrent ? 700 : 600,
+                      color: col.isCurrent ? 'var(--text-primary)' : 'var(--text-muted)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
+                      {col.label2} <span style={{ opacity: 0.8 }}>({col.label1})</span>
+                    </div>
+                    {/* Weekdag-rijtje hoort uitsluitend hier, boven de weken —
+                        dit is de kolomkop-rij, los van (en boven) de 'Team
+                        Yoko'-sectiebalk verderop in de lijst. */}
+                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 3, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
+                      <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
