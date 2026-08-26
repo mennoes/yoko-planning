@@ -631,6 +631,44 @@ function formatDragDate(iso: string | null): string {
   return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
+// Volgt de horizontale scroll-positie van de dichtstbijzijnde scrollende
+// ancestor van `ref` zodat een lange bar-titel mee kan schuiven (Google-
+// Cal-stijl). Gedeeld door DraggableBar en de dag-zoom event-bar: elke
+// zichtbare bar had voorheen z'n EIGEN scroll-listener op dezelfde
+// container, die bij elke ruwe scroll-tick z'n eigen React state zette —
+// met tientallen/honderden bars tegelijk in beeld (Overzicht met een
+// volledig team) meetbare scroll-jank. RAF-throttle capt elke bar op
+// hooguit één update per animatieframe, ongeacht hoe vaak de browser
+// native scroll-events afvuurt.
+function useScrollLeftOf(ref: { current: HTMLElement | null }): number {
+  const [scrollLeft, setScrollLeft] = useState(0)
+  useEffect(() => {
+    let el: HTMLElement | null = ref.current
+    while (el && el !== document.body) {
+      const s = getComputedStyle(el)
+      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
+      el = el.parentElement
+    }
+    if (!el || el === document.body) return
+    const scroller = el
+    let raf: number | null = null
+    const update = () => {
+      if (raf != null) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        setScrollLeft(scroller.scrollLeft)
+      })
+    }
+    setScrollLeft(scroller.scrollLeft)
+    scroller.addEventListener('scroll', update, { passive: true })
+    return () => {
+      scroller.removeEventListener('scroll', update)
+      if (raf != null) cancelAnimationFrame(raf)
+    }
+  }, [ref])
+  return scrollLeft
+}
+
 function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   team?: TeamMember[]
@@ -761,21 +799,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // titel mee kan schuiven (Google-Cal-stijl). Anders verdwijnt de tekst van
   // brede bars onder de sticky linker-kolom zodra je rechts scrolt.
   const barRef = useRef<HTMLDivElement | null>(null)
-  const [scrollLeft, setScrollLeft] = useState(0)
-  useEffect(() => {
-    let el: HTMLElement | null = barRef.current
-    while (el && el !== document.body) {
-      const s = getComputedStyle(el)
-      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
-      el = el.parentElement
-    }
-    if (!el || el === document.body) return
-    const scroller = el
-    const update = () => setScrollLeft(scroller.scrollLeft)
-    update()
-    scroller.addEventListener('scroll', update, { passive: true })
-    return () => scroller.removeEventListener('scroll', update)
-  }, [])
+  const scrollLeft = useScrollLeftOf(barRef)
 
   const isReadOnly = project.source === 'google'
 
@@ -1194,21 +1218,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   // ScrollLeft van de buitenste horizontaal-scrollende container houden we
   // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
   // naam blijft links in beeld zolang de pill nog door 't viewport loopt).
-  const [scrollLeft, setScrollLeft] = useState(0)
-  useEffect(() => {
-    let el: HTMLElement | null = rootRef.current
-    while (el && el !== document.body) {
-      const s = getComputedStyle(el)
-      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
-      el = el.parentElement
-    }
-    if (!el || el === document.body) return
-    const scroller = el
-    const update = () => setScrollLeft(scroller.scrollLeft)
-    update()
-    scroller.addEventListener('scroll', update, { passive: true })
-    return () => scroller.removeEventListener('scroll', update)
-  }, [])
+  const scrollLeft = useScrollLeftOf(rootRef)
   // nameW is de sticky linker-kolom; titels moeten daar 8px naast komen.
   function titleOffsetFor(barLeft: number, barWidth: number, padLeft: number) {
     const want = scrollLeft - barLeft + 8
