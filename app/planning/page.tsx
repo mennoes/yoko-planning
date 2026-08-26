@@ -38,6 +38,7 @@ import {
 import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange } from '@/lib/popoverState'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity } from '@/lib/itemActivity'
+import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { MentionTextarea } from '@/components/MentionTextarea'
 import { TextWithItemRefs } from '@/components/ItemRefChip'
 import { ReactionRow } from '@/components/ReactionRow'
@@ -1946,8 +1947,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   )
 }
 
-function MeetingDaySummary({ meetings, left, width, onOpen }: {
-  meetings: Project[]; left: number; width: number; onOpen: (project: Project) => void
+function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
+  meetings: Project[]; left: number; width: number
+  onOpen: (project: Project) => void
+  onDone: (project: Project) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
@@ -2018,16 +2021,25 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
               {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
             {sorted.map(meeting => (
-              <div key={meeting.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <div key={meeting.id}
+                onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
+                onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7 }}>
+                <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
+                  {meeting.startTime ?? 'Hele dag'}
+                </span>
+                <button onClick={ev => { ev.stopPropagation(); onDone(meeting) }}
+                  aria-label={`${meeting.name} afronden`}
+                  title="Afronden en naar Done verplaatsen — verdwijnt automatisch uit gekoppelde to do's"
+                  style={{ width: 17, height: 17, flexShrink: 0, padding: 0, borderRadius: 4,
+                    border: '1.5px solid var(--border-strong)', background: 'var(--bg-card)',
+                    color: 'var(--text-primary)', cursor: 'pointer' }} />
                 <button onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
                   onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                   onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                  style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start', gap: 9,
-                    padding: '8px 9px', border: 'none', borderRadius: 7, background: 'transparent',
+                  style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start',
+                    padding: '6px 3px', border: 'none', borderRadius: 7, background: 'transparent',
                     color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
-                    {meeting.startTime ?? 'Hele dag'}
-                  </span>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
                     {meeting.name}
                   </span>
@@ -2053,7 +2065,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
   )
 }
 
-function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onReassign }: {
+function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onMarkDone, onReassign }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   team?: TeamMember[]
   zoom: ZoomLevel
@@ -2066,6 +2078,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
+  onMarkDone: (p: Project) => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const RS = rowScale ?? 1
@@ -2517,7 +2530,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const daySlice = colW / 5
         const left = dateToWeekPx(dayStart, gridStart, colW)
         return (
-          <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} left={left} width={daySlice} onOpen={onBarClick} />
+          <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} left={left} width={daySlice}
+            onOpen={onBarClick} onDone={onMarkDone} />
         )
       })}
       {/* Meetings hangen nu bovenop project-balken — geen aparte divider
@@ -4313,6 +4327,12 @@ export default function PlanningPage() {
     if (fromDb) return fromDb === 'yoko'
     return HARDCODED_YOKO.has(id)
   }
+  // Gestopt (bv. stage afgerond) — zelfde live-lookup-patroon als
+  // isYokoCrew: 'team' bevat alleen de smalle workload.TeamMember-vorm
+  // (id/name/color/weeklyCapacity), dus de vlag komt uit liveTeam.
+  function isMemberInactive(id: string): boolean {
+    return !!liveTeam.find(m => m.id === id)?.inactive
+  }
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
   const [vacations,    setVacations]    = useState<Record<string, { from: string | null; until: string | null }>>({})
@@ -4403,6 +4423,11 @@ export default function PlanningPage() {
     return v === null ? true : v === '1'
   })
   useEffect(() => { localStorage.setItem('planning-yokoteam-open', yokoTeamOpen ? '1' : '0') }, [yokoTeamOpen])
+  const [inactiveTeamOpen, setInactiveTeamOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('planning-inactive-team-open') === '1'
+  })
+  useEffect(() => { localStorage.setItem('planning-inactive-team-open', inactiveTeamOpen ? '1' : '0') }, [inactiveTeamOpen])
   const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -5235,7 +5260,7 @@ export default function PlanningPage() {
     const subIdx     = subMatch ? parseInt(subMatch[2], 10) : -1
     const isSubitem  = subIdx >= 0
     const before = allGroups[boardName] ?? []
-    const groups = before.map(g => ({
+    const updatedGroups = before.map(g => ({
       ...g,
       items: g.items.map(i => {
         if (i.id !== parentId) return i
@@ -5264,6 +5289,11 @@ export default function PlanningPage() {
         return { ...i, subitems: subs }
       }),
     }))
+    // Top-level items die op Done worden gezet verhuizen meteen naar de
+    // centrale Done-groep. Subitems blijven bij hun parent maar krijgen
+    // status Done, waardoor agenda én gekoppelde todo's (via projectRef +
+    // isAutoDone) ze automatisch als afgerond zien.
+    const groups = extra?.status !== undefined ? autoMoveDoneItems(updatedGroups) : updatedGroups
     saveGroups(boardName, groups)
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     // Houd detailProject in sync zodat project.startDate/endDate up-to-date
@@ -5276,6 +5306,17 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
       setDetailProject(null)
     })
+  }
+
+  // Vinkje in het meetings-popovertje — zet een Google-item (of elk ander
+  // project) direct op Done, zonder eerst de detail-drawer te hoeven
+  // openen. handleDetailUpdate regelt de verhuizing naar de Done-groep;
+  // Todo's plukt 'm er via doneProjectKeys/isAutoDone vanzelf uit.
+  function markProjectDone(project: Project) {
+    handleDetailUpdate(project, project.startDate, project.endDate, { status: 'Done' })
+    logActivity('Afgerond', project.name, project.board)
+    const rawId = project.id.slice(project.board.length + 2).split('__si')[0]
+    logItemActivity(rawId, 'zette op Done', project.name).catch(() => {})
   }
 
   function handleDetailDelete(project: Project) {
@@ -5415,6 +5456,7 @@ export default function PlanningPage() {
     let totalHours = 0, totalCap = 0, overbooked = 0, deadlinesThis = 0
     const activeIds = new Set<string>()
     for (const m of team) {
+      if (isMemberInactive(m.id)) continue
       const cap = m.weeklyCapacity
       totalCap += cap
       let memberHours = 0
@@ -5847,9 +5889,10 @@ export default function PlanningPage() {
         // YOKO_IDS-check loopt nu via isYokoCrew (team_members.kind),
         // met fallback op de hardcoded set voor leden die nog geen kind
         // hebben in de DB.
-        const yokoTeam    = team.filter(m => isYokoCrew(m.id))
-        const unassigned  = team.filter(m => m.id === 'unassigned')
-        const freelancers = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned')
+        const yokoTeam     = team.filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id))
+        const unassigned   = team.filter(m => m.id === 'unassigned')
+        const inactiveTeam = team.filter(m => isMemberInactive(m.id))
+        const freelancers  = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id))
         function toggle(id: string) {
           setFilterMembers(prev => {
             const next = new Set(prev)
@@ -5863,7 +5906,7 @@ export default function PlanningPage() {
           })
         }
         const row = (m: TeamMember) => {
-          const checked = filterMembers.size === 0 ? isYokoCrew(m.id) || m.id === 'unassigned' : filterMembers.has(m.id)
+          const checked = filterMembers.size === 0 ? (isYokoCrew(m.id) && !isMemberInactive(m.id)) || m.id === 'unassigned' : filterMembers.has(m.id)
           return (
             <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
               <input type="checkbox" checked={checked} onChange={() => toggle(m.id)}
@@ -5907,6 +5950,16 @@ export default function PlanningPage() {
                   <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', color: 'var(--text-muted)' }}>klik om uit te klappen</span>
                 </summary>
                 {freelancers.map(row)}
+              </details>
+            )}
+            {inactiveTeam.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
+                  fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em',
+                  padding: '8px 0', borderTop: '1px solid var(--border-light)' }}>
+                  <span>▸ Inactief team ({inactiveTeam.length})</span>
+                </summary>
+                {inactiveTeam.map(row)}
               </details>
             )}
           </Popup>
@@ -6195,6 +6248,7 @@ export default function PlanningPage() {
             // is alles wat isYokoCrew() teruggeeft (DB-kind óf hardcoded).
             const defaultVisibleIds = new Set<string>(['unassigned'])
             for (const m of team) if (isYokoCrew(m.id)) defaultVisibleIds.add(m.id)
+            for (const m of team) if (isMemberInactive(m.id)) defaultVisibleIds.add(m.id)
             const DEFAULT_VIS = defaultVisibleIds
             const isMemberVisible = (id: string) =>
               filterMembers.size === 0 ? DEFAULT_VIS.has(id) : filterMembers.has(id)
@@ -6369,16 +6423,20 @@ export default function PlanningPage() {
             // team-volgorde (uit localStorage / team.json).
             const me = profile?.memberId
             const yokoTeam = visible
-              .filter(m => isYokoCrew(m.id))
+              .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id))
               .sort((a, b) => {
                 if (a.id === me) return -1
                 if (b.id === me) return 1
                 return 0
               })
-            const unassigned   = visible.filter(m => m.id === 'unassigned')
-            const freelancers  = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned'
-              // Verberg inactieve freelancers (geen werk in [-2mnd, +3mnd])
-              // tenzij gebruiker 'm expliciet via 't filter aanzet.
+            const unassigned    = visible.filter(m => m.id === 'unassigned')
+            // Inactief (gestopt, bv. stage afgerond) staat los van de
+            // activity-heuristiek hieronder — een expliciet gezette vlag,
+            // altijd in z'n eigen groep, nooit bij Team Yoko/Freelancers.
+            const inactiveTeam  = visible.filter(m => isMemberInactive(m.id))
+            const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id)
+              // Verberg freelancers zonder recente activiteit (geen werk in
+              // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
             const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; isOpen?: boolean }) => (
@@ -6497,7 +6555,7 @@ export default function PlanningPage() {
                         visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
                         visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
-                        onReassign={handleReassignOwner} />
+                        onMarkDone={markProjectDone} onReassign={handleReassignOwner} />
                     </div>
                   </div>
                 )}
@@ -6546,6 +6604,12 @@ export default function PlanningPage() {
               // freelancers (met ownership op iets) altijd door — dan kon
               // je de sectie nooit volledig dichtklappen. Wil je een
               // freelancer altijd zien, klap de sectie open.
+            }
+            if (inactiveTeam.length > 0) {
+              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, { onClick: () => setInactiveTeamOpen(o => !o), isOpen: inactiveTeamOpen })}</div>)
+              if (inactiveTeamOpen) {
+                inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i)))
+              }
             }
             return out
           })()}
