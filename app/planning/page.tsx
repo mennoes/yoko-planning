@@ -5516,8 +5516,11 @@ export default function PlanningPage() {
 
       {/* ── Fixed header — bevat alleen nog de toolbar. Titel + KPIs zijn
             naar de scrollable grid verhuisd zodat ze meescrollen i.p.v.
-            vaste vertical-space op te slokken. ── */}
-      <header style={{ flexShrink: 0, padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
+            vaste vertical-space op te slokken. position+zIndex expliciet
+            hoger dan de sticky kolomkop-rij (z=24) eronder — anders kan de
+            sticky header er bij het scrollen overheen schuiven en de
+            Menu-knop (en z'n dropdown-trigger) onbereikbaar maken. ── */}
+      <header style={{ flexShrink: 0, position: 'relative', zIndex: 30, background: 'var(--bg-base)', padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
 
         {/* Title + nav — desktop only; op mobiel scrollt 't mee bovenin de
             grid (zie title-row in de scrollable area). */}
