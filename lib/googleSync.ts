@@ -1012,6 +1012,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // ownerIdsLocked-flag respect: zie comment in single-event branch.
     const exExtraRec = (existingRow?.extra ?? {}) as Record<string, unknown>
     const ownersLocked = exExtraRec.ownerIdsLocked === true
+    // Instances die de gebruiker handmatig als subitem heeft verwijderd
+    // (BoardTable's SubItemsSection.deleteOne) — Google blijft die
+    // instance gewoon teruggeven bij elke sync, dus zonder deze
+    // tombstone-lijst kwam een verwijderde recurring-instance er bij de
+    // eerstvolgende sync gewoon weer bij (leek alsof verwijderen niet
+    // werkte).
+    const dismissedInstanceIds = new Set(
+      Array.isArray(exExtraRec.dismissedInstanceIds) ? (exExtraRec.dismissedInstanceIds as string[]) : []
+    )
     const ownerSet = new Set<string>()
     if (ownersLocked && Array.isArray(existingRow?.owner_ids)) {
       for (const o of (existingRow!.owner_ids as string[])) ownerSet.add(o)
@@ -1096,7 +1105,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       if (sd && sd > cutoffIso) return false
       return true
     })
-    const mergedSubitems = [...subitems, ...preserved]
+    // Dismissed instances eruit filteren NA de merge — ze kunnen zowel via
+    // de verse sync (subitems) als via de geschiedenis (preserved) weer
+    // binnenkomen, dus één laatste filter op de samengevoegde lijst i.p.v.
+    // los op elke bron.
+    const mergedSubitems = [...subitems, ...preserved].filter(s => !dismissedInstanceIds.has(s.id))
     // Sorteer chronologisch: zo blijft de Done-sectie onderaan in de UI
     // en houden gebruikers visueel hetzelfde beeld als voorheen.
     mergedSubitems.sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
@@ -1170,6 +1183,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         return {
           ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
           ...(() => { const m = sorted.find(ev => ev.hangoutLink)?.hangoutLink; return m ? { meetLink: m } : {} })(),
+          // dismissedInstanceIds meenemen — anders wist deze sync-pass 'm
+          // weer (extra wordt hier volledig herbouwd, niet gemerged) en
+          // komt een handmatig verwijderde instance bij de ÉÉRSTVOLGENDE
+          // sync alsnog terug.
+          ...(dismissedInstanceIds.size > 0 ? { dismissedInstanceIds: [...dismissedInstanceIds] } : {}),
         }
       })(),
       // Position bewaren — anders sprong een handmatig gesleept item
