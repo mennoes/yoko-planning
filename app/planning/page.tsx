@@ -6152,11 +6152,6 @@ export default function PlanningPage() {
                     <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
                   </>
                 )}
-                {zoom === 'week' && (
-                  <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 3, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
-                    <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
-                  </div>
-                )}
               </div>
               )
             })}

@@ -11,17 +11,9 @@ import { isOnDemoRoute, notifyDemoBlocked, DEMO_BOARD_IDS } from './demoFixtures
 // Verzonnen bord-config voor /demo — zelfde vorm als de echte 5 borden,
 // zodat de 'Agenda's'-sectie in de (hergebruikte) Sidebar er precies zo
 // uitziet, maar met nep-klantnamen i.p.v. de echte.
-const DEMO_COLUMNS: ColumnDef[] = [
-  { key: 'ownerIds', label: 'Owner',    type: 'owners',    width: 90  },
-  { key: 'status',   label: 'Status',   type: 'status',    width: 145 },
-  { key: 'timeline', label: 'Timeline', type: 'daterange', width: 175 },
-  { key: 'deadline', label: 'Deadline', type: 'date',      width: 105 },
-  { key: 'estHours', label: 'Est Time', type: 'number',    width: 85  },
-  { key: 'notes',    label: 'Notes',    type: 'text',      width: 160 },
-]
 const DEMO_FALLBACK: BoardConfig[] = [
-  { id: DEMO_BOARD_IDS[0], name: DEMO_BOARD_IDS[0], emoji: '🎬', color: '#B0C6EB', columns: DEMO_COLUMNS },
-  { id: DEMO_BOARD_IDS[1], name: DEMO_BOARD_IDS[1], emoji: '🎨', color: '#D8935B', columns: DEMO_COLUMNS },
+  { id: DEMO_BOARD_IDS[0], name: DEMO_BOARD_IDS[0], emoji: '🎬', color: '#B0C6EB', columns: [] },
+  { id: DEMO_BOARD_IDS[1], name: DEMO_BOARD_IDS[1], emoji: '🎨', color: '#D8935B', columns: [] },
 ]
 
 const LS_KEY = 'yoko-boards-registry'

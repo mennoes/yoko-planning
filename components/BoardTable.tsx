@@ -6,17 +6,8 @@ import { createPortal } from 'react-dom'
 // pagina in CSR-bailout en breekt `next build` voor de dynamische
 // /projects/[slug] route. We zijn 'use client', dus window.location is
 // veilig.
-import teamDataRaw from '@/data/team.json'
-import { isOnDemoRoute, DEMO_MEMBERS } from '@/lib/demoFixtures'
+import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
-
-// /demo mag nooit het echte team.json-team enumereren (owner-pickers,
-// @mentions, etc. zouden anders alle échte Yoko-collega's tonen naast de
-// vier nep-teamleden). Overal waar dit bestand demoAwareTeamMembers() las, gaat
-// dat voortaan via deze functie.
-function demoAwareTeamMembers(): typeof teamDataRaw.members {
-  return isOnDemoRoute() ? DEMO_MEMBERS as unknown as typeof teamDataRaw.members : teamDataRaw.members
-}
 import { setBoardColumns } from '@/lib/boardsRegistry'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
@@ -450,7 +441,7 @@ function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
   // dual-lookup verscheen 'r geen avatar voor leden die alleen via
   // /team-admin zijn toegevoegd (zoals Manuel).
   const liveMember = liveTeam.find(t => t.id === id)
-  const seedMember = demoAwareTeamMembers().find(t => t.id === id)
+  const seedMember = teamData.members.find(t => t.id === id)
   const m = liveMember
     ? { id: liveMember.id, name: liveMember.name, color: liveMember.color }
     : seedMember
@@ -502,7 +493,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
       seen.add(m.id)
       out.push({ id: m.id, name: m.name, color: m.color })
     }
-    for (const m of demoAwareTeamMembers()) {
+    for (const m of teamData.members) {
       if (seen.has(m.id)) continue
       seen.add(m.id)
       out.push({ id: m.id, name: m.name, color: m.color })
@@ -2292,7 +2283,7 @@ function DedupModal({ groups, onClose, onDelete }: {
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                           {i.startDate ? `${i.startDate} → ${i.endDate ?? i.startDate}` : 'geen datums'} · {i.estHours ?? 0}u
-                          {i.ownerIds && i.ownerIds.length > 0 && ` · ${i.ownerIds.filter(o => o !== 'unassigned').map(o => demoAwareTeamMembers().find(m => m.id === o)?.name?.split(' ')[0] ?? o).join(', ')}`}
+                          {i.ownerIds && i.ownerIds.length > 0 && ` · ${i.ownerIds.filter(o => o !== 'unassigned').map(o => teamData.members.find(m => m.id === o)?.name?.split(' ')[0] ?? o).join(', ')}`}
                         </div>
                       </div>
                       <span style={{ fontSize: 10.5, fontWeight: 700, color: isKept ? 'var(--accent)' : 'var(--text-muted)' }}>
@@ -2357,7 +2348,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate }: {
   const round1 = (n: number) => Math.round(n * 10) / 10
 
   const segments = owners.map(oid => {
-    const m = demoAwareTeamMembers().find(x => x.id === oid)
+    const m = teamData.members.find(x => x.id === oid)
     return {
       id:        oid,
       value:     live[oid] ?? 0,
@@ -2396,7 +2387,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate }: {
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
           {owners.map(oid => {
-            const m = demoAwareTeamMembers().find(x => x.id === oid)
+            const m = teamData.members.find(x => x.id === oid)
             if (!m) return null
             const val = live[oid] ?? 0
             const pct = total > 0 ? Math.round((val / total) * 100) : 0
@@ -2792,7 +2783,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
       showToast(label)
     } else if ('ownerIds' in updates) {
       const next = (updates.ownerIds ?? []).filter(id => id !== 'unassigned')
-      const names = next.map(id => demoAwareTeamMembers().find(m => m.id === id)?.name?.split(' ')[0] ?? id)
+      const names = next.map(id => teamData.members.find(m => m.id === id)?.name?.split(' ')[0] ?? id)
       label = names.length === 0 ? `${target} niet meer toegewezen` : `${target} → ${names.join(', ')}`
       showToast(label)
     } else if ('startDate' in updates || 'endDate' in updates) {
@@ -2845,7 +2836,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     if (key === 'name')      return item.name?.toLowerCase() ?? ''
     if (key === 'ownerIds') {
       const id = item.ownerIds?.[0]
-      const m  = id ? demoAwareTeamMembers().find(t => t.id === id) : null
+      const m  = id ? teamData.members.find(t => t.id === id) : null
       return (m?.name ?? '~').toLowerCase()
     }
     if (key === 'status')    return STATUS_OPTIONS.findIndex(o => o.label === item.status)
@@ -3965,7 +3956,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const yokoOwners = useMemo(() => {
     return allOwners.filter(id => {
       if (!id || id === 'unassigned') return false
-      return demoAwareTeamMembers().some(t => t.id === id)
+      return teamData.members.some(t => t.id === id)
     })
   }, [allOwners])
 
@@ -4438,7 +4429,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                         </button>
                       )}
                       {yokoOwners.map(id => {
-                        const m = demoAwareTeamMembers().find(t => t.id === id)
+                        const m = teamData.members.find(t => t.id === id)
                         if (!m) return null
                         const active = filterOwner === id
                         return (
@@ -4467,7 +4458,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       {!isMobile && yokoOwners.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
           {yokoOwners.map(id => {
-            const m = demoAwareTeamMembers().find(t => t.id === id)
+            const m = teamData.members.find(t => t.id === id)
             if (!m) return null
             const active = filterOwner === id
             return (
@@ -4791,7 +4782,7 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
         <button onClick={() => toggle('owner')} style={barBtn}>Owner…</button>
         {open === 'owner' && (
           <div style={popoverStyle}>
-            {demoAwareTeamMembers().map(m => (
+            {teamData.members.map(m => (
               <button key={m.id} onClick={() => { onUpdate({ ownerIds: [m.id] }); setOpen('') }}
                 style={{ ...popoverItem, color: m.color }}>
                 {m.name}
