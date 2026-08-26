@@ -17,6 +17,7 @@ import Sidebar from './Sidebar'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import { FeedbackBubble } from './FeedbackBubble'
+import ProfileSetup from './ProfileSetup'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconMenu, IconSearch } from './Icon'
 import { NotificationBell } from './NotificationBell'
@@ -106,6 +107,11 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />
       <FeedbackBubble />
+      {/* Zelfde modal als de echte app: Sidebar-footer opent 'm via
+          openEdit() (ProfileContext). Zonder deze mount deed die knop
+          niets zichtbaars op /demo — editOpen ging wel op true, maar er
+          was niets dat er iets mee deed. */}
+      <ProfileSetup />
 
       {/* Bekijk-als-switcher — wissel wie 'jij' bent in de demo, direct
           boven de (hergebruikte) Sidebar-footer. Alleen desktop: op
@@ -113,7 +119,12 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
           linkerkolom om iets boven te plakken. */}
       {!isMobile && (
         <div style={{
-          position: 'fixed', bottom: 62, left: 12, zIndex: 40,
+          // bottom: 108 — de Sidebar's eigen 'Volgorde'-toggle + footer
+          // (profiel/thema/instellingen) zitten ALTIJD op ~100px van de
+          // viewport-onderkant (vast, ongeacht nav-inhoud). Bij bottom: 62
+          // stond deze switcher daar bovenop — de avatars overlapten de
+          // 'Volgorde'-tekst zodat die onleesbaar werd.
+          position: 'fixed', bottom: 108, left: 12, zIndex: 40,
           display: 'flex', flexDirection: 'column', gap: 6,
         }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingLeft: 2 }}>

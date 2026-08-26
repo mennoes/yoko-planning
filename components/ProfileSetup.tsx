@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 import teamData from '@/data/team.json'
 import { useProfile } from './ProfileContext'
 import { useTeam } from './TeamContext'
 import { supabase } from '@/lib/supabase'
 import { getCurrentUserId } from '@/lib/sync'
+import { isDemoPath } from '@/lib/demoFixtures'
 import type { UserProfile } from '@/lib/profile'
 const PREVIEW = 200   // crop-circle diameter px
 const OUTPUT  = 240   // saved avatar px
@@ -220,6 +222,7 @@ export default function ProfileSetup() {
   const { profile, setProfile, needsSetup, editOpen, closeEdit } = useProfile()
   const { members: liveTeam } = useTeam()
   const isVisible = needsSetup || editOpen
+  const demo = isDemoPath(usePathname())
 
   // Members-list: prefer live Supabase team_members (zo zien admin-toegevoegde
   // gebruikers zoals 'Manuel' zichzelf óók als optie), met data/team.json
@@ -236,11 +239,14 @@ export default function ProfileSetup() {
   const [takenIds,   setTakenIds]   = useState<Set<string>>(new Set())
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Pull list of member_ids already claimed by other users so we can hide them
+  // Pull list of member_ids already claimed by other users so we can hide them.
+  // Nooit op /demo — de demo-leden (demo-sam, demo-robin, ...) bestaan niet
+  // in de echte profiles-tabel, en een publieke demo-pagina hoort sowieso
+  // nooit de productie-Supabase te raadplegen (privacy + onnodige load).
   useEffect(() => {
     let cancelled = false
     async function pull() {
-      if (!supabase) return
+      if (!supabase || demo) return
       const myUid = await getCurrentUserId()
       const { data } = await supabase.from('profiles').select('user_id, member_id')
       if (cancelled || !data) return
@@ -252,7 +258,7 @@ export default function ProfileSetup() {
     }
     if (isVisible) pull()
     return () => { cancelled = true }
-  }, [isVisible])
+  }, [isVisible]) // eslint-disable-line react-hooks/exhaustive-deps -- demo is route-vast
 
   const visibleMembers = MEMBERS
     .filter(m => m.id !== 'unassigned' && !m.hidden)
