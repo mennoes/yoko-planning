@@ -4380,9 +4380,34 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       ...g,
       items: g.items
         .filter(i => !selectedIds.has(i.id))
-        .map(i => i.subitems && i.subitems.some(s => selectedIds.has(s.id))
-          ? { ...i, subitems: i.subitems.filter(s => !selectedIds.has(s.id)) }
-          : i),
+        .map(i => {
+          if (!i.subitems?.some(s => selectedIds.has(s.id))) return i
+
+          // De losse ×-actie bewaart voor Google-instances een tombstone,
+          // zodat de periodieke Calendar-sync ze niet direct opnieuw als
+          // subitem aanmaakt. De bulkactie liep tot nu toe buiten die route:
+          // het subitem verdween kort uit de UI en kwam daarna weer terug.
+          // Bouw hier exact dezelfde dismissed-lijst op voor alle
+          // geselecteerde Google-subitems, inclusief oude rows die alleen
+          // aan hun si_g_-id of externalLink herkenbaar zijn.
+          const dismissed = new Set(
+            Array.isArray(i.dismissedInstanceIds)
+              ? (i.dismissedInstanceIds as string[])
+              : []
+          )
+          for (const sub of i.subitems) {
+            if (!selectedIds.has(sub.id)) continue
+            if (sub.source === 'google' || !!sub.externalLink || sub.id.startsWith('si_g_')) {
+              dismissed.add(sub.id)
+            }
+          }
+
+          return {
+            ...i,
+            subitems: i.subitems.filter(s => !selectedIds.has(s.id)),
+            ...(dismissed.size > 0 ? { dismissedInstanceIds: [...dismissed] } : {}),
+          }
+        }),
     })))
     for (const id of topLevelIdsToDelete) {
       softDeleteItem(id).catch(() => {})
