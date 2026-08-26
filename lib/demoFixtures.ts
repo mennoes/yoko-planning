@@ -73,11 +73,19 @@ export function demoNavigate(router: { push: (href: string) => void }, href: str
 }
 
 // ─── Team ───────────────────────────────────────────────────────────────────
+// 8 leden i.p.v. de oorspronkelijke 4 — een grotere, drukkere cast maakt
+// Planning/Werklast/Home er meteen representatiever uitzien (verdeelde
+// capaciteit, overlappende deadlines, een inactief lid als voorbeeld van
+// die sectie) i.p.v. een leeg-ogende demo met maar een handjevol namen.
 export const DEMO_MEMBERS: TeamMember[] = [
-  { id: 'demo-sam',   name: 'Sam',   email: '', color: '#B0C6EB', weeklyCapacity: 40, position: 0, hidden: false, kind: 'yoko',        startDate: null, inactive: false },
-  { id: 'demo-robin', name: 'Robin', email: '', color: '#9DB1A4', weeklyCapacity: 32, position: 1, hidden: false, kind: 'yoko',        startDate: null, inactive: false },
+  { id: 'demo-sam',   name: 'Sam',   email: '', color: '#B0C6EB', weeklyCapacity: 40, position: 0, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
+  { id: 'demo-robin', name: 'Robin', email: '', color: '#9DB1A4', weeklyCapacity: 32, position: 1, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
   { id: 'demo-jules', name: 'Jules', email: '', color: '#C09BCA', weeklyCapacity: 40, position: 2, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
-  { id: 'demo-noa',   name: 'Noa',   email: '', color: '#D8B62E', weeklyCapacity: 24, position: 3, hidden: false, kind: 'yoko',        startDate: null, inactive: false },
+  { id: 'demo-noa',   name: 'Noa',   email: '', color: '#D8B62E', weeklyCapacity: 24, position: 3, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
+  { id: 'demo-finn',  name: 'Finn',  email: '', color: '#7FB3D5', weeklyCapacity: 40, position: 4, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
+  { id: 'demo-mila',  name: 'Mila',  email: '', color: '#E8998D', weeklyCapacity: 24, position: 5, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
+  { id: 'demo-liam',  name: 'Liam',  email: '', color: '#A3D9A5', weeklyCapacity: 16, position: 6, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
+  { id: 'demo-eva',   name: 'Eva',   email: '', color: '#D7BDE2', weeklyCapacity: 24, position: 7, hidden: false, kind: 'freelance',  startDate: null, inactive: true  },
 ]
 
 export const DEMO_PROFILE: UserProfile = {
@@ -93,6 +101,10 @@ export const DEMO_PHOTOS: Record<string, string> = {
   'demo-robin': 'https://randomuser.me/api/portraits/women/44.jpg',
   'demo-jules': 'https://randomuser.me/api/portraits/men/67.jpg',
   'demo-noa':   'https://randomuser.me/api/portraits/women/23.jpg',
+  'demo-finn':  'https://randomuser.me/api/portraits/men/12.jpg',
+  'demo-mila':  'https://randomuser.me/api/portraits/women/68.jpg',
+  'demo-liam':  'https://randomuser.me/api/portraits/men/76.jpg',
+  'demo-eva':   'https://randomuser.me/api/portraits/women/50.jpg',
 }
 
 // ─── Boards ─────────────────────────────────────────────────────────────────
@@ -128,7 +140,15 @@ function item(id: string, name: string, ownerIds: string[], status: string, opts
 // backed) boardsRegistry valt 'ie terug op het rauwe id als label. Door
 // het id zelf al leesbaar te maken ('Noorderlicht Media') i.p.v. een
 // technische slug ('demo-noorderlicht'), oogt die fallback gewoon goed.
-export const DEMO_BOARD_IDS = ['Noorderlicht Media', 'Kaap Studio']
+//
+// LET OP bij uitbreiden: app/demo/budget/page.tsx verwijst naar specifieke
+// item-id's (bv. 'Noorderlicht Media__i4') voor z'n omzet-fixtures — nieuwe
+// items krijgen dus altijd een NIEUW id-suffix (i8, i9, ...), bestaande
+// id's nooit hernummeren/verwijderen. Een derde bord toevoegen vereist ook
+// een bijpassend entry in lib/navStore.ts's DEMO_PROJECTS en
+// lib/boardsRegistry.ts's DEMO_FALLBACK (allebei niet automatisch afgeleid
+// van deze lijst).
+export const DEMO_BOARD_IDS = ['Noorderlicht Media', 'Kaap Studio', 'Vuurtoren Events']
 
 export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
   return {
@@ -148,11 +168,25 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
             item('i4', 'Kickoff volgend seizoen', ['demo-sam', 'demo-jules'], 'Not started', { startOffset: 3, endOffset: 3, estHours: 2 }),
             item('i6', 'Merkfilm — klant-call + debrief', ['demo-sam'], 'Working on...', { startOffset: 0, endOffset: 1, estHours: 8, deadlineOffset: 2 }),
             item('i7', 'Merkfilm — voice-over regelen', ['demo-sam'], 'Not started', { startOffset: 1, endOffset: 3, estHours: 10 }),
+            item('i8', 'Nieuwsbrief — juli editie', ['demo-finn'], 'Working on...', { startOffset: -1, endOffset: 2, estHours: 6, deadlineOffset: 2 }),
+            item('i9', 'Podcast — gastenlijst Q3', ['demo-mila', 'demo-noa'], 'Not started', { startOffset: 6, endOffset: 9, estHours: 8 }),
+            item('i10', 'Merkfilm — kleurcorrectie', ['demo-liam'], 'Stuck', { startOffset: -2, endOffset: 2, estHours: 14, deadlineOffset: 3 }),
+            item('i11', 'Fotoshoot — bedrijfsportretten', ['demo-finn', 'demo-jules'], 'Not started', {
+              deadlineOffset: 30,
+              subitems: [
+                sub('s1', 'Locatiescout', ['demo-finn'], 'Working on...', 8, 10, 6),
+                sub('s2', 'Shootdag', ['demo-finn', 'demo-jules'], 'Not started', 15, 15, 10),
+                sub('s3', 'Selectie + retouche', ['demo-jules'], 'Not started', 16, 22, 12),
+              ],
+            }),
+            item('i12', 'Jaaroverzicht — scriptidee pitchen', ['demo-sam', 'demo-robin'], 'Not started', { startOffset: 20, endOffset: 22, estHours: 4, deadlineOffset: 23 }),
           ],
         },
         {
           id: 'g2', name: 'Done', color: '#9A9590', items: [
             item('i5', 'Intake + offerte', ['demo-sam'], 'Done', { startOffset: -20, endOffset: -16, estHours: 6 }),
+            item('i13', 'Vorig kwartaal — eindrapportage', ['demo-robin'], 'Done', { startOffset: -30, endOffset: -27, estHours: 8 }),
+            item('i14', 'Merkfilm — pitch + akkoord klant', ['demo-sam'], 'Done', { startOffset: -35, endOffset: -33, estHours: 5 }),
           ],
         },
       ],
@@ -172,6 +206,50 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
             }),
             item('i4', 'Podcast S2 — aflevering 3 edit', ['demo-noa'], 'Working on...', { startOffset: -3, endOffset: 1, estHours: 12, deadlineOffset: 1 }),
             item('i5', 'Trailer volgend seizoen', ['demo-robin'], 'Not started', { startOffset: 14, endOffset: 20, estHours: 18 }),
+            item('i6', 'Verpakkingsontwerp — schetsen', ['demo-mila'], 'Working on...', { startOffset: -2, endOffset: 3, estHours: 16, deadlineOffset: 6 }),
+            item('i7', 'Social templates — Q3 batch', ['demo-eva'], 'Not started', { startOffset: 10, endOffset: 13, estHours: 9 }),
+            item('i8', 'Klant-workshop voorbereiden', ['demo-sam', 'demo-finn'], 'Working on...', { startOffset: 0, endOffset: 2, estHours: 6, deadlineOffset: 3 }),
+            item('i9', 'Merchandise — sampledrop bestellen', ['demo-jules'], 'Stuck', { startOffset: -4, endOffset: -1, estHours: 4 }),
+            item('i10', 'Podcast S2 — seizoensfinale', ['demo-noa', 'demo-mila'], 'Not started', {
+              deadlineOffset: 35,
+              subitems: [
+                sub('s1', 'Script + gasten', ['demo-noa'], 'Not started', 22, 26, 10),
+                sub('s2', 'Opname', ['demo-noa', 'demo-mila'], 'Not started', 28, 28, 6),
+                sub('s3', 'Edit + mix', ['demo-mila'], 'Not started', 29, 33, 14),
+              ],
+            }),
+          ],
+        },
+        {
+          id: 'g2', name: 'Done', color: '#9A9590', items: [
+            item('i11', 'Huisstijl — intake + moodboard-akkoord', ['demo-jules'], 'Done', { startOffset: -14, endOffset: -12, estHours: 5 }),
+            item('i12', 'Podcast S2 — aflevering 1 + 2', ['demo-noa'], 'Done', { startOffset: -18, endOffset: -8, estHours: 22 }),
+          ],
+        },
+      ],
+    },
+    'Vuurtoren Events': {
+      groups: [
+        {
+          id: 'g1', name: 'Lopende projecten', color: '#5FA8A0', items: [
+            item('i1', 'Festivalweekend — draaiboek', ['demo-eva', 'demo-finn'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 18, deadlineOffset: 5 }),
+            item('i2', 'Aftermovie — vorig jaar recap', ['demo-liam'], 'Not started', { startOffset: 7, endOffset: 12, estHours: 20, deadlineOffset: 14 }),
+            item('i3', 'Sponsorpakket — pitchdeck', ['demo-robin', 'demo-eva'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 10, deadlineOffset: 4 }),
+            item('i4', 'Line-up aankondiging — social plan', ['demo-mila'], 'Not started', { startOffset: 9, endOffset: 11, estHours: 8, deadlineOffset: 12 }),
+            item('i5', 'Ticketpagina — copy + design', ['demo-jules', 'demo-finn'], 'Not started', {
+              deadlineOffset: 20,
+              subitems: [
+                sub('s1', 'Copy schrijven', ['demo-eva'], 'Not started', 10, 12, 6),
+                sub('s2', 'Design + bouw', ['demo-jules', 'demo-finn'], 'Not started', 13, 18, 16),
+              ],
+            }),
+            item('i6', 'Vrijwilligersbriefing plannen', ['demo-liam'], 'Not started', { startOffset: 25, endOffset: 25, estHours: 3 }),
+          ],
+        },
+        {
+          id: 'g2', name: 'Done', color: '#9A9590', items: [
+            item('i7', 'Locatie — contract getekend', ['demo-sam'], 'Done', { startOffset: -25, endOffset: -23, estHours: 4 }),
+            item('i8', 'Vorig jaar — evaluatie + leerpunten', ['demo-robin', 'demo-eva'], 'Done', { startOffset: -22, endOffset: -20, estHours: 6 }),
           ],
         },
       ],
@@ -183,6 +261,9 @@ export const DEMO_TODOS = [
   { id: 'dt1', text: 'Facturen vorige maand versturen', done: false },
   { id: 'dt2', text: 'Intake nieuwe klant voorbereiden', done: false },
   { id: 'dt3', text: 'Feedback merkfilm-edit doorsturen', done: true },
+  { id: 'dt4', text: 'Sponsorpakket — voorbeelden opsturen naar Daan', done: false },
+  { id: 'dt5', text: 'Locatiescout-foto\'s doorsturen naar Jules', done: false },
+  { id: 'dt6', text: 'Podcast-gastenlijst afstemmen met Mila', done: true },
 ]
 
 // ─── Documenten (Pagina's) ──────────────────────────────────────────────────

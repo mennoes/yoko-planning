@@ -106,6 +106,14 @@ export const DEMO_CONTACT_GROUPS: ContactGroup[] = [
     id: 'kaap', name: 'Kaap Studio', color: '#D8935B',
     contacts: [
       { id: 'thijs-vermeer', name: 'Thijs Vermeer', role: 'Eigenaar', email: 'thijs@kaapstudio.example', phone: '' },
+      { id: 'noor-jansen',   name: 'Noor Jansen',   role: 'Marketing', email: 'noor@kaapstudio.example', phone: '06 87654321' },
+    ],
+  },
+  {
+    id: 'vuurtoren', name: 'Vuurtoren Events', color: '#5FA8A0',
+    contacts: [
+      { id: 'daan-hendriks', name: 'Daan Hendriks', role: 'Festivaldirecteur', email: 'daan@vuurtorenevents.example', phone: '06 55501234' },
+      { id: 'sofie-mulder',  name: 'Sofie Mulder',  role: 'Sponsoring',        email: '', phone: '' },
     ],
   },
 ]
