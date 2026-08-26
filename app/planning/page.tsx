@@ -710,17 +710,20 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
 
   return (
     <>
-      {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
-          het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
-          zodat lijn en label nooit over namen/profielfoto's lopen. */}
-      {todayEdge && (
-        <div aria-hidden style={{
-          position: 'absolute', top: 0, bottom: 0,
-          ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
-          width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
-          pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
-        }} />
-      )}
+      {/* Eén lijn voor zowel de normale als de aan-de-rand-geklemd variant.
+          Voorheen bleef de lijn ín de scroll-content bestaan terwijl hier
+          óók een randlijn werd getekend; precies op de viewportgrens zag je
+          daardoor twee gele lijnen naast elkaar. */}
+      <div aria-hidden style={{
+        position: 'absolute', top: 0, bottom: 0,
+        ...(todayEdge === 'left'
+          ? { left: nameW + namePad }
+          : todayEdge === 'right'
+            ? { right: 0 }
+            : { left: (nowOffset ?? 0) - scrollLeft }),
+        width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
+        pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
+      }} />
       {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
           verandert bij horizontaal scrollen alleen de x-positie/tekst en
           nooit de verticale layout van de sticky headers eronder. */}
@@ -3085,7 +3088,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   allGroups: Record<string, BoardGroup[]>
   anchor?: { x: number; y: number } | null
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; statusOverride: 'active' | 'done'; hiddenFromPlanning: boolean }>) => void
   onDuplicate?: () => void
   onDelete?: () => void
 }) {
@@ -3221,6 +3224,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     ownerIds:  string[]
     links:     import('@/lib/boards').ItemLink[]
     status:    string
+    statusOverride: 'active' | 'done'
     hiddenFromPlanning: boolean
   }>
   function commit(patch: Patch) {
@@ -3233,6 +3237,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     if (isGoogle) {
       const allowed: Patch = {}
       if (patch.status              !== undefined) allowed.status              = patch.status
+      if (patch.statusOverride      !== undefined) allowed.statusOverride      = patch.statusOverride
       if (patch.estHours            !== undefined) allowed.estHours            = patch.estHours
       if (patch.ownerHours          !== undefined) allowed.ownerHours          = patch.ownerHours
       if (patch.ownerIds            !== undefined) allowed.ownerIds            = patch.ownerIds
@@ -5385,7 +5390,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; statusOverride: 'active' | 'done'; hiddenFromPlanning: boolean }>) {
     const boardName  = project.board
     let rawIdPart    = project.id.slice(boardName.length + 2)
     // Vrij-events worden per-dag gesynthetiseerd met suffix '__vrij_YYYY-
@@ -5422,6 +5427,7 @@ export default function PlanningPage() {
             if (extra.ownerHours        !== undefined) subPatch.ownerHours        = extra.ownerHours
             if (extra.ownerIds          !== undefined) subPatch.ownerIds          = extra.ownerIds
             if (extra.status            !== undefined) subPatch.status            = extra.status
+            if (extra.statusOverride    !== undefined) subPatch.statusOverride    = extra.statusOverride
             if (extra.startTime         !== undefined) subPatch.startTime         = extra.startTime
             if (extra.endTime           !== undefined) subPatch.endTime           = extra.endTime
             if (extra.hiddenFromPlanning !== undefined) subPatch.hiddenFromPlanning = extra.hiddenFromPlanning
@@ -5459,7 +5465,13 @@ export default function PlanningPage() {
   function toggleProjectDone(project: Project) {
     const wasDone = project.status === 'done'
     const nextStatus = wasDone ? '' : 'Done'
-    handleDetailUpdate(project, project.startDate, project.endDate, { status: nextStatus })
+    handleDetailUpdate(project, project.startDate, project.endDate, {
+      status: nextStatus,
+      // Alleen status='' was onvoldoende: voor afspraken ouder dan drie
+      // dagen zette de Google-sync ze meteen opnieuw op Done. Bewaar daarom
+      // expliciet dat de gebruiker deze afspraak heropend heeft.
+      statusOverride: wasDone ? 'active' : 'done',
+    })
     logActivity(wasDone ? 'Heropend' : 'Afgerond', project.name, project.board)
     const rawId = project.id.slice(project.board.length + 2).split('__si')[0]
     logItemActivity(rawId, wasDone ? 'zette terug op niet-afgerond' : 'zette op Done', project.name).catch(() => {})
@@ -6144,31 +6156,14 @@ export default function PlanningPage() {
             </div>
           )}
 
-          {/* "Now" indicator — yoko-yellow vertical line at today's exact
-              position with a VANDAAG pill at the top so the marker is hard
-              to miss when scrolling through time. Rendert altijd wanneer
-              nowOffset bekend is (voorheen gegate op !todayEdge, maar die
-              state leeft nu geïsoleerd in <TodayMarker> hierboven) — buiten
-              beeld is deze lijn gewoon off-screen, geen visueel probleem. */}
+          {/* Onzichtbaar geometrie-anker voor de bestaande zoom- en
+              scrolllogica. De zichtbare Vandaag-lijn staat nu één keer in
+              TodayMarker; dit element heeft bewust geen border. */}
           {nowOffset !== null && (
-            <>
-              {/* De lijn zelf: hoge z-index zodat 'ie BOVEN ALLES doorloopt
-                  (kolom-headers, maand-groepen, en zelfs de sticky naam-
-                  kolommen). Eerder z=14: dan bleef de lijn ergens achter
-                  een sticky achtergrond hangen en zag de gebruiker een
-                  gat in 't midden. z=30 trekt 'm door tot aan de pill (z=50). */}
-              <div data-today-marker style={{
-                position: 'absolute', top: 0, bottom: 0,
-                left: nowOffset, width: 0,
-                borderLeft: '2px solid var(--yellow)',
-                pointerEvents: 'none',
-                // Boven beide sticky header-rijen (z=24/25), maar onder de
-                // VANDAAG-pill (z=50). Zo blijft de lijn ononderbroken door
-                // maand- en weekheaders heen lopen.
-                zIndex: 40,
-                boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
-              }} />
-            </>
+            <div data-today-marker aria-hidden style={{
+              position: 'absolute', left: nowOffset, top: 0,
+              width: 0, height: 1, pointerEvents: 'none', opacity: 0,
+            }} />
           )}
 
           {/* Month grouping row (only for week/day zoom) — sticky-left bevat
@@ -6267,11 +6262,11 @@ export default function PlanningPage() {
               const isWeekStart = zoom === 'dag' && dow === 1
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0,
-                // Week-zoom: extra ruimte bovenaan zodat de datum/weekdagen
+                // Week-zoom: extra ruimte bovenaan zodat de datum
                 // niet onder de VANDAAG-pill (die er los bovenop zit) komen
-                // te zitten — de pill hangt op een vaste positie, dus de
-                // header zelf schuift een regel naar beneden i.p.v. andersom.
-                padding: zoom === 'week' ? '22px 2px 3px' : '8px 2px', textAlign: 'center',
+                // te zitten. De weekdagen staan voortaan in de al bestaande
+                // Studio-Yoko-sectiebalk eronder, waardoor deze kop lager is.
+                padding: zoom === 'week' ? '22px 2px 5px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 {zoom === 'week' ? (
@@ -6280,12 +6275,6 @@ export default function PlanningPage() {
                       color: col.isCurrent ? 'var(--text-primary)' : 'var(--text-muted)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
                       {col.label2} <span style={{ opacity: 0.8 }}>({col.label1})</span>
-                    </div>
-                    {/* Weekdag-rijtje hoort uitsluitend hier, boven de weken —
-                        dit is de kolomkop-rij, los van (en boven) de 'Team
-                        Yoko'-sectiebalk verderop in de lijst. */}
-                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 1, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
-                      <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
                     </div>
                   </>
                 ) : (
@@ -6499,7 +6488,7 @@ export default function PlanningPage() {
               // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
-            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number }) => (
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; showWeekdays?: boolean }) => (
               <div onClick={opts?.onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)',
@@ -6507,7 +6496,7 @@ export default function PlanningPage() {
                 {/* Label blijft tegen de linker rand kleven terwijl de balk
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
-                <div style={{ position: 'sticky', left: 0, width: 'max-content',
+                <div style={{ position: 'sticky', left: 0, width: opts?.showWeekdays ? nameW + namePad : 'max-content', boxSizing: 'border-box',
                   padding: '6px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
@@ -6527,6 +6516,20 @@ export default function PlanningPage() {
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
                 </div>
+                {opts?.showWeekdays && cols.map(col => (
+                  <div key={`weekdays-${col.key}`} style={{
+                    position: 'absolute', top: 0,
+                    left: nameW + namePad + cols.slice(0, cols.indexOf(col)).reduce((sum, c) => sum + c.widthPx, 0),
+                    width: col.widthPx, height: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+                    borderLeft: '1px solid var(--border-strong)',
+                    color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)',
+                    fontSize: 8.5, fontWeight: 650, letterSpacing: '0.04em',
+                    pointerEvents: 'none',
+                  }}>
+                    <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
+                  </div>
+                ))}
               </div>
             )
 
@@ -6658,7 +6661,7 @@ export default function PlanningPage() {
               )
             }
             if (yokoTeam.length > 0) {
-              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos })}</div>)
+              out.push(<div key="hdr-yoko" style={{ position: 'relative' }}>{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, showWeekdays: zoom === 'week' })}</div>)
               if (yokoTeamPos !== 0) {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }
