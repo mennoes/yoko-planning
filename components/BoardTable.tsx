@@ -1494,7 +1494,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
-function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, onUpdate }: {
+function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
@@ -1505,7 +1505,9 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   onOpenDetail?: (sub: SubItem) => void
   colWidths?: Record<string, number>
   onResizeCol?: (key: string, width: number) => void
-  onUpdate: (u: SubItem[]) => void
+  // IDs van eerder verwijderde Google-instances (recurring) — zie deleteOne.
+  dismissedInstanceIds?: string[]
+  onUpdate: (u: SubItem[], itemPatch?: { dismissedInstanceIds?: string[] }) => void
 }) {
   function updateOne(id: string, u: Partial<SubItem>) {
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
@@ -1517,7 +1519,22 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
       return s
     }))
   }
-  function deleteOne(id: string) { onUpdate(subitems.filter(s => s.id !== id)) }
+  function deleteOne(id: string) {
+    const deleted  = subitems.find(s => s.id === id)
+    const filtered = subitems.filter(s => s.id !== id)
+    // Google-instances (recurring events) worden bij elke sync opnieuw
+    // opgebouwd uit de events die Google nog teruggeeft — zonder dit
+    // 'onthoud wat ik verwijderde' lijstje kwam een handmatig verwijderde
+    // instance bij de volgende sync gewoon weer terug (leek alsof
+    // verwijderen niet werkte). Alleen relevant voor source==='google';
+    // handmatige subitems verdwijnen gewoon, geen tombstone nodig.
+    if (deleted?.source === 'google') {
+      const next = [...(dismissedInstanceIds ?? []), id]
+      onUpdate(filtered, { dismissedInstanceIds: next })
+    } else {
+      onUpdate(filtered)
+    }
+  }
   const [justCreatedSubId, setJustCreatedSubId] = useState<string | null>(null)
   function addOne() {
     const id = Date.now().toString()
@@ -2168,7 +2185,8 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
           parentExternalLink={item.externalLink ?? null}
           onOpenDetail={sub => setOpenSub(sub)}
           colWidths={subColWidths ?? colWidths} onResizeCol={onResizeSubCol ?? onResizeCol}
-          onUpdate={updated => onUpdate({ subitems: updated })} />
+          dismissedInstanceIds={item.dismissedInstanceIds as string[] | undefined}
+          onUpdate={(updated, patch) => onUpdate({ subitems: updated, ...(patch ?? {}) })} />
       )}
       {showDetail && (
         <ItemDetailDrawer item={item} cols={cols} accentColor={accentColor}
