@@ -105,11 +105,17 @@ export async function applyAutoStatus(): Promise<{ changed: number }> {
       })
       return { ...g, items }
     })
-    if (boardChanged) {
-      // Items die zojuist op Done belandden willen we óók meteen naar de
-      // Done-groep schuiven, anders blijven ze tussen open werk staan in
-      // 'Projecten' / 'Meetings'. autoMoveDoneItems is idempotent.
-      const moved = autoMoveDoneItems(nextGroups)
+    // autoMoveDoneItems draait ALTIJD, niet alleen wanneer deze sweep zelf
+    // iets wijzigde — het restaureert items die een (inmiddels verwijderde)
+    // oudere versie van deze functie ooit naar een aparte Done-groep
+    // verplaatste, terug naar hun eigen groep. Die restore mag niet
+    // wachten tot er toevallig ook een Vrij/Working-on-wijziging in
+    // dezelfde board is; anders blijven al-misplaatste items voor altijd
+    // vastzitten op een board waar verder niets meer verandert. Idempotent
+    // (geeft dezelfde referentie terug als er niets te doen is), dus
+    // pushen we alleen als er ECHT iets veranderde.
+    const moved = autoMoveDoneItems(nextGroups)
+    if (boardChanged || moved !== nextGroups) {
       saveGroups(boardId, moved)
       pushBoardToRemote(boardId, moved).catch(() => {})
       dirty.add(boardId)
