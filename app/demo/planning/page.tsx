@@ -7,8 +7,7 @@ import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 // DEMO-VARIANT van app/planning/page.tsx: zelfde component, maar databron
 // vervangen door verzonnen fixtures (lib/demoFixtures.ts) i.p.v. de echte
-// borden/team — geen Supabase-sync, geen Google-koppeling. Zie
-// app/demo/README.md voor de volledige uitleg van dit patroon.
+// borden/team — geen Supabase-sync, geen Google-koppeling.
 import teamData          from '@/data/demoTeam.json'
 import { buildDemoBoards, DEMO_BOARD_IDS } from '@/lib/demoFixtures'
 import { loadGroups, saveGroups, addDays, moveItemToBoard, softDeleteItem, restoreTrashItem } from '@/lib/boardStore'
@@ -38,6 +37,7 @@ import {
 import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange } from '@/lib/popoverState'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity } from '@/lib/itemActivity'
+import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { MentionTextarea } from '@/components/MentionTextarea'
 import { TextWithItemRefs } from '@/components/ItemRefChip'
 import { ReactionRow } from '@/components/ReactionRow'
@@ -53,7 +53,7 @@ import { startTimer, stopTimer, getActiveTimer, totalMinutesForProject, onTimerU
 import { logActivity }   from '@/lib/activityLog'
 import {
   IconMore, IconUsers, IconBoard, IconHourglass, IconRange, IconShare,
-  IconDownload, IconSort, IconChevronLeft, IconChevronRight, IconChevronsLeft, IconChevronsRight,
+  IconDownload, IconSort, IconChevronLeft, IconChevronRight,
   IconPlay, IconStop, IconClose, IconEye, IconEyeOff,
 } from '@/components/Icon'
 import { GoogleBadge } from '@/components/GoogleBadge'
@@ -301,10 +301,13 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // bevestigd: item in groep 'Vrij' zonder naam-match → 40u compleet
   // verdwenen uit de werkdruk-totalen.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  const totalCalDays = Math.max(1, Math.floor((pE.getTime() - pS.getTime()) / 86400000) + 1)
+  // Gebruik voor de noemer exact dezelfde zichtbare werkdagen als voor de
+  // overlap. Anders verdwijnen weekend-aandelen uit de week-/dagtotalen.
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), isVrij ? undefined : memberId)
+  if (totalWork === 0) return 0
   const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
-  const fraction  = overlapWork / totalCalDays
+  const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
   const myShare = project.ownerHours && memberId in project.ownerHours
@@ -313,10 +316,7 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   return Math.round(fraction * myShare * 10) / 10
 }
 
-function memberHoursInCol(projects: Project[], memberId: string, col: Col) {
-  // Eén keer laden i.p.v. per project — deze functie loopt over alle
-  // projects × members × kolommen in de grid.
-  const overrides = loadCategoryOverrides()
+function memberHoursInCol(projects: Project[], memberId: string, col: Col, overrides = loadCategoryOverrides()) {
   return projects
     .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd, overrides[p.id]) }))
     .filter(c => c.hours > 0)
@@ -631,6 +631,122 @@ function formatDragDate(iso: string | null): string {
   return d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
+// Volgt de horizontale scroll-positie van de dichtstbijzijnde scrollende
+// ancestor van `ref` zodat een lange bar-titel mee kan schuiven (Google-
+// Cal-stijl). Gedeeld door DraggableBar en de dag-zoom event-bar: elke
+// zichtbare bar had voorheen z'n EIGEN scroll-listener op dezelfde
+// container, die bij elke ruwe scroll-tick z'n eigen React state zette —
+// met tientallen/honderden bars tegelijk in beeld (Overzicht met een
+// volledig team) meetbare scroll-jank. RAF-throttle capt elke bar op
+// hooguit één update per animatieframe, ongeacht hoe vaak de browser
+// native scroll-events afvuurt.
+function useScrollLeftOf(ref: { current: HTMLElement | null }): number {
+  const [scrollLeft, setScrollLeft] = useState(0)
+  useEffect(() => {
+    let el: HTMLElement | null = ref.current
+    while (el && el !== document.body) {
+      const s = getComputedStyle(el)
+      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
+      el = el.parentElement
+    }
+    if (!el || el === document.body) return
+    const scroller = el
+    let raf: number | null = null
+    const update = () => {
+      if (raf != null) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        setScrollLeft(scroller.scrollLeft)
+      })
+    }
+    setScrollLeft(scroller.scrollLeft)
+    scroller.addEventListener('scroll', update, { passive: true })
+    return () => {
+      scroller.removeEventListener('scroll', update)
+      if (raf != null) cancelAnimationFrame(raf)
+    }
+  }, [ref])
+  return scrollLeft
+}
+
+// Losse VANDAAG-pill + rand-indicator, buiten PlanningPage's eigen
+// render-cyclus. Leest scrollLeft via z'n eigen (RAF-throttled)
+// useScrollLeftOf-hook i.p.v. via top-level state op de pagina — zie de
+// toelichting bij de aanroep verderop voor waarom dat nodig is.
+function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }: {
+  gridRef: { current: HTMLDivElement | null }
+  nowOffset: number | null
+  nameW: number
+  namePad: number
+  zoom: ZoomLevel
+  cols: Col[]
+  goToday: () => void
+}) {
+  const scrollLeft = useScrollLeftOf(gridRef)
+  const [clientWidth, setClientWidth] = useState(0)
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const update = () => setClientWidth(el.clientWidth)
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [gridRef])
+
+  const todayEdge: 'left' | 'right' | null = (() => {
+    if (nowOffset === null) {
+      const nowMs = Date.now()
+      const first = cols[0]?.rangeStart.getTime()
+      const last = cols[cols.length - 1]?.rangeEnd.getTime()
+      return first != null && nowMs < first ? 'left' : last != null && nowMs > last ? 'right' : null
+    }
+    const screenX = nowOffset - scrollLeft
+    if (screenX < nameW + namePad) return 'left'
+    if (screenX > clientWidth) return 'right'
+    return null
+  })()
+
+  if (!todayEdge && nowOffset === null) return null
+
+  return (
+    <>
+      {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
+          het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
+          zodat lijn en label nooit over namen/profielfoto's lopen. */}
+      {todayEdge && (
+        <div aria-hidden style={{
+          position: 'absolute', top: 0, bottom: 0,
+          ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
+          width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
+          pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
+        }} />
+      )}
+      {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
+          verandert bij horizontaal scrollen alleen de x-positie/tekst en
+          nooit de verticale layout van de sticky headers eronder. */}
+      <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
+        // Vandaag staat bovenaan, ter hoogte van de datum in de kolomkop
+        // (bv. 'aug. 24 - 30'). Dagweergave heeft daarnaast nog een
+        // maandgroeprij erboven, dus krijgt een grotere offset. Beide
+        // edge-varianten gebruiken exact dezelfde top en verspringen niet.
+        position: 'absolute', top: zoom === 'dag' ? 82 : 4,
+        ...(todayEdge === 'left'
+          ? { left: nameW + namePad + 6 }
+          : todayEdge === 'right'
+            ? { right: 6 }
+            : { left: (nowOffset ?? 0) - scrollLeft - 32, width: 64 }),
+        zIndex: 80, padding: todayEdge ? '2px 9px' : '2px 0', borderRadius: 999, border: 'none',
+        background: 'var(--yellow)', color: '#1a1a1a',
+        boxShadow: '0 2px 6px rgba(216,182,46,0.4)',
+        fontSize: 9.5, fontWeight: 800, lineHeight: 1.2, letterSpacing: '0.08em', cursor: 'pointer',
+        whiteSpace: 'nowrap', textAlign: 'center',
+      }}>
+        VANDAAG {todayEdge === 'left' ? '←' : todayEdge === 'right' ? '→' : ''}
+      </button>
+    </>
+  )
+}
+
 function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   team?: TeamMember[]
@@ -756,26 +872,6 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   const reassignRef = useRef<string | null>(null)
   const didDrag = useRef(false)
   const dpx = 7 / colW
-
-  // Volg de horizontale scroll-positie van de timeline-container zodat de
-  // titel mee kan schuiven (Google-Cal-stijl). Anders verdwijnt de tekst van
-  // brede bars onder de sticky linker-kolom zodra je rechts scrolt.
-  const barRef = useRef<HTMLDivElement | null>(null)
-  const [scrollLeft, setScrollLeft] = useState(0)
-  useEffect(() => {
-    let el: HTMLElement | null = barRef.current
-    while (el && el !== document.body) {
-      const s = getComputedStyle(el)
-      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
-      el = el.parentElement
-    }
-    if (!el || el === document.body) return
-    const scroller = el
-    const update = () => setScrollLeft(scroller.scrollLeft)
-    update()
-    scroller.addEventListener('scroll', update, { passive: true })
-    return () => scroller.removeEventListener('scroll', update)
-  }, [])
 
   const isReadOnly = project.source === 'google'
 
@@ -941,9 +1037,11 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // links van het viewport ligt. +8 voor wat lucht aan de linkerkant zodat de
   // tekst niet pal tegen de sticky kolomrand plakt.
   const barLeftAbs = g.left + 2
-  const wantShift  = scrollLeft + 8 - barLeftAbs
   const maxShift   = Math.max(0, g.width - 90)
-  const titleShift = Math.max(0, Math.min(wantShift, maxShift))
+  // De grid houdt --planner-scroll-left rechtstreeks op het scrollende
+  // DOM-element bij. CSS positioneert de titel daardoor zonder dat iedere
+  // balk een eigen listener en React-render nodig heeft.
+  const titleShift = `clamp(0px, calc(var(--planner-scroll-left, 0px) + 8px - ${barLeftAbs}px), ${maxShift}px)`
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
@@ -989,7 +1087,6 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
         />
       )}
       <div
-        ref={barRef}
         onMouseDown={e => startDrag(e, 'move')}
         onClick={e => { if (!didDrag.current) { e.stopPropagation(); onClick() } }}
         onMouseEnter={() => setHoverBar(true)}
@@ -1102,7 +1199,15 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
 // week). Saturday/Sunday events are clipped to the end of Friday so weekends
 // don't waste horizontal space.
 function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
-  const days = Math.floor((d.getTime() - gridStart.getTime()) / 86400000)
+  // Gebruik kalenderdagen, niet verstreken milliseconden. De grid begint
+  // maanden vóór vandaag; zodra daar een zomer-/wintertijdgrens tussen zit,
+  // is `getTime()` één uur korter/langer dan N × 24u. Math.floor schoof dan
+  // alle datums na de DST-wissel één volledige dagslice naar links (woensdag
+  // verscheen onder dinsdag). Date.UTC op alleen Y/M/D blijft DST-neutraal.
+  const calendarDay = (value: Date) => Date.UTC(
+    value.getFullYear(), value.getMonth(), value.getDate(),
+  ) / 86400000
+  const days = calendarDay(d) - calendarDay(gridStart)
   const weekIdx = Math.floor(days / 7)
   const dowMon = ((days % 7) + 7) % 7  // 0=Mon..6=Sun (gridStart is a Mon)
   const cellInWeek = Math.min(dowMon, 5) // Sat/Sun snap to col-end
@@ -1159,7 +1264,6 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   const HOUR_H     = Math.round(44 * HOUR_RS)
   const totalWidth = cols.reduce((s, c) => s + c.widthPx, 0)
   const gridRef = useRef<HTMLDivElement>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<null | {
     p: Project; durMin: number; newIso: string; newStartMin: number;
   }>(null)
@@ -1183,29 +1287,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     mouseStartX: number; mouseStartY: number;
     moved: boolean;
   }>(null)
-  // ScrollLeft van de buitenste horizontaal-scrollende container houden we
-  // bij om lange-event titels mee te laten schuiven (Google-Cal style: de
-  // naam blijft links in beeld zolang de pill nog door 't viewport loopt).
-  const [scrollLeft, setScrollLeft] = useState(0)
-  useEffect(() => {
-    let el: HTMLElement | null = rootRef.current
-    while (el && el !== document.body) {
-      const s = getComputedStyle(el)
-      if (/auto|scroll/.test(s.overflowX) || /auto|scroll/.test(s.overflow)) break
-      el = el.parentElement
-    }
-    if (!el || el === document.body) return
-    const scroller = el
-    const update = () => setScrollLeft(scroller.scrollLeft)
-    update()
-    scroller.addEventListener('scroll', update, { passive: true })
-    return () => scroller.removeEventListener('scroll', update)
-  }, [])
   // nameW is de sticky linker-kolom; titels moeten daar 8px naast komen.
   function titleOffsetFor(barLeft: number, barWidth: number, padLeft: number) {
-    const want = scrollLeft - barLeft + 8
     const max  = Math.max(0, barWidth - 90)
-    return Math.max(0, Math.min(want - padLeft, max))
+    return `clamp(0px, calc(var(--planner-scroll-left, 0px) + 8px - ${barLeft + padLeft}px), ${max}px)`
   }
 
   // Filter visible projects
@@ -1587,7 +1672,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
 
   return (
-    <div ref={rootRef}>
+    <div>
       {/* All-day banner — sticky-left cel toont 'De hele dag' OR de avatar
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
@@ -1939,8 +2024,10 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   )
 }
 
-function MeetingDaySummary({ meetings, left, width, onOpen }: {
-  meetings: Project[]; left: number; width: number; onOpen: (project: Project) => void
+function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
+  meetings: Project[]; left: number; width: number
+  onOpen: (project: Project) => void
+  onDone: (project: Project) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const [pinned, setPinned] = useState(false)
@@ -1994,6 +2081,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
           color: '#765f00', fontSize: 9.5, fontWeight: 850,
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
           pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
+          outline: 'none', boxShadow: 'none',
         }}>
         <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
         <span aria-hidden style={{ opacity: 0.45 }}>·</span>
@@ -2010,19 +2098,42 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
               {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
             {sorted.map(meeting => (
-              <button key={meeting.id} onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
+              <div key={meeting.id}
                 onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                 onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 9,
-                  padding: '8px 9px', border: 'none', borderRadius: 7, background: 'transparent',
-                  color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7 }}>
                 <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
                   {meeting.startTime ?? 'Hele dag'}
                 </span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
-                  {meeting.name}
-                </span>
-              </button>
+                <button onClick={ev => { ev.stopPropagation(); onDone(meeting) }}
+                  aria-label={`${meeting.name} afronden`}
+                  title="Afronden en naar Done verplaatsen — verdwijnt automatisch uit gekoppelde to do's"
+                  style={{ width: 17, height: 17, flexShrink: 0, padding: 0, borderRadius: 4,
+                    border: '1.5px solid var(--border-strong)', background: 'var(--bg-card)',
+                    color: 'var(--text-primary)', cursor: 'pointer' }} />
+                <button onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
+                  onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
+                  style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start',
+                    padding: '6px 3px', border: 'none', borderRadius: 7, background: 'transparent',
+                    color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
+                    {meeting.name}
+                  </span>
+                </button>
+                {meeting.externalLink && (
+                  <a href={meeting.externalLink} target="_blank" rel="noopener noreferrer"
+                    onClick={ev => ev.stopPropagation()}
+                    aria-label={`Open ${meeting.name} in Google Calendar`}
+                    title="Open in Google Calendar"
+                    style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      gap: 3, minWidth: 38, height: 27, padding: '0 6px', borderRadius: 6,
+                      border: '1px solid rgba(216,182,46,0.35)', background: 'rgba(216,182,46,0.14)',
+                      color: '#765f00', fontSize: 9.5, fontWeight: 850, textDecoration: 'none' }}>
+                    G <span aria-hidden>↗</span>
+                  </a>
+                )}
+              </div>
             ))}
             {pinned && <div style={{ padding: '5px 8px 3px', fontSize: 10.5, color: 'var(--text-muted)' }}>Kies een meeting om details te openen</div>}
           </div>
@@ -2031,7 +2142,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen }: {
   )
 }
 
-function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onReassign }: {
+function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onMarkDone, onReassign }: {
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   team?: TeamMember[]
   zoom: ZoomLevel
@@ -2044,6 +2155,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
+  onMarkDone: (p: Project) => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const RS = rowScale ?? 1
@@ -2071,7 +2183,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
   // terwijl een hover de concrete afspraken en tijden laat zien.
   const googleMeetings = (hideMeetings ? [] : owned).filter(p =>
-    p.source === 'google' && !isVrijTitle(p.name))
+    p.status !== 'done' && p.source === 'google' && !isVrijTitle(p.name))
   const meetingsByDay = new Map<string, Project[]>()
   if (zoom === 'week') {
     for (const p of googleMeetings) {
@@ -2495,7 +2607,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const daySlice = colW / 5
         const left = dateToWeekPx(dayStart, gridStart, colW)
         return (
-          <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} left={left} width={daySlice} onOpen={onBarClick} />
+          <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} left={left} width={daySlice}
+            onOpen={onBarClick} onDone={onMarkDone} />
         )
       })}
       {/* Meetings hangen nu bovenop project-balken — geen aparte divider
@@ -3245,9 +3358,14 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               {project.name}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {/* DEMO: geen bord-tabelweergave beschikbaar — platte tekst i.p.v. link. */}
-              in → <span style={{ color, fontWeight: 600 }}>{project.board}</span>
-              {project.group ? <> · {project.group}</> : null}
+              in → <Link
+                href={`/projects/${project.board}?focus=${encodeURIComponent(project.id.slice(project.board.length + 2))}`}
+                title="Open op het bord"
+                style={{ color, fontWeight: 600, textDecoration: 'none' }}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
+                {project.board}
+              </Link>{project.group ? <> · {project.group}</> : null}
               {rawItem?.source === 'google' && <span style={{ marginLeft: 8, color: '#a05400' }}>· Bewerk in Google Calendar</span>}
             </div>
             {project.parentName && project.parentName !== project.name && (
@@ -4286,6 +4404,12 @@ export default function PlanningPage() {
     if (fromDb) return fromDb === 'yoko'
     return HARDCODED_YOKO.has(id)
   }
+  // Gestopt (bv. stage afgerond) — zelfde live-lookup-patroon als
+  // isYokoCrew: 'team' bevat alleen de smalle workload.TeamMember-vorm
+  // (id/name/color/weeklyCapacity), dus de vlag komt uit liveTeam.
+  function isMemberInactive(id: string): boolean {
+    return !!liveTeam.find(m => m.id === id)?.inactive
+  }
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
   const [vacations,    setVacations]    = useState<Record<string, { from: string | null; until: string | null }>>({})
@@ -4339,6 +4463,19 @@ export default function PlanningPage() {
     setDetailProject(p)
   }
   const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
+  // Elke setShadowDrag triggert effectiveProjects' volledige her-berekening
+  // (map/filter over ALLE projecten op ALLE borden + een localStorage-read
+  // voor owner-excludes) — prima op zichzelf, maar rauwe mousemove-events
+  // vuren makkelijk sneller dan het scherm ververst (soms 100+/s), waardoor
+  // die zware herberekening een sleepbeweging niet meer bijhoudt en vooral
+  // tekst zichtbaar achter de muis aan bleef 'schuiven'. RAF-throttle capt
+  // 'm op maximaal één keer per animatieframe — de balk zelf blijft
+  // instant volgen (die leest lokale ghost-state, niet shadowDrag).
+  const dragRafRef = useRef<number | null>(null)
+  function cancelPendingDragMove() {
+    if (dragRafRef.current != null) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = null }
+  }
+  useEffect(() => cancelPendingDragMove, [])
   const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
   const [peopleOpen,   setPeopleOpen]   = useState(false)
@@ -4349,20 +4486,51 @@ export default function PlanningPage() {
   const [shareOpen,    setShareOpen]    = useState(false)
   const [copiedBoard,  setCopiedBoard]  = useState<string | null>(null)
   const [overflowOpen, setOverflowOpen] = useState(false)
-  const [todayEdge, setTodayEdge] = useState<'left' | 'right' | null>(null)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
-  const [freelancersOpen, setFreelancersOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('planning-freelancers-open') === '1'
-  })
-  useEffect(() => { localStorage.setItem('planning-freelancers-open', freelancersOpen ? '1' : '0') }, [freelancersOpen])
-  const [yokoTeamOpen, setYokoTeamOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true
-    const v = localStorage.getItem('planning-yokoteam-open')
-    return v === null ? true : v === '1'
-  })
-  useEffect(() => { localStorage.setItem('planning-yokoteam-open', yokoTeamOpen ? '1' : '0') }, [yokoTeamOpen])
+  // Team Yoko/Freelancers/Inactief-pijltje: 4-staps cyclus i.p.v. een platte
+  // open/dicht-toggle. Vervangt ook de losse 'Alles uitklappen'-knop uit de
+  // zoom-toolbar (die gold voorheen voor ALLE leden ongeacht sectie) — die
+  // functie zit nu per-sectie in dit ene pijltje:
+  //   pos 0: dicht
+  //   pos 1: open, leden individueel ingeklapt (net geopend, of terug van pos 2)
+  //   pos 2: open, alle leden in déze sectie individueel uitgeklapt
+  //   pos 3: functioneel gelijk aan pos 1 (open, ingeklapt) — apart gehouden
+  //          zodat de VOLGENDE klik weer sluit i.p.v. opnieuw alles uitklapt.
+  // Alleen open/dicht (pos !== 0) wordt onthouden; de uitgeklapt-substap
+  // reset bij een herlaad naar 'idle'.
+  function initCyclePos(key: string, defaultOpen: boolean): number {
+    if (typeof window === 'undefined') return defaultOpen ? 1 : 0
+    const v = localStorage.getItem(key)
+    const open = v === null ? defaultOpen : v === '1'
+    return open ? 1 : 0
+  }
+  const [freelancersPos, setFreelancersPos] = useState<number>(() => initCyclePos('planning-freelancers-open', false))
+  useEffect(() => { localStorage.setItem('planning-freelancers-open', freelancersPos !== 0 ? '1' : '0') }, [freelancersPos])
+  const [yokoTeamPos, setYokoTeamPos] = useState<number>(() => initCyclePos('planning-yokoteam-open', true))
+  useEffect(() => { localStorage.setItem('planning-yokoteam-open', yokoTeamPos !== 0 ? '1' : '0') }, [yokoTeamPos])
+  const [inactiveTeamPos, setInactiveTeamPos] = useState<number>(() => initCyclePos('planning-inactive-team-open', false))
+  useEffect(() => { localStorage.setItem('planning-inactive-team-open', inactiveTeamPos !== 0 ? '1' : '0') }, [inactiveTeamPos])
+  // Doorloopt de 4 stappen voor één sectie en past `expanded` toe (alle
+  // leden van déze sectie individueel open/dicht) waar dat bij de stap hoort.
+  function cycleSectionArrow(pos: number, setPos: (p: number) => void, members: TeamMember[]) {
+    const next = (pos + 1) % 4
+    setPos(next)
+    if (next === 2) {
+      setExpanded(prev => {
+        const n = new Set(prev)
+        members.forEach(m => n.add(m.id))
+        return n
+      })
+    } else if (next === 1 || next === 3) {
+      setExpanded(prev => {
+        let changed = false
+        const n = new Set(prev)
+        for (const m of members) { if (n.delete(m.id)) changed = true }
+        return changed ? n : prev
+      })
+    }
+  }
   const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -4754,6 +4922,8 @@ export default function PlanningPage() {
   // aan 't item). Cross-tab synced via storage events.
   const [ownerExcludesTick, setOwnerExcludesTick] = useState(0)
   useEffect(() => onOwnerExcludesChange(() => setOwnerExcludesTick(t => t + 1)), [])
+  const [categoryRevision, setCategoryRevision] = useState(0)
+  useEffect(() => onCategoryOverridesChange(() => setCategoryRevision(t => t + 1)), [])
 
   const effectiveProjects = useMemo(() => {
     let next = projects
@@ -4845,7 +5015,21 @@ export default function PlanningPage() {
     const el = gridRef.current
     if (!el) return
     let queued = false
+    let saveTimer: number | null = null
     function updateVisibleRange() {
+      const gridNow = gridRef.current
+      if (!gridNow) return
+      const immediateLeft = gridNow.scrollLeft
+      // Titelverschuiving loopt via één gedeelde CSS-variabele. Dit is een
+      // directe DOM-write en veroorzaakt geen React-render per balk.
+      gridNow.style.setProperty('--planner-scroll-left', `${immediateLeft}px`)
+      if (saveTimer != null) window.clearTimeout(saveTimer)
+      saveTimer = window.setTimeout(() => {
+        try {
+          window.localStorage.setItem('planning-scroll-left', String(gridNow.scrollLeft))
+          window.localStorage.setItem('planning-scroll-left-at', String(Date.now()))
+        } catch {}
+      }, 160)
       if (queued) return
       queued = true
       requestAnimationFrame(() => {
@@ -4855,12 +5039,13 @@ export default function PlanningPage() {
         const cur = grid.scrollLeft
         setVisibleGridRange(prev => {
           const next = { start: cur, end: cur + grid.clientWidth }
-          return prev.start === next.start && prev.end === next.end ? prev : next
+          // Row-height/packing heeft al een buffer van drie weken. Een
+          // update per kwart viewport is ruim voldoende en voorkomt een
+          // volledige planner-render op iedere pixel scroll.
+          const step = Math.max(80, grid.clientWidth * 0.25)
+          const widthChanged = Math.abs((prev.end - prev.start) - grid.clientWidth) > 1
+          return prev.end === 0 || widthChanged || Math.abs(prev.start - cur) >= step ? next : prev
         })
-        try {
-          window.localStorage.setItem('planning-scroll-left', String(cur))
-          window.localStorage.setItem('planning-scroll-left-at', String(Date.now()))
-        } catch {}
       })
     }
     updateVisibleRange()
@@ -4869,6 +5054,7 @@ export default function PlanningPage() {
     return () => {
       el.removeEventListener('scroll', updateVisibleRange)
       window.removeEventListener('resize', updateVisibleRange)
+      if (saveTimer != null) window.clearTimeout(saveTimer)
     }
   }, [])
 
@@ -4922,6 +5108,23 @@ export default function PlanningPage() {
 
   const cols = useMemo(() => buildCols(zoom, baseFrom, colW), [zoom, baseFrom, colW])
 
+  // Uren per persoon/kolom zijn duur om uit te rekenen (alle projecten ×
+  // teamleden × kolommen). Voorheen gebeurde dit opnieuw bij iedere gewone
+  // scroll-render. Cache de matrix totdat data, kolommen, team of categorieën
+  // daadwerkelijk veranderen.
+  const contributionsByCell = useMemo(() => {
+    const overrides = loadCategoryOverrides()
+    const result = new Map<string, ReturnType<typeof memberHoursInCol>>()
+    for (const member of team) {
+      for (const col of cols) {
+        result.set(`${member.id}\u0000${col.key}`, memberHoursInCol(effectiveProjects, member.id, col, overrides))
+      }
+    }
+    return result
+  }, [effectiveProjects, team, cols, categoryRevision])
+  const contributionsFor = (memberId: string, col: Col) =>
+    contributionsByCell.get(`${memberId}\u0000${col.key}`) ?? []
+
   // Capacity in the right unit per zoom
   function colCapacity(weeklyCapacity: number, memberId?: string): number {
     if (zoom === 'dag') {
@@ -4950,7 +5153,11 @@ export default function PlanningPage() {
     setCapacity(memberId, capacity)
   }
   function handleDragMove(project: Project, s: string | null, e: string | null) {
-    setShadowDrag({ projectId: project.id, start: s, end: e })
+    cancelPendingDragMove()
+    dragRafRef.current = requestAnimationFrame(() => {
+      dragRafRef.current = null
+      setShadowDrag({ projectId: project.id, start: s, end: e })
+    })
   }
   // Hercalc estHours = werkdagen × 8 voor de gegeven datum-range. Gebruikt
   // dezelfde regel als de detail-drawer's autofillEstFromDates: na elke
@@ -4969,6 +5176,7 @@ export default function PlanningPage() {
   }
 
   function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
+    cancelPendingDragMove()
     setShadowDrag(null)
     const boardName  = project.board
     let rawId        = project.id.slice(boardName.length + 2)
@@ -5137,7 +5345,7 @@ export default function PlanningPage() {
     const subIdx     = subMatch ? parseInt(subMatch[2], 10) : -1
     const isSubitem  = subIdx >= 0
     const before = allGroups[boardName] ?? []
-    const groups = before.map(g => ({
+    const updatedGroups = before.map(g => ({
       ...g,
       items: g.items.map(i => {
         if (i.id !== parentId) return i
@@ -5166,6 +5374,11 @@ export default function PlanningPage() {
         return { ...i, subitems: subs }
       }),
     }))
+    // Top-level items die op Done worden gezet verhuizen meteen naar de
+    // centrale Done-groep. Subitems blijven bij hun parent maar krijgen
+    // status Done, waardoor agenda én gekoppelde todo's (via projectRef +
+    // isAutoDone) ze automatisch als afgerond zien.
+    const groups = extra?.status !== undefined ? autoMoveDoneItems(updatedGroups) : updatedGroups
     saveGroups(boardName, groups)
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     // Houd detailProject in sync zodat project.startDate/endDate up-to-date
@@ -5178,6 +5391,17 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
       setDetailProject(null)
     })
+  }
+
+  // Vinkje in het meetings-popovertje — zet een Google-item (of elk ander
+  // project) direct op Done, zonder eerst de detail-drawer te hoeven
+  // openen. handleDetailUpdate regelt de verhuizing naar de Done-groep;
+  // Todo's plukt 'm er via doneProjectKeys/isAutoDone vanzelf uit.
+  function markProjectDone(project: Project) {
+    handleDetailUpdate(project, project.startDate, project.endDate, { status: 'Done' })
+    logActivity('Afgerond', project.name, project.board)
+    const rawId = project.id.slice(project.board.length + 2).split('__si')[0]
+    logItemActivity(rawId, 'zette op Done', project.name).catch(() => {})
   }
 
   function handleDetailDelete(project: Project) {
@@ -5282,14 +5506,16 @@ export default function PlanningPage() {
   const nameW       = isMobile ? 70  : NAME_W
   const namePad     = isMobile ? 6   : NAME_PAD
   const totalWidth  = nameW + namePad + cols.reduce((s, c) => s + c.widthPx, 0)
-  const monthGroups = zoom !== 'maand' ? getMonthGroupsFromCols(cols) : null
+  // In het weekoverzicht is de maandregel dubbelop: iedere kolom toont de
+  // volledige datumband al. Alleen de dagweergave houdt maandgroepen nodig.
+  // Daardoor verhuist de compacte zoom-/uitklapbalk in weekmodus naar de
+  // anders lege linker weekheader en winnen we een volledige headerregel.
+  const monthGroups = zoom === 'dag' ? getMonthGroupsFromCols(cols) : null
   const stickyBg    = 'var(--bg-base)'
 
   // Navigation step
   function stepBack()    { setColOffset(o => o - 1) }
   function stepForward() { setColOffset(o => o + 1) }
-  function jumpBack()    { setColOffset(o => o - ZOOM_COUNT[zoom]) }
-  function jumpForward() { setColOffset(o => o + ZOOM_COUNT[zoom]) }
   // Vandaag-knop: reset kolom-offset + scroll viewport zodat 't VANDAAG-
   // markertje rond 1/4 van de zichtbare breedte staat. Eerder zette deze
   // alleen colOffset=0 maar liet ie de scrollLeft staan — dan zag je
@@ -5315,6 +5541,7 @@ export default function PlanningPage() {
     let totalHours = 0, totalCap = 0, overbooked = 0, deadlinesThis = 0
     const activeIds = new Set<string>()
     for (const m of team) {
+      if (isMemberInactive(m.id)) continue
       const cap = m.weeklyCapacity
       totalCap += cap
       let memberHours = 0
@@ -5383,29 +5610,18 @@ export default function PlanningPage() {
     return null
   }, [cols, nameW, namePad])
 
-  // Als vandaag horizontaal buiten beeld valt, toon een klikbare indicator
-  // tegen de betreffende rand. Zo blijft de richting naar vandaag zichtbaar.
-  useEffect(() => {
-    const el = gridRef.current
-    if (!el) return
-    const update = () => {
-      if (nowOffset === null) {
-        const nowMs = Date.now()
-        const first = cols[0]?.rangeStart.getTime()
-        const last = cols[cols.length - 1]?.rangeEnd.getTime()
-        setTodayEdge(first != null && nowMs < first ? 'left' : last != null && nowMs > last ? 'right' : null)
-        return
-      }
-      const screenX = nowOffset - el.scrollLeft
-      if (screenX < nameW + namePad) setTodayEdge('left')
-      else if (screenX > el.clientWidth) setTodayEdge('right')
-      else setTodayEdge(null)
-    }
-    update()
-    el.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update)
-    return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
-  }, [nowOffset, cols, nameW, namePad])
+  // todayEdge + de VANDAAG-pill zelf zijn verhuisd naar het losstaande
+  // <TodayMarker> component verderop — dat trackt scrollLeft via z'n EIGEN
+  // (RAF-throttled) useScrollLeftOf-hook i.p.v. via top-level state hier.
+  // Reden: dit component (PlanningPage) is enorm; elke setState hier
+  // (zoals het oude setTodayEdge, dat op praktisch elke scroll-tick vuurde)
+  // her-rendert de HELE pagina — alle rijen, alle balken. Voor de meeste
+  // balken maakt dat niet uit (die scrollen native mee, geen React-update
+  // nodig), maar de VANDAAG-pill zelf hangt BUITEN de scrollende container
+  // en moet dus WEL elke frame herpositioneerd worden. Als die reposition
+  // moet wachten op een render van de hele pagina, loopt de pill zichtbaar
+  // achter de rest van de tijdlijn aan — precies het 'vandaag-balk is traag'
+  // effect. Een geïsoleerd component her-rendert alleen zichzelf.
 
   // Formatted current date for header subtitle
   const today = new Date()
@@ -5416,56 +5632,94 @@ export default function PlanningPage() {
 
       {/* ── Fixed header — bevat alleen nog de toolbar. Titel + KPIs zijn
             naar de scrollable grid verhuisd zodat ze meescrollen i.p.v.
-            vaste vertical-space op te slokken. ── */}
-      <header style={{ flexShrink: 0, padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
+            vaste vertical-space op te slokken. position+zIndex expliciet
+            hoger dan de sticky kolomkop-rij (z=24) eronder — anders kan de
+            sticky header er bij het scrollen overheen schuiven en de
+            Menu-knop (en z'n dropdown-trigger) onbereikbaar maken. ── */}
+      <header style={{ flexShrink: 0, position: 'relative', zIndex: 30, background: 'var(--bg-base)', padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
 
         {/* Title + nav — desktop only; op mobiel scrollt 't mee bovenin de
             grid (zie title-row in de scrollable area). */}
         {!isMobile && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 24, flex: 1 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.04em', lineHeight: 1 }}>
-                  Planning
-                </h1>
-                <div style={segGroup}>
-                  {(['compact', 'large'] as ViewSize[]).map(v => (
-                    <button key={v} onClick={() => {
-                        if (v === viewSize) return
-                        const el = gridRef.current
-                        if (el) {
-                          const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
-                          pendingAnchorRef.current = { colIdx: idx }
-                        }
-                        setViewSize(v)
-                      }} style={segBtn(viewSize === v)}>
-                      {v === 'compact' ? 'Compact' : 'Standaard'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                {todayLabel}
-              </div>
+        <div style={{ display: 'flex', alignItems: 'center', position: 'relative', minHeight: 40, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, zIndex: 2 }}>
+            <h1 style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', margin: 0, marginRight: 4, letterSpacing: '-0.04em', lineHeight: 1 }}>
+              Planning
+            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ ...segGroup, height: 34, alignItems: 'stretch' }}>
+              {(['compact', 'large'] as ViewSize[]).map(v => (
+                <button key={v} onClick={() => {
+                    if (v === viewSize) return
+                    const el = gridRef.current
+                    if (el) {
+                      const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
+                      pendingAnchorRef.current = { colIdx: idx }
+                    }
+                    setViewSize(v)
+                  }} style={{ ...segBtn(viewSize === v), height: 32, display: 'inline-flex', alignItems: 'center' }}>
+                  {v === 'compact' ? 'Compact' : 'Standaard'}
+                </button>
+              ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 4, fontSize: 13, color: 'var(--text-secondary)' }}>
-              <span>
-                <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.pctUsed}%</strong>
-                <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>{kpis.totalHours}/{kpis.totalCap}u</span>
-              </span>
-              <span style={{ width: 1, height: 12, background: 'var(--border)' }} />
-              <span>
-                <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
-                <span style={{ marginLeft: 4, color: 'var(--text-muted)' }}>deadl.</span>
-              </span>
+            <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
+            <button onClick={() => setHideMeetings(v => !v)}
+              title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
+              style={{ ...ghostBtn(hideMeetings), height: 34, display: 'inline-flex', alignItems: 'center', padding: '6px 11px' }}>
+              {hideMeetings
+                ? <IconEye size={13} style={{ marginRight: 5 }} />
+                : <IconEyeOff size={13} style={{ marginRight: 5 }} />}
+              Meetings
+            </button>
             </div>
           </div>
-          <div style={segGroup}>
-            <button onClick={jumpBack} style={segBtn(false)} title="Sprong terug"><IconChevronsLeft size={14} /></button>
-            <button onClick={stepBack} style={segBtn(false)}><IconChevronLeft size={14} /></button>
-            <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
-            <button onClick={jumpForward} style={segBtn(false)} title="Sprong vooruit"><IconChevronsRight size={14} /></button>
+
+          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            display: 'flex', alignItems: 'center', gap: 10, minHeight: 18, fontSize: 12.5,
+            color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 1 }}>
+            <span style={{ textTransform: 'capitalize' }}>{todayLabel}</span>
+            <span aria-hidden style={{ width: 1, height: 12, background: 'var(--border)' }} />
+            <span>
+              <strong style={{ color: kpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 13, fontWeight: 800 }}>
+                Deze week: {kpis.pctUsed}%
+              </strong>
+              <span style={{ marginLeft: 5 }}>{kpis.totalHours}/{kpis.totalCap}u</span>
+            </span>
+            <span aria-hidden style={{ width: 1, height: 12, background: 'var(--border)' }} />
+            <span>
+              <strong style={{ color: kpis.deadlinesThis > 0 ? '#a05400' : 'var(--text-primary)', fontSize: 13, fontWeight: 800 }}>{kpis.deadlinesThis}</strong>
+              <span style={{ marginLeft: 4 }}>deadline{kpis.deadlinesThis === 1 ? '' : 's'}</span>
+            </span>
+          </div>
+
+          <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', position: 'relative', height: 40, zIndex: 3 }}>
+            <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
+              style={{ ...ghostBtn(overflowOpen), padding: '9px 14px', height: 40, display: 'inline-flex', alignItems: 'center', fontSize: 15, fontWeight: 600 }}>
+              <IconMore size={18} style={{ marginRight: 6 }} />Menu
+            </button>
+            {overflowOpen && (
+              <>
+                <div onClick={() => setOverflowOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 101,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: 4, minWidth: 220,
+                  boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
+                  display: 'flex', flexDirection: 'column', gap: 2,
+                }}>
+                  <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}><span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item</button>
+                  <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                  <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}><IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}</button>
+                  <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}><IconBoard size={14} /> Agenda&apos;s</button>
+                  <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}><IconHourglass size={14} /> Capaciteit</button>
+                  <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}><IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}</button>
+                  <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                  <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }} style={overflowItemStyle}><IconDownload size={14} /> Exporteer als iCal</button>
+                  <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }} style={overflowItemStyle}><IconShare size={14} /> Deelbare link maken</button>
+                  <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }} style={overflowItemStyle}><IconRange size={14} /> Verschuif projecten</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
         )}
@@ -5709,9 +5963,10 @@ export default function PlanningPage() {
         // YOKO_IDS-check loopt nu via isYokoCrew (team_members.kind),
         // met fallback op de hardcoded set voor leden die nog geen kind
         // hebben in de DB.
-        const yokoTeam    = team.filter(m => isYokoCrew(m.id))
-        const unassigned  = team.filter(m => m.id === 'unassigned')
-        const freelancers = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned')
+        const yokoTeam     = team.filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id))
+        const unassigned   = team.filter(m => m.id === 'unassigned')
+        const inactiveTeam = team.filter(m => isMemberInactive(m.id))
+        const freelancers  = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id))
         function toggle(id: string) {
           setFilterMembers(prev => {
             const next = new Set(prev)
@@ -5725,7 +5980,7 @@ export default function PlanningPage() {
           })
         }
         const row = (m: TeamMember) => {
-          const checked = filterMembers.size === 0 ? isYokoCrew(m.id) || m.id === 'unassigned' : filterMembers.has(m.id)
+          const checked = filterMembers.size === 0 ? (isYokoCrew(m.id) && !isMemberInactive(m.id)) || m.id === 'unassigned' : filterMembers.has(m.id)
           return (
             <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
               <input type="checkbox" checked={checked} onChange={() => toggle(m.id)}
@@ -5771,35 +6026,23 @@ export default function PlanningPage() {
                 {freelancers.map(row)}
               </details>
             )}
+            {inactiveTeam.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
+                  fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em',
+                  padding: '8px 0', borderTop: '1px solid var(--border-light)' }}>
+                  <span>▸ Inactief team ({inactiveTeam.length})</span>
+                </summary>
+                {inactiveTeam.map(row)}
+              </details>
+            )}
           </Popup>
         )
       })()}
 
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-      {todayEdge && (
-        <>
-          {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
-              het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
-              zodat lijn en label nooit over namen/profielfoto's lopen. */}
-          <div aria-hidden style={{
-            position: 'absolute', top: 0, bottom: 0,
-            ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
-            width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
-            pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
-          }} />
-          <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-            position: 'absolute', top: 8,
-            ...(todayEdge === 'left' ? { left: nameW + namePad + 6 } : { right: 6 }),
-            zIndex: 80, padding: '5px 9px', borderRadius: 999, border: 'none',
-            background: 'var(--yellow)', color: '#1a1a1a',
-            boxShadow: '0 3px 10px rgba(216, 182, 46, 0.45)',
-            fontSize: 9.5, fontWeight: 900, letterSpacing: '0.06em', cursor: 'pointer',
-          }}>
-            VANDAAG {todayEdge === 'left' ? '←' : '→'}
-          </button>
-        </>
-      )}
+      <TodayMarker gridRef={gridRef} nowOffset={nowOffset} nameW={nameW} namePad={namePad} zoom={zoom} cols={cols} goToday={goToday} />
       <div ref={gridRef} onMouseDown={onGridMouseDown}
         onWheel={(ev) => {
           // Cmd/Ctrl + wheel → verticale zoom (bar-hoogte). Trackpad-pinch
@@ -5842,8 +6085,11 @@ export default function PlanningPage() {
 
           {/* "Now" indicator — yoko-yellow vertical line at today's exact
               position with a VANDAAG pill at the top so the marker is hard
-              to miss when scrolling through time. */}
-          {nowOffset !== null && !todayEdge && (
+              to miss when scrolling through time. Rendert altijd wanneer
+              nowOffset bekend is (voorheen gegate op !todayEdge, maar die
+              state leeft nu geïsoleerd in <TodayMarker> hierboven) — buiten
+              beeld is deze lijn gewoon off-screen, geen visueel probleem. */}
+          {nowOffset !== null && (
             <>
               {/* De lijn zelf: hoge z-index zodat 'ie BOVEN ALLES doorloopt
                   (kolom-headers, maand-groepen, en zelfs de sticky naam-
@@ -5855,29 +6101,12 @@ export default function PlanningPage() {
                 left: nowOffset, width: 0,
                 borderLeft: '2px solid var(--yellow)',
                 pointerEvents: 'none',
-                // Onder sticky naamcellen houden als extra bescherming;
-                // de geklemde randversie hierboven neemt het over zodra
-                // vandaag de naamkolom nadert.
-                zIndex: 10,
+                // Boven beide sticky header-rijen (z=24/25), maar onder de
+                // VANDAAG-pill (z=50). Zo blijft de lijn ononderbroken door
+                // maand- en weekheaders heen lopen.
+                zIndex: 40,
                 boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
               }} />
-              {/* VANDAAG-pill als SEPARATE sibling — eigen sticky-top, hoge
-                  z-index zodat 'ie BOVEN de kolom-headers (z=12) blijft
-                  hangen, ook al ligt de lijn eronder onder de sticky cellen.
-                  Voorheen zat 'ie als child binnen de lijn-div, en daarmee
-                  opgesloten in de stacking context van z=3 — kolom-header
-                  schoof 'm onzichtbaar. */}
-              <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
-                position: 'sticky', top: 4,
-                marginLeft: nowOffset - 32, width: 64,
-                padding: '2px 0',
-                background: 'var(--yellow)', color: '#1a1a1a',
-                fontSize: 9.5, fontWeight: 800,
-                letterSpacing: '0.08em', textAlign: 'center',
-                borderRadius: 999,
-                boxShadow: '0 2px 6px rgba(216, 182, 46, 0.4)',
-                zIndex: 50, cursor: 'pointer', border: 'none',
-              }}>VANDAAG</button>
             </>
           )}
 
@@ -5889,142 +6118,42 @@ export default function PlanningPage() {
               anders bedekken namen zoals Menno de toolbar bij verticaal scrollen. */}
           {monthGroups && (
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 25, background: stickyBg, alignItems: 'stretch' }}>
-              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '4px 8px 0 4px', gap: 4 }}>
-                {/* Menu helemaal links, vóór de twee zoomregelaars. */}
+              <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 22, background: stickyBg, display: 'flex', alignItems: 'stretch', padding: '2px 6px 0 4px', gap: 4 }}>
                 {!isMobile && (
-                  <div style={{ display: 'inline-flex', alignItems: 'flex-start', position: 'relative', flexShrink: 0 }}>
-                    <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
-                      style={{ ...ghostBtn(overflowOpen), padding: '6px 8px', height: 34 }}>
-                      <IconMore size={15} style={{ marginRight: 4 }} />Menu
-                    </button>
-                    {overflowOpen && (
-                      <>
-                        <div onClick={() => setOverflowOpen(false)}
-                          style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
-                        <div style={{
-                          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 101,
-                          background: 'var(--bg-card)', border: '1px solid var(--border)',
-                          borderRadius: 8, padding: 4, minWidth: 220,
-                          boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
-                          display: 'flex', flexDirection: 'column', gap: 2,
-                        }}>
-                          <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}>
-                            <span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item
-                          </button>
-                          <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
-                          <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}>
-                            <IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}>
-                            <IconBoard size={14} /> Agenda&apos;s
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}>
-                            <IconHourglass size={14} /> Capaciteit
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}>
-                            <IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}
-                          </button>
-                          <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
-                          <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }} style={overflowItemStyle}>
-                            <IconDownload size={14} /> Exporteer als iCal
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }} style={overflowItemStyle}>
-                            <IconShare size={14} /> Deelbare link maken
-                          </button>
-                          <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }} style={overflowItemStyle}>
-                            <IconRange size={14} /> Verschuif projecten
-                          </button>
-                        </div>
-                      </>
-                    )}
+                  <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: 28,
+                    borderRadius: 8, overflow: 'hidden', background: 'var(--bg-card)',
+                    border: '1px solid var(--border-light)' }}>
+                    {/* Verticale balkhoogte. */}
+                    <div title={`Balkhoogte ${rowZoomPct}% — Cmd/Ctrl + scroll`}
+                      style={{ height: '100%', display: 'flex', alignItems: 'center', gap: 2, padding: '0 4px', flexShrink: 0 }}>
+                      <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 1 }}>↕</span>
+                      <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))} title="Lagere balken"
+                        style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>−</button>
+                      <span style={{ minWidth: 17, textAlign: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)' }}>{rowZoomPct}</span>
+                      <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))} title="Hogere balken"
+                        style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
+                    </div>
+                    <span aria-hidden style={{ width: 1, height: 20, background: 'var(--border-light)', flexShrink: 0 }} />
+                    {/* Horizontale tijdlijnzoom. */}
+                    <div style={{ minWidth: 0, flex: 1, height: '100%', display: 'flex', alignItems: 'center', gap: 2, padding: '0 4px' }}>
+                      <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)' }}>↔</span>
+                      <button onClick={() => anchoredColWZoom(z => z - 10)} title="Smaller (sneltoets: −)"
+                        style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>−</button>
+                      <input type="range"
+                        min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
+                        max={zoom === 'week' ? WEEK_ZOOM_MAX : VIRTUAL_MAX}
+                        step={5}
+                        value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
+                        title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
+                        style={{ flex: 1, minWidth: 24, accentColor: 'var(--accent)' }} />
+                      <button onClick={() => anchoredColWZoom(z => z + 10)} title="Breder (sneltoets: +)"
+                        style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
+                    </div>
                   </div>
                 )}
-                {/* Verticale balkhoogte; blijft als eerste zoomregelaar staan. */}
-                {!isMobile && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    justifyContent: 'center', gap: 1,
-                    position: 'absolute', left: 68, top: 4, height: 58, zIndex: 23,
-                    padding: '2px 3px', borderRadius: 8, width: 26,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}
-                    title={`Balk-hoogte ${rowZoomPct}% — Cmd/Ctrl + scroll om in/uit te zoomen`}>
-                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))}
-                      title="Hogere balken"
-                      style={{ width: 18, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>+</button>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1 }}>{rowZoomPct}</span>
-                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))}
-                      title="Lagere balken"
-                      style={{ width: 18, height: 16, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0, lineHeight: 1 }}>−</button>
-                  </div>
-                )}
-                {!isMobile && <div style={{ width: 30, flexShrink: 0 }} />}
-                {/* Horizontale tijdlijnzoom tussen verticale zoom en Alles. */}
-                {!isMobile && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, width: 92, height: 34,
-                    padding: '0 4px', borderRadius: 8, flexShrink: 0,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
-                    <button onClick={() => anchoredColWZoom(z => z - 10)} title="Smaller (sneltoets: −)"
-                      style={{ width: 16, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>−</button>
-                    <input type="range"
-                      min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
-                      max={zoom === 'week' ? WEEK_ZOOM_MAX : VIRTUAL_MAX}
-                      step={5}
-                      value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
-                      title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                      style={{ flex: 1, minWidth: 0, accentColor: 'var(--accent)' }} />
-                    <button onClick={() => anchoredColWZoom(z => z + 10)} title="Breder (sneltoets: +)"
-                      style={{ width: 16, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
-                  </div>
-                )}
-                <button onClick={() => {
-                    if (expanded.size >= team.length) setExpanded(new Set())
-                    else setExpanded(new Set(team.map(m => m.id)))
-                  }}
-                  title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: isMobile ? '3px 8px' : '6px 14px', borderRadius: 8,
-                    background: expanded.size >= team.length ? 'var(--accent-mid)' : 'var(--bg-card)',
-                    border: expanded.size >= team.length ? '1px solid var(--accent)' : '1px solid var(--border-light)',
-                    color: expanded.size >= team.length ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: isMobile ? 11 : 14, fontWeight: 700,
-                    cursor: 'pointer', flex: 1, justifyContent: 'center',
-                    transition: 'background 0.12s, border-color 0.12s, color 0.12s',
-                  }}
-                  onMouseEnter={e => { if (expanded.size < team.length) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                  onMouseLeave={e => { if (expanded.size < team.length) e.currentTarget.style.background = 'var(--bg-card)' }}>
-                  <span style={{ fontSize: isMobile ? 12 : 16, lineHeight: 1, color: expanded.size >= team.length ? 'var(--accent)' : 'var(--text-muted)' }}>
-                    {expanded.size >= team.length ? '▾' : '▸'}
-                  </span>
-                  Alles
-                </button>
-                {/* Zoom-level dropdown: Dag/Week/Maand/Kwartaal — directer
-                    dan de slider voor grof-niveau switches. Slider blijft
-                    voor fine-tuning binnen Week of Dag.
-                    Custom button + popover ipv native <select> omdat de
-                    native dropdown niet betrouwbaar opent binnen sticky
-                    parents in alle browsers. */}
-                <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
-                {/* Meetings-toggle — ontbrak hier terwijl 't wél in de
-                    maand/kwartaal-header stond, waardoor de knop in de
-                    (meest gebruikte) week/dag-zoom onvindbaar was. */}
-                <button onClick={() => setHideMeetings(v => !v)}
-                  title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center',
-                    padding: '4px 10px', borderRadius: 6, marginLeft: 4,
-                    background: hideMeetings ? 'var(--bg-hover)' : 'var(--bg-card)',
-                    border: '1px solid var(--border-light)',
-                    color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 600,
-                    cursor: 'pointer', flexShrink: 0,
-                  }}>
-                  {hideMeetings
-                    ? <IconEye    size={12} style={{ marginRight: 5 }} />
-                    : <IconEyeOff size={12} style={{ marginRight: 5 }} />}
-                  Meetings
-                </button>
               </div>
               {monthGroups.map(({ label, widthPx }) => (
-                <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '6px 12px', fontSize: 10.5, fontWeight: 600,
+                <div key={label} style={{ width: widthPx, flexShrink: 0, padding: '5px 12px', fontSize: 10.5, fontWeight: 600,
                   color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
                   borderLeft: '1px solid var(--border-light)', background: stickyBg,
                   alignSelf: 'flex-start' }}>
@@ -6035,66 +6164,38 @@ export default function PlanningPage() {
           )}
 
           {/* Column header row */}
-          <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 28 : 0, zIndex: 24, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
+          <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 30 : 0, zIndex: 24, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
             <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: monthGroups && !isMobile ? 40 : 4, paddingRight: 8, paddingTop: 0, paddingBottom: 4 }}>
-              {!monthGroups && (
-                <button onClick={() => {
-                    if (expanded.size >= team.length) setExpanded(new Set())
-                    else setExpanded(new Set(team.map(m => m.id)))
-                  }}
-                  title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '4px 11px', borderRadius: 6,
-                    background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                    color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
-                    cursor: 'pointer', marginRight: 6,
-                  }}>
-                  {expanded.size >= team.length ? '▾' : '▸'} Alles
-                </button>
-              )}
-              {!monthGroups && (
-                <>
-                  <ZoomDropdown zoom={zoom} colWZoom={colWZoom} setZoomLevel={setZoomLevel} />
-                  {/* Meetings-toggle direct rechts naast Vandaag zodat je 'm
-                      binnen handbereik hebt. */}
-                  <button onClick={() => setHideMeetings(v => !v)}
-                    title={hideMeetings ? 'Korte meetings tonen' : 'Korte meetings (≤2u) verbergen'}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center',
-                      padding: '4px 10px', borderRadius: 6, marginRight: 6,
-                      background: hideMeetings ? 'var(--bg-hover)' : 'var(--bg-card)',
-                      border: '1px solid var(--border-light)',
-                      color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 600,
-                      cursor: 'pointer', flexShrink: 0,
-                    }}>
-                    {hideMeetings
-                      ? <IconEye    size={12} style={{ marginRight: 5 }} />
-                      : <IconEyeOff size={12} style={{ marginRight: 5 }} />}
-                    Meetings
-                  </button>
-                </>
-              )}
               {!isMobile && !monthGroups && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, width: '100%',
-                  padding: '4px 10px', borderRadius: 8,
+                <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: 28,
+                  borderRadius: 8, overflow: 'hidden',
                   background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
+                  <div title={`Balkhoogte ${rowZoomPct}% — Cmd/Ctrl + scroll`}
+                    style={{ height: '100%', display: 'flex', alignItems: 'center', gap: 2, padding: '0 4px', flexShrink: 0 }}>
+                    <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)' }}>↕</span>
+                    <button onClick={() => setRowZoomPct(p => Math.max(70, p - 10))} title="Lagere balken"
+                      style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>−</button>
+                    <span style={{ minWidth: 17, textAlign: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)' }}>{rowZoomPct}</span>
+                    <button onClick={() => setRowZoomPct(p => Math.min(180, p + 10))} title="Hogere balken"
+                      style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
+                  </div>
+                  <span aria-hidden style={{ width: 1, height: 20, background: 'var(--border-light)', flexShrink: 0 }} />
+                  <div style={{ minWidth: 0, flex: 1, height: '100%', display: 'flex', alignItems: 'center', gap: 2, padding: '0 4px' }}>
+                  <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)' }}>↔</span>
                   <button onClick={() => anchoredColWZoom(z => z - 10)}
                     title="Smaller (sneltoets: −)"
-                    style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>−</button>
+                    style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>−</button>
                   <input type="range"
                     min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
                     max={zoom === 'week' ? WEEK_ZOOM_MAX : VIRTUAL_MAX}
                     step={5}
                     value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                     title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                    style={{ flex: 1, minWidth: 0, accentColor: 'var(--accent)' }} />
+                    style={{ flex: 1, minWidth: 24, accentColor: 'var(--accent)' }} />
                   <button onClick={() => anchoredColWZoom(z => z + 10)}
                     title="Breder (sneltoets: +)"
-                    style={{ width: 18, height: 18, background: 'transparent', border: 'none', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, padding: 0, lineHeight: 1, flexShrink: 0 }}>+</button>
-                  {!monthGroups && (
-                    <span aria-hidden style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1, marginLeft: 4 }}>↕ {rowZoomPct}%</span>
-                  )}
+                    style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -6104,15 +6205,28 @@ export default function PlanningPage() {
               const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
               const isWeekStart = zoom === 'dag' && dow === 1
               return (
-              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: '8px 2px', textAlign: 'center',
+              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: zoom === 'week' ? '6px 2px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
-                <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
-                <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
-                {zoom === 'week' && (
-                  <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 4, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
-                    <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
-                  </div>
+                {zoom === 'week' ? (
+                  <>
+                    <div style={{ fontSize: 10.5, fontWeight: col.isCurrent ? 700 : 600,
+                      color: col.isCurrent ? 'var(--text-primary)' : 'var(--text-muted)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
+                      {col.label2} <span style={{ opacity: 0.8 }}>({col.label1})</span>
+                    </div>
+                    {/* Weekdag-rijtje hoort uitsluitend hier, boven de weken —
+                        dit is de kolomkop-rij, los van (en boven) de 'Team
+                        Yoko'-sectiebalk verderop in de lijst. */}
+                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 3, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
+                      <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: zoom === 'dag' ? 10 : 11.5, fontWeight: col.isCurrent ? 700 : 600, color: col.isCurrent ? 'var(--text-primary)' : weekend ? 'var(--text-muted)' : 'var(--text-muted)', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.06em' }}>{col.label1}</div>
+                    <div style={{ fontSize: zoom === 'dag' ? 14 : 9.5, fontWeight: zoom === 'dag' ? (col.isCurrent ? 700 : 600) : 500, color: col.isCurrent ? 'var(--text-primary)' : zoom === 'dag' ? (weekend ? 'var(--text-muted)' : 'var(--text-primary)') : 'var(--text-muted)', marginTop: 2, letterSpacing: '0.02em' }}>{col.label2}</div>
+                  </>
                 )}
               </div>
               )
@@ -6128,6 +6242,7 @@ export default function PlanningPage() {
             // is alles wat isYokoCrew() teruggeeft (DB-kind óf hardcoded).
             const defaultVisibleIds = new Set<string>(['unassigned'])
             for (const m of team) if (isYokoCrew(m.id)) defaultVisibleIds.add(m.id)
+            for (const m of team) if (isMemberInactive(m.id)) defaultVisibleIds.add(m.id)
             const DEFAULT_VIS = defaultVisibleIds
             const isMemberVisible = (id: string) =>
               filterMembers.size === 0 ? DEFAULT_VIS.has(id) : filterMembers.has(id)
@@ -6212,7 +6327,7 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
                       background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
                     {cols.map(col => {
-                      const contribs = memberHoursInCol(effectiveProjects, m.id, col)
+                      const contribs = contributionsFor(m.id, col)
                       const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                       const isWeekStart = col.rangeStart.getDay() === 1
                       // Klik op leeg deel van de cel → nieuw item op deze
@@ -6286,8 +6401,8 @@ export default function PlanningPage() {
                 {unassignedVisible.map(renderPerson)}
                 {freelancersVisible.length > 0 && (
                   <>
-                    {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersOpen(o => !o), freelancersOpen)}
-                    {freelancersOpen && freelancersVisible.map(renderPerson)}
+                    {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0)}
+                    {freelancersPos !== 0 && freelancersVisible.map(renderPerson)}
                   </>
                 )}
               </>
@@ -6302,19 +6417,23 @@ export default function PlanningPage() {
             // team-volgorde (uit localStorage / team.json).
             const me = profile?.memberId
             const yokoTeam = visible
-              .filter(m => isYokoCrew(m.id))
+              .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id))
               .sort((a, b) => {
                 if (a.id === me) return -1
                 if (b.id === me) return 1
                 return 0
               })
-            const unassigned   = visible.filter(m => m.id === 'unassigned')
-            const freelancers  = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned'
-              // Verberg inactieve freelancers (geen werk in [-2mnd, +3mnd])
-              // tenzij gebruiker 'm expliciet via 't filter aanzet.
+            const unassigned    = visible.filter(m => m.id === 'unassigned')
+            // Inactief (gestopt, bv. stage afgerond) staat los van de
+            // activity-heuristiek hieronder — een expliciet gezette vlag,
+            // altijd in z'n eigen groep, nooit bij Team Yoko/Freelancers.
+            const inactiveTeam  = visible.filter(m => isMemberInactive(m.id))
+            const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id)
+              // Verberg freelancers zonder recente activiteit (geen werk in
+              // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
-            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; isOpen?: boolean }) => (
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number }) => (
               <div onClick={opts?.onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)',
@@ -6325,7 +6444,19 @@ export default function PlanningPage() {
                 <div style={{ position: 'sticky', left: 0, width: 'max-content',
                   padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {opts?.onClick && (
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: opts.isOpen ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                    opts.arrowPos === 2 ? (
+                      // pos 2: iedereen in deze sectie staat individueel
+                      // uitgeklapt — 2 kleine pijltjes onder elkaar i.p.v.
+                      // het gewone enkele pijltje, zodat 't verschil met
+                      // 'gewoon open' in één oogopslag duidelijk is.
+                      <span title="Alle leden uitgeklapt — klik om in te klappen"
+                        style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 10, lineHeight: 0.55, color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: 9 }}>▾</span>
+                        <span style={{ fontSize: 9 }}>▾</span>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: opts.arrowPos ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                    )
                   )}
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
@@ -6398,7 +6529,7 @@ export default function PlanningPage() {
 
                   {/* Week/day/month cells */}
                   {cols.map(col => {
-                    const contribs = memberHoursInCol(effectiveProjects, member.id, col)
+                    const contribs = contributionsFor(member.id, col)
                     const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                     // In Overzicht-zoom is een 'kolom' een hele week, dus
                     // weekend-highlighting is hier niet relevant.
@@ -6430,7 +6561,7 @@ export default function PlanningPage() {
                         visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
                         visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
-                        onReassign={handleReassignOwner} />
+                        onMarkDone={markProjectDone} onReassign={handleReassignOwner} />
                     </div>
                   </div>
                 )}
@@ -6461,8 +6592,8 @@ export default function PlanningPage() {
               )
             }
             if (yokoTeam.length > 0) {
-              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => setYokoTeamOpen(o => !o), isOpen: yokoTeamOpen })}</div>)
-              if (yokoTeamOpen) {
+              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos })}</div>)
+              if (yokoTeamPos !== 0) {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }
             }
@@ -6471,14 +6602,20 @@ export default function PlanningPage() {
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
             }
             if (freelancers.length > 0) {
-              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
-              if (freelancersOpen) {
+              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos })}</div>)
+              if (freelancersPos !== 0) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
               // Ingeklapt = écht ingeklapt. Voorheen toonden we 'actieve'
               // freelancers (met ownership op iets) altijd door — dan kon
               // je de sectie nooit volledig dichtklappen. Wil je een
               // freelancer altijd zien, klap de sectie open.
+            }
+            if (inactiveTeam.length > 0) {
+              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, { onClick: () => cycleSectionArrow(inactiveTeamPos, setInactiveTeamPos, inactiveTeam), arrowPos: inactiveTeamPos })}</div>)
+              if (inactiveTeamPos !== 0) {
+                inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i)))
+              }
             }
             return out
           })()}
