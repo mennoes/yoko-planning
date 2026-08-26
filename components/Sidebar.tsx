@@ -30,7 +30,7 @@ import {
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
 import { NotificationBell } from './NotificationBell'
-import { isOnDemoRoute, notifyDemoBlocked } from '@/lib/demoFixtures'
+import { isOnDemoRoute } from '@/lib/demoFixtures'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -173,7 +173,10 @@ function PagesSectionItems({ pathname }: { pathname: string }) {
   }, [])
 
   function createNewIn(folderId: string | null) {
-    if (isOnDemoRoute()) { notifyDemoBlocked(); return }
+    // Documenten zijn 100% localStorage (via pagesStore.ts's demo-namespace
+    // op /demo) — geen Supabase-write nodig, dus geen reden om dit op de
+    // demo te blokkeren zoals andere features die wél de echte backend
+    // nodig hebben.
     const id  = Date.now().toString()
     const now = new Date().toISOString()
     savePage({ id, title: '', content: '', emoji: '📄', createdAt: now, updatedAt: now, folderId })

@@ -46,8 +46,8 @@ function isOnDemoRoute(): boolean {
   return typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')
 }
 const DEMO_PROJECTS: NavItem[] = [
-  { id: 'Noorderlicht Media', label: 'Noorderlicht Media', href: '/demo/planning', color: '#B0C6EB' },
-  { id: 'Kaap Studio',        label: 'Kaap Studio',        href: '/demo/planning', color: '#D8935B' },
+  { id: 'Noorderlicht Media', label: 'Noorderlicht Media', href: '/demo/projects/Noorderlicht%20Media', color: '#B0C6EB' },
+  { id: 'Kaap Studio',        label: 'Kaap Studio',        href: '/demo/projects/Kaap%20Studio',        color: '#D8935B' },
 ]
 
 function load<T>(key: string, fallback: T): T {

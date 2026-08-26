@@ -178,3 +178,30 @@ export const DEMO_TODOS = [
   { id: 'dt2', text: 'Intake nieuwe klant voorbereiden', done: false },
   { id: 'dt3', text: 'Feedback merkfilm-edit doorsturen', done: true },
 ]
+
+// ─── Documenten (Pagina's) ──────────────────────────────────────────────────
+// Zelfde shape als lib/pagesStore.ts' DocFolder/PageDoc — hier los
+// gedefinieerd i.p.v. geïmporteerd zodat dit fixture-bestand geen
+// afhankelijkheid naar pagesStore hoeft te hebben.
+export type DemoDocFolder = { id: string; name: string; emoji?: string }
+export type DemoPageDoc = {
+  id: string; title: string; content: string; emoji: string
+  createdAt: string; updatedAt: string; folderId?: string | null
+}
+
+export const DEMO_DOC_FOLDERS: DemoDocFolder[] = [
+  { id: 'demo-df1', name: 'Klantcontracten' },
+]
+
+export const DEMO_PAGES: DemoPageDoc[] = [
+  {
+    id: 'demo-dp1', title: 'Huisstijl-richtlijnen', emoji: '🎨',
+    content: 'Kleuren, typografie en logo-gebruik voor Noorderlicht Media — zie het gedeelde brandbook voor de volledige set.',
+    createdAt: '2026-06-02T09:00:00.000Z', updatedAt: '2026-06-02T09:00:00.000Z', folderId: null,
+  },
+  {
+    id: 'demo-dp2', title: 'Onboarding nieuwe klant', emoji: '📋',
+    content: 'Checklist voor een nieuwe klant: intake-gesprek, offerte, kickoff plannen, toegang tot gedeelde mappen regelen.',
+    createdAt: '2026-05-14T09:00:00.000Z', updatedAt: '2026-05-14T09:00:00.000Z', folderId: 'demo-df1',
+  },
+]

@@ -20,6 +20,17 @@ export function resetDemoBoards(): void {
       window.localStorage.removeItem('yoko-demo-profile')
       window.localStorage.removeItem('yoko-demo-comments')
       window.localStorage.removeItem('home-demo-sections-order')
+      window.localStorage.removeItem('yoko-demo-recent-pages')
+      window.localStorage.removeItem('yoko-demo-doc-folders')
+      // Losse pagina's staan elk onder een eigen 'yoko-demo-page-{id}'-key
+      // (geen vaste lijst) — die vind je alleen door de hele localStorage
+      // langs te lopen en op prefix te matchen.
+      const pageKeys: string[] = []
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i)
+        if (k?.startsWith('yoko-demo-page-')) pageKeys.push(k)
+      }
+      for (const k of pageKeys) window.localStorage.removeItem(k)
     } catch {}
   }
 }
