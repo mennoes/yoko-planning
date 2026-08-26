@@ -301,10 +301,13 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // bevestigd: item in groep 'Vrij' zonder naam-match → 40u compleet
   // verdwenen uit de werkdruk-totalen.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  const totalCalDays = Math.max(1, Math.floor((pE.getTime() - pS.getTime()) / 86400000) + 1)
+  // Gebruik voor de noemer exact dezelfde zichtbare werkdagen als voor de
+  // overlap. Anders verdwijnen weekend-aandelen uit de week-/dagtotalen.
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), isVrij ? undefined : memberId)
+  if (totalWork === 0) return 0
   const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
-  const fraction  = overlapWork / totalCalDays
+  const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
   const myShare = project.ownerHours && memberId in project.ownerHours
