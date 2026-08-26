@@ -210,7 +210,17 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
     if (!open) return
     const groups = loadGroups(boardId, [])
     const map: Record<string, string> = {}
-    for (const g of groups) for (const i of g.items) if (i?.id) map[i.id] = (i.name as string) ?? ''
+    for (const g of groups) for (const i of g.items) {
+      if (i?.id) map[i.id] = (i.name as string) ?? ''
+      // Subitem-gekoppelde activity (id-vorm '{parentId}__siN') matchte
+      // hier nooit — alleen top-level ids stonden in de map, dus zonder
+      // meta.itemName viel zo'n regel altijd terug op '(naamloos)'.
+      const subs = (i?.subitems as Array<{ name?: string }> | undefined) ?? []
+      subs.forEach((sub, idx) => {
+        const subName = sub?.name && sub.name.trim().length > 0 ? sub.name : (i.name as string) ?? ''
+        map[`${i.id}__si${idx}`] = subName
+      })
+    }
     setItemNameById(map)
     // Aanvullen vanuit Supabase voor 't geval localStorage leeg is OF
     // entries verwijzen naar items die we niet meer lokaal hebben.
@@ -591,8 +601,13 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
                 {' '}
                 {isOwnerChange ? renderOwnerActionText(e) : e.action}
               </div>
-              {/* Lijn 3: change-pills */}
-              {(e.meta?.before !== undefined || e.meta?.after !== undefined) && (
+              {/* Lijn 3: change-pills. meta.before/after ontbreken op elke
+                  entry zolang migratie 0020 (activity.meta) niet gedraaid
+                  is — val dan terug op e.detail (de platte 'van → naar'-
+                  tekst, bv. '72u → 24u'), die WEL altijd wordt opgeslagen.
+                  Zonder deze fallback toonde zo'n regel alleen wie iets
+                  deed, zonder te zeggen wát er precies veranderde. */}
+              {(e.meta?.before !== undefined || e.meta?.after !== undefined) ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                   {isOwnerChange ? (
                     <OwnerChangePill before={e.meta?.before} after={e.meta?.after} getPhoto={getPhoto} />
@@ -604,7 +619,9 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
                     </>
                   )}
                 </div>
-              )}
+              ) : e.detail ? (
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{e.detail}</div>
+              ) : null}
             </div>
             {canUndo && (
               <button onClick={ev2 => { ev2.stopPropagation(); onUndo(e) }}
