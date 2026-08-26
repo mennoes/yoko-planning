@@ -2036,6 +2036,11 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
   const closeTimer = useRef<number | null>(null)
   const sorted = [...meetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
   const open = hovered || pinned
+  // Alles al afgevinkt? Dan mag de dag-badge zelf ook gedempt + met een
+  // vinkje — zo zie je in één oogopslag of er nog actie nodig is (fel
+  // geel 'G') of de dag al klaar is (grijze '✓'), zonder de popover te
+  // hoeven openen.
+  const allDone = meetings.length > 0 && meetings.every(m => m.status === 'done')
 
   const cancelClose = () => {
     if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
@@ -2070,20 +2075,30 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
           if (meetings.length === 1) onOpen(meetings[0])
           else { show(); setPinned(true) }
         }}
-        aria-label={`${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}`}
+        aria-label={allDone
+          ? `${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}, allemaal afgerond`
+          : `${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}`}
         style={{
           position: 'absolute', left: left + 2, top: 2,
           width: Math.max(18, width - 4), height: 18,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
           padding: '0 3px', borderRadius: 5,
-          border: `1px solid ${open ? 'rgba(216,182,46,0.7)' : 'rgba(216,182,46,0.35)'}`,
-          background: open ? 'rgba(216,182,46,0.26)' : 'rgba(216,182,46,0.14)',
-          color: '#765f00', fontSize: 9.5, fontWeight: 850,
+          border: allDone
+            ? '1px solid var(--border)'
+            : `1px solid ${open ? 'rgba(216,182,46,0.95)' : 'rgba(216,182,46,0.6)'}`,
+          background: allDone
+            ? 'var(--bg-hover)'
+            : (open ? 'rgba(216,182,46,0.85)' : 'rgba(216,182,46,0.55)'),
+          color: allDone ? 'var(--text-muted)' : '#3d2e00',
+          opacity: allDone ? 0.62 : 1,
+          fontSize: 9.5, fontWeight: 850,
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
           pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
           outline: 'none', boxShadow: 'none',
         }}>
-        <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
+        <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: allDone ? 'var(--green)' : '#2b2000' }}>
+          {allDone ? '✓' : 'G'}
+        </span>
         <span aria-hidden style={{ opacity: 0.45 }}>·</span>
         <span>{meetings.length}</span>
       </button>
@@ -3091,7 +3106,28 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     }
     return Array.from(byId.values())
   }, [liveTeam])
-  const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => `${project.board}__${i.id}` === project.id)
+  // project.id is niet altijd het kale '{board}__{itemId}' — subitem-
+  // afgeleide projects (recurring Google-instances, of subitems met eigen
+  // datums) krijgen een '__siN'-suffix, en per-dag vrij-events een
+  // '__vrij_YYYY-MM-DD'-suffix (zie groupsToProjects/handleDetailUpdate).
+  // Zonder deze strip vond de exacte-match hieronder nooit de PARENT-rij
+  // voor zulke projects, waardoor rawItem altijd undefined bleef en velden
+  // als status/notes/contactpersoon in de popup leeg leken terwijl ze op
+  // de subitem/parent wél gezet waren.
+  const rawItemIdFull = project.id.slice(project.board.length + 2)
+  const rawVrijMatch = rawItemIdFull.match(/^(.+)__vrij_\d{4}-\d{2}-\d{2}$/)
+  const rawSiMatch = (rawVrijMatch ? rawVrijMatch[1] : rawItemIdFull).match(/^(.+)__si(\d+)$/)
+  const rawParentId = rawSiMatch ? rawSiMatch[1] : (rawVrijMatch ? rawVrijMatch[1] : rawItemIdFull)
+  const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => i.id === rawParentId)
+  // Voor subitem-projects gelden status/startTime/endTime op de subitem
+  // zelf, niet op de parent — notes/contactpersoon/journal/links/deadline
+  // staan alleen op de parent (subitems hebben die velden niet).
+  const rawSubitem = rawSiMatch
+    ? (rawItem?.subitems as Array<{ status?: string; startTime?: string | null; endTime?: string | null }> | undefined)?.[Number(rawSiMatch[2])]
+    : undefined
+  const rawStatus    = (rawSubitem ? rawSubitem.status    : rawItem?.status)    as string | undefined
+  const rawStartTime = (rawSubitem ? rawSubitem.startTime : rawItem?.startTime) as string | null | undefined
+  const rawEndTime   = (rawSubitem ? rawSubitem.endTime   : rawItem?.endTime)   as string | null | undefined
 
   const [startDate, setStartDate] = useState(project.startDate ?? '')
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
@@ -3139,21 +3175,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   }, [ownerPickerOpen])
   const [entryMentions, setEntryMentions] = useState<string[]>([])
   const { profile } = useProfile()
-  const [categoryOverride, setCategoryOverrideState] = useState<WorkloadCategory | null>(loadCategoryOverrides()[project.id] ?? null)
-  useEffect(() => {
-    setCategoryOverrideState(loadCategoryOverrides()[project.id] ?? null)
-    return onCategoryOverridesChange(() => {
-      setCategoryOverrideState(loadCategoryOverrides()[project.id] ?? null)
-    })
-  }, [project.id])
-  const currentCategory = effectiveCategory(
-    { name: project.name, hours: project.estHours ?? 0, source: project.source },
-    categoryOverride,
-  )
-  function changeCategory(c: WorkloadCategory | null) {
-    setCategoryOverrideState(c)
-    setCategoryOverride(project.id, c)
-  }
   const hasSubitems = ((rawItem?.subitems as { estHours?: number }[] | undefined)?.length ?? 0) > 0
   const subitemsTotal = ((rawItem?.subitems as { estHours?: number }[] | undefined) ?? [])
     .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
@@ -3530,7 +3551,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         </Row>
         <Row label="Status">
           <StatusPicker
-            value={(rawItem?.status as string) ?? ''}
+            value={rawStatus ?? ''}
             onChange={v => commit({ status: v })}
           />
         </Row>
@@ -3614,36 +3635,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
-        <Row label="Categorie">
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {ALL_CATEGORIES.map(c => {
-              const active = currentCategory === c
-              const colorC = CAT_COLOR[c]
-              return (
-                <button key={c} type="button" onClick={() => changeCategory(c)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '4px 10px', borderRadius: 16,
-                    border: active ? `1.5px solid ${colorC}` : '1px solid var(--border)',
-                    background: active ? `${colorC}22` : 'var(--bg-card)',
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: 12, fontWeight: active ? 700 : 500,
-                    cursor: 'pointer',
-                  }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: colorC }} />
-                  {CAT_LABEL[c]}
-                </button>
-              )
-            })}
-            {categoryOverride && (
-              <button type="button" onClick={() => changeCategory(null)}
-                title="Reset naar automatisch"
-                style={{ padding: '4px 8px', borderRadius: 16, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
-                ↺ auto
-              </button>
-            )}
-          </div>
-        </Row>
         <Row label="Contactpersoon">
           <input
             type="text"
@@ -3691,11 +3682,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               Google-events nemen hun tijden uit de sync zelf. */}
           {!isGoogle && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
-              <input type="time" value={(rawItem?.startTime as string | undefined) ?? ''}
+              <input type="time" value={rawStartTime ?? ''}
                 onChange={e => commit({ startTime: e.target.value || null } as Partial<BoardItem>)}
                 style={{ ...dateInput, width: 100 }} />
               <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>tot</span>
-              <input type="time" value={(rawItem?.endTime as string | undefined) ?? ''}
+              <input type="time" value={rawEndTime ?? ''}
                 onChange={e => commit({ endTime: e.target.value || null } as Partial<BoardItem>)}
                 style={{ ...dateInput, width: 100 }} />
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>laat leeg voor de hele dag</span>
