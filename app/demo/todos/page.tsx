@@ -26,7 +26,7 @@ import {
 import {
   loadCommentsFor, saveComment, onCommentsUpdate,
   newCommentId, toggleReaction, type CommentThread,
-} from '@/lib/demoCommentsStore'
+} from '@/lib/commentsStore'
 import { createNotification } from '@/lib/notificationsStore'
 import { MentionTextarea } from '@/components/MentionTextarea'
 import { ReactionRow } from '@/components/ReactionRow'
@@ -872,8 +872,8 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
           </span>
         )}
         {item.projectRef && (
-          <Link href="/demo/planning"
-            title={`Open ${item.projectRef.board} in Planning`}
+          <Link href={`/demo/projects/${encodeURIComponent(item.projectRef.board)}`}
+            title={`Open ${item.projectRef.board}-agenda`}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '1px 7px', borderRadius: 10,
               background: (BOARD_COLORS[item.projectRef.board] ?? '#888') + '22',
