@@ -1441,6 +1441,25 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
                 ↗
               </button>
             )}
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onDelete() }}
+              title="Subitem verwijderen"
+              aria-label={`Subitem ${subitem.name} verwijderen`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 24, height: 24, padding: 0, flexShrink: 0,
+                border: 'none', borderRadius: 5, background: 'transparent',
+                color: hover ? 'var(--danger, #c4453a)' : 'var(--text-muted)',
+                cursor: 'pointer', fontSize: 18, lineHeight: 1,
+                opacity: hover ? 1 : 0.65,
+                transition: 'color 0.12s, background 0.12s, opacity 0.12s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              ×
+            </button>
             {subitem.meetLink && (
               <a href={subitem.meetLink} target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
@@ -1489,11 +1508,10 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           )}
         </div>
       ))}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border)', height: '100%' }}>
-        {hover && (
-          <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
-        )}
-      </div>
+      {/* Actiekolom blijft bestaan voor uitlijning met parent-rijen. De
+          verwijderknop staat bewust naast de subitemnaam: in brede Agenda-
+          tabellen stond deze kolom vaak buiten beeld. */}
+      <div style={{ borderLeft: '1px solid var(--border)', height: '100%' }} />
     </div>
   )
 }
@@ -1533,8 +1551,11 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     // instance bij de volgende sync gewoon weer terug (leek alsof
     // verwijderen niet werkte). Alleen relevant voor source==='google';
     // handmatige subitems verdwijnen gewoon, geen tombstone nodig.
-    if (deleted?.source === 'google') {
-      const next = [...(dismissedInstanceIds ?? []), id]
+    const isGoogleInstance = deleted?.source === 'google'
+      || !!deleted?.externalLink
+      || id.startsWith('si_g_')
+    if (isGoogleInstance) {
+      const next = [...new Set([...(dismissedInstanceIds ?? []), id])]
       onUpdate(filtered, { dismissedInstanceIds: next })
     } else {
       onUpdate(filtered)
