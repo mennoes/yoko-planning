@@ -4422,22 +4422,49 @@ export default function PlanningPage() {
   const [todayEdge, setTodayEdge] = useState<'left' | 'right' | null>(null)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
-  const [freelancersOpen, setFreelancersOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('planning-freelancers-open') === '1'
-  })
-  useEffect(() => { localStorage.setItem('planning-freelancers-open', freelancersOpen ? '1' : '0') }, [freelancersOpen])
-  const [yokoTeamOpen, setYokoTeamOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true
-    const v = localStorage.getItem('planning-yokoteam-open')
-    return v === null ? true : v === '1'
-  })
-  useEffect(() => { localStorage.setItem('planning-yokoteam-open', yokoTeamOpen ? '1' : '0') }, [yokoTeamOpen])
-  const [inactiveTeamOpen, setInactiveTeamOpen] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('planning-inactive-team-open') === '1'
-  })
-  useEffect(() => { localStorage.setItem('planning-inactive-team-open', inactiveTeamOpen ? '1' : '0') }, [inactiveTeamOpen])
+  // Team Yoko/Freelancers/Inactief-pijltje: 4-staps cyclus i.p.v. een platte
+  // open/dicht-toggle. Vervangt ook de losse 'Alles uitklappen'-knop uit de
+  // zoom-toolbar (die gold voorheen voor ALLE leden ongeacht sectie) — die
+  // functie zit nu per-sectie in dit ene pijltje:
+  //   pos 0: dicht
+  //   pos 1: open, leden individueel ingeklapt (net geopend, of terug van pos 2)
+  //   pos 2: open, alle leden in déze sectie individueel uitgeklapt
+  //   pos 3: functioneel gelijk aan pos 1 (open, ingeklapt) — apart gehouden
+  //          zodat de VOLGENDE klik weer sluit i.p.v. opnieuw alles uitklapt.
+  // Alleen open/dicht (pos !== 0) wordt onthouden; de uitgeklapt-substap
+  // reset bij een herlaad naar 'idle'.
+  function initCyclePos(key: string, defaultOpen: boolean): number {
+    if (typeof window === 'undefined') return defaultOpen ? 1 : 0
+    const v = localStorage.getItem(key)
+    const open = v === null ? defaultOpen : v === '1'
+    return open ? 1 : 0
+  }
+  const [freelancersPos, setFreelancersPos] = useState<number>(() => initCyclePos('planning-freelancers-open', false))
+  useEffect(() => { localStorage.setItem('planning-freelancers-open', freelancersPos !== 0 ? '1' : '0') }, [freelancersPos])
+  const [yokoTeamPos, setYokoTeamPos] = useState<number>(() => initCyclePos('planning-yokoteam-open', true))
+  useEffect(() => { localStorage.setItem('planning-yokoteam-open', yokoTeamPos !== 0 ? '1' : '0') }, [yokoTeamPos])
+  const [inactiveTeamPos, setInactiveTeamPos] = useState<number>(() => initCyclePos('planning-inactive-team-open', false))
+  useEffect(() => { localStorage.setItem('planning-inactive-team-open', inactiveTeamPos !== 0 ? '1' : '0') }, [inactiveTeamPos])
+  // Doorloopt de 4 stappen voor één sectie en past `expanded` toe (alle
+  // leden van déze sectie individueel open/dicht) waar dat bij de stap hoort.
+  function cycleSectionArrow(pos: number, setPos: (p: number) => void, members: TeamMember[]) {
+    const next = (pos + 1) % 4
+    setPos(next)
+    if (next === 2) {
+      setExpanded(prev => {
+        const n = new Set(prev)
+        members.forEach(m => n.add(m.id))
+        return n
+      })
+    } else if (next === 1 || next === 3) {
+      setExpanded(prev => {
+        let changed = false
+        const n = new Set(prev)
+        for (const m of members) { if (n.delete(m.id)) changed = true }
+        return changed ? n : prev
+      })
+    }
+  }
   const isMobile = useIsMobile()
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     if (typeof window === 'undefined') return 'compact'
@@ -6116,31 +6143,7 @@ export default function PlanningPage() {
                       <button onClick={() => anchoredColWZoom(z => z + 10)} title="Breder (sneltoets: +)"
                         style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
                     </div>
-                    <span aria-hidden style={{ width: 1, height: 20, background: 'var(--border-light)', flexShrink: 0 }} />
-                    <button onClick={() => {
-                        if (expanded.size >= team.length) setExpanded(new Set())
-                        else setExpanded(new Set(team.map(m => m.id)))
-                      }}
-                      aria-label={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                      title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                      style={{ alignSelf: 'stretch', width: 34, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        background: expanded.size >= team.length ? 'var(--accent-mid)' : 'transparent', border: 'none',
-                        color: expanded.size >= team.length ? 'var(--accent)' : 'var(--text-secondary)',
-                        cursor: 'pointer', fontSize: 22, fontWeight: 800, lineHeight: 1 }}>
-                      {expanded.size >= team.length ? '▾' : '▸'}
-                    </button>
                   </div>
-                )}
-                {isMobile && (
-                  <button onClick={() => {
-                      if (expanded.size >= team.length) setExpanded(new Set())
-                      else setExpanded(new Set(team.map(m => m.id)))
-                    }}
-                    title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                    style={{ flex: 1, border: '1px solid var(--border-light)', borderRadius: 6,
-                      background: 'var(--bg-card)', fontSize: 18, color: 'var(--text-secondary)' }}>
-                    {expanded.size >= team.length ? '▾' : '▸'}
-                  </button>
                 )}
               </div>
               {monthGroups.map(({ label, widthPx }) => (
@@ -6187,32 +6190,7 @@ export default function PlanningPage() {
                     title="Breder (sneltoets: +)"
                     style={{ width: 15, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, padding: 0 }}>+</button>
                   </div>
-                  <span aria-hidden style={{ width: 1, height: 20, background: 'var(--border-light)', flexShrink: 0 }} />
-                  <button onClick={() => {
-                      if (expanded.size >= team.length) setExpanded(new Set())
-                      else setExpanded(new Set(team.map(m => m.id)))
-                    }}
-                    aria-label={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                    title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                    style={{ alignSelf: 'stretch', width: 34, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      background: expanded.size >= team.length ? 'var(--accent-mid)' : 'transparent', border: 'none',
-                      color: expanded.size >= team.length ? 'var(--accent)' : 'var(--text-secondary)',
-                      cursor: 'pointer', fontSize: 22, fontWeight: 800, lineHeight: 1 }}>
-                    {expanded.size >= team.length ? '▾' : '▸'}
-                  </button>
                 </div>
-              )}
-              {isMobile && !monthGroups && (
-                <button onClick={() => {
-                    if (expanded.size >= team.length) setExpanded(new Set())
-                    else setExpanded(new Set(team.map(m => m.id)))
-                  }}
-                  aria-label={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                  title={expanded.size >= team.length ? 'Alles inklappen' : 'Alles uitklappen'}
-                  style={{ width: 34, height: 28, borderRadius: 6, border: '1px solid var(--border-light)',
-                    background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 20, cursor: 'pointer' }}>
-                  {expanded.size >= team.length ? '▾' : '▸'}
-                </button>
               )}
             </div>
             {cols.map(col => {
@@ -6417,8 +6395,8 @@ export default function PlanningPage() {
                 {unassignedVisible.map(renderPerson)}
                 {freelancersVisible.length > 0 && (
                   <>
-                    {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersOpen(o => !o), freelancersOpen)}
-                    {freelancersOpen && freelancersVisible.map(renderPerson)}
+                    {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0)}
+                    {freelancersPos !== 0 && freelancersVisible.map(renderPerson)}
                   </>
                 )}
               </>
@@ -6449,7 +6427,7 @@ export default function PlanningPage() {
               // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
-            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; isOpen?: boolean }) => (
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number }) => (
               <div onClick={opts?.onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)',
@@ -6460,7 +6438,19 @@ export default function PlanningPage() {
                 <div style={{ position: 'sticky', left: 0, width: 'max-content',
                   padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {opts?.onClick && (
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: opts.isOpen ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                    opts.arrowPos === 2 ? (
+                      // pos 2: iedereen in deze sectie staat individueel
+                      // uitgeklapt — 2 kleine pijltjes onder elkaar i.p.v.
+                      // het gewone enkele pijltje, zodat 't verschil met
+                      // 'gewoon open' in één oogopslag duidelijk is.
+                      <span title="Alle leden uitgeklapt — klik om in te klappen"
+                        style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 10, lineHeight: 0.55, color: 'var(--text-muted)' }}>
+                        <span style={{ fontSize: 9 }}>▾</span>
+                        <span style={{ fontSize: 9 }}>▾</span>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', transition: 'transform 0.15s', display: 'inline-block', transform: opts.arrowPos ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+                    )
                   )}
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
@@ -6596,8 +6586,8 @@ export default function PlanningPage() {
               )
             }
             if (yokoTeam.length > 0) {
-              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => setYokoTeamOpen(o => !o), isOpen: yokoTeamOpen })}</div>)
-              if (yokoTeamOpen) {
+              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos })}</div>)
+              if (yokoTeamPos !== 0) {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }
             }
@@ -6606,8 +6596,8 @@ export default function PlanningPage() {
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
             }
             if (freelancers.length > 0) {
-              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => setFreelancersOpen(o => !o), isOpen: freelancersOpen })}</div>)
-              if (freelancersOpen) {
+              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos })}</div>)
+              if (freelancersPos !== 0) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
               // Ingeklapt = écht ingeklapt. Voorheen toonden we 'actieve'
@@ -6616,8 +6606,8 @@ export default function PlanningPage() {
               // freelancer altijd zien, klap de sectie open.
             }
             if (inactiveTeam.length > 0) {
-              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, { onClick: () => setInactiveTeamOpen(o => !o), isOpen: inactiveTeamOpen })}</div>)
-              if (inactiveTeamOpen) {
+              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, { onClick: () => cycleSectionArrow(inactiveTeamPos, setInactiveTeamPos, inactiveTeam), arrowPos: inactiveTeamPos })}</div>)
+              if (inactiveTeamPos !== 0) {
                 inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i)))
               }
             }
