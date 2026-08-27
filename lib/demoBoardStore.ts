@@ -7,7 +7,7 @@
 import { saveGroups } from './boardStore'
 import { buildDemoBoards, DEMO_BOARD_IDS } from './demoFixtures'
 
-const DEMO_SEED_VERSION = '2'
+const DEMO_SEED_VERSION = '3'
 const DEMO_SEED_VERSION_KEY = 'yoko-demo-seed-version'
 
 // Een nieuwe demo-release mag de fictieve planning één keer verversen,
@@ -33,9 +33,11 @@ export function resetDemoBoards(): void {
     try {
       window.localStorage.removeItem('yoko-demo-todos')
       window.localStorage.removeItem('yoko-demo-todos-sections')
+      window.localStorage.removeItem('yoko-demo-todos-sections-fantasy-v1')
       window.localStorage.removeItem('yoko-demo-todos-removed-projects')
       window.localStorage.setItem(DEMO_SEED_VERSION_KEY, DEMO_SEED_VERSION)
       window.localStorage.removeItem('yoko-demo-profile')
+      window.localStorage.removeItem('yoko-demo-profile-fantasy-v1')
       window.localStorage.removeItem('yoko-demo-comments')
       window.localStorage.removeItem('home-demo-sections-order')
       window.localStorage.removeItem('yoko-demo-recent-pages')
@@ -43,12 +45,16 @@ export function resetDemoBoards(): void {
       // Pagina's-secties (Team/Team beheren/Kantoor/Budget/Accounts/
       // Geschiedenis) — elk hun eigen, volledig lokale demo-store.
       window.localStorage.removeItem('yoko-demo-team-members')
+      window.localStorage.removeItem('yoko-demo-team-members-fantasy-v1')
       window.localStorage.removeItem('yoko-demo-team-capacities')
       window.localStorage.removeItem('yoko-demo-team-contacts')
+      window.localStorage.removeItem('yoko-demo-team-contacts-fantasy-v1')
       window.localStorage.removeItem('yoko-demo-team-daysoff')
       window.localStorage.removeItem('yoko-kantoor-demo')
       window.localStorage.removeItem('yoko-demo-budget-entries')
       window.localStorage.removeItem('yoko-demo-project-revenue')
+      window.localStorage.removeItem('yoko-demo-budget-entries-fantasy-v1')
+      window.localStorage.removeItem('yoko-demo-project-revenue-fantasy-v1')
       window.localStorage.removeItem('yoko-demo-revenue-templates')
       window.localStorage.removeItem('yoko-demo-accounts')
       // Losse pagina's staan elk onder een eigen 'yoko-demo-page-{id}'-key

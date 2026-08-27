@@ -96,18 +96,18 @@ function buildFakeTrash(): DemoTrashItem[] {
     {
       id:            'demo-trash-1',
       name:          'Oude planning — concept v1',
-      boardId:       'Noorderlicht Media',
-      groupName:     'Lopende projecten',
+      boardId:       'De Gouw & Bree',
+      groupName:     'Nieuwe aanvragen',
       deletedAt:     new Date(now - 5 * HOUR).toISOString(),
-      deletedByName: 'Robin',
+      deletedByName: 'Pikachu',
     },
     {
       id:            'demo-trash-2',
       name:          'Losse aantekening (te verwijderen)',
-      boardId:       'Kaap Studio',
-      groupName:     'Lopende projecten',
+      boardId:       'Rivendel & Rohan',
+      groupName:     'In aanbouw',
       deletedAt:     new Date(now - 2 * DAY).toISOString(),
-      deletedByName: 'Jules',
+      deletedByName: 'Pippi',
     },
   ]
 }

@@ -73,7 +73,7 @@ export function quarterLabel(q: string): string {
 }
 
 // ─── Budget-regels (losse omzet, niet aan een project gekoppeld) ─────────
-const ENTRIES_KEY = 'yoko-demo-budget-entries'
+const ENTRIES_KEY = 'yoko-demo-budget-entries-fantasy-v1'
 const ENTRIES_EVENT = 'yoko-demo-budget-update'
 
 function seedEntries(): DemoBudgetEntry[] {
@@ -82,11 +82,11 @@ function seedEntries(): DemoBudgetEntry[] {
   return [
     {
       id: genId('demobud'), memberId: 'demo-sam', quarter: q, amount: 1200,
-      label: 'Consultancy — Noorderlicht Media merkstrategie', createdAt: now, updatedAt: now,
+      label: 'Spoedtoeslag — orks vóór zonsopgang gepland', createdAt: now, updatedAt: now,
     },
     {
       id: genId('demobud'), memberId: 'demo-jules', quarter: q, amount: 750,
-      label: 'Extra huisstijl-sessie — Kaap Studio', createdAt: now, updatedAt: now,
+      label: 'Extra workshop — tweede ontbijt automatiseren', createdAt: now, updatedAt: now,
     },
   ]
 }
@@ -127,7 +127,7 @@ export function onDemoBudgetUpdate(handler: () => void): () => void {
 }
 
 // ─── Project-omzet (gekoppeld aan een board-item) ─────────────────────────
-const REVENUE_KEY = 'yoko-demo-project-revenue'
+const REVENUE_KEY = 'yoko-demo-project-revenue-fantasy-v1'
 const REVENUE_EVENT = 'yoko-demo-project-revenue-update'
 
 // itemId-vorm: `${boardId}__${item.id}`, zelfde als de echte pagina bouwt.
@@ -137,11 +137,11 @@ const REVENUE_EVENT = 'yoko-demo-project-revenue-update'
 function seedRevenue(): DemoProjectRevenue[] {
   const now = new Date().toISOString()
   return [
-    { itemId: 'Noorderlicht Media__i4', boardId: 'Noorderlicht Media', amount: 1800, confirmed: true,  updatedAt: now },
-    { itemId: 'Noorderlicht Media__i6', boardId: 'Noorderlicht Media', amount: 950,  confirmed: true,  updatedAt: now },
-    { itemId: 'Noorderlicht Media__i7', boardId: 'Noorderlicht Media', amount: 600,  confirmed: false, updatedAt: now },
-    { itemId: 'Kaap Studio__i2',        boardId: 'Kaap Studio',        amount: 4200, confirmed: true,  updatedAt: now },
-    { itemId: 'Kaap Studio__i3',        boardId: 'Kaap Studio',        amount: 8900, confirmed: false, updatedAt: now },
+    { itemId: 'De Gouw & Bree__i4',   boardId: 'De Gouw & Bree',   amount: 1800, confirmed: true,  updatedAt: now },
+    { itemId: 'De Gouw & Bree__i6',   boardId: 'De Gouw & Bree',   amount: 950,  confirmed: true,  updatedAt: now },
+    { itemId: 'De Gouw & Bree__i7',   boardId: 'De Gouw & Bree',   amount: 600,  confirmed: false, updatedAt: now },
+    { itemId: 'Rivendel & Rohan__i35', boardId: 'Rivendel & Rohan', amount: 4200, confirmed: true,  updatedAt: now },
+    { itemId: 'Rivendel & Rohan__i36', boardId: 'Rivendel & Rohan', amount: 8900, confirmed: false, updatedAt: now },
   ]
 }
 

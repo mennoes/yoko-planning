@@ -6,7 +6,7 @@
 // BELANGRIJK: dit bestand mag NOOIT echte klant- of teamnamen bevatten —
 // alles hier is fictief en puur bedoeld om de tool te laten zien (bv. op
 // LinkedIn) zonder echte Studio Yoko-data bloot te geven.
-import type { BoardGroup, BoardItem, SubItem } from './boards'
+import type { BoardGroup, BoardItem } from './boards'
 import type { TeamMember } from './teamStore'
 import type { UserProfile } from './profile'
 
@@ -74,43 +74,30 @@ export function demoNavigate(router: { push: (href: string) => void }, href: str
 }
 
 // ─── Team ───────────────────────────────────────────────────────────────────
-// 8 leden i.p.v. de oorspronkelijke 4 — een grotere, drukkere cast maakt
-// Planning/Werklast/Home er meteen representatiever uitzien (verdeelde
-// capaciteit, overlappende deadlines, een inactief lid als voorbeeld van
-// die sectie) i.p.v. een leeg-ogende demo met maar een handjevol namen.
+// De publieke demo mag best laten zien dat plannen ook leuk kan zijn.
+// De tien fictieve collega's komen uit kinder-tv, Pokemon en jeugdboeken;
+// de stabiele ids blijven gelijk zodat alle demo-features blijven werken.
 export const DEMO_MEMBERS: TeamMember[] = [
-  { id: 'demo-sam',   name: 'Sam',   email: '', color: '#B0C6EB', weeklyCapacity: 40, position: 0, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
-  { id: 'demo-robin', name: 'Robin', email: '', color: '#9DB1A4', weeklyCapacity: 32, position: 1, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
-  { id: 'demo-jules', name: 'Jules', email: '', color: '#C09BCA', weeklyCapacity: 40, position: 2, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
-  { id: 'demo-noa',   name: 'Noa',   email: '', color: '#D8B62E', weeklyCapacity: 24, position: 3, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
-  { id: 'demo-finn',  name: 'Finn',  email: '', color: '#7FB3D5', weeklyCapacity: 40, position: 4, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
-  { id: 'demo-mila',  name: 'Mila',  email: '', color: '#E8998D', weeklyCapacity: 24, position: 5, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
-  { id: 'demo-liam',  name: 'Liam',  email: '', color: '#A3D9A5', weeklyCapacity: 16, position: 6, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
-  { id: 'demo-eva',   name: 'Eva',   email: '', color: '#D7BDE2', weeklyCapacity: 24, position: 7, hidden: false, kind: 'freelance',  startDate: null, inactive: true  },
-  { id: 'demo-tess',  name: 'Tess',  email: '', color: '#F4A896', weeklyCapacity: 40, position: 8, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
-  { id: 'demo-bram',  name: 'Bram',  email: '', color: '#93B5C6', weeklyCapacity: 32, position: 9, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
+  { id: 'demo-sam',   name: 'Bert',        email: '', color: '#F2C94C', weeklyCapacity: 40, position: 0, hidden: false, kind: 'yoko',      startDate: null, inactive: false },
+  { id: 'demo-robin', name: 'Pikachu',     email: '', color: '#FFD93D', weeklyCapacity: 32, position: 1, hidden: false, kind: 'yoko',      startDate: null, inactive: false },
+  { id: 'demo-jules', name: 'Pippi',       email: '', color: '#F299C2', weeklyCapacity: 40, position: 2, hidden: false, kind: 'freelance', startDate: null, inactive: false },
+  { id: 'demo-noa',   name: 'Rembo',       email: '', color: '#9B51E0', weeklyCapacity: 24, position: 3, hidden: false, kind: 'yoko',      startDate: null, inactive: false },
+  { id: 'demo-finn',  name: 'Moffel',      email: '', color: '#6FCF97', weeklyCapacity: 40, position: 4, hidden: false, kind: 'yoko',      startDate: null, inactive: false },
+  { id: 'demo-mila',  name: 'Piertje',     email: '', color: '#EB5757', weeklyCapacity: 24, position: 5, hidden: false, kind: 'freelance', startDate: null, inactive: false },
+  { id: 'demo-liam',  name: 'Tinky Winky', email: '', color: '#8C6ADE', weeklyCapacity: 16, position: 6, hidden: false, kind: 'yoko',      startDate: null, inactive: false },
+  { id: 'demo-eva',   name: 'Pipo',        email: '', color: '#F2994A', weeklyCapacity: 24, position: 7, hidden: false, kind: 'freelance', startDate: null, inactive: false },
+  { id: 'demo-tess',  name: 'Bassie',      email: '', color: '#2D9CDB', weeklyCapacity: 40, position: 8, hidden: false, kind: 'yoko',      startDate: null, inactive: false },
+  { id: 'demo-bram',  name: 'Adriaan',     email: '', color: '#27AE60', weeklyCapacity: 32, position: 9, hidden: false, kind: 'freelance', startDate: null, inactive: false },
 ]
 
 export const DEMO_PROFILE: UserProfile = {
-  memberId: 'demo-sam', name: 'Sam', color: '#B0C6EB', photo: null,
+  memberId: 'demo-sam', name: 'Bert', color: '#F2C94C', photo: null,
 }
 
 // ─── 'Gezichten' voor de nep-teamleden ──────────────────────────────────────
-// Echte (gestockte model-)portretfoto's i.p.v. lettertje-cirkels — random-
-// user.me is precies hiervoor bedoeld (stabiele, vaste URL's per index,
-// puur illustratief, nooit een echt persoon die aan onze data hangt).
-export const DEMO_PHOTOS: Record<string, string> = {
-  'demo-sam':   'https://randomuser.me/api/portraits/men/32.jpg',
-  'demo-robin': 'https://randomuser.me/api/portraits/women/44.jpg',
-  'demo-jules': 'https://randomuser.me/api/portraits/men/67.jpg',
-  'demo-noa':   'https://randomuser.me/api/portraits/women/23.jpg',
-  'demo-finn':  'https://randomuser.me/api/portraits/men/12.jpg',
-  'demo-mila':  'https://randomuser.me/api/portraits/women/68.jpg',
-  'demo-liam':  'https://randomuser.me/api/portraits/men/76.jpg',
-  'demo-eva':   'https://randomuser.me/api/portraits/women/50.jpg',
-  'demo-tess':  'https://randomuser.me/api/portraits/women/31.jpg',
-  'demo-bram':  'https://randomuser.me/api/portraits/men/45.jpg',
-}
+// Geen willekeurige stockgezichten bij bekende fictieve namen: de gewone,
+// gekleurde initialen-avatar van de planner is hier duidelijker en grappiger.
+export const DEMO_PHOTOS: Record<string, string> = {}
 
 // ─── Boards ─────────────────────────────────────────────────────────────────
 // Dagen-offset t.o.v. 'vandaag' op het moment dat de demo voor het eerst in
@@ -124,19 +111,14 @@ function iso(offsetDays: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-function sub(id: string, name: string, ownerIds: string[], status: string, startOffset: number, endOffset: number, estHours: number): SubItem {
-  return { id, name, ownerIds, status, startDate: iso(startOffset), endDate: iso(endOffset), estHours }
-}
-
-function item(id: string, name: string, ownerIds: string[], status: string, opts: { startOffset?: number; endOffset?: number; estHours?: number; subitems?: SubItem[]; deadlineOffset?: number } = {}): BoardItem {
-  const { startOffset, endOffset, estHours, subitems, deadlineOffset } = opts
+function item(id: string, name: string, ownerIds: string[], status: string, opts: { startOffset?: number; endOffset?: number; estHours?: number; deadlineOffset?: number } = {}): BoardItem {
+  const { startOffset, endOffset, estHours, deadlineOffset } = opts
   return {
     id, name, ownerIds, status,
     startDate: startOffset != null ? iso(startOffset) : null,
     endDate:   endOffset   != null ? iso(endOffset)   : (startOffset != null ? iso(startOffset) : null),
     deadline: deadlineOffset != null ? iso(deadlineOffset) : null,
     estHours: estHours ?? 0, dagen: 0,
-    subitems,
   }
 }
 
@@ -153,171 +135,158 @@ function item(id: string, name: string, ownerIds: string[], status: string, opts
 // een bijpassend entry in lib/navStore.ts's DEMO_PROJECTS en
 // lib/boardsRegistry.ts's DEMO_FALLBACK (allebei niet automatisch afgeleid
 // van deze lijst).
-export const DEMO_BOARD_IDS = ['Noorderlicht Media', 'Kaap Studio', 'Vuurtoren Events']
+export const DEMO_BOARD_IDS = ['De Gouw & Bree', 'Rivendel & Rohan', 'Gondor & Mordor']
+
+// Exact honderd aanvragen voor planningstools van bedrijven die uitstekend
+// in Midden-aarde hadden kunnen bestaan. De titels zijn luchtig; de data
+// erachter blijft realistisch genoeg om planning, capaciteit en deadlines
+// goed te demonstreren.
+const DEMO_REQUESTS = [
+  "De Steigerende Pony — kamers, tafels en biervaten plannen",
+  "Gouwse Tweede Ontbijtservice — bezorgroutes automatiseren",
+  "Baggins Bagage — expedities en koffers verdelen",
+  "Sam Gewis Tuinonderhoud — hobbit-hoveniers inroosteren",
+  "Took & Co Vuurwerk — shows, vergunningen en lonten plannen",
+  "Brandebok Postduiven — vluchten en brieven verdelen",
+  "Boer van der Made Champignons — oogstploegen inplannen",
+  "Groene Draak Brouwerij — ketels en proeverijen reserveren",
+  "Balingshoek Veerdienst — overtochten en ponydiensten plannen",
+  "Feestboom Festivals — podia en tweede ontbijten verdelen",
+  "Balingshoek Gatenbouw — aannemers per hobbitgat plannen",
+  "Bilbo Uitgeverij — hoofdstukken, dwergen en deadlines bewaken",
+  "Het Rode Boek — honderd jaar correctierondes plannen",
+  "Gouwse Sheriffdienst — avondpatrouilles inroosteren",
+  "Westgouw Vuurwerkbezorging — raketten op tijd leveren",
+  "Merry & Pippin Catering — zes maaltijden per dag plannen",
+  "Rosie Katoen Bruiloften — feesttenten en boeketten verdelen",
+  "Frodo Verhuisservice — breekbare ringen apart plannen",
+  "Zak Einde B&B — kamers zonder onverwachte tovenaars boeken",
+  "Michel Delving Archief — leeszalen en perkament reserveren",
+  "Rivendel Raadzaal — eeuwenlange vergaderingen korter plannen",
+  "Elrond Events — geheime raden en lunchpauzes combineren",
+  "Legolas Pijlenservice — voorraad en schietbanen plannen",
+  "Gimli Mijnbeheer — dwergen over schachten verdelen",
+  "Khazad-dûm Delvers — ploegendienst zonder Balrogconflict",
+  "Lothlórien Boomhotels — kamers per boomtop boeken",
+  "Galadriel Spiegelconsultancy — toekomstkijksessies reserveren",
+  "Lórien Mantels — maatwerk en onzichtbaarheidstests plannen",
+  "Grijze Havens Cruises — afvaarten naar het Westen plannen",
+  "Gandalf Vuurwerk & Advies — projecten en verdwijningen bewaken",
+  "Schaduwvacht Express — bliksemsnelle ritten verdelen",
+  "Arwen Bridal — passen, vlechten en elfenjurken plannen",
+  "Rivendel Wellness — elfenmassages per eeuw inboeken",
+  "Moria Echo Studios — opnames zonder trommels in de diepte",
+  "Balrog Verwarming — storingsmonteurs brandveilig inroosteren",
+  "Grottrol Sloopwerken — projecten met minimale nevenschade plannen",
+  "Adelaars Luchtredding — vluchten pas op het laatste moment boeken",
+  "Beorn Honing & Logies — berenvrije kamers reserveren",
+  "Demsterwold Ongediertebestrijding — spinnenroutes plannen",
+  "Thranduil Wijnkelders — vaten, proeverijen en ontsnappingen plannen",
+  "Meerstad Vismarkt — kramen en visleveringen verdelen",
+  "Bard Boogbeveiliging — wachtdiensten en drakendekking plannen",
+  "Erebor Schatkistbeheer — audits per goudberg inroosteren",
+  "Smaug Verwarming — afspraken zonder brandverzekering plannen",
+  "Daal Speelgoedmakers — productie voor winterfeesten plannen",
+  "IJzerheuvels Smederij — ovens, hamers en orders verdelen",
+  "Blauwe Bergen Steenwerk — steenhouwers per gevel plannen",
+  "Dwergen Vatenrace — wedstrijden en ziekenhuisbedden reserveren",
+  "Erebor Deurenservice — geheime ingangen op maanstand plannen",
+  "Thorin & Co Interim — dertien dwergen op één klus plaatsen",
+  "Rohan Ruiterschool — lessen en paarden eerlijk verdelen",
+  "Edoras Dakdekkers — rieten daken vóór de winter plannen",
+  "Helmsdiepte Beveiliging — nachtwachten en ladders voorspellen",
+  "Entenraad Bosbeheer — besluiten binnen één kwartaal afronden",
+  "Fangorn Snoeiwerken — routes zonder levende bomen plannen",
+  "Isengard Circulair Hout — herplanting achteraf inboeken",
+  "Orthanc Telecom — palantírs en belkamers reserveren",
+  "Saruman Witgoed — monteurs in vijf kleuren inroosteren",
+  "Gríma Communicatie — crisisoverleggen en fluisterdiensten plannen",
+  "BoomBaard Besluitvorming — extreem lange projecten faseren",
+  "Éowyn Schildmaagd Training — lessen en oefenzwaarden plannen",
+  "Théoden Paardenlease — reserveringen en koninklijke ritten bewaken",
+  "Rohan Hooi & Voer — stallen en leveringen op elkaar afstemmen",
+  "Éomer Bereden Koeriers — spoedritten door de Mark plannen",
+  "Gouden Zaal Horeca — banketten en heldendichten reserveren",
+  "Rohan Helmenpoets — ophaalroutes en glansbeurten plannen",
+  "Westfold Alarmcentrale — meldingen vóór zonsopgang verdelen",
+  "Wargvrije Wandelroutes — inspecteurs per bergpas plannen",
+  "Gondor Vuurtorens — onderhoud zonder vals alarm plannen",
+  "Minas Tirith Trappenservice — monteurs over zeven niveaus verdelen",
+  "Witte Boom Hoveniers — één heel belangrijke boom verzorgen",
+  "Denethor Tomatencatering — keukenplanning zonder drama",
+  "Faramir Rangers — patrouilles en hinderlagen inroosteren",
+  "Ithilien Picknickservice — manden buiten bereik van olifanten plannen",
+  "Osgiliath Bruggenbouw — bouwfasen tussen twee legers plannen",
+  "Dol Amroth Zwanenboten — vloot en bemanning reserveren",
+  "Citadel Archief — wachtrijen voor oude rollen plannen",
+  "Beregond Nachtwacht — diensten en geheime pauzes verdelen",
+  "Palantír Videobellen — vergaderkamers zonder Sauron plannen",
+  "Raad van Elrond Consultancy — meetings met maximaal negen deelnemers",
+  "Midden-aarde Landmeters — meetploegen en kaarten verdelen",
+  "Gezelschap Expedities — negen agenda's eindelijk gelijk leggen",
+  "Eén Ring Juwelenreparatie — anonieme afspraken inboeken",
+  "Mordor Human Resources — tienduizend orks eerlijk inroosteren",
+  "Sauron EyeCare — oogmetingen en torendiensten plannen",
+  "Barad-dûr Facility Services — onderhoud aan één hoge toren",
+  "Doemberg Gieterij — ovens en ringproductie bewaken",
+  "Negen Nazgûl Taxi — ritten zonder dubbelboeking verdelen",
+  "Ork & Roll Uitzendbureau — brullende flexkrachten plaatsen",
+  "Uruk-hai Sprintcoaches — trainingen tot zonsopgang plannen",
+  "Shelob Webhosting — serveronderhoud tussen voedertijden",
+  "Gollum Ring Recovery — zoekteams en vispauzes plannen",
+  "Dode Moerassen Spa — behandelingen en dwaallichtjes boeken",
+  "Zwarte Poort Logistics — tijdsloten voor enorme legers plannen",
+  "Harad Olifantenverhuur — mûmakils en bestuurders reserveren",
+  "Umbar Kapersrederij — schepen en aanlegplaatsen verdelen",
+  "Rhûn Karavaanservice — routes door het Oosten plannen",
+  "Angmar Winterdienst — sneeuwploegen en spoken inroosteren",
+  "Warg Walkers — uitlaatdiensten met extra sterke lijnen",
+  "Tom Bombadil Events — zangblokken zonder eindtijd plannen",
+]
+
+const DEMO_MEMBER_IDS = DEMO_MEMBERS.map(member => member.id)
+
+function buildRequestItem(title: string, index: number): BoardItem {
+  const cycle = index % 10
+  const status = cycle < 2 ? 'Done' : cycle === 2 ? 'Stuck' : cycle < 7 ? 'Working on...' : 'Not started'
+  const startOffset = status === 'Done' ? -18 + (index % 8) : status === 'Not started' ? 3 + (index % 24) : -2 + (index % 5)
+  const endOffset = startOffset + 1 + (index % 5)
+  const owner = DEMO_MEMBER_IDS[index % DEMO_MEMBER_IDS.length]
+  const owners = index % 7 === 0
+    ? [owner, DEMO_MEMBER_IDS[(index + 3) % DEMO_MEMBER_IDS.length]]
+    : [owner]
+  return item(`i${index + 1}`, title, owners, status, {
+    startOffset,
+    endOffset,
+    estHours: 4 + ((index * 3) % 25),
+    deadlineOffset: status === 'Done' ? undefined : endOffset + 1,
+  })
+}
+
+function buildRequestGroups(from: number, to: number, color: string): BoardGroup[] {
+  const requests = DEMO_REQUESTS.slice(from, to).map((title, localIndex) => buildRequestItem(title, from + localIndex))
+  return [
+    { id: 'g1', name: 'Nieuwe aanvragen', color, items: requests.filter(request => request.status === 'Not started') },
+    { id: 'g2', name: 'In aanbouw', color: '#D8935B', items: requests.filter(request => request.status === 'Working on...' || request.status === 'Stuck') },
+    { id: 'g3', name: 'Done', color: '#9A9590', items: requests.filter(request => request.status === 'Done') },
+  ]
+}
 
 export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
   return {
-    'Noorderlicht Media': {
-      groups: [
-        {
-          id: 'g1', name: 'Lopende projecten', color: '#B0C6EB', items: [
-            item('i1', 'Merkfilm — script + storyboard', ['demo-sam'], 'Done', { startOffset: -9, endOffset: -3, estHours: 24 }),
-            item('i2', 'Merkfilm — edit', ['demo-robin'], 'Working on...', {
-              deadlineOffset: 5,
-              subitems: [
-                sub('s1', 'Edit v1', ['demo-robin'], 'Working on...', 0, 6, 32),
-                sub('s2', 'Edit v2 — klantfeedback', ['demo-robin'], 'Not started', 9, 12, 12),
-              ],
-            }),
-            item('i3', 'Social cutdowns (5x)', ['demo-noa'], 'Not started', { startOffset: 14, endOffset: 18, estHours: 14, deadlineOffset: 19 }),
-            item('i4', 'Kickoff volgend seizoen', ['demo-sam', 'demo-jules'], 'Not started', { startOffset: 3, endOffset: 3, estHours: 2 }),
-            item('i6', 'Merkfilm — klant-call + debrief', ['demo-sam'], 'Working on...', { startOffset: 0, endOffset: 1, estHours: 8, deadlineOffset: 2 }),
-            item('i7', 'Merkfilm — voice-over regelen', ['demo-sam'], 'Not started', { startOffset: 1, endOffset: 3, estHours: 10 }),
-            item('i8', 'Nieuwsbrief — juli editie', ['demo-finn'], 'Working on...', { startOffset: -1, endOffset: 2, estHours: 6, deadlineOffset: 2 }),
-            item('i9', 'Podcast — gastenlijst Q3', ['demo-mila', 'demo-noa'], 'Not started', { startOffset: 6, endOffset: 9, estHours: 8 }),
-            item('i10', 'Merkfilm — kleurcorrectie', ['demo-liam'], 'Stuck', { startOffset: -2, endOffset: 2, estHours: 14, deadlineOffset: 3 }),
-            item('i11', 'Fotoshoot — bedrijfsportretten', ['demo-finn', 'demo-jules'], 'Not started', {
-              deadlineOffset: 30,
-              subitems: [
-                sub('s1', 'Locatiescout', ['demo-finn'], 'Working on...', 8, 10, 6),
-                sub('s2', 'Shootdag', ['demo-finn', 'demo-jules'], 'Not started', 15, 15, 10),
-                sub('s3', 'Selectie + retouche', ['demo-jules'], 'Not started', 16, 22, 12),
-              ],
-            }),
-            item('i12', 'Jaaroverzicht — scriptidee pitchen', ['demo-sam', 'demo-robin'], 'Not started', { startOffset: 20, endOffset: 22, estHours: 4, deadlineOffset: 23 }),
-            item('i15', 'Documentaire — onderzoeksfase', ['demo-tess'], 'Working on...', { startOffset: -3, endOffset: 5, estHours: 22, deadlineOffset: 8 }),
-            item('i16', 'Documentaire — interviewplanning', ['demo-tess', 'demo-bram'], 'Not started', {
-              deadlineOffset: 16,
-              subitems: [
-                sub('s1', 'Kandidaten benaderen', ['demo-tess'], 'Working on...', 2, 5, 6),
-                sub('s2', 'Interviews inplannen', ['demo-bram'], 'Not started', 6, 9, 4),
-              ],
-            }),
-            item('i17', 'Merkfilm — geluidsmix', ['demo-bram'], 'Not started', { startOffset: 4, endOffset: 6, estHours: 10, deadlineOffset: 7 }),
-            item('i18', 'Nieuwsbrief — augustus editie', ['demo-finn'], 'Not started', { startOffset: 12, endOffset: 14, estHours: 6, deadlineOffset: 15 }),
-            item('i19', 'Social cutdowns — review klant', ['demo-noa', 'demo-tess'], 'Not started', { startOffset: 19, endOffset: 19, estHours: 3, deadlineOffset: 20 }),
-            item('i20', 'Archiefbeelden — digitaliseren', ['demo-bram'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 12 }),
-            item('i22', 'Merkfilm — feedbackronde versnellen', ['demo-robin'], 'Working on...', { startOffset: -2, endOffset: 3, estHours: 18, deadlineOffset: 3 }),
-            item('i23', 'Campagnebeelden — key visuals', ['demo-jules'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 16, deadlineOffset: 5 }),
-          ],
-        },
-        {
-          id: 'g2', name: 'Done', color: '#9A9590', items: [
-            item('i5', 'Intake + offerte', ['demo-sam'], 'Done', { startOffset: -20, endOffset: -16, estHours: 6 }),
-            item('i13', 'Vorig kwartaal — eindrapportage', ['demo-robin'], 'Done', { startOffset: -30, endOffset: -27, estHours: 8 }),
-            item('i14', 'Merkfilm — pitch + akkoord klant', ['demo-sam'], 'Done', { startOffset: -35, endOffset: -33, estHours: 5 }),
-            item('i21', 'Documentaire — intake + treatment', ['demo-tess'], 'Done', { startOffset: -10, endOffset: -8, estHours: 9 }),
-          ],
-        },
-      ],
-    },
-    'Kaap Studio': {
-      groups: [
-        {
-          id: 'g1', name: 'Lopende projecten', color: '#D8935B', items: [
-            item('i1', 'Huisstijl — moodboard', ['demo-jules'], 'Done', { startOffset: -6, endOffset: -4, estHours: 10 }),
-            item('i2', 'Huisstijl — logo-varianten', ['demo-jules'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 20, deadlineOffset: 4 }),
-            item('i3', 'Website', ['demo-sam', 'demo-jules'], 'Not started', {
-              deadlineOffset: 25,
-              subitems: [
-                sub('s1', 'Wireframes', ['demo-sam', 'demo-jules'], 'Not started', 5, 11, 28),
-                sub('s2', 'Launch prep', ['demo-sam'], 'Not started', 18, 24, 16),
-              ],
-            }),
-            item('i4', 'Podcast S2 — aflevering 3 edit', ['demo-noa'], 'Working on...', { startOffset: -3, endOffset: 1, estHours: 12, deadlineOffset: 1 }),
-            item('i5', 'Trailer volgend seizoen', ['demo-robin'], 'Not started', { startOffset: 14, endOffset: 20, estHours: 18 }),
-            item('i6', 'Verpakkingsontwerp — schetsen', ['demo-mila'], 'Working on...', { startOffset: -2, endOffset: 3, estHours: 16, deadlineOffset: 6 }),
-            item('i7', 'Social templates — Q3 batch', ['demo-eva'], 'Not started', { startOffset: 10, endOffset: 13, estHours: 9 }),
-            item('i8', 'Klant-workshop voorbereiden', ['demo-sam', 'demo-finn'], 'Working on...', { startOffset: 0, endOffset: 2, estHours: 6, deadlineOffset: 3 }),
-            item('i9', 'Merchandise — sampledrop bestellen', ['demo-jules'], 'Stuck', { startOffset: -4, endOffset: -1, estHours: 4 }),
-            item('i10', 'Podcast S2 — seizoensfinale', ['demo-noa', 'demo-mila'], 'Not started', {
-              deadlineOffset: 35,
-              subitems: [
-                sub('s1', 'Script + gasten', ['demo-noa'], 'Not started', 22, 26, 10),
-                sub('s2', 'Opname', ['demo-noa', 'demo-mila'], 'Not started', 28, 28, 6),
-                sub('s3', 'Edit + mix', ['demo-mila'], 'Not started', 29, 33, 14),
-              ],
-            }),
-            item('i13', 'Verpakkingsontwerp — proefdruk', ['demo-mila', 'demo-bram'], 'Not started', { startOffset: 6, endOffset: 9, estHours: 10, deadlineOffset: 10 }),
-            item('i14', 'Website — content aanleveren', ['demo-tess'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 8, deadlineOffset: 5 }),
-            item('i15', 'Merchandise — webshop koppeling', ['demo-bram'], 'Not started', { startOffset: 8, endOffset: 12, estHours: 14, deadlineOffset: 13 }),
-            item('i16', 'Klantpresentatie — Q4 voorstel', ['demo-sam', 'demo-tess'], 'Not started', { startOffset: 16, endOffset: 17, estHours: 6, deadlineOffset: 18 }),
-            item('i17', 'Podcast — coverart nieuw seizoen', ['demo-eva'], 'Working on...', { startOffset: 0, endOffset: 2, estHours: 8, deadlineOffset: 3 }),
-            item('i18', 'Huisstijl — social media kit', ['demo-jules', 'demo-eva'], 'Not started', {
-              deadlineOffset: 22,
-              subitems: [
-                sub('s1', 'Templates ontwerpen', ['demo-jules'], 'Not started', 12, 16, 12),
-                sub('s2', 'Export + documentatie', ['demo-eva'], 'Not started', 17, 19, 6),
-              ],
-            }),
-            item('i20', 'Website — responsive uitwerking', ['demo-sam'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 18, deadlineOffset: 5 }),
-            item('i21', 'Podcast — extra social snippets', ['demo-noa'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 14, deadlineOffset: 4 }),
-          ],
-        },
-        {
-          id: 'g2', name: 'Done', color: '#9A9590', items: [
-            item('i11', 'Huisstijl — intake + moodboard-akkoord', ['demo-jules'], 'Done', { startOffset: -14, endOffset: -12, estHours: 5 }),
-            item('i12', 'Podcast S2 — aflevering 1 + 2', ['demo-noa'], 'Done', { startOffset: -18, endOffset: -8, estHours: 22 }),
-            item('i19', 'Merchandise — leverancier geselecteerd', ['demo-bram'], 'Done', { startOffset: -12, endOffset: -10, estHours: 4 }),
-          ],
-        },
-      ],
-    },
-    'Vuurtoren Events': {
-      groups: [
-        {
-          id: 'g1', name: 'Lopende projecten', color: '#5FA8A0', items: [
-            item('i1', 'Festivalweekend — draaiboek', ['demo-eva', 'demo-finn'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 18, deadlineOffset: 5 }),
-            item('i2', 'Aftermovie — vorig jaar recap', ['demo-liam'], 'Not started', { startOffset: 7, endOffset: 12, estHours: 20, deadlineOffset: 14 }),
-            item('i3', 'Sponsorpakket — pitchdeck', ['demo-robin', 'demo-eva'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 10, deadlineOffset: 4 }),
-            item('i4', 'Line-up aankondiging — social plan', ['demo-mila'], 'Not started', { startOffset: 9, endOffset: 11, estHours: 8, deadlineOffset: 12 }),
-            item('i5', 'Ticketpagina — copy + design', ['demo-jules', 'demo-finn'], 'Not started', {
-              deadlineOffset: 20,
-              subitems: [
-                sub('s1', 'Copy schrijven', ['demo-eva'], 'Not started', 10, 12, 6),
-                sub('s2', 'Design + bouw', ['demo-jules', 'demo-finn'], 'Not started', 13, 18, 16),
-              ],
-            }),
-            item('i6', 'Vrijwilligersbriefing plannen', ['demo-liam'], 'Not started', { startOffset: 25, endOffset: 25, estHours: 3 }),
-            // Bewust boven Liams weekcapaciteit (16u) gepland deze week —
-            // zodat de 'Overbelast deze week'-widget op Home ook echt een
-            // voorbeeld toont i.p.v. altijd de lege 'iedereen onder cap'-staat.
-            item('i9', 'Spoedklus — geluidscheck techniek', ['demo-liam'], 'Working on...', { startOffset: 0, endOffset: 2, estHours: 20, deadlineOffset: 3 }),
-            item('i10', 'Foodtrucks — contracten rondmaken', ['demo-tess'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 8, deadlineOffset: 4 }),
-            item('i11', 'Programmering — tweede stage boeken', ['demo-bram', 'demo-eva'], 'Not started', {
-              deadlineOffset: 18,
-              subitems: [
-                sub('s1', 'Longlist artiesten', ['demo-bram'], 'Not started', 8, 10, 6),
-                sub('s2', 'Boekingen afronden', ['demo-eva'], 'Not started', 11, 15, 10),
-              ],
-            }),
-            item('i12', 'Veiligheidsplan — update indienen', ['demo-sam'], 'Not started', { startOffset: 15, endOffset: 16, estHours: 6, deadlineOffset: 17 }),
-            item('i13', 'Merchandise-kraam — voorraad bestellen', ['demo-tess'], 'Not started', { startOffset: 13, endOffset: 13, estHours: 3 }),
-            item('i14', 'Vrijwilligers — wervingspost social', ['demo-mila'], 'Working on...', { startOffset: -2, endOffset: 1, estHours: 5, deadlineOffset: 2 }),
-            item('i16', 'Festivalcampagne — dagplanning content', ['demo-finn'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 16, deadlineOffset: 5 }),
-            item('i17', 'Backstage-interviews — voorbereiding', ['demo-mila'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 12, deadlineOffset: 4 }),
-            item('i18', 'Productieschema — leveranciers afstemmen', ['demo-bram', 'demo-tess'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 18, deadlineOffset: 5 }),
-          ],
-        },
-        {
-          id: 'g2', name: 'Done', color: '#9A9590', items: [
-            item('i7', 'Locatie — contract getekend', ['demo-sam'], 'Done', { startOffset: -25, endOffset: -23, estHours: 4 }),
-            item('i8', 'Vorig jaar — evaluatie + leerpunten', ['demo-robin', 'demo-eva'], 'Done', { startOffset: -22, endOffset: -20, estHours: 6 }),
-            item('i15', 'Vergunningaanvraag — ingediend', ['demo-sam'], 'Done', { startOffset: -18, endOffset: -16, estHours: 5 }),
-          ],
-        },
-      ],
-    },
+    'De Gouw & Bree': { groups: buildRequestGroups(0, 34, '#B0C6EB') },
+    'Rivendel & Rohan': { groups: buildRequestGroups(34, 67, '#D8935B') },
+    'Gondor & Mordor': { groups: buildRequestGroups(67, 100, '#5FA8A0') },
   }
 }
 
 export const DEMO_TODOS = [
-  { id: 'dt1', text: 'Facturen vorige maand versturen', done: false },
-  { id: 'dt2', text: 'Intake nieuwe klant voorbereiden', done: false },
-  { id: 'dt3', text: 'Feedback merkfilm-edit doorsturen', done: true },
-  { id: 'dt4', text: 'Sponsorpakket — voorbeelden opsturen naar Daan', done: false },
-  { id: 'dt5', text: 'Locatiescout-foto\'s doorsturen naar Jules', done: false },
-  { id: 'dt6', text: 'Podcast-gastenlijst afstemmen met Mila', done: true },
+  { id: 'dt1', text: 'Controleren of de Nazgûl allemaal een rijbewijs hebben', done: false },
+  { id: 'dt2', text: 'Pikachu vragen waarom de palantír weer offline is', done: false },
+  { id: 'dt3', text: 'Tweede ontbijt als standaard pauz toevoegen', done: true },
+  { id: 'dt4', text: 'Pippi koppelen aan de Barad-dûr-kickoff', done: false },
+  { id: 'dt5', text: 'Moffel waarschuwen voor de Balrog-deadline', done: false },
+  { id: 'dt6', text: 'Bassie en Adriaan uit dezelfde tijdlijn halen', done: true },
 ]
 
 // ─── Documenten (Pagina's) ──────────────────────────────────────────────────
@@ -337,7 +306,7 @@ export const DEMO_DOC_FOLDERS: DemoDocFolder[] = [
 export const DEMO_PAGES: DemoPageDoc[] = [
   {
     id: 'demo-dp1', title: 'Huisstijl-richtlijnen', emoji: '🎨',
-    content: 'Kleuren, typografie en logo-gebruik voor Noorderlicht Media — zie het gedeelde brandbook voor de volledige set.',
+    content: 'Kleuren, typografie en logo-gebruik voor De Steigerende Pony. Let op: Mordor-zwart is geen accentkleur.',
     createdAt: '2026-06-02T09:00:00.000Z', updatedAt: '2026-06-02T09:00:00.000Z', folderId: null,
   },
   {

@@ -5,8 +5,8 @@
       "title": "Komend",
       "emoji": "🗓",
       "items": [
-        { "id": "d1", "text": "Merkfilm — laatste feedbackronde inplannen", "done": false },
-        { "id": "d2", "text": "Huisstijl-presentatie voorbereiden", "done": false }
+        { "id": "d1", "text": "Nazgûl-rijbewijzen controleren", "done": false },
+        { "id": "d2", "text": "Tweede ontbijt als vaste pauz toevoegen", "done": false }
       ]
     },
     {
@@ -14,45 +14,45 @@
       "title": "Ideeën",
       "emoji": "💡",
       "items": [
-        { "id": "d3", "text": "Nieuwsbrief-format opzetten", "done": false },
-        { "id": "d4", "text": "Podcast-cover restylen", "done": false }
+        { "id": "d3", "text": "Een automatische Balrog-waarschuwing bouwen", "done": false },
+        { "id": "d4", "text": "Palantír-koppeling testen zonder Sauron", "done": false }
       ]
     },
     {
       "id": "demo-sam",
-      "title": "Sam",
+      "title": "Bert",
       "emoji": "🧑",
       "kind": "personal",
       "items": [
-        { "id": "d5", "text": "Facturen vorige maand versturen", "done": false },
-        { "id": "d6", "text": "Intake nieuwe klant voorbereiden", "done": false }
+        { "id": "d5", "text": "Orks alfabetisch sorteren", "done": false },
+        { "id": "d6", "text": "Planning van De Steigerende Pony nalopen", "done": false }
       ]
     },
     {
       "id": "demo-robin",
-      "title": "Robin",
+      "title": "Pikachu",
       "emoji": "🧑",
       "kind": "personal",
       "items": [
-        { "id": "d7", "text": "Editsjabloon opschonen", "done": false }
+        { "id": "d7", "text": "Orthanc weer van stroom voorzien", "done": false }
       ]
     },
     {
       "id": "demo-jules",
-      "title": "Jules",
+      "title": "Pippi",
       "emoji": "🧑",
       "kind": "personal",
       "items": [
-        { "id": "d8", "text": "Moodboard delen met klant", "done": false }
+        { "id": "d8", "text": "Kickoff in Villa Kakelbont voorbereiden", "done": false }
       ]
     },
     {
       "id": "demo-noa",
-      "title": "Noa",
+      "title": "Rembo",
       "emoji": "🧑",
       "kind": "personal",
       "items": [
-        { "id": "d9", "text": "Social-cutdowns exporteren", "done": false }
+        { "id": "d9", "text": "Mordor-dashboard expres lelijk maken", "done": false }
       ]
     }
   ]

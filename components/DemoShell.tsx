@@ -33,6 +33,7 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [notice, setNotice] = useState(false)
+  const noticeTimerRef = useRef<number | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)
   const viewerRef = useRef<HTMLDivElement>(null)
   const { profile, setProfile } = useProfile()
@@ -81,12 +82,15 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     function onBlocked() {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
       setNotice(true)
-      const t = setTimeout(() => setNotice(false), 5000)
-      return () => clearTimeout(t)
+      noticeTimerRef.current = window.setTimeout(() => setNotice(false), 3500)
     }
     window.addEventListener(DEMO_BLOCKED_EVENT, onBlocked)
-    return () => window.removeEventListener(DEMO_BLOCKED_EVENT, onBlocked)
+    return () => {
+      window.removeEventListener(DEMO_BLOCKED_EVENT, onBlocked)
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
+    }
   }, [])
 
   function doReset() {
@@ -227,11 +231,16 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
           fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10,
           maxWidth: '92vw',
         }}>
-          <span>Dit is een demo — dat kan niet in deze versie.</span>
-          <a href="mailto:menno@studioyoko.nl" style={{ color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}
+          <span>Dat onderdeel zit niet in de demo.</span>
+          <a href="https://mail.google.com/mail/?view=cm&fs=1&to=menno%40studioyoko.nl&su=Vraag%20over%20Tuesday"
+            style={{ color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}
             onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer">
-            Meer info →
+            Mail Menno →
           </a>
+          <button type="button" aria-label="Melding sluiten" onClick={() => setNotice(false)}
+            style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 1px 3px' }}>
+            ×
+          </button>
         </div>
       )}
 

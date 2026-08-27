@@ -8,7 +8,7 @@
 import { mergeSections } from './todosStore'
 import type { Section } from './todosStore'
 
-const KEY   = 'yoko-demo-todos-sections'
+const KEY   = 'yoko-demo-todos-sections-fantasy-v1'
 const EVENT = 'yoko-demo-todos-update'
 
 export function loadSections(fallback: Section[]): Section[] {
