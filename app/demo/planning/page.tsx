@@ -9,7 +9,7 @@ import { useUndo } from '@/components/UndoContext'
 // vervangen door verzonnen fixtures (lib/demoFixtures.ts) i.p.v. de echte
 // borden/team — geen Supabase-sync, geen Google-koppeling.
 import teamData          from '@/data/demoTeam.json'
-import { buildDemoBoards, DEMO_BOARD_IDS, notifyDemoBlocked } from '@/lib/demoFixtures'
+import { buildDemoBoards, DEMO_BOARD_IDS, ensureCurrentDemoBoardSeed, notifyDemoBlocked } from '@/lib/demoFixtures'
 import { loadGroups, saveGroups, addDays, moveItemToBoard, softDeleteItem, restoreTrashItem } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
@@ -4733,6 +4733,7 @@ export default function PlanningPage() {
   }
 
   useEffect(() => {
+    ensureCurrentDemoBoardSeed()
     function refresh() {
       const loaded: Record<string, BoardGroup[]> = {}
       // Dynamische bord-lijst (uit registry) + fallback-seed waar

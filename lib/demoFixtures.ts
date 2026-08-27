@@ -95,9 +95,18 @@ export const DEMO_PROFILE: UserProfile = {
 }
 
 // ─── 'Gezichten' voor de nep-teamleden ──────────────────────────────────────
-// Geen willekeurige stockgezichten bij bekende fictieve namen: de gewone,
-// gekleurde initialen-avatar van de planner is hier duidelijker en grappiger.
-export const DEMO_PHOTOS: Record<string, string> = {}
+export const DEMO_PHOTOS: Record<string, string> = {
+  'demo-sam':   'https://www.pinclipart.com/picdir/middle/572-5726831_bert-sesame-street-characters-clipart.png',
+  'demo-robin': 'https://assets.pokemon.com/assets/cms2/img/pokedex/full/025.png',
+  'demo-jules': 'https://cdn01.nyheter24.se/b3a2c1ea03d802d802/2017/05/04/1398612/pippi-langstrump.jpg',
+  'demo-noa':   'https://media.1815.io/jfk/i/full/2019/06/rembo-en-rembo-online-kijken.jpg',
+  'demo-finn':  'https://api3.schooltv.nl/cache/i/26000/images/26608.w402.r1-1.ee1f37c.q90.webp',
+  'demo-mila':  'https://img.youtube.com/vi/0iT87zXzzLM/maxresdefault.jpg',
+  'demo-liam':  'https://i.pinimg.com/474x/d9/23/da/d923da86c7fd3f8c7fd57344715aaccc.jpg',
+  'demo-eva':   'https://upload.wikimedia.org/wikipedia/commons/b/b5/Pipo_de_Clown.png',
+  'demo-tess':  'https://image.demorgen.be/36198022/width/640/bas-van-toor',
+  'demo-bram':  'https://redactie.rtl.nl/sites/default/files/content/images/2019/11/05/Aad.jpg?height=768&impolicy=semi_dynamic&itok=nzCRnGvp&width=1024',
+}
 
 // ─── Boards ─────────────────────────────────────────────────────────────────
 // Dagen-offset t.o.v. 'vandaag' op het moment dat de demo voor het eerst in
@@ -247,18 +256,26 @@ const DEMO_REQUESTS = [
 const DEMO_MEMBER_IDS = DEMO_MEMBERS.map(member => member.id)
 
 function buildRequestItem(title: string, index: number): BoardItem {
-  const cycle = index % 10
-  const status = cycle < 2 ? 'Done' : cycle === 2 ? 'Stuck' : cycle < 7 ? 'Working on...' : 'Not started'
-  const startOffset = status === 'Done' ? -18 + (index % 8) : status === 'Not started' ? 3 + (index % 24) : -2 + (index % 5)
-  const endOffset = startOffset + 1 + (index % 5)
-  const owner = DEMO_MEMBER_IDS[index % DEMO_MEMBER_IDS.length]
-  const owners = index % 7 === 0
+  const ownerIndex = index % DEMO_MEMBER_IDS.length
+  // Status varieert per ronde in plaats van per persoon. Daardoor heeft
+  // ieder teamlid een natuurlijke mix van afgerond, lopend en toekomstig
+  // werk; voorheen kreeg dezelfde persoon tien keer vrijwel dezelfde fase.
+  const round = Math.floor(index / DEMO_MEMBER_IDS.length)
+  const status = round < 2 ? 'Done' : round === 2 ? 'Stuck' : round < 6 ? 'Working on...' : 'Not started'
+  const startOffset = status === 'Done'
+    ? -34 + round * 8 + (ownerIndex % 4)
+    : status === 'Not started'
+      ? 6 + (round - 6) * 7 + (ownerIndex % 5)
+      : -5 + (round - 2) * 3 + (ownerIndex % 4)
+  const endOffset = startOffset + 1 + ((index + ownerIndex) % 3)
+  const owner = DEMO_MEMBER_IDS[ownerIndex]
+  const owners = index % 13 === 0
     ? [owner, DEMO_MEMBER_IDS[(index + 3) % DEMO_MEMBER_IDS.length]]
     : [owner]
   return item(`i${index + 1}`, title, owners, status, {
     startOffset,
     endOffset,
-    estHours: 4 + ((index * 3) % 25),
+    estHours: 5 + ((index * 3 + ownerIndex) % 8),
     deadlineOffset: status === 'Done' ? undefined : endOffset + 1,
   })
 }
@@ -278,6 +295,23 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
     'Rivendel & Rohan': { groups: buildRequestGroups(34, 67, '#D8935B') },
     'Gondor & Mordor': { groups: buildRequestGroups(67, 100, '#5FA8A0') },
   }
+}
+
+// De fixtures leven in localStorage zodat bezoekers in de demo kunnen
+// slepen en wijzigen. Bij een inhoudelijke fixture-update verversen we die
+// basis eenmalig; daarna blijven hun wijzigingen gewoon bewaard.
+const DEMO_BOARD_SEED_VERSION = 'fantasy-balanced-v2'
+
+export function ensureCurrentDemoBoardSeed(): void {
+  if (typeof window === 'undefined') return
+  const versionKey = 'yoko-demo-board-seed-version'
+  if (window.localStorage.getItem(versionKey) === DEMO_BOARD_SEED_VERSION) return
+  const boards = buildDemoBoards()
+  for (const [boardName, board] of Object.entries(boards)) {
+    window.localStorage.setItem(`yoko-board-${boardName}`, JSON.stringify(board.groups))
+    window.localStorage.removeItem(`yoko-board-${boardName}-dirty`)
+  }
+  window.localStorage.setItem(versionKey, DEMO_BOARD_SEED_VERSION)
 }
 
 export const DEMO_TODOS = [
