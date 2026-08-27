@@ -5755,9 +5755,14 @@ export default function PlanningPage() {
             </div>
           </div>
 
-          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+          <div style={{
+            // Rechts uitlijnen richting Menu i.p.v. absoluut centreren. Op
+            // smallere desktops kon de gecentreerde datum daardoor onder de
+            // Meetings-knop schuiven.
+            marginLeft: 'auto', marginRight: 18,
             display: 'flex', alignItems: 'center', gap: 10, minHeight: 18, fontSize: 12.5,
-            color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 1 }}>
+            color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 2,
+          }}>
             <span style={{ textTransform: 'capitalize' }}>{todayLabel}</span>
             <span aria-hidden style={{ width: 1, height: 12, background: 'var(--border)' }} />
             <span>
@@ -5773,7 +5778,7 @@ export default function PlanningPage() {
             </span>
           </div>
 
-          <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', position: 'relative', height: 40, zIndex: 3 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', height: 40, zIndex: 3, flexShrink: 0 }}>
             <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
               style={{ ...ghostBtn(overflowOpen), padding: '9px 14px', height: 40, display: 'inline-flex', alignItems: 'center', fontSize: 15, fontWeight: 600 }}>
               <IconMore size={18} style={{ marginRight: 6 }} />Menu
