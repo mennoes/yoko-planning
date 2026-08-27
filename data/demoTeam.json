@@ -1,8 +1,14 @@
 {
   "members": [
-    { "id": "demo-sam",   "name": "Sam",   "email": "", "weeklyCapacity": 40, "color": "#B0C6EB" },
-    { "id": "demo-robin", "name": "Robin", "email": "", "weeklyCapacity": 32, "color": "#9DB1A4" },
-    { "id": "demo-jules", "name": "Jules", "email": "", "weeklyCapacity": 40, "color": "#C09BCA" },
-    { "id": "demo-noa",   "name": "Noa",   "email": "", "weeklyCapacity": 24, "color": "#D8B62E" }
+    { "id": "demo-sam",   "name": "Bert",        "email": "", "weeklyCapacity": 40, "color": "#F2C94C" },
+    { "id": "demo-robin", "name": "Pikachu",     "email": "", "weeklyCapacity": 32, "color": "#FFD93D" },
+    { "id": "demo-jules", "name": "Pippi",       "email": "", "weeklyCapacity": 40, "color": "#F299C2" },
+    { "id": "demo-noa",   "name": "Rembo",       "email": "", "weeklyCapacity": 24, "color": "#9B51E0" },
+    { "id": "demo-finn",  "name": "Moffel",      "email": "", "weeklyCapacity": 40, "color": "#6FCF97" },
+    { "id": "demo-mila",  "name": "Piertje",     "email": "", "weeklyCapacity": 24, "color": "#EB5757" },
+    { "id": "demo-liam",  "name": "Tinky Winky", "email": "", "weeklyCapacity": 16, "color": "#8C6ADE" },
+    { "id": "demo-eva",   "name": "Pipo",        "email": "", "weeklyCapacity": 24, "color": "#F2994A" },
+    { "id": "demo-tess",  "name": "Bassie",      "email": "", "weeklyCapacity": 40, "color": "#2D9CDB" },
+    { "id": "demo-bram",  "name": "Adriaan",     "email": "", "weeklyCapacity": 32, "color": "#27AE60" }
   ]
 }

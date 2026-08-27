@@ -19,41 +19,41 @@ type SectionData   = { id: string; title: string; emoji: string; blocks: InfoBlo
 
 const DEFAULT_DATA: SectionData[] = [
   {
-    id: 'amsterdam', title: 'Amsterdam', emoji: '📍',
+    id: 'bree', title: 'Bree', emoji: '🍺',
     blocks: [
-      { id: 'adres', label: 'Adres', text: 'Noorderlicht Media B.V.\nVoorbeeldkade 42, gebouw 3B, 2e etage\n1012AB Amsterdam' },
+      { id: 'adres', label: 'Adres', text: 'De Steigerende Pony\nTegenover de Zuidpoort\nBree, Midden-aarde' },
       { id: 'bedrijf', label: 'Bedrijfsgegevens', rows: [
-        { id: 'kvk',  label: 'KvK',      value: '12345678' },
-        { id: 'iban', label: 'IBAN',      value: 'NL91 DEMO 0417 1643 00', mono: true },
-        { id: 'bic',  label: 'SWIFT/BIC', value: 'DEMONL2A',               mono: true },
-        { id: 'btw',  label: 'BTW',       value: 'NL123456789B01',        mono: true },
+        { id: 'kvk',  label: 'Registratie', value: 'Raad van Bree' },
+        { id: 'iban', label: 'Betaling',    value: 'Goudstukken bij vertrek' },
+        { id: 'bic',  label: 'Boekhouding', value: 'Vraag de herbergier' },
+        { id: 'btw',  label: 'Belasting',   value: 'Niet in de demo' },
       ]},
       { id: 'wifi-ams', label: 'WiFi', rows: [
-        { id: 'net1',  label: 'Netwerk',    value: 'DemoKantoor' },
-        { id: 'pass1', label: 'Wachtwoord', value: 'DemoWifi-2024!', mono: true, secret: true },
+        { id: 'net1',  label: 'Netwerk',    value: 'Palantir_Gasten' },
+        { id: 'pass1', label: 'Toegang', value: 'Vraag Gandalf' },
       ]},
-      { id: 'park-ams', label: 'Parkeren', text: 'Reserveer je plek via de parkeerapp.\nLogin: demo@voorbeeldbedrijf.nl' },
+      { id: 'park-ams', label: 'Parkeren', text: 'Pony\'s links van de herberg. Nazgûl graag achterom.' },
     ],
   },
   {
-    id: 'utrecht', title: 'Utrecht', emoji: '📍',
+    id: 'rivendel', title: 'Rivendel', emoji: '🧝',
     blocks: [
-      { id: 'adres-utr', label: 'Adres', text: 'Voorbeeldplein 8\n3511 AB Utrecht' },
+      { id: 'adres-utr', label: 'Adres', text: 'Laatste Huiselijke Huis\nEerste waterval links\nRivendel' },
       { id: 'wifi-utr', label: 'WiFi', rows: [
-        { id: 'net2',  label: 'Netwerk',    value: 'WiFi_Voorbeeldpand' },
-        { id: 'pass2', label: 'Wachtwoord', value: 'DEMO1234', mono: true, secret: true },
+        { id: 'net2',  label: 'Netwerk',    value: 'ELROND_5G' },
+        { id: 'pass2', label: 'Toegang', value: 'Spreek vriend en treed binnen' },
       ]},
-      { id: 'alarm', label: 'Alarm', rows: [
-        { id: 'code', label: 'Alarmcode', value: '0000',       mono: true, secret: true },
-        { id: 'tel',  label: 'Beveiliging', value: '010 000 00 00' },
-        { id: 'id',   label: 'ID code',   value: '000000#',    mono: true, secret: true },
+      { id: 'alarm', label: 'Beveiliging', rows: [
+        { id: 'code', label: 'Alarm', value: 'Blaas op de hoorn' },
+        { id: 'tel',  label: 'Beveiliging', value: 'Vraag de elfenwacht' },
+        { id: 'id',   label: 'Noodroute', value: 'Via de eerste waterval' },
       ]},
-      { id: 'park-utr', label: 'Parkeren', text: 'Parkeergarage De Voorbeeldhoek' },
+      { id: 'park-utr', label: 'Parkeren', text: 'Adelaars uitsluitend op het bovenste terras.' },
     ],
   },
 ]
 
-const STORAGE_KEY = 'yoko-kantoor-demo'
+const STORAGE_KEY = 'yoko-kantoor-demo-fantasy-v1'
 function genId()  { return Math.random().toString(36).slice(2, 9) }
 
 // ─── Inline-editable text ─────────────────────────────────────────────────────

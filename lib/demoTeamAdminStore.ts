@@ -11,7 +11,7 @@
 import type { TeamMember } from './teamStore'
 import { DEMO_MEMBERS } from './demoFixtures'
 
-export const DEMO_TEAM_STORAGE_KEY = 'yoko-demo-team-members'
+export const DEMO_TEAM_STORAGE_KEY = 'yoko-demo-team-members-fantasy-v1'
 
 function cloneSeed(): TeamMember[] {
   return DEMO_MEMBERS.map(m => ({ ...m }))

@@ -49,7 +49,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     if (!demo) return
     let initial = DEMO_PROFILE
     try {
-      const raw = window.localStorage.getItem('yoko-demo-profile')
+      const raw = window.localStorage.getItem('yoko-demo-profile-fantasy-v1')
       if (raw) initial = JSON.parse(raw) as UserProfile
     } catch {}
     setProfileState(initial)
@@ -127,7 +127,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     // straks het échte profiel van de gebruiker.
     if (demo) {
       setProfileState(p)
-      try { window.localStorage.setItem('yoko-demo-profile', JSON.stringify(p)) } catch {}
+      try { window.localStorage.setItem('yoko-demo-profile-fantasy-v1', JSON.stringify(p)) } catch {}
       return
     }
     saveProfile(p)

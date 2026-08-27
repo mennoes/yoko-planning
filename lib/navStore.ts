@@ -46,9 +46,9 @@ function isOnDemoRoute(): boolean {
   return typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')
 }
 const DEMO_PROJECTS: NavItem[] = [
-  { id: 'Noorderlicht Media', label: 'Noorderlicht Media', href: '/demo/projects/Noorderlicht%20Media', color: '#B0C6EB' },
-  { id: 'Kaap Studio',        label: 'Kaap Studio',        href: '/demo/projects/Kaap%20Studio',        color: '#D8935B' },
-  { id: 'Vuurtoren Events',   label: 'Vuurtoren Events',   href: '/demo/projects/Vuurtoren%20Events',   color: '#5FA8A0' },
+  { id: 'De Gouw & Bree',    label: 'De Gouw & Bree',    href: '/demo/projects/De%20Gouw%20%26%20Bree',    color: '#B0C6EB' },
+  { id: 'Rivendel & Rohan',  label: 'Rivendel & Rohan',  href: '/demo/projects/Rivendel%20%26%20Rohan',   color: '#D8935B' },
+  { id: 'Gondor & Mordor',   label: 'Gondor & Mordor',   href: '/demo/projects/Gondor%20%26%20Mordor',    color: '#5FA8A0' },
 ]
 
 // Zelfde items als DEFAULT_DOCS, maar met /demo-hrefs (rechtstreeks i.p.v.
