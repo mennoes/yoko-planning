@@ -1207,7 +1207,7 @@ function subitemAsItem(s: SubItem): BoardItem {
 }
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, colWidths, onResizeCol, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -1231,6 +1231,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   colWidths?: Record<string, number>
   onResizeCol?: (key: string, width: number) => void
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
+  onReorderBefore?: (draggedId: string, targetId: string) => void
 }) {
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
@@ -1309,6 +1310,22 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   const [isDraggingMe, setIsDraggingMe] = useState(false)
   return (
     <div
+      onDragOver={e => {
+        if (!e.dataTransfer.types.includes('application/x-yoko-subitem')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }}
+      onDrop={e => {
+        const raw = e.dataTransfer.getData('application/x-yoko-subitem')
+        if (!raw || !onReorderBefore || !parentItemId) return
+        try {
+          const data = JSON.parse(raw) as { subitemId?: string; parentItemId?: string }
+          if (data.parentItemId !== parentItemId || !data.subitemId || data.subitemId === subitem.id) return
+          e.preventDefault()
+          e.stopPropagation()
+          onReorderBefore(data.subitemId, subitem.id)
+        } catch {}
+      }}
       onDragEnd={() => {
         setIsDraggingMe(false)
         window.dispatchEvent(new CustomEvent('yoko-subitem-drag-end'))
@@ -1348,7 +1365,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             window.dispatchEvent(new CustomEvent('yoko-subitem-drag-start', { detail: { subitemId: subitem.id, name: subitem.name } }))
           }}
           style={{
-            position: 'absolute', left: -22, top: '50%', transform: 'translateY(-50%)',
+            position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)',
             width: 18, height: 28,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'grab', userSelect: 'none',
@@ -1356,7 +1373,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             // achtergrond was text-secondary zonder eigen vlak nauwelijks
             // te zien.
             color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
-            opacity: 0, transition: 'opacity 0.12s, background 0.12s',
+            opacity: hover ? 1 : 0.45, transition: 'opacity 0.12s, background 0.12s',
             zIndex: 5, borderRadius: 4,
             background: 'var(--bg-hover)',
             border: '1px solid var(--border-strong)',
@@ -1365,7 +1382,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
           (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
           checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}
-      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative', padding: '0 0 0 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative', padding: '0 0 0 27px' }}>
         {onToggleSelect && (
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
@@ -1547,6 +1564,16 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
       return s
     }))
   }
+  function reorderOne(draggedId: string, targetId: string) {
+    const from = subitems.findIndex(s => s.id === draggedId)
+    const to = subitems.findIndex(s => s.id === targetId)
+    if (from < 0 || to < 0 || from === to) return
+    const next = [...subitems]
+    const [moved] = next.splice(from, 1)
+    const nextTarget = next.findIndex(s => s.id === targetId)
+    next.splice(Math.max(0, nextTarget), 0, moved)
+    onUpdate(next)
+  }
   function deleteOne(id: string) {
     const deleted  = subitems.find(s => s.id === id)
     const filtered = subitems.filter(s => s.id !== id)
@@ -1638,7 +1665,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           onOpenDetail={onOpenDetail}
           justCreatedSubId={justCreatedSubId}
           colWidths={colWidths} onResizeCol={onResizeCol}
-          updateOne={updateOne} deleteOne={deleteOne} />
+          updateOne={updateOne} deleteOne={deleteOne} reorderOne={reorderOne} />
         {/* Som-rij voor de subitems van dit item — dezelfde stijl als de
             groep-som onderaan de hoofdtabel. Toont alleen wanneer 'r
             ten minste 1 subitem is. */}
@@ -1672,7 +1699,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
@@ -1690,18 +1717,11 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
   onResizeCol?: (key: string, width: number) => void
   updateOne: (id: string, u: Partial<SubItem>) => void
   deleteOne: (id: string) => void
+  reorderOne: (draggedId: string, targetId: string) => void
 }) {
   const [doneOpen, setDoneOpen] = useState(false)
-  const sortByStart = (a: SubItem, b: SubItem) => {
-    const av = a.startDate ?? ''
-    const bv = b.startDate ?? ''
-    if (!av && !bv) return 0
-    if (!av) return 1
-    if (!bv) return -1
-    return av.localeCompare(bv)
-  }
-  const active = subitems.filter(s => s.status !== 'Done').sort(sortByStart)
-  const done   = subitems.filter(s => s.status === 'Done').sort(sortByStart)
+  const active = subitems.filter(s => s.status !== 'Done')
+  const done   = subitems.filter(s => s.status === 'Done')
   // 'Laatste' = bepaalt of de verticale connector na deze rij doorloopt.
   // Wanneer Done bestaat is de Done-header de laatste; anders de laatste
   // actieve rij. Bij geopende Done is de laatste done-rij de finale.
@@ -1720,7 +1740,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
           defaultEditName={sub.id === justCreatedSubId}
           colWidths={colWidths} onResizeCol={onResizeCol}
-          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)}
+          onReorderBefore={reorderOne} />
       ))}
       {hasDone && (
         <>
@@ -1757,7 +1778,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
               onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
               colWidths={colWidths} onResizeCol={onResizeCol}
-              onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+              onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)}
+              onReorderBefore={reorderOne} />
           ))}
         </>
       )}
@@ -2029,7 +2051,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
 
         {/* Selection checkbox */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', paddingLeft: 16 }}>
           <input type="checkbox" checked={selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
             style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15,
@@ -3454,12 +3476,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
-                {/* Drag-handles: twee stuks, hover-only. Eén IN de checkbox-
-                    kolom (rechts van de checkbox, LINKS van de ▶-arrow zodat
-                    'ie niet meer over de expand-knop valt), één in de name-
-                    kolom net LINKS van de comment-knop zodat je vanaf 't
-                    einde van een lange rij kunt slepen zonder helemaal terug
-                    te muiszen naar links. */}
+                {/* Eén vaste drag-handle bij de hoofdregel. `top: 50%` van de
+                    volledige wrapper liet de greep bij uitklappen halverwege
+                    het subitemblok springen. */}
                 {!reorderMode && (() => {
                   const startDrag = (e: React.DragEvent) => {
                     dragRowRef.current = realIdx
@@ -3474,7 +3493,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     if (row) e.dataTransfer.setDragImage(row, 20, 12)
                   }
                   const gripBase: React.CSSProperties = {
-                    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+                    position: 'absolute', top: 10,
                     width: 14, height: 24,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: 'grab', userSelect: 'none',
@@ -3488,29 +3507,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     border: '1px solid var(--border-strong)',
                     pointerEvents: 'auto',
                   }
-                  // Naam-kolom eindigt op (32 + nameW). Comment-knop zit
-                  // helemaal rechts binnen die kolom (padding-right ~14 +
-                  // knop-breedte ~34-44). We plaatsen de rechter grip 52px
-                  // vóór de kolom-rand zodat 'ie net links van de comment-
-                  // knop verschijnt.
-                  const nameW = colWidths['name'] ?? 200
-                  const rightHandleLeft = 32 + nameW - 52
                   return (
-                    <>
-                      <span draggable
-                        className="row-grip"
-                        title="Sleep om te verplaatsen tussen groepen"
-                        onDragStart={startDrag}
-                        // Rechts van de checkbox (16px center + 8px margin =
-                        // 24px), links van de kolomrand (32px). Overlapt niet
-                        // meer met de ▶-arrow die op ~36px begint.
-                        style={{ ...gripBase, left: 18 }}>⠿</span>
-                      <span draggable
-                        className="row-grip"
-                        title="Sleep om te verplaatsen tussen groepen"
-                        onDragStart={startDrag}
-                        style={{ ...gripBase, left: rightHandleLeft }}>⠿</span>
-                    </>
+                    <span draggable
+                      className="row-grip"
+                      title="Sleep om te verplaatsen tussen groepen"
+                      onDragStart={startDrag}
+                      style={{ ...gripBase, left: 4 }}>⠿</span>
                   )
                 })()}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
@@ -4290,11 +4292,11 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const nameW = colWidths['name'] ?? 200
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.
-  const gridTemplate = `32px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const gridTemplate = `48px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
   // Subitem-tabel mag eigen breedtes hebben. Fallback per kolom op de
   // parent-breedte zodat ongetoete kolommen 'meeschalen' totdat de
   // gebruiker ze expliciet apart resized.
-  const subGridTemplate = `32px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const subGridTemplate = `48px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
 
