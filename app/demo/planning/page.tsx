@@ -9,7 +9,7 @@ import { useUndo } from '@/components/UndoContext'
 // vervangen door verzonnen fixtures (lib/demoFixtures.ts) i.p.v. de echte
 // borden/team — geen Supabase-sync, geen Google-koppeling.
 import teamData          from '@/data/demoTeam.json'
-import { buildDemoBoards, DEMO_BOARD_IDS } from '@/lib/demoFixtures'
+import { buildDemoBoards, DEMO_BOARD_IDS, notifyDemoBlocked } from '@/lib/demoFixtures'
 import { loadGroups, saveGroups, addDays, moveItemToBoard, softDeleteItem, restoreTrashItem } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
@@ -5738,7 +5738,7 @@ export default function PlanningPage() {
                   <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}><IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}</button>
                   <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                   <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }} style={overflowItemStyle}><IconDownload size={14} /> Exporteer als iCal</button>
-                  <button onClick={() => { setOverflowOpen(false); setShareOpen(true) }} style={overflowItemStyle}><IconShare size={14} /> Deelbare link maken</button>
+                  <button onClick={() => { setOverflowOpen(false); notifyDemoBlocked() }} style={overflowItemStyle}><IconShare size={14} /> Deelbare link maken</button>
                   <button onClick={() => { setOverflowOpen(false); setShiftOpen(true) }} style={overflowItemStyle}><IconRange size={14} /> Verschuif projecten</button>
                 </div>
               </>
@@ -5821,7 +5821,7 @@ export default function PlanningPage() {
               { icon: IconHourglass, label: 'Capaciteit',                 active: false, onClick: () => { setOverflowOpen(false); setUrenOpen(true) } },
               { icon: IconRange,     label: 'Verschuif projecten',        active: false, onClick: () => { setOverflowOpen(false); setShiftOpen(true) } },
               { icon: IconDownload,  label: 'Exporteer als iCal',         active: false, onClick: () => { setOverflowOpen(false); downloadIcs(projects) } },
-              { icon: IconShare,     label: 'Deelbare link maken',        active: false, onClick: () => { setOverflowOpen(false); setShareOpen(true) } },
+              { icon: IconShare,     label: 'Deelbare link maken',        active: false, onClick: () => { setOverflowOpen(false); notifyDemoBlocked() } },
               { icon: IconSort,      label: editOrder ? 'Stop sorteren'   : 'Sorteer teamleden', active: editOrder, onClick: () => { setOverflowOpen(false); setEditOrder(o => !o) } },
             ].map(({ icon: Ic, label, active, onClick }) => (
               <button key={label} onClick={onClick}
