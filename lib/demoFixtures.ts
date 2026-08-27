@@ -86,6 +86,8 @@ export const DEMO_MEMBERS: TeamMember[] = [
   { id: 'demo-mila',  name: 'Mila',  email: '', color: '#E8998D', weeklyCapacity: 24, position: 5, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
   { id: 'demo-liam',  name: 'Liam',  email: '', color: '#A3D9A5', weeklyCapacity: 16, position: 6, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
   { id: 'demo-eva',   name: 'Eva',   email: '', color: '#D7BDE2', weeklyCapacity: 24, position: 7, hidden: false, kind: 'freelance',  startDate: null, inactive: true  },
+  { id: 'demo-tess',  name: 'Tess',  email: '', color: '#F4A896', weeklyCapacity: 40, position: 8, hidden: false, kind: 'yoko',       startDate: null, inactive: false },
+  { id: 'demo-bram',  name: 'Bram',  email: '', color: '#93B5C6', weeklyCapacity: 32, position: 9, hidden: false, kind: 'freelance',  startDate: null, inactive: false },
 ]
 
 export const DEMO_PROFILE: UserProfile = {
@@ -105,6 +107,8 @@ export const DEMO_PHOTOS: Record<string, string> = {
   'demo-mila':  'https://randomuser.me/api/portraits/women/68.jpg',
   'demo-liam':  'https://randomuser.me/api/portraits/men/76.jpg',
   'demo-eva':   'https://randomuser.me/api/portraits/women/50.jpg',
+  'demo-tess':  'https://randomuser.me/api/portraits/women/31.jpg',
+  'demo-bram':  'https://randomuser.me/api/portraits/men/45.jpg',
 }
 
 // ─── Boards ─────────────────────────────────────────────────────────────────
@@ -180,6 +184,18 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
               ],
             }),
             item('i12', 'Jaaroverzicht — scriptidee pitchen', ['demo-sam', 'demo-robin'], 'Not started', { startOffset: 20, endOffset: 22, estHours: 4, deadlineOffset: 23 }),
+            item('i15', 'Documentaire — onderzoeksfase', ['demo-tess'], 'Working on...', { startOffset: -3, endOffset: 5, estHours: 22, deadlineOffset: 8 }),
+            item('i16', 'Documentaire — interviewplanning', ['demo-tess', 'demo-bram'], 'Not started', {
+              deadlineOffset: 16,
+              subitems: [
+                sub('s1', 'Kandidaten benaderen', ['demo-tess'], 'Working on...', 2, 5, 6),
+                sub('s2', 'Interviews inplannen', ['demo-bram'], 'Not started', 6, 9, 4),
+              ],
+            }),
+            item('i17', 'Merkfilm — geluidsmix', ['demo-bram'], 'Not started', { startOffset: 4, endOffset: 6, estHours: 10, deadlineOffset: 7 }),
+            item('i18', 'Nieuwsbrief — augustus editie', ['demo-finn'], 'Not started', { startOffset: 12, endOffset: 14, estHours: 6, deadlineOffset: 15 }),
+            item('i19', 'Social cutdowns — review klant', ['demo-noa', 'demo-tess'], 'Not started', { startOffset: 19, endOffset: 19, estHours: 3, deadlineOffset: 20 }),
+            item('i20', 'Archiefbeelden — digitaliseren', ['demo-bram'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 12 }),
           ],
         },
         {
@@ -187,6 +203,7 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
             item('i5', 'Intake + offerte', ['demo-sam'], 'Done', { startOffset: -20, endOffset: -16, estHours: 6 }),
             item('i13', 'Vorig kwartaal — eindrapportage', ['demo-robin'], 'Done', { startOffset: -30, endOffset: -27, estHours: 8 }),
             item('i14', 'Merkfilm — pitch + akkoord klant', ['demo-sam'], 'Done', { startOffset: -35, endOffset: -33, estHours: 5 }),
+            item('i21', 'Documentaire — intake + treatment', ['demo-tess'], 'Done', { startOffset: -10, endOffset: -8, estHours: 9 }),
           ],
         },
       ],
@@ -218,12 +235,25 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
                 sub('s3', 'Edit + mix', ['demo-mila'], 'Not started', 29, 33, 14),
               ],
             }),
+            item('i13', 'Verpakkingsontwerp — proefdruk', ['demo-mila', 'demo-bram'], 'Not started', { startOffset: 6, endOffset: 9, estHours: 10, deadlineOffset: 10 }),
+            item('i14', 'Website — content aanleveren', ['demo-tess'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 8, deadlineOffset: 5 }),
+            item('i15', 'Merchandise — webshop koppeling', ['demo-bram'], 'Not started', { startOffset: 8, endOffset: 12, estHours: 14, deadlineOffset: 13 }),
+            item('i16', 'Klantpresentatie — Q4 voorstel', ['demo-sam', 'demo-tess'], 'Not started', { startOffset: 16, endOffset: 17, estHours: 6, deadlineOffset: 18 }),
+            item('i17', 'Podcast — coverart nieuw seizoen', ['demo-eva'], 'Working on...', { startOffset: 0, endOffset: 2, estHours: 8, deadlineOffset: 3 }),
+            item('i18', 'Huisstijl — social media kit', ['demo-jules', 'demo-eva'], 'Not started', {
+              deadlineOffset: 22,
+              subitems: [
+                sub('s1', 'Templates ontwerpen', ['demo-jules'], 'Not started', 12, 16, 12),
+                sub('s2', 'Export + documentatie', ['demo-eva'], 'Not started', 17, 19, 6),
+              ],
+            }),
           ],
         },
         {
           id: 'g2', name: 'Done', color: '#9A9590', items: [
             item('i11', 'Huisstijl — intake + moodboard-akkoord', ['demo-jules'], 'Done', { startOffset: -14, endOffset: -12, estHours: 5 }),
             item('i12', 'Podcast S2 — aflevering 1 + 2', ['demo-noa'], 'Done', { startOffset: -18, endOffset: -8, estHours: 22 }),
+            item('i19', 'Merchandise — leverancier geselecteerd', ['demo-bram'], 'Done', { startOffset: -12, endOffset: -10, estHours: 4 }),
           ],
         },
       ],
@@ -248,12 +278,24 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
             // zodat de 'Overbelast deze week'-widget op Home ook echt een
             // voorbeeld toont i.p.v. altijd de lege 'iedereen onder cap'-staat.
             item('i9', 'Spoedklus — geluidscheck techniek', ['demo-liam'], 'Working on...', { startOffset: 0, endOffset: 2, estHours: 20, deadlineOffset: 3 }),
+            item('i10', 'Foodtrucks — contracten rondmaken', ['demo-tess'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 8, deadlineOffset: 4 }),
+            item('i11', 'Programmering — tweede stage boeken', ['demo-bram', 'demo-eva'], 'Not started', {
+              deadlineOffset: 18,
+              subitems: [
+                sub('s1', 'Longlist artiesten', ['demo-bram'], 'Not started', 8, 10, 6),
+                sub('s2', 'Boekingen afronden', ['demo-eva'], 'Not started', 11, 15, 10),
+              ],
+            }),
+            item('i12', 'Veiligheidsplan — update indienen', ['demo-sam'], 'Not started', { startOffset: 15, endOffset: 16, estHours: 6, deadlineOffset: 17 }),
+            item('i13', 'Merchandise-kraam — voorraad bestellen', ['demo-tess'], 'Not started', { startOffset: 13, endOffset: 13, estHours: 3 }),
+            item('i14', 'Vrijwilligers — wervingspost social', ['demo-mila'], 'Working on...', { startOffset: -2, endOffset: 1, estHours: 5, deadlineOffset: 2 }),
           ],
         },
         {
           id: 'g2', name: 'Done', color: '#9A9590', items: [
             item('i7', 'Locatie — contract getekend', ['demo-sam'], 'Done', { startOffset: -25, endOffset: -23, estHours: 4 }),
             item('i8', 'Vorig jaar — evaluatie + leerpunten', ['demo-robin', 'demo-eva'], 'Done', { startOffset: -22, endOffset: -20, estHours: 6 }),
+            item('i15', 'Vergunningaanvraag — ingediend', ['demo-sam'], 'Done', { startOffset: -18, endOffset: -16, estHours: 5 }),
           ],
         },
       ],
