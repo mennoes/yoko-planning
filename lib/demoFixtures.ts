@@ -197,6 +197,8 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
             item('i18', 'Nieuwsbrief — augustus editie', ['demo-finn'], 'Not started', { startOffset: 12, endOffset: 14, estHours: 6, deadlineOffset: 15 }),
             item('i19', 'Social cutdowns — review klant', ['demo-noa', 'demo-tess'], 'Not started', { startOffset: 19, endOffset: 19, estHours: 3, deadlineOffset: 20 }),
             item('i20', 'Archiefbeelden — digitaliseren', ['demo-bram'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 12 }),
+            item('i22', 'Merkfilm — feedbackronde versnellen', ['demo-robin'], 'Working on...', { startOffset: -2, endOffset: 3, estHours: 18, deadlineOffset: 3 }),
+            item('i23', 'Campagnebeelden — key visuals', ['demo-jules'], 'Working on...', { startOffset: -1, endOffset: 4, estHours: 16, deadlineOffset: 5 }),
           ],
         },
         {
@@ -248,6 +250,8 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
                 sub('s2', 'Export + documentatie', ['demo-eva'], 'Not started', 17, 19, 6),
               ],
             }),
+            item('i20', 'Website — responsive uitwerking', ['demo-sam'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 18, deadlineOffset: 5 }),
+            item('i21', 'Podcast — extra social snippets', ['demo-noa'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 14, deadlineOffset: 4 }),
           ],
         },
         {
@@ -290,6 +294,9 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
             item('i12', 'Veiligheidsplan — update indienen', ['demo-sam'], 'Not started', { startOffset: 15, endOffset: 16, estHours: 6, deadlineOffset: 17 }),
             item('i13', 'Merchandise-kraam — voorraad bestellen', ['demo-tess'], 'Not started', { startOffset: 13, endOffset: 13, estHours: 3 }),
             item('i14', 'Vrijwilligers — wervingspost social', ['demo-mila'], 'Working on...', { startOffset: -2, endOffset: 1, estHours: 5, deadlineOffset: 2 }),
+            item('i16', 'Festivalcampagne — dagplanning content', ['demo-finn'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 16, deadlineOffset: 5 }),
+            item('i17', 'Backstage-interviews — voorbereiding', ['demo-mila'], 'Working on...', { startOffset: -1, endOffset: 3, estHours: 12, deadlineOffset: 4 }),
+            item('i18', 'Productieschema — leveranciers afstemmen', ['demo-bram', 'demo-tess'], 'Working on...', { startOffset: -2, endOffset: 4, estHours: 18, deadlineOffset: 5 }),
           ],
         },
         {

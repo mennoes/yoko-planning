@@ -25,7 +25,7 @@ import { UserAvatar } from './UserAvatar'
 import { useProfile } from './ProfileContext'
 import { useTeam } from './TeamContext'
 import { DEMO_BLOCKED_EVENT, demoSafeHref, notifyDemoBlocked } from '@/lib/demoFixtures'
-import { resetDemoBoards } from '@/lib/demoBoardStore'
+import { refreshDemoBoardsIfNeeded, resetDemoBoards } from '@/lib/demoBoardStore'
 
 export default function DemoShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -43,6 +43,8 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
   const { members: liveTeam } = useTeam()
   const bekijkAlsMembers = liveTeam.filter(m => m.id !== 'unassigned' && !m.hidden)
   const activeViewer = bekijkAlsMembers.find(m => m.id === profile?.memberId) ?? bekijkAlsMembers[0]
+
+  useEffect(() => { refreshDemoBoardsIfNeeded() }, [])
 
   useEffect(() => {
     if (!viewerOpen) return
