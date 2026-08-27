@@ -360,9 +360,8 @@ export function projectHoursInWeek(
   // slechts 7,1u zichtbaar. Met dezelfde filter voor totaal én overlap
   // blijft de som over alle zichtbare cellen exact gelijk aan myShare.
   //
-  // EXCEPTION: vrij-events zelf moeten WEL meetellen — anders skipt
-  // countWorkdays hun eigen dag weg en wordt een 8u vakantie 0u in de
-  // werkdruk-bol. Voor vrij dus geen memberId-skip; alleen weekend.
+  // Vrij is geen werkbijdrage: het verlaagt capaciteit, maar wordt niet als
+  // gewerkte uren bij het totaal opgeteld.
   //
   // Gebruikte vroeger een eigen los regex-patroon hier, dat niet 1-op-1
   // overeenkwam met de canonieke VRIJ_PATTERNS in lib/workloadCategory.ts
@@ -378,12 +377,12 @@ export function projectHoursInWeek(
   // werkdruk-totalen, terwijl isVrijDayForMember het lid op die exacte
   // dagen al wél als 'vrij' had gemarkeerd via die groepsnaam.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime(), isVrij ? undefined : memberId)
-  if (totalWork === 0) return 0
-  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), isVrij ? undefined : memberId)
+  if (isVrij) return 0
+  const totalProjectWork = countWorkdays(pStart.getTime(), pEnd.getTime(), memberId)
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), memberId)
   if (overlapWork === 0) return 0
 
-  const fraction        = overlapWork / totalWork
+  const fraction        = overlapWork / Math.max(1, totalProjectWork)
   const result          = fraction * myShare
 
   return Math.round(result * 10) / 10
