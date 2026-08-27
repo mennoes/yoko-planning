@@ -7,7 +7,7 @@
 import { saveGroups } from './boardStore'
 import { buildDemoBoards, DEMO_BOARD_IDS } from './demoFixtures'
 
-const DEMO_SEED_VERSION = '3'
+const DEMO_SEED_VERSION = '4'
 const DEMO_SEED_VERSION_KEY = 'yoko-demo-seed-version'
 
 // Een nieuwe demo-release mag de fictieve planning één keer verversen,

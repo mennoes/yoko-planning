@@ -255,6 +255,88 @@ const DEMO_REQUESTS = [
 
 const DEMO_MEMBER_IDS = DEMO_MEMBERS.map(member => member.id)
 
+// De klus achter iedere aanvraag past bij het karakter dat hem uitvoert.
+// Zo krijgt Bert keurige lijstjes, Pikachu stroomstoringen, Pippi het zware
+// werk en Bassie en Adriaan ieder hun eigen, zeer verschillende aanpak.
+const CHARACTER_TASKS: string[][] = [
+  [
+    'maakt een uiterst precies schema met gelabelde tabbladen',
+    'controleert de planning voor de derde keer',
+    'sorteert alle aanvragen alfabetisch én op urgentie',
+    'plant een serieus voortgangsoverleg zonder koekjes',
+    'werkt de checklist af met een vers geslepen potlood',
+  ],
+  [
+    'laadt alle apparatuur op met één dondersteen',
+    'lost de stroomstoring op met een voorzichtige bliksemflits',
+    'test of de laadpalen pika-proof zijn',
+    'geeft de deadline een elektrische versnelling',
+    'houdt de accu’s enthousiast op honderd procent',
+  ],
+  [
+    'tilt het complete project eigenhandig naar de juiste plek',
+    'komt achterstevoren binnen en lost het alsnog op',
+    'verplaatst de zwaarste deadline zonder hulp',
+    'test het plan samen met haar paard op kantoor',
+    'maakt er op Villa Kakelbont-wijze iets sterks van',
+  ],
+  [
+    'bouwt eerst een onverklaarbare machine met zeven knoppen',
+    'neemt een proefaflevering op die volledig ontspoort',
+    'test het plan met rook, confetti en een megafoon',
+    'maakt een handleiding waar niemand wijzer van wordt',
+    'organiseert een brainstorm met verplicht rare geluiden',
+  ],
+  [
+    'zoekt uit hoe het werkt en stelt precies honderd vragen',
+    'maakt een leerzaam stappenplan met verrassend veel plaatjes',
+    'onderzoekt waarom de planning alweer is verschoven',
+    'test samen met Piertje of iedereen het begrijpt',
+    'maakt van de klus een buitengewoon leerzaam avontuur',
+  ],
+  [
+    'houdt de antwoorden bij en helpt Moffel op weg',
+    'maakt een vriendelijk overzicht met sterren en pijlen',
+    'controleert of niemand een belangrijke stap vergeet',
+    'probeert het plan uit en legt het daarna rustig uit',
+    'verzamelt alle slimme ideeën in één vrolijk verslag',
+  ],
+  [
+    'neemt alles mee in de rode handtas, inclusief de deadline',
+    'test de ontvangst met de driehoekige antenne',
+    'reserveert tijd voor een welverdiende Tubby-toast',
+    'zendt het plan uit vanaf de paarse heuvel',
+    'zwaait naar de planning tot alle blokken goed staan',
+  ],
+  [
+    'maakt er een circusnummer met één perfecte landing van',
+    'oefent de presentatie tussen de clownsneuzen',
+    'plant de generale repetitie onder de circustent',
+    'jongleert met drie deadlines en een klantvraag',
+    'lost de klus op met een buiging en een tromgeroffel',
+  ],
+  [
+    'verzint eerst een grap en vergeet daarna waar de briefing ligt',
+    'bestelt taart voor een overleg dat pas volgende week is',
+    'schrijft een draaiboek met opvallend veel moppen',
+    'neemt een korte weg die onverwacht drie uur langer duurt',
+    'vraagt Adriaan om het moeilijke gedeelte te doen',
+  ],
+  [
+    'zegt rustig “alles sal reg kom” en repareert het plan',
+    'vangt de deadline op met een keurige salto',
+    'maakt Bassies omweg weer logisch en uitvoerbaar',
+    'controleert de risico’s vanaf de hoogste ladder',
+    'rondt de klus af zonder zijn glimlach te verliezen',
+  ],
+]
+
+function characterRequestTitle(request: string, ownerIndex: number, round: number): string {
+  const client = request.split(' — ')[0]
+  const task = CHARACTER_TASKS[ownerIndex][round % CHARACTER_TASKS[ownerIndex].length]
+  return `${client} — ${task}`
+}
+
 function buildRequestItem(title: string, index: number): BoardItem {
   const ownerIndex = index % DEMO_MEMBER_IDS.length
   // Status varieert per ronde in plaats van per persoon. Daardoor heeft
@@ -269,10 +351,7 @@ function buildRequestItem(title: string, index: number): BoardItem {
       : -5 + (round - 2) * 3 + (ownerIndex % 4)
   const endOffset = startOffset + 1 + ((index + ownerIndex) % 3)
   const owner = DEMO_MEMBER_IDS[ownerIndex]
-  const owners = index % 13 === 0
-    ? [owner, DEMO_MEMBER_IDS[(index + 3) % DEMO_MEMBER_IDS.length]]
-    : [owner]
-  return item(`i${index + 1}`, title, owners, status, {
+  return item(`i${index + 1}`, characterRequestTitle(title, ownerIndex, round), [owner], status, {
     startOffset,
     endOffset,
     estHours: 5 + ((index * 3 + ownerIndex) % 8),
@@ -300,7 +379,7 @@ export function buildDemoBoards(): Record<string, { groups: BoardGroup[] }> {
 // De fixtures leven in localStorage zodat bezoekers in de demo kunnen
 // slepen en wijzigen. Bij een inhoudelijke fixture-update verversen we die
 // basis eenmalig; daarna blijven hun wijzigingen gewoon bewaard.
-const DEMO_BOARD_SEED_VERSION = 'fantasy-balanced-v2'
+const DEMO_BOARD_SEED_VERSION = 'fantasy-character-jobs-v3'
 
 export function ensureCurrentDemoBoardSeed(): void {
   if (typeof window === 'undefined') return
