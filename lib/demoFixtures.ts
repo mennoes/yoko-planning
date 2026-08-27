@@ -46,6 +46,7 @@ const DEMO_EQUIVALENTS: Record<string, string> = {
   '/budget':      '/demo/budget',
   '/accounts':    '/demo/accounts',
   '/geschiedenis': '/demo/geschiedenis',
+  '/activity':    '/demo/activity',
 }
 
 /** Vertaalt een 'echte' href naar de demo-variant. Externe links (mailto:,

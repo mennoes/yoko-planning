@@ -52,7 +52,7 @@ type SectionId = 'taken' | 'werkdruk' | 'team' | 'deadlines' | 'overload' | 'doc
 // echte, auth-gated routes buiten /demo wezen. Kantoor/Team/Accounts/
 // Documenten hebben inmiddels allemaal een werkende /demo-variant, dus
 // beide secties horen er weer bij.
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload', 'documenten', 'paginas']
+const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload', 'paginas', 'documenten']
 
 type RemoteProfile = {
   member_id:       string | null
