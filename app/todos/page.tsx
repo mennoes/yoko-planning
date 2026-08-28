@@ -1,4 +1,5 @@
 'use client'
+import { completeLinkedTask, completionTargetForProject } from '@/lib/personalCompletionClient'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -178,6 +179,8 @@ function TodoCard({
   onDragStartCard?: () => void
   onDropOnCard?: () => void
 }) {
+  const { profile: actingProfile } = useProfile()
+  const pendingToggle = useRef(new Set<string>())
   const [newText, setNewText] = useState('')
   const [editId,  setEditId]  = useState<string | null>(null)
   const [editTxt, setEditTxt] = useState('')
@@ -242,7 +245,21 @@ function TodoCard({
     onUpdate({ ...section, items })
   }
 
-  function toggle(id: string) {
+  async function toggle(id: string) {
+    const item = section.items.find(i => i.id === id)
+    if (!item || pendingToggle.current.has(id)) return
+    const target = item.projectRef ? completionTargetForProject(item.projectRef) : null
+    if (isMember && target?.ownerIds.includes(section.id)) {
+      if (actingProfile?.memberId !== section.id) {
+        window.alert('Alleen dit teamlid kan zijn of haar persoonlijke taak afronden. De gezamenlijke status kun je in het item wijzigen.')
+        return
+      }
+      pendingToggle.current.add(id)
+      try { await completeLinkedTask(item.projectRef, section.id, !item.done) }
+      catch (err) { window.alert(err instanceof Error ? err.message : 'Opslaan mislukt.') }
+      finally { pendingToggle.current.delete(id) }
+      return
+    }
     const prev = { ...section, items: [...section.items] }
     onUpdate({ ...section, items: section.items.map(i => i.id === id ? { ...i, done: !i.done } : i) }, prev)
   }
@@ -1105,8 +1122,9 @@ export default function TodosPage() {
       setDoneProjectKeys(loadDoneTodoProjectKeys())
     }
     window.addEventListener('yoko-board-update', onBoardUpdate)
+    const offComments = onCommentsUpdate(onBoardUpdate)
     return () => {
-      offRemote(); offEvent()
+      offRemote(); offEvent(); offComments()
       window.removeEventListener('yoko-board-update', onBoardUpdate)
     }
   }, [])
