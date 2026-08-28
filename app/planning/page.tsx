@@ -3641,7 +3641,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           key={`${rawItem.id}:${rawSubitem?.id ?? ''}`}
           target={{ parentItemId: rawItem.id, ...(rawSubitem ? { subitemId: rawSubitem.id } : {}) }}
           ownerIds={rawSubitem?.ownerIds.some(id => id && id !== 'unassigned') ? rawSubitem.ownerIds : rawItem.ownerIds}
-          status={rawItem.status === 'Done' ? 'Done' : rawStatus ?? ''} showMessages />}
+          status={rawItem.status === 'Done' ? 'Done' : rawStatus ?? ''} layout="row" showMessages />}
         <Row label="Contactpersoon">
           <input
             type="text"

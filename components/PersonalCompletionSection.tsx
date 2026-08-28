@@ -8,8 +8,8 @@ import { loadCommentsFor, onCommentsUpdate, type CommentThread } from '@/lib/com
 import { completionContext, completionState, type CompletionTarget } from '@/lib/personalCompletion'
 import { updatePersonalCompletion } from '@/lib/personalCompletionClient'
 
-export function PersonalCompletionSection({ target, ownerIds, status, showMessages = false }: {
-  target: CompletionTarget; ownerIds: string[]; status: string; showMessages?: boolean
+export function PersonalCompletionSection({ target, ownerIds, status, showMessages = false, layout = 'field' }: {
+  target: CompletionTarget; ownerIds: string[]; status: string; showMessages?: boolean; layout?: 'field' | 'row'
 }) {
   const { profile } = useProfile()
   const demo = usePathname()?.startsWith('/demo')
@@ -38,34 +38,33 @@ export function PersonalCompletionSection({ target, ownerIds, status, showMessag
     } catch (err) { setError(err instanceof Error ? err.message : 'Opslaan mislukt.') }
     finally { setPending(false) }
   }
-  if (demo || !owners.length) return null
+  if (demo || owners.length < 2 || !canChange) return null
   const messages = threads.flatMap(t => t.thread).filter(r => r.personalCompletion).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  return <section aria-label="Persoonlijke voortgang" style={{ marginBottom: 20, padding: 14, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg-card)' }}>
-    <strong style={{ fontSize: 13 }}>Persoonlijke voortgang</strong>
-    <p style={{ margin: '5px 0 12px', fontSize: 12, color: 'var(--text-muted)' }}>Alleen jouw taak afronden. De gezamenlijke status en uren blijven ongewijzigd.</p>
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-      {owners.map(id => {
-        const done = completionState(threads, target, id)?.done
-        return <span key={id} style={{ padding: '5px 9px', borderRadius: 6, fontSize: 12, background: done ? 'rgba(0,200,117,0.12)' : 'var(--bg-hover)', color: done ? 'var(--green, #00a860)' : 'var(--text-secondary)' }}>
-          {done ? '✓ ' : ''}{members.find(m => m.id === id)?.name ?? id} · {done ? 'klaar' : 'open'}
-        </span>
-      })}
-    </div>
-    {canChange && <button disabled={pending || allDone} onClick={() => change(!mine?.done)}
+  const ownerSummary = owners.map(id => `${members.find(m => m.id === id)?.name ?? id}: ${completionState(threads, target, id)?.done ? 'klaar' : 'open'}`).join('\n')
+  const completedCount = owners.filter(id => completionState(threads, target, id)?.done).length
+  return <section aria-label="Persoonlijke voortgang" style={layout === 'row'
+    ? { display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: 8, alignItems: 'start', marginBottom: 14 }
+    : { display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <span style={layout === 'row'
+      ? { fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, paddingTop: 3 }
+      : { fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mijn taak</span>
+    <div style={{ minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, minHeight: 28 }}>
+    <button disabled={pending || allDone} onClick={() => change(!mine?.done)}
       aria-pressed={!!mine?.done}
-      style={{ padding: '9px 13px', borderRadius: 7, border: '1px solid var(--border)', background: mine?.done ? 'var(--bg-hover)' : 'var(--accent)', color: mine?.done ? 'var(--text-primary)' : '#fff', fontWeight: 700, cursor: pending || allDone ? 'default' : 'pointer', opacity: pending || allDone ? 0.6 : 1 }}>
-      {pending ? 'Opslaan…' : mine?.done ? 'Mijn taak heropenen' : '✓ Mijn taak klaar'}
-    </button>}
-    {canChange && mine && retryNotification === null && !allDone && <button disabled={pending}
-      title="Controleert of de andere betrokkenen hun melding hebben; maakt geen dubbele meldingen"
-      onClick={() => change(mine.done)} style={{ marginLeft: 10, padding: 4, border: 0, background: 'none', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
-      Melding opnieuw versturen
-    </button>}
+      title={allDone ? 'Heropen eerst de gezamenlijke status.' : 'Alleen jouw taak afronden of heropenen. De gezamenlijke status en uren blijven ongewijzigd.'}
+      style={{ padding: '4px 10px', minHeight: 28, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-hover)', color: mine?.done ? 'var(--green, #00a860)' : 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: pending || allDone ? 'default' : 'pointer', opacity: pending || allDone ? 0.6 : 1 }}>
+      {pending ? 'Opslaan…' : mine?.done ? '↺ Heropenen' : '✓ Afronden'}
+    </button>
+    <span title={ownerSummary} aria-label={ownerSummary} style={{ fontSize: 11, color: 'var(--text-muted)' }}>{completedCount}/{owners.length} klaar</span>
+    </div>
     {allDone && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 0 }}>Het hele item staat op Done. Heropen eerst de gezamenlijke status.</p>}
     {error && <p role="alert" style={{ color: 'var(--red, #e2445c)', fontSize: 12 }}>{error}</p>}
     {retryNotification !== null && <p role="alert" style={{ fontSize: 12 }}>Je status is opgeslagen, maar de melding is nog niet verstuurd. <button disabled={pending} onClick={() => change(retryNotification)}>Melding opnieuw versturen</button></p>}
-    {showMessages && messages.length > 0 && <div style={{ marginTop: 14, borderTop: '1px solid var(--border)' }}>
+    {showMessages && messages.length > 0 && <details style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+      <summary style={{ cursor: 'pointer' }}>Activiteit ({messages.length})</summary>
       {messages.slice(0, 5).map(r => <p key={r.id} style={{ fontSize: 12, whiteSpace: 'pre-wrap', margin: '10px 0 0' }}>{r.body}</p>)}
-    </div>}
+    </details>}
+    </div>
   </section>
 }
