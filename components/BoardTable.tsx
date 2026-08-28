@@ -2626,7 +2626,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
             {cols.map(col => (
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {col.type === 'status' ? 'Status voor iedereen' : col.label}
+                  {col.type === 'status' ? 'Status project' : col.label}
                 </span>
                 <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
                   <Cell item={item} col={col} onUpdate={onUpdate} />
