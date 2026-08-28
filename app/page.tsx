@@ -1,4 +1,6 @@
 'use client'
+import { completeLinkedTask, completionTargetForProject, loadPersonalCompletion } from '@/lib/personalCompletionClient'
+import { onCommentsUpdate } from '@/lib/commentsStore'
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -397,6 +399,8 @@ export default function HomePage() {
   // klikt op /team Manuels vrijdag uit). Anders blijft 'Team vandaag'
   // op de oude status hangen tot een handmatige refresh.
   const [daysOffTick, setDaysOffTick] = useState(0)
+  const [completionTick, setCompletionTick] = useState(0)
+  useEffect(() => onCommentsUpdate(() => setCompletionTick(n => n + 1)), [])
   useEffect(() => {
     const bump = () => setDaysOffTick(n => n + 1)
     const off = onProfileDaysOffChange(bump)
@@ -462,6 +466,7 @@ export default function HomePage() {
       }
     }).catch(() => {})
     const offTodos = onTodosUpdate(loadMine)
+    const offComments = onCommentsUpdate(loadMine)
 
     // Load all boards once for team status / deadlines / workload widgets
     const projectList: Project[] = []
@@ -517,7 +522,7 @@ export default function HomePage() {
 
     setHydrated(true)
 
-    return () => { offTodos() }
+    return () => { offTodos(); offComments() }
   }, [memberId])
 
   // Recompute the workload list whenever the week offset (or the project list
@@ -582,11 +587,14 @@ export default function HomePage() {
         startTime: c.project.startTime, endTime: c.project.endTime,
         source: c.project.source, externalLink: c.project.externalLink,
         meetLink: c.project.meetLink,
-        done: c.project.status === 'done' || werkdrukDone.has(`${c.project.board}:${rawItemId}`),
+        done: c.project.status === 'done' || (() => {
+          const target = completionTargetForProject({ board: c.project.board, itemId: rawItemId })
+          return (target ? loadPersonalCompletion(target, memberId)?.done : undefined) ?? werkdrukDone.has(`${c.project.board}:${rawItemId}`)
+        })(),
         parentName: c.project.parentName,
       }
     }))
-  }, [memberId, weekOffset, allProjects])
+  }, [memberId, weekOffset, allProjects, completionTick])
 
   // Re-load category overrides if another view changes them.
   useEffect(() => {
@@ -645,8 +653,13 @@ export default function HomePage() {
 
   // Tikt een todo op de eigen sectie aan/uit vanuit de home-widget zodat
   // 'r een checkbox-klik direct opslaat in dezelfde store als /todos.
-  function toggleHomeTodo(id: string) {
+  async function toggleHomeTodo(id: string) {
     if (!memberId) return
+    const task = myTodos.find(t => t.id === id)
+    if (task?.projectRef) {
+      try { if (await completeLinkedTask(task.projectRef, memberId, !task.done)) return }
+      catch (err) { window.alert(err instanceof Error ? err.message : 'Opslaan mislukt.'); return }
+    }
     const fallback: TodoSection[] = todosData.sections as TodoSection[]
     const sections = loadTodoSectionsStore(fallback)
     const next = sections.map(s => s.id === memberId
@@ -665,6 +678,10 @@ export default function HomePage() {
   // gaf onverwachte side-effects. Persisteer alleen lokaal zodat een
   // refresh de fade behoudt zonder de echte agenda-status te muteren.
   async function toggleWorkloadDone(it: WorkloadItem, next: boolean) {
+    if (memberId) {
+      try { if (await completeLinkedTask({ board: it.board, itemId: it.rawItemId }, memberId, next)) return }
+      catch (err) { window.alert(err instanceof Error ? err.message : 'Opslaan mislukt.'); return }
+    }
     setWeekItems(items => items.map(w => w.id === it.id ? { ...w, done: next } : w))
     try {
       const KEY = 'yoko-werkdruk-done-flags'

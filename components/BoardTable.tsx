@@ -33,6 +33,7 @@ import { DistributionPie } from './DistributionPie'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
+import { PersonalCompletionSection } from './PersonalCompletionSection'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -1872,8 +1873,10 @@ function NotesPreview({ value, onOpen, onSave }: {
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName }: {
+type OpenItemRequest = { id: string; subitemId?: string }
+function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName, openRequest, onCloseRequest }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
+  openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   // Subitem-tabel gebruikt eigen breedtes zodat resizen daar de parent-
   // rij niet meeverandert.
   subGridTemplate?: string
@@ -1961,16 +1964,21 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   // de URL zodat ie niet bij elke pageload opnieuw triggert.
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (!openRequest) return
+    if (openRequest.id !== item.id) { setShowDetail(false); setOpenSub(null); return }
     const params = new URLSearchParams(window.location.search)
-    const wantId = params.get('drawer')
+    const wantId = openRequest.id
     if (wantId && wantId === item.id) {
-      setShowDetail(true)
+      const sub = item.subitems?.find(s => s.id === openRequest.subitemId)
+      if (sub) { setExpanded(true); setOpenSub(sub) }
+      else setShowDetail(true)
       params.delete('drawer')
+      params.delete('subitem')
       const qs = params.toString()
       const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
       window.history.replaceState(null, '', next)
     }
-  }, [item.id])
+  }, [item.id, openRequest])
 
   // Auto-rollup: als parent een veld leeg laat én er zijn subitems, dan
   // afleiden uit subitems. Hours doen we al verderop in de Cell-dispatcher
@@ -2243,11 +2251,13 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
       )}
       {showDetail && (
         <ItemDetailDrawer item={item} cols={cols} accentColor={accentColor}
-          onUpdate={onUpdate} onClose={() => setShowDetail(false)} />
+          onUpdate={onUpdate} onClose={() => { setShowDetail(false); if (openRequest?.id === item.id) onCloseRequest?.() }} />
       )}
       {openSub && (
         <ItemDetailDrawer
-          item={subitemAsItem(openSub)}
+          item={{ ...subitemAsItem(openSub), ownerIds: openSub.ownerIds.some(id => id && id !== 'unassigned') ? openSub.ownerIds : item.ownerIds }}
+          parentItemId={item.id}
+          parentStatus={item.status}
           cols={cols}
           accentColor={accentColor}
           onUpdate={u => {
@@ -2265,7 +2275,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
             onUpdate({ subitems: nextSubs })
             setOpenSub(prev => prev ? { ...prev, ...subFields } : prev)
           }}
-          onClose={() => setOpenSub(null)} />
+          onClose={() => { setOpenSub(null); if (openRequest?.id === item.id) onCloseRequest?.() }} />
       )}
     </>
   )
@@ -2488,8 +2498,9 @@ function OwnerDistributionSection({ item, owners, total, onUpdate }: {
   )
 }
 
-function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
+function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentItemId, parentStatus }: {
   item: BoardItem; cols: ColumnDef[]; accentColor?: string
+  parentItemId?: string; parentStatus?: string
   onUpdate: (u: Partial<BoardItem>) => void
   onClose: () => void
 }) {
@@ -2514,8 +2525,8 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, editName])
 
-  const thread = threads[0]
-  const replies = thread?.thread ?? []
+  const thread = threads.find(t => !t.thread.some(r => r.personalCompletion))
+  const replies = threads.flatMap(t => t.thread).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
   function addReply() {
     const body = newReply.trim()
@@ -2555,9 +2566,9 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
   }
 
   function deleteReply(replyId: string) {
-    if (!thread) return
-    const next = thread.thread.filter(r => r.id !== replyId)
-    saveComment({ ...thread, thread: next })
+    const ownerThread = threads.find(t => t.thread.some(r => r.id === replyId && !r.personalCompletion))
+    if (!ownerThread) return
+    saveComment({ ...ownerThread, thread: ownerThread.thread.filter(r => r.id !== replyId) })
   }
 
   const accent = accentColor ?? '#579bfc'
@@ -2615,7 +2626,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
             {cols.map(col => (
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {col.label}
+                  {col.type === 'status' ? 'Status voor iedereen' : col.label}
                 </span>
                 <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
                   <Cell item={item} col={col} onUpdate={onUpdate} />
@@ -2623,6 +2634,10 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
               </div>
             ))}
           </div>
+
+          <PersonalCompletionSection
+            target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
+            ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status} />
 
           {/* Verdeling-pie — alleen wanneer meerdere eigenaren EN er uren zijn,
               dan heeft 't visueel iets te zeggen. Anders skip 'm. */}
@@ -2668,20 +2683,22 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
                       <div style={{ fontSize: 14, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 }}>
                         {r.body}
                       </div>
-                      {profile?.memberId && thread && (
+                      {profile?.memberId && (
                         <ReactionRow
                           reactions={r.reactions}
                           currentMemberId={profile.memberId}
                           onToggle={emoji => {
                             const updatedReply = toggleReaction(r, emoji, profile.memberId!)
+                            const ownerThread = threads.find(t => t.thread.some(x => x.id === r.id))
+                            if (!ownerThread) return
                             saveComment({
-                              ...thread,
-                              thread: thread.thread.map(x => x.id === r.id ? updatedReply : x),
+                              ...ownerThread,
+                              thread: ownerThread.thread.map(x => x.id === r.id ? updatedReply : x),
                             })
                           }}
                         />
                       )}
-                      {mine && (
+                      {mine && !r.personalCompletion && (
                         <button className="cmt-del" onClick={() => deleteReply(r.id)}
                           title="Verwijder opmerking"
                           style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 15, padding: '2px 6px', borderRadius: 4, opacity: 0, transition: 'opacity 0.15s' }}
@@ -2724,8 +2741,9 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
+  openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   subGridTemplate?: string
   subColWidths?:    Record<string, number>
@@ -2767,7 +2785,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   // Collapsed-state komt rechtstreeks uit de group-data (gestored in
   // localStorage + Supabase via boardStore). Toggle persisteert via
   // onUpdateGroup, dus refresh onthoudt je keuze.
-  const collapsed = group.collapsed ?? false
+  const collapsed = (group.collapsed ?? false) && !group.items.some(i => i.id === openRequest?.id)
   const toggleCollapsed = () => onUpdateGroup({ ...group, collapsed: !collapsed })
   const [headerHover,  setHeaderHover]  = useState(false)
   const [editName,     setEditName]     = useState(false)
@@ -3002,9 +3020,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   // per definitie een archief-groep — daar juist NIET verbergen, anders
   // toont die groep standaard niks.
   const isDoneGroup = group.name.toLowerCase().trim().startsWith('done')
-  const currentItems  = renderItems.filter(i => !isOpkomendItem(i) && (isDoneGroup || i.status !== 'Done'))
-  const doneItems     = isDoneGroup ? [] : renderItems.filter(i => !isOpkomendItem(i) && i.status === 'Done')
-  const opkomendItems = renderItems.filter(i =>  isOpkomendItem(i))
+  const currentItems  = renderItems.filter(i => i.id === openRequest?.id || (!isOpkomendItem(i) && (isDoneGroup || i.status !== 'Done')))
+  const doneItems     = isDoneGroup ? [] : renderItems.filter(i => i.id !== openRequest?.id && !isOpkomendItem(i) && i.status === 'Done')
+  const opkomendItems = renderItems.filter(i => i.id !== openRequest?.id && isOpkomendItem(i))
   const [opkomendOpen, setOpkomendOpen] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)
   // Onthoud welk item zojuist via 'Voeg item toe' is aangemaakt zodat de
@@ -3516,6 +3534,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   )
                 })()}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
+                  openRequest={openRequest} onCloseRequest={onCloseRequest}
                   subGridTemplate={subGridTemplate}
                   subColWidths={subColWidths}
                   onResizeSubCol={onResizeSubCol}
@@ -3787,6 +3806,22 @@ type BoardTableProps = {
 }
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
+  const [openRequest, setOpenRequest] = useState<OpenItemRequest | null>(null)
+  useEffect(() => {
+    const readUrl = () => {
+      const params = new URLSearchParams(window.location.search)
+      const id = params.get('drawer')
+      if (id) setOpenRequest({ id, subitemId: params.get('subitem') ?? undefined })
+    }
+    const openFromNotification = (event: Event) => {
+      const detail = (event as CustomEvent<{ board: string; id: string; subitemId?: string }>).detail
+      if (detail?.board === boardId) setOpenRequest({ id: detail.id, subitemId: detail.subitemId })
+    }
+    readUrl()
+    window.addEventListener('popstate', readUrl)
+    window.addEventListener('yoko-open-item', openFromNotification)
+    return () => { window.removeEventListener('popstate', readUrl); window.removeEventListener('yoko-open-item', openFromNotification) }
+  }, [boardId])
   const storageKey = `board-col-widths-${title}`
   // DEDUPE VERWIJDERD — de name+dates+uren matching was te agressief en
   // gooide rechtmatige top-level items weg (Gerolsteiner etc) wanneer
@@ -3980,6 +4015,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       ...g,
       items: g.items
         .filter(item => {
+          if (item.id === openRequest?.id) return true
           if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
           if (filterOwner && !item.ownerIds.includes(filterOwner)) return false
           if (filterStatus && item.status !== filterStatus) return false
@@ -4054,7 +4090,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         || name === 'meetings'
         || name === 'doorlopend'
     })
-  }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter])
+  }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter, openRequest])
 
   const allOwners = useMemo(() => {
     const ids = new Set<string>()
@@ -4795,6 +4831,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               }} />
             )}
             <BoardGroupSection boardId={boardId} group={group} cols={columns}
+              openRequest={openRequest} onCloseRequest={() => setOpenRequest(null)}
               colWidths={colWidths} gridTemplate={gridTemplate}
               subGridTemplate={subGridTemplate}
               subColWidths={subColWidths}

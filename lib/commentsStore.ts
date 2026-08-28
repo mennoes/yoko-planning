@@ -10,6 +10,7 @@ export type CommentReply = {
   body:      string
   createdAt: string
   reactions?: Record<string, string[]>
+  personalCompletion?: import('./personalCompletion').PersonalCompletion
 }
 
 export type CommentThread = {
@@ -57,18 +58,23 @@ function writeCache(all: CommentThread[]) {
 
 function inferKind(contextId: string): string {
   if (contextId.startsWith('todo:')) return 'todo'
-  if (contextId.startsWith('board:')) return 'board_item'
+  if (contextId.startsWith('board:') || contextId.startsWith('board-item:')) return 'board_item'
   if (contextId.startsWith('page:'))  return 'page'
   return 'page'  // pages don't use a prefix in our codebase
 }
 
 export function saveComment(c: CommentThread): void {
+  cacheComment(c)
+  pushCommentRemote(c).catch(() => {})
+}
+
+/** Cache a server-confirmed comment without writing it back to the server. */
+export function cacheComment(c: CommentThread): void {
   const all = loadAllComments()
   const idx = all.findIndex(x => x.id === c.id)
   if (idx >= 0) all[idx] = c
   else all.unshift(c)
   writeCache(all)
-  pushCommentRemote(c).catch(() => {})
 }
 
 export function deleteComment(id: string): void {
@@ -124,9 +130,14 @@ async function deleteCommentRemote(id: string): Promise<void> {
 export async function pullCommentsAll(): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
-  const { data, error } = await supabase
-    .from('comments').select('*').order('created_at', { ascending: false })
-  if (error || !data) return false
+  const data: CommentRow[] = []
+  for (let offset = 0; ; offset += 500) {
+    const page = await supabase.from('comments').select('*')
+      .order('created_at', { ascending: false }).order('id').range(offset, offset + 499)
+    if (page.error || !page.data) return false
+    data.push(...page.data as CommentRow[])
+    if (page.data.length < 500) break
+  }
   if (data.length === 0) {
     // Remote leeg — upload de huidige lokale cache (eerste sync).
     const local = loadAllComments()
@@ -150,6 +161,13 @@ export async function pullCommentsAll(): Promise<boolean> {
     resolved:  r.resolved ?? false,
     createdAt: r.created_at,
   }))
+  // An in-flight snapshot can predate a just-confirmed completion. These
+  // events are append-only: never hide a confirmed state on a stale pull.
+  const remoteIds = new Set(next.map(c => c.id))
+  for (const local of loadAllComments()) {
+    if (!remoteIds.has(local.id) && local.thread.some(r => r.personalCompletion)) next.push(local)
+  }
+  next.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
   if (JSON.stringify(loadAllComments()) === JSON.stringify(next)) return true
   writeCache(next)
   return true
@@ -171,7 +189,13 @@ export function subscribeRemoteComments(): () => void {
   channel = supabase.channel('comments:all')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => schedulePull())
     .subscribe()
+  const refreshVisible = () => { if (!document.hidden) schedulePull() }
+  const timer = window.setInterval(refreshVisible, 30_000)
+  window.addEventListener('focus', refreshVisible)
   return () => {
+    window.clearInterval(timer)
+    window.removeEventListener('focus', refreshVisible)
+    if (pullTimer) { clearTimeout(pullTimer); pullTimer = null }
     if (supabase && channel) { supabase.removeChannel(channel); channel = null }
   }
 }

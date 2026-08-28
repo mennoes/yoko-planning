@@ -56,6 +56,8 @@ test('a completed attached meeting does not hide the parent task or change its d
   const mocks = {
     './boardStore': { loadGroups: board => board === 'vlaanderen' ? mockGroups : [] },
     './workloadCategory': category,
+    './commentsStore': { loadAllComments: () => [] },
+    './personalCompletion': { completionState: () => undefined },
   }
   for (const board of ['yoko', 'pnp', 'nederland', 'vlaanderen', 'dienjaar']) mocks[`@/data/boards/${board}.json`] = { groups: [] }
   const api = loadModule('../lib/todoProjectSeed.ts', mocks, { window: { localStorage: { getItem: () => null } } })

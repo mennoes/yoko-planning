@@ -1,4 +1,5 @@
 'use client'
+import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -3122,7 +3123,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   // zelf, niet op de parent — notes/contactpersoon/journal/links/deadline
   // staan alleen op de parent (subitems hebben die velden niet).
   const rawSubitem = rawSiMatch
-    ? (rawItem?.subitems as Array<{ status?: string; startTime?: string | null; endTime?: string | null }> | undefined)?.[Number(rawSiMatch[2])]
+    ? rawItem?.subitems?.[Number(rawSiMatch[2])]
     : undefined
   const rawStatus    = (rawSubitem ? rawSubitem.status    : rawItem?.status)    as string | undefined
   const rawStartTime = (rawSubitem ? rawSubitem.startTime : rawItem?.startTime) as string | null | undefined
@@ -3550,7 +3551,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
           </div>
         </Row>
-        <Row label="Status">
+        <Row label="Status voor iedereen">
           <StatusPicker
             value={rawStatus ?? ''}
             onChange={v => commit({ status: v })}
@@ -3636,6 +3637,10 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
+        {rawItem && (!rawSiMatch || rawSubitem) && <PersonalCompletionSection
+          target={{ parentItemId: rawItem.id, ...(rawSubitem ? { subitemId: rawSubitem.id } : {}) }}
+          ownerIds={rawSubitem?.ownerIds.some(id => id && id !== 'unassigned') ? rawSubitem.ownerIds : rawItem.ownerIds}
+          status={rawItem.status === 'Done' ? 'Done' : rawStatus ?? ''} showMessages />}
         <Row label="Contactpersoon">
           <input
             type="text"
