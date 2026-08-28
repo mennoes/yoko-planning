@@ -18,6 +18,7 @@ export type SubItem = {
   // subitem, zodat 'Open in Google ↗' beschikbaar blijft.
   externalLink?: string | null
   source?:      'manual' | 'google'
+  googleSeriesId?: string // server-side koppeling voor automatisch geneste meetings
   // Expliciete gebruikerskeuze voor Google-sync. Met 'active' blijft een
   // eerder afgeronde afspraak heropend, ook wanneer de datum >3 dagen oud is.
   statusOverride?: 'active' | 'done'

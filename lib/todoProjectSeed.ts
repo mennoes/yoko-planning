@@ -28,6 +28,7 @@ export type ProjectSeedLink = {
   startDate?: string | null
   endDate?:   string | null
   status?:    string | null
+  googleSeriesId?: string
 }
 
 const RAW: Record<string, { groups: BoardGroup[] }> = {
@@ -51,7 +52,7 @@ export function loadAllTodoProjects(): ProjectSeedLink[] {
         endDate: item.endDate ?? null,
         status: item.status ?? null,
       })
-      const subs = (item.subitems as Array<{ name?: string; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+      const subs = item.subitems ?? []
       subs.forEach((sub, idx) => {
         out.push({
           board,
@@ -60,6 +61,7 @@ export function loadAllTodoProjects(): ProjectSeedLink[] {
           startDate: sub.startDate ?? null,
           endDate: sub.endDate ?? sub.startDate ?? null,
           status: sub.status ?? null,
+          googleSeriesId: sub.googleSeriesId,
         })
       })
     }
@@ -98,9 +100,10 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
             endDate: item.endDate ?? null,
           })
         }
-        const subs = (item.subitems as Array<{ id?: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+        const subs = item.subitems ?? []
         if (parentOwns) continue
         subs.forEach((si, idx) => {
+          if (si.googleSeriesId) return // Meetings are not newly seeded as tasks.
           const subOwners = Array.isArray(si.ownerIds) ? si.ownerIds : []
           if (!subOwners.includes(memberId)) return
           if ((si.status ?? '').toLowerCase() === 'done') return
@@ -194,6 +197,7 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
   const projectsByKey = new Map(projects.map(p => [`${p.board}:${p.itemId}`, p]))
   const childrenByParent = new Map<string, ProjectSeedLink[]>()
   for (const project of projects) {
+    if (project.googleSeriesId) continue // An attached meeting doesn't define project completion/dates.
     const marker = project.itemId.lastIndexOf('__si')
     if (marker <= 0) continue
     const parentKey = `${project.board}:${project.itemId.slice(0, marker)}`
