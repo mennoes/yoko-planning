@@ -2636,6 +2636,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
           </div>
 
           <PersonalCompletionSection
+            key={item.id}
             target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
             ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status} />
 
