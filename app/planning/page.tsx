@@ -3557,6 +3557,12 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             onChange={v => commit({ status: v })}
           />
         </Row>
+        {rawItem && (!rawSiMatch || rawSubitem) && <PersonalCompletionSection
+          key={`${rawItem.id}:${rawSubitem?.id ?? ''}`}
+          target={{ parentItemId: rawItem.id, ...(rawSubitem ? { subitemId: rawSubitem.id } : {}) }}
+          ownerIds={rawSubitem?.ownerIds.some(id => id && id !== 'unassigned') ? rawSubitem.ownerIds : rawItem.ownerIds}
+          status={rawItem.status === 'Done' ? 'Done' : rawStatus ?? ''} layout="row" showMessages
+          renderStatus={(value, onChange, disabled) => <StatusPicker value={value} onChange={onChange} disabled={disabled} ariaLabel="Status mijn taak" />} />}
         <Row label="Bord">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
@@ -3637,11 +3643,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
-        {rawItem && (!rawSiMatch || rawSubitem) && <PersonalCompletionSection
-          key={`${rawItem.id}:${rawSubitem?.id ?? ''}`}
-          target={{ parentItemId: rawItem.id, ...(rawSubitem ? { subitemId: rawSubitem.id } : {}) }}
-          ownerIds={rawSubitem?.ownerIds.some(id => id && id !== 'unassigned') ? rawSubitem.ownerIds : rawItem.ownerIds}
-          status={rawItem.status === 'Done' ? 'Done' : rawStatus ?? ''} layout="row" showMessages />}
         <Row label="Contactpersoon">
           <input
             type="text"
@@ -4105,9 +4106,10 @@ const STATUS_PICKER_OPTIONS = [
   { label: 'Working on...', color: '#ff7b24' , display: 'Working on...' },
   { label: 'Done',          color: '#00c875' , display: 'Done' },
   { label: 'Stuck',         color: '#e2445c' , display: 'Stuck' },
+  { label: 'Not started',   color: '#808080' , display: 'Not started' },
   { label: 'Doorlopend',    color: '#579bfc' , display: 'Doorlopend' },
 ]
-function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function StatusPicker({ value, onChange, disabled = false, ariaLabel }: { value: string; onChange: (v: string) => void; disabled?: boolean; ariaLabel?: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -4119,17 +4121,17 @@ function StatusPicker({ value, onChange }: { value: string; onChange: (v: string
   const cur = STATUS_PICKER_OPTIONS.find(o => o.label === value) ?? STATUS_PICKER_OPTIONS[0]
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button onClick={() => setOpen(o => !o)}
+      <button disabled={disabled} aria-label={ariaLabel} aria-expanded={open && !disabled} onClick={() => setOpen(o => !o)}
         style={{
           padding: '6px 14px', borderRadius: 999, border: 'none',
           background: cur.color || 'var(--overlay-medium)',
           color: cur.color ? '#fff' : 'var(--text-muted)',
-          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: 'pointer',
+          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
           minWidth: 110, textAlign: 'left',
         }}>
         {cur.display}
       </button>
-      {open && (
+      {open && !disabled && (
         <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 10,
           background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
           padding: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 2 }}>
