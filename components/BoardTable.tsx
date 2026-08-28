@@ -291,7 +291,7 @@ function EditableCell({
 }
 
 // ─── Status cel ───────────────────────────────────────────────────────────────
-function StatusCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function StatusCell({ value, onChange, disabled = false, ariaLabel }: { value: string; onChange: (v: string) => void; disabled?: boolean; ariaLabel?: string }) {
   const [open, setOpen] = useState(false)
   const [hover, setHover] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -302,13 +302,13 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
       {/* Vol-cel status-tag: vult de hele rij-cel met de status-kleur
           zodat de kolom in één oogopslag visueel scant. Geen rond pilletje
           meer met witruimte eromheen. */}
-      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} disabled={disabled} aria-label={ariaLabel} aria-expanded={open && !disabled} onClick={() => setOpen(o => !o)}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
           position: 'relative',
           width: '100%', height: '100%',
-          padding: '0 10px', borderRadius: 0, cursor: 'pointer', border: 'none',
+          padding: '0 10px', borderRadius: 0, cursor: disabled ? 'default' : 'pointer', border: 'none', opacity: disabled ? 0.6 : 1,
           background: opt.color || 'var(--overlay-medium)',
           color: opt.color ? '#fff' : 'var(--text-muted)',
           fontSize: 12.5, fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
@@ -328,7 +328,7 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
         )}
       </button>
 
-      {open && (
+      {open && !disabled && (
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -2631,12 +2631,13 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                 <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
                   <Cell item={item} col={col} onUpdate={onUpdate} />
                 </div>
+                {col.type === 'status' && <PersonalCompletionSection
+                  key={item.id}
+                  target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
+                  ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status}
+                  renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Status mijn taak" />} />}
               </div>
             ))}
-            <PersonalCompletionSection
-              key={item.id}
-              target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
-              ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status} />
           </div>
 
           {/* Verdeling-pie — alleen wanneer meerdere eigenaren EN er uren zijn,

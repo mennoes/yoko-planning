@@ -156,6 +156,7 @@ test('Home and To do shared selector uses personal Done and supports reopening d
 test('API rejects unauthenticated and malformed requests before doing any writes', async () => {
   let calls = 0
   const { POST } = load('../app/api/items/personal-completion/route.ts', {
+    '@/lib/personalCompletion': rules,
     '@/lib/supabaseAdmin': { supabaseAdmin: { auth: { getUser: async () => ({ data: { user: { id: 'real-user' } }, error: null }) } } },
     '@/lib/personalCompletionServer': { setPersonalCompletion: async () => { calls++; return {} }, CompletionError: Error },
   })
@@ -163,5 +164,37 @@ test('API rejects unauthenticated and malformed requests before doing any writes
   const request = body => new Request('http://local/', { method: 'POST', headers: { Authorization: 'Bearer token' }, body: JSON.stringify(body) })
   assert.equal((await POST(request({ parentItemId: 'project', done: 'yes', expectedEventId: null }))).status, 400)
   assert.equal((await POST(request(null))).status, 400)
+  assert.equal((await POST(request({ parentItemId: 'project', done: false, status: 'Done', expectedEventId: null }))).status, 400)
+  assert.equal((await POST(request({ parentItemId: 'project', done: false, status: 'unknown', expectedEventId: null }))).status, 400)
   assert.equal(calls, 0)
+})
+
+test('personal statuses persist separately without modifying project, hours or another owner', async () => {
+  const db = fakeDb(); const before = structuredClone(db.tables.board_items)
+  let previous = null
+  for (const status of ['Working on...', 'Stuck', 'Doorlopend', 'Done', 'Working on...', 'Not started', '']) {
+    const result = await setPersonalCompletion(db, 'u-menno', target, status === 'Done', previous, status)
+    const state = rules.completionState([result.comment], target, 'menno')
+    assert.equal(rules.personalTaskStatus(state), status)
+    assert.equal(state.done, status === 'Done')
+    assert.equal(rules.completionState([result.comment], target, 'odette'), undefined)
+    assert.deepEqual(db.tables.board_items, before)
+    const retry = await setPersonalCompletion(db, 'u-menno', target, status === 'Done', previous, status)
+    assert.equal(retry.comment.id, result.comment.id)
+    previous = result.comment.id
+  }
+  assert.equal(db.tables.comments.length, 7)
+  assert.equal(db.tables.notifications.length, 7)
+  assert.match(db.tables.comments[0].thread[0].body, /Working on/)
+  assert.match(db.tables.comments[4].thread[0].body, /heropend/)
+})
+test('legacy completion records and To do boolean toggles remain compatible', async () => {
+  assert.equal(rules.personalTaskStatus({ done: true }), 'Done')
+  assert.equal(rules.personalTaskStatus({ done: false }), 'Not started')
+  const db = fakeDb()
+  const working = await setPersonalCompletion(db, 'u-menno', target, false, null, 'Working on...')
+  const done = await setPersonalCompletion(db, 'u-menno', target, true, working.comment.id)
+  const reopened = await setPersonalCompletion(db, 'u-menno', target, false, done.comment.id)
+  assert.equal(rules.personalTaskStatus(reopened.comment.thread[0].personalCompletion), 'Not started')
+  assert.match(done.comment.thread[0].body, /afgerond/)
 })

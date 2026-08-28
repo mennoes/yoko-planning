@@ -2,7 +2,7 @@
 
 import { supabase } from './supabase'
 import { cacheComment, loadAllComments, pullCommentsAll, type CommentThread } from './commentsStore'
-import { completionState, type CompletionTarget } from './personalCompletion'
+import { completionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
 import { loadGroups } from './boardStore'
 
 export function loadPersonalCompletion(target: CompletionTarget, memberId: string) {
@@ -26,7 +26,7 @@ export function completionTargetForProject(ref: { board: string; itemId: string 
 }
 
 const pending = new Map<string, Promise<{ notificationError: boolean }>>()
-export function updatePersonalCompletion(target: CompletionTarget, memberId: string, done: boolean): Promise<{ notificationError: boolean }> {
+export function updatePersonalCompletion(target: CompletionTarget, memberId: string, done: boolean, status?: PersonalTaskStatus): Promise<{ notificationError: boolean }> {
   const key = JSON.stringify([target.parentItemId, target.subitemId, memberId])
   const existing = pending.get(key)
   if (existing) return existing
@@ -38,7 +38,7 @@ export function updatePersonalCompletion(target: CompletionTarget, memberId: str
     const previous = loadPersonalCompletion(target, memberId)
     const res = await fetch('/api/items/personal-completion', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
-      body: JSON.stringify({ parentItemId: target.parentItemId, subitemId: target.subitemId, done, expectedEventId: previous?.eventId ?? null }),
+      body: JSON.stringify({ parentItemId: target.parentItemId, subitemId: target.subitemId, done, status, expectedEventId: previous?.eventId ?? null }),
     })
     const result = await res.json() as { error?: string; comment?: CommentThread; notificationError?: boolean }
     if (!res.ok || !result.comment) {
