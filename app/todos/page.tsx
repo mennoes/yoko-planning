@@ -338,6 +338,7 @@ function TodoCard({
   for (const p of allProjects) {
     const key = `${p.board}:${p.itemId}`
     projectDates.set(key, { start: p.startDate ?? null, end: p.endDate ?? null })
+    if (p.googleSeriesId) continue
     const marker = p.itemId.lastIndexOf('__si')
     if (marker > 0) {
       const parentKey = `${p.board}:${p.itemId.slice(0, marker)}`

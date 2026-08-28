@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
+import { loadMeetingPlacement, nestedMeetingId, routeGoogleMeeting } from './googleMeetingRouting'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -162,14 +163,6 @@ async function getRoutingRules(admin: SupabaseClient): Promise<Rule[]> {
     .eq('enabled', true)
     .order('position', { ascending: true })
   return ((data as Rule[] | null) ?? []).filter(r => r.pattern && r.board_id)
-}
-
-function routeEvent(name: string, defaultBoard: string, rules: Rule[]): string {
-  const lc = (name || '').toLowerCase()
-  for (const r of rules) {
-    if (lc.includes(r.pattern.toLowerCase())) return r.board_id
-  }
-  return defaultBoard
 }
 
 async function ensureGoogleGroup(
@@ -441,7 +434,7 @@ async function ensureMeetingsGroup(
   await admin.from('board_groups').insert({
     id:        newId,
     board_id:  boardId,
-    name:      'Meetings & doorlopend',
+    name:      'Meetings',
     color:     '#D8B62E',
     collapsed: false,
     position:  maxPos + 1,
@@ -473,23 +466,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   const memberKeys = await buildMemberKeys(admin)
   const resolveAttendeeEmail = (email: string) => resolveAttendeeEmailWith(memberKeys, email)
 
-  // Fallback-bord: vroeger was cal.board_id verplicht en sloegen we kalenders
-  // zonder selectie over. Dat dwong de user om per kalender een bord te
-  // kiezen. Nu: routing-regels per event bepalen het juiste bord; events
-  // zonder match landen op het eerste bord in de registry (of cal.board_id
-  // als die nog gezet is voor backwards compat).
-  let defaultBoard = cal.board_id
-  if (!defaultBoard) {
-    const { data: bRow } = await admin
-      .from('boards').select('id').order('position', { ascending: true }).limit(1)
-    defaultBoard = (bRow as { id: string }[] | null)?.[0]?.id ?? null
-  }
-  if (!defaultBoard) return { added: 0, updated: 0, removed: 0 }
-  const fallbackBoard: string = defaultBoard
+  // Nieuwe meetings krijgen per event hun agenda; niet de toevallige
+  // kalenderinstelling of het eerste bord. Bestaande plaatsingen blijven.
+  const { data: boardRows, error: boardsError } = await admin.from('boards').select('id')
+  if (boardsError) throw new Error(`Agendas laden mislukt: ${boardsError.message}`)
+  const availableBoards = new Set((boardRows ?? []).map(b => String(b.id)))
+  if (!availableBoards.has('yoko')) throw new Error('Yoko-agenda ontbreekt; meetingrouting gestopt')
   const accessToken = await ensureFreshAccessToken(admin, cal)
 
-  // Routing-regels (substring → board). Wordt per event toegepast; valt
-  // terug op cal.board_id wanneer geen enkele regel matcht.
+  // Deelnemersdomeinen eerst, bestaande titelregels als extra aanwijzing.
   const rules = await getRoutingRules(admin)
 
   // Cache van Google Agenda groepen per bord — een event kan op elk bord
@@ -642,12 +627,14 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // van bord verhuizen wanneer een routing-regel toegevoegd of gewijzigd is).
   // Trek óók status/journal/owner_ids mee zodat we user-edits niet
   // overschrijven bij de volgende Google-sync.
-  const { data: existingRows } = await admin
+  const { data: existingRows, error: existingError } = await admin
     .from('board_items')
     .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
+
+  if (existingError) throw new Error(`Bestaande Google-items laden mislukt: ${existingError.message}`)
 
   const existing = (existingRows as ItemRow[] | null) ?? []
   const byExt    = new Map(existing.map(r => [r.external_id, r.id]))
@@ -660,14 +647,8 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // eerstvolgende sync 'm opnieuw top-level aanmaken en zou de nesting bij
   // elke refresh "verdwijnen". Door deze id's te skippen blijft de nesting
   // permanent staan over syncs heen.
-  const { data: subParents } = await admin
-    .from('board_items')
-    .select('subitems')
-    .not('subitems', 'is', null)
-  const nestedIds = new Set<string>()
-  for (const r of (subParents as { subitems: SubItemSnapshot[] | null }[] | null) ?? []) {
-    for (const s of (r.subitems ?? [])) if (s?.id) nestedIds.add(s.id)
-  }
+  const placement = await loadMeetingPlacement(admin)
+  const nestedIds = placement.nestedIds
 
   // Group recurring events by their master ID so each recurring meeting
   // becomes ONE board_item with subitems for each instance. Single events
@@ -741,11 +722,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // soft-deleted; we willen die kunnen 'revive' ipv een tweede rij
     // ernaast aanmaken. De upsert hieronder zet deleted_at expliciet op
     // null om de row weer zichtbaar te maken.
-    const { data: sharedRows } = await admin
+    const { data: sharedRows, error: sharedError } = await admin
       .from('board_items')
       .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, name, start_date, deleted_at')
       .eq('source', 'google')
       .in('ical_uid', Array.from(new Set(wantedICals)))
+    if (sharedError) throw new Error(`Gedeelde Google-items laden mislukt: ${sharedError.message}`)
     for (const r of (sharedRows as ItemRow[] | null) ?? []) {
       if (!r.ical_uid) continue
       const prev = sharedByICal.get(r.ical_uid)
@@ -760,13 +742,14 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // aanraken.
   const legacyByKey = new Map<string, ItemRow>()
   {
-    const { data: legacyRows } = await admin
+    const { data: legacyRows, error: legacyError } = await admin
       .from('board_items')
       .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, name, start_date')
       .eq('source', 'google')
       .eq('external_user_id', cal.user_id)
       .is('ical_uid', null)
       .is('deleted_at', null)
+    if (legacyError) throw new Error(`Bestaande agendaplaatsingen laden mislukt: ${legacyError.message}`)
     for (const r of (legacyRows as ItemRow[] | null) ?? []) {
       const name = String((r as { name?: string }).name ?? '').toLowerCase().trim()
         .replace(/\s*\(\d+×\)\s*$/, '').trim()
@@ -780,9 +763,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   function legacyLookup(name: string, startDate: string | null): ItemRow | undefined {
     if (!startDate) return undefined
     const norm = name.toLowerCase().trim().replace(/\s*\(\d+×\)\s*$/, '').trim()
-    const boards = new Set<string>([fallbackBoard])
-    for (const r of rules) boards.add(r.board_id)
-    for (const b of boards) {
+    for (const b of availableBoards) {
       const hit = legacyByKey.get(`${b}::${norm}::${startDate}`)
       if (hit) return hit
     }
@@ -841,13 +822,40 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   const upserts: Record<string, unknown>[] = []
 
   for (const [groupKey, instances] of groupedByRec) {
+    const routingEvents = [...instances].sort((a, b) => (eventDates(a).start ?? '').localeCompare(eventDates(b).start ?? ''))
+    const route = routeGoogleMeeting(routingEvents, rules, availableBoards)
+    const meetingName = [...routingEvents].reverse().find(e => e.summary?.trim())?.summary?.trim() ?? '(geen titel)'
+    const nestingLookup = findExistingFor(iCalKeyForGroup(instances), groupKey, meetingName, eventDates(routingEvents[0]).start)
+    const alreadyPlaced = placement.hasSeries(nestingLookup.id)
+    // Only brand-new meetings can auto-nest. Once placed, the stored series
+    // identity keeps syncing that same parent (including after rename/move).
+    const placed = await placement.place(nestingLookup.id, meetingName, route, !nestingLookup.row, instances.map(ev => {
+      const dates = eventDates(ev)
+      const owners = ownersForEvent(ev)
+      return {
+        id: nestedMeetingId(nestingLookup.id, ev),
+        name: ev.summary?.trim() || meetingName,
+        ownerIds: owners.owners,
+        status: resolveStatus(undefined, dates.end ?? dates.start),
+        startDate: dates.start, endDate: dates.end ?? dates.start,
+        ...eventTimes(ev), estHours: owners.total,
+        externalLink: ev.htmlLink ?? null, meetLink: ev.hangoutLink ?? null,
+        source: 'google' as const,
+      }
+    }))
+    if (placed) {
+      seenIds.add(nestingLookup.id)
+      seenExt.add(groupKey)
+      if (alreadyPlaced) updated++; else added++
+      continue
+    }
     if (instances.length === 1) {
       // Single, non-recurring event
       const ev = instances[0]
       const { start, end } = eventDates(ev)
       if (!start) continue
       const name        = ev.summary ?? '(geen titel)'
-      const targetBoard = routeEvent(name, fallbackBoard, rules)
+      const targetBoard = route.boardId
       // getGroupFor / getDoorlopendGroupFor zijn nu niet meer nodig als
       // default — alle nieuwe meetings landen in de Meetings-groep en
       // bestaande rij-groepen worden gerespecteerd via existingRow.group_id.
@@ -1007,7 +1015,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       }
       return '(geen titel)'
     })()
-    const targetBoard = routeEvent(baseName, fallbackBoard, rules)
+    const targetBoard = route.boardId
     // Doorlopend-group is vervangen door 'Meetings & doorlopend' voor
     // nieuwe rijen (zie keepGroup hieronder).
     const minStart = eventDates(sorted[0]).start

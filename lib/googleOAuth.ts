@@ -23,10 +23,13 @@ export type GoogleEvent = {
   end:                { dateTime?: string; date?: string; timeZone?: string }
   updated?:           string
   recurringEventId?:  string                       // master ID for recurring instances
+  originalStartTime?: { dateTime?: string; date?: string; timeZone?: string }
+  organizer?:        { email?: string }
   transparency?:      'opaque' | 'transparent'     // 'transparent' = "Free" (doesn't take time)
   attendees?: Array<{
     email?:          string
     self?:           boolean
+    resource?:       boolean
     responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted'
   }>
 }
