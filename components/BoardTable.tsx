@@ -33,6 +33,7 @@ import { DistributionPie } from './DistributionPie'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
+import { PersonalCompletionSection } from './PersonalCompletionSection'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -290,7 +291,7 @@ function EditableCell({
 }
 
 // ─── Status cel ───────────────────────────────────────────────────────────────
-function StatusCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function StatusCell({ value, onChange, disabled = false, ariaLabel }: { value: string; onChange: (v: string) => void; disabled?: boolean; ariaLabel?: string }) {
   const [open, setOpen] = useState(false)
   const [hover, setHover] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -301,13 +302,13 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
       {/* Vol-cel status-tag: vult de hele rij-cel met de status-kleur
           zodat de kolom in één oogopslag visueel scant. Geen rond pilletje
           meer met witruimte eromheen. */}
-      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} disabled={disabled} aria-label={ariaLabel} aria-expanded={open && !disabled} onClick={() => setOpen(o => !o)}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
           position: 'relative',
           width: '100%', height: '100%',
-          padding: '0 10px', borderRadius: 0, cursor: 'pointer', border: 'none',
+          padding: '0 10px', borderRadius: 0, cursor: disabled ? 'default' : 'pointer', border: 'none', opacity: disabled ? 0.6 : 1,
           background: opt.color || 'var(--overlay-medium)',
           color: opt.color ? '#fff' : 'var(--text-muted)',
           fontSize: 12.5, fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
@@ -327,7 +328,7 @@ function StatusCell({ value, onChange }: { value: string; onChange: (v: string) 
         )}
       </button>
 
-      {open && (
+      {open && !disabled && (
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -1207,7 +1208,7 @@ function subitemAsItem(s: SubItem): BoardItem {
 }
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, colWidths, onResizeCol, onUpdate, onDelete }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -1231,6 +1232,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   colWidths?: Record<string, number>
   onResizeCol?: (key: string, width: number) => void
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
+  onReorderBefore?: (draggedId: string, targetId: string) => void
 }) {
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
@@ -1309,6 +1311,22 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   const [isDraggingMe, setIsDraggingMe] = useState(false)
   return (
     <div
+      onDragOver={e => {
+        if (!e.dataTransfer.types.includes('application/x-yoko-subitem')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }}
+      onDrop={e => {
+        const raw = e.dataTransfer.getData('application/x-yoko-subitem')
+        if (!raw || !onReorderBefore || !parentItemId) return
+        try {
+          const data = JSON.parse(raw) as { subitemId?: string; parentItemId?: string }
+          if (data.parentItemId !== parentItemId || !data.subitemId || data.subitemId === subitem.id) return
+          e.preventDefault()
+          e.stopPropagation()
+          onReorderBefore(data.subitemId, subitem.id)
+        } catch {}
+      }}
       onDragEnd={() => {
         setIsDraggingMe(false)
         window.dispatchEvent(new CustomEvent('yoko-subitem-drag-end'))
@@ -1348,7 +1366,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             window.dispatchEvent(new CustomEvent('yoko-subitem-drag-start', { detail: { subitemId: subitem.id, name: subitem.name } }))
           }}
           style={{
-            position: 'absolute', left: -22, top: '50%', transform: 'translateY(-50%)',
+            position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)',
             width: 18, height: 28,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'grab', userSelect: 'none',
@@ -1356,7 +1374,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             // achtergrond was text-secondary zonder eigen vlak nauwelijks
             // te zien.
             color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
-            opacity: 0, transition: 'opacity 0.12s, background 0.12s',
+            opacity: hover ? 1 : 0.45, transition: 'opacity 0.12s, background 0.12s',
             zIndex: 5, borderRadius: 4,
             background: 'var(--bg-hover)',
             border: '1px solid var(--border-strong)',
@@ -1365,7 +1383,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
           (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
           checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}
-      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative', padding: '0 0 0 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative', padding: '0 0 0 27px' }}>
         {onToggleSelect && (
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
@@ -1547,6 +1565,16 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
       return s
     }))
   }
+  function reorderOne(draggedId: string, targetId: string) {
+    const from = subitems.findIndex(s => s.id === draggedId)
+    const to = subitems.findIndex(s => s.id === targetId)
+    if (from < 0 || to < 0 || from === to) return
+    const next = [...subitems]
+    const [moved] = next.splice(from, 1)
+    const nextTarget = next.findIndex(s => s.id === targetId)
+    next.splice(Math.max(0, nextTarget), 0, moved)
+    onUpdate(next)
+  }
   function deleteOne(id: string) {
     const deleted  = subitems.find(s => s.id === id)
     const filtered = subitems.filter(s => s.id !== id)
@@ -1638,7 +1666,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           onOpenDetail={onOpenDetail}
           justCreatedSubId={justCreatedSubId}
           colWidths={colWidths} onResizeCol={onResizeCol}
-          updateOne={updateOne} deleteOne={deleteOne} />
+          updateOne={updateOne} deleteOne={deleteOne} reorderOne={reorderOne} />
         {/* Som-rij voor de subitems van dit item — dezelfde stijl als de
             groep-som onderaan de hoofdtabel. Toont alleen wanneer 'r
             ten minste 1 subitem is. */}
@@ -1672,7 +1700,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
@@ -1690,18 +1718,11 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
   onResizeCol?: (key: string, width: number) => void
   updateOne: (id: string, u: Partial<SubItem>) => void
   deleteOne: (id: string) => void
+  reorderOne: (draggedId: string, targetId: string) => void
 }) {
   const [doneOpen, setDoneOpen] = useState(false)
-  const sortByStart = (a: SubItem, b: SubItem) => {
-    const av = a.startDate ?? ''
-    const bv = b.startDate ?? ''
-    if (!av && !bv) return 0
-    if (!av) return 1
-    if (!bv) return -1
-    return av.localeCompare(bv)
-  }
-  const active = subitems.filter(s => s.status !== 'Done').sort(sortByStart)
-  const done   = subitems.filter(s => s.status === 'Done').sort(sortByStart)
+  const active = subitems.filter(s => s.status !== 'Done')
+  const done   = subitems.filter(s => s.status === 'Done')
   // 'Laatste' = bepaalt of de verticale connector na deze rij doorloopt.
   // Wanneer Done bestaat is de Done-header de laatste; anders de laatste
   // actieve rij. Bij geopende Done is de laatste done-rij de finale.
@@ -1720,7 +1741,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
           defaultEditName={sub.id === justCreatedSubId}
           colWidths={colWidths} onResizeCol={onResizeCol}
-          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+          onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)}
+          onReorderBefore={reorderOne} />
       ))}
       {hasDone && (
         <>
@@ -1757,7 +1779,8 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
               onOpenDetail={onOpenDetail ? () => onOpenDetail(sub) : undefined}
               colWidths={colWidths} onResizeCol={onResizeCol}
-              onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)} />
+              onUpdate={u => updateOne(sub.id, u)} onDelete={() => deleteOne(sub.id)}
+              onReorderBefore={reorderOne} />
           ))}
         </>
       )}
@@ -1850,8 +1873,10 @@ function NotesPreview({ value, onOpen, onSave }: {
 }
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
-function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName }: {
+type OpenItemRequest = { id: string; subitemId?: string }
+function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName, openRequest, onCloseRequest }: {
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
+  openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   // Subitem-tabel gebruikt eigen breedtes zodat resizen daar de parent-
   // rij niet meeverandert.
   subGridTemplate?: string
@@ -1939,16 +1964,21 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   // de URL zodat ie niet bij elke pageload opnieuw triggert.
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (!openRequest) return
+    if (openRequest.id !== item.id) { setShowDetail(false); setOpenSub(null); return }
     const params = new URLSearchParams(window.location.search)
-    const wantId = params.get('drawer')
+    const wantId = openRequest.id
     if (wantId && wantId === item.id) {
-      setShowDetail(true)
+      const sub = item.subitems?.find(s => s.id === openRequest.subitemId)
+      if (sub) { setExpanded(true); setOpenSub(sub) }
+      else setShowDetail(true)
       params.delete('drawer')
+      params.delete('subitem')
       const qs = params.toString()
       const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
       window.history.replaceState(null, '', next)
     }
-  }, [item.id])
+  }, [item.id, openRequest])
 
   // Auto-rollup: als parent een veld leeg laat én er zijn subitems, dan
   // afleiden uit subitems. Hours doen we al verderop in de Cell-dispatcher
@@ -2029,7 +2059,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
 
         {/* Selection checkbox */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', paddingLeft: 16 }}>
           <input type="checkbox" checked={selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
             style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15,
@@ -2221,11 +2251,13 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
       )}
       {showDetail && (
         <ItemDetailDrawer item={item} cols={cols} accentColor={accentColor}
-          onUpdate={onUpdate} onClose={() => setShowDetail(false)} />
+          onUpdate={onUpdate} onClose={() => { setShowDetail(false); if (openRequest?.id === item.id) onCloseRequest?.() }} />
       )}
       {openSub && (
         <ItemDetailDrawer
-          item={subitemAsItem(openSub)}
+          item={{ ...subitemAsItem(openSub), ownerIds: openSub.ownerIds.some(id => id && id !== 'unassigned') ? openSub.ownerIds : item.ownerIds }}
+          parentItemId={item.id}
+          parentStatus={item.status}
           cols={cols}
           accentColor={accentColor}
           onUpdate={u => {
@@ -2243,7 +2275,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
             onUpdate({ subitems: nextSubs })
             setOpenSub(prev => prev ? { ...prev, ...subFields } : prev)
           }}
-          onClose={() => setOpenSub(null)} />
+          onClose={() => { setOpenSub(null); if (openRequest?.id === item.id) onCloseRequest?.() }} />
       )}
     </>
   )
@@ -2466,8 +2498,9 @@ function OwnerDistributionSection({ item, owners, total, onUpdate }: {
   )
 }
 
-function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
+function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentItemId, parentStatus }: {
   item: BoardItem; cols: ColumnDef[]; accentColor?: string
+  parentItemId?: string; parentStatus?: string
   onUpdate: (u: Partial<BoardItem>) => void
   onClose: () => void
 }) {
@@ -2492,8 +2525,8 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, editName])
 
-  const thread = threads[0]
-  const replies = thread?.thread ?? []
+  const thread = threads.find(t => !t.thread.some(r => r.personalCompletion))
+  const replies = threads.flatMap(t => t.thread).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
   function addReply() {
     const body = newReply.trim()
@@ -2533,9 +2566,9 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
   }
 
   function deleteReply(replyId: string) {
-    if (!thread) return
-    const next = thread.thread.filter(r => r.id !== replyId)
-    saveComment({ ...thread, thread: next })
+    const ownerThread = threads.find(t => t.thread.some(r => r.id === replyId && !r.personalCompletion))
+    if (!ownerThread) return
+    saveComment({ ...ownerThread, thread: ownerThread.thread.filter(r => r.id !== replyId) })
   }
 
   const accent = accentColor ?? '#579bfc'
@@ -2593,11 +2626,16 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
             {cols.map(col => (
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {col.label}
+                  {col.type === 'status' ? 'Status project' : col.label}
                 </span>
                 <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
                   <Cell item={item} col={col} onUpdate={onUpdate} />
                 </div>
+                {col.type === 'status' && <PersonalCompletionSection
+                  key={item.id}
+                  target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
+                  ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status}
+                  renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Status mijn taak" />} />}
               </div>
             ))}
           </div>
@@ -2646,20 +2684,22 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
                       <div style={{ fontSize: 14, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 }}>
                         {r.body}
                       </div>
-                      {profile?.memberId && thread && (
+                      {profile?.memberId && (
                         <ReactionRow
                           reactions={r.reactions}
                           currentMemberId={profile.memberId}
                           onToggle={emoji => {
                             const updatedReply = toggleReaction(r, emoji, profile.memberId!)
+                            const ownerThread = threads.find(t => t.thread.some(x => x.id === r.id))
+                            if (!ownerThread) return
                             saveComment({
-                              ...thread,
-                              thread: thread.thread.map(x => x.id === r.id ? updatedReply : x),
+                              ...ownerThread,
+                              thread: ownerThread.thread.map(x => x.id === r.id ? updatedReply : x),
                             })
                           }}
                         />
                       )}
-                      {mine && (
+                      {mine && !r.personalCompletion && (
                         <button className="cmt-del" onClick={() => deleteReply(r.id)}
                           title="Verwijder opmerking"
                           style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 15, padding: '2px 6px', borderRadius: 4, opacity: 0, transition: 'opacity 0.15s' }}
@@ -2702,8 +2742,9 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose }: {
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
+  openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
   subGridTemplate?: string
   subColWidths?:    Record<string, number>
@@ -2745,7 +2786,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   // Collapsed-state komt rechtstreeks uit de group-data (gestored in
   // localStorage + Supabase via boardStore). Toggle persisteert via
   // onUpdateGroup, dus refresh onthoudt je keuze.
-  const collapsed = group.collapsed ?? false
+  const collapsed = (group.collapsed ?? false) && !group.items.some(i => i.id === openRequest?.id)
   const toggleCollapsed = () => onUpdateGroup({ ...group, collapsed: !collapsed })
   const [headerHover,  setHeaderHover]  = useState(false)
   const [editName,     setEditName]     = useState(false)
@@ -2980,9 +3021,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   // per definitie een archief-groep — daar juist NIET verbergen, anders
   // toont die groep standaard niks.
   const isDoneGroup = group.name.toLowerCase().trim().startsWith('done')
-  const currentItems  = renderItems.filter(i => !isOpkomendItem(i) && (isDoneGroup || i.status !== 'Done'))
-  const doneItems     = isDoneGroup ? [] : renderItems.filter(i => !isOpkomendItem(i) && i.status === 'Done')
-  const opkomendItems = renderItems.filter(i =>  isOpkomendItem(i))
+  const currentItems  = renderItems.filter(i => i.id === openRequest?.id || (!isOpkomendItem(i) && (isDoneGroup || i.status !== 'Done')))
+  const doneItems     = isDoneGroup ? [] : renderItems.filter(i => i.id !== openRequest?.id && !isOpkomendItem(i) && i.status === 'Done')
+  const opkomendItems = renderItems.filter(i => i.id !== openRequest?.id && isOpkomendItem(i))
   const [opkomendOpen, setOpkomendOpen] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)
   // Onthoud welk item zojuist via 'Voeg item toe' is aangemaakt zodat de
@@ -3454,12 +3495,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }
                 }}
                 onDragEnd={() => { dragRowRef.current = null }}>
-                {/* Drag-handles: twee stuks, hover-only. Eén IN de checkbox-
-                    kolom (rechts van de checkbox, LINKS van de ▶-arrow zodat
-                    'ie niet meer over de expand-knop valt), één in de name-
-                    kolom net LINKS van de comment-knop zodat je vanaf 't
-                    einde van een lange rij kunt slepen zonder helemaal terug
-                    te muiszen naar links. */}
+                {/* Eén vaste drag-handle bij de hoofdregel. `top: 50%` van de
+                    volledige wrapper liet de greep bij uitklappen halverwege
+                    het subitemblok springen. */}
                 {!reorderMode && (() => {
                   const startDrag = (e: React.DragEvent) => {
                     dragRowRef.current = realIdx
@@ -3474,7 +3512,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     if (row) e.dataTransfer.setDragImage(row, 20, 12)
                   }
                   const gripBase: React.CSSProperties = {
-                    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+                    position: 'absolute', top: 10,
                     width: 14, height: 24,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: 'grab', userSelect: 'none',
@@ -3488,32 +3526,16 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     border: '1px solid var(--border-strong)',
                     pointerEvents: 'auto',
                   }
-                  // Naam-kolom eindigt op (32 + nameW). Comment-knop zit
-                  // helemaal rechts binnen die kolom (padding-right ~14 +
-                  // knop-breedte ~34-44). We plaatsen de rechter grip 52px
-                  // vóór de kolom-rand zodat 'ie net links van de comment-
-                  // knop verschijnt.
-                  const nameW = colWidths['name'] ?? 200
-                  const rightHandleLeft = 32 + nameW - 52
                   return (
-                    <>
-                      <span draggable
-                        className="row-grip"
-                        title="Sleep om te verplaatsen tussen groepen"
-                        onDragStart={startDrag}
-                        // Rechts van de checkbox (16px center + 8px margin =
-                        // 24px), links van de kolomrand (32px). Overlapt niet
-                        // meer met de ▶-arrow die op ~36px begint.
-                        style={{ ...gripBase, left: 18 }}>⠿</span>
-                      <span draggable
-                        className="row-grip"
-                        title="Sleep om te verplaatsen tussen groepen"
-                        onDragStart={startDrag}
-                        style={{ ...gripBase, left: rightHandleLeft }}>⠿</span>
-                    </>
+                    <span draggable
+                      className="row-grip"
+                      title="Sleep om te verplaatsen tussen groepen"
+                      onDragStart={startDrag}
+                      style={{ ...gripBase, left: 4 }}>⠿</span>
                   )
                 })()}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
+                  openRequest={openRequest} onCloseRequest={onCloseRequest}
                   subGridTemplate={subGridTemplate}
                   subColWidths={subColWidths}
                   onResizeSubCol={onResizeSubCol}
@@ -3785,6 +3807,22 @@ type BoardTableProps = {
 }
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
+  const [openRequest, setOpenRequest] = useState<OpenItemRequest | null>(null)
+  useEffect(() => {
+    const readUrl = () => {
+      const params = new URLSearchParams(window.location.search)
+      const id = params.get('drawer')
+      if (id) setOpenRequest({ id, subitemId: params.get('subitem') ?? undefined })
+    }
+    const openFromNotification = (event: Event) => {
+      const detail = (event as CustomEvent<{ board: string; id: string; subitemId?: string }>).detail
+      if (detail?.board === boardId) setOpenRequest({ id: detail.id, subitemId: detail.subitemId })
+    }
+    readUrl()
+    window.addEventListener('popstate', readUrl)
+    window.addEventListener('yoko-open-item', openFromNotification)
+    return () => { window.removeEventListener('popstate', readUrl); window.removeEventListener('yoko-open-item', openFromNotification) }
+  }, [boardId])
   const storageKey = `board-col-widths-${title}`
   // DEDUPE VERWIJDERD — de name+dates+uren matching was te agressief en
   // gooide rechtmatige top-level items weg (Gerolsteiner etc) wanneer
@@ -3978,6 +4016,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       ...g,
       items: g.items
         .filter(item => {
+          if (item.id === openRequest?.id) return true
           if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
           if (filterOwner && !item.ownerIds.includes(filterOwner)) return false
           if (filterStatus && item.status !== filterStatus) return false
@@ -4052,7 +4091,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         || name === 'meetings'
         || name === 'doorlopend'
     })
-  }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter])
+  }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter, openRequest])
 
   const allOwners = useMemo(() => {
     const ids = new Set<string>()
@@ -4290,11 +4329,11 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const nameW = colWidths['name'] ?? 200
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.
-  const gridTemplate = `32px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const gridTemplate = `48px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
   // Subitem-tabel mag eigen breedtes hebben. Fallback per kolom op de
   // parent-breedte zodat ongetoete kolommen 'meeschalen' totdat de
   // gebruiker ze expliciet apart resized.
-  const subGridTemplate = `32px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const subGridTemplate = `48px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
 
@@ -4793,6 +4832,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               }} />
             )}
             <BoardGroupSection boardId={boardId} group={group} cols={columns}
+              openRequest={openRequest} onCloseRequest={() => setOpenRequest(null)}
               colWidths={colWidths} gridTemplate={gridTemplate}
               subGridTemplate={subGridTemplate}
               subColWidths={subColWidths}

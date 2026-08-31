@@ -1,4 +1,5 @@
 'use client'
+import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -285,10 +286,8 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
   // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
   // duwt in de werkdruk-cellen.
-  // VRIJ-events zelf moeten echter WEL meetellen op hun eigen dag — anders
-  // skipt countWorkdaysMs hen weg en wordt een 8u vakantiedag 0u in de bol.
-  // Voor vrij gebruiken we daarom GEEN memberId-skip: alleen weekend
-  // wordt nog uitgesloten.
+  // Vrij is geen gepland werk: het verlaagt de beschikbare capaciteit en
+  // hoort dus niet óók als gewerkte uren in de bol te staan.
   // Naast naam-patroon (isVrijTitle) ook de GROEPSNAAM checken (zelfde
   // regel als isVrijDayForMember in lib/vrijDays.ts) en de expliciete
   // category-override. Zonder dit: een item als 'Zwitserland' dat in een
@@ -301,13 +300,11 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // bevestigd: item in groep 'Vrij' zonder naam-match → 40u compleet
   // verdwenen uit de werkdruk-totalen.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  // Gebruik voor de noemer exact dezelfde zichtbare werkdagen als voor de
-  // overlap. Anders verdwijnen weekend-aandelen uit de week-/dagtotalen.
-  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), isVrij ? undefined : memberId)
-  if (totalWork === 0) return 0
-  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
+  if (isVrij) return 0
+  const totalProjectWork = countWorkdaysMs(pS.getTime(), pE.getTime(), memberId)
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), memberId)
   if (overlapWork === 0) return 0
-  const fraction  = overlapWork / totalWork
+  const fraction  = overlapWork / Math.max(1, totalProjectWork)
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
   const myShare = project.ownerHours && memberId in project.ownerHours
@@ -3126,7 +3123,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   // zelf, niet op de parent — notes/contactpersoon/journal/links/deadline
   // staan alleen op de parent (subitems hebben die velden niet).
   const rawSubitem = rawSiMatch
-    ? (rawItem?.subitems as Array<{ status?: string; startTime?: string | null; endTime?: string | null }> | undefined)?.[Number(rawSiMatch[2])]
+    ? rawItem?.subitems?.[Number(rawSiMatch[2])]
     : undefined
   const rawStatus    = (rawSubitem ? rawSubitem.status    : rawItem?.status)    as string | undefined
   const rawStartTime = (rawSubitem ? rawSubitem.startTime : rawItem?.startTime) as string | null | undefined
@@ -3554,12 +3551,18 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
           </div>
         </Row>
-        <Row label="Status">
+        <Row label="Status project">
           <StatusPicker
             value={rawStatus ?? ''}
             onChange={v => commit({ status: v })}
           />
         </Row>
+        {rawItem && (!rawSiMatch || rawSubitem) && <PersonalCompletionSection
+          key={`${rawItem.id}:${rawSubitem?.id ?? ''}`}
+          target={{ parentItemId: rawItem.id, ...(rawSubitem ? { subitemId: rawSubitem.id } : {}) }}
+          ownerIds={rawSubitem?.ownerIds.some(id => id && id !== 'unassigned') ? rawSubitem.ownerIds : rawItem.ownerIds}
+          status={rawItem.status === 'Done' ? 'Done' : rawStatus ?? ''} layout="row" showMessages
+          renderStatus={(value, onChange, disabled) => <StatusPicker value={value} onChange={onChange} disabled={disabled} ariaLabel="Status mijn taak" />} />}
         <Row label="Bord">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
@@ -4103,9 +4106,10 @@ const STATUS_PICKER_OPTIONS = [
   { label: 'Working on...', color: '#ff7b24' , display: 'Working on...' },
   { label: 'Done',          color: '#00c875' , display: 'Done' },
   { label: 'Stuck',         color: '#e2445c' , display: 'Stuck' },
+  { label: 'Not started',   color: '#808080' , display: 'Not started' },
   { label: 'Doorlopend',    color: '#579bfc' , display: 'Doorlopend' },
 ]
-function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function StatusPicker({ value, onChange, disabled = false, ariaLabel }: { value: string; onChange: (v: string) => void; disabled?: boolean; ariaLabel?: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -4117,17 +4121,17 @@ function StatusPicker({ value, onChange }: { value: string; onChange: (v: string
   const cur = STATUS_PICKER_OPTIONS.find(o => o.label === value) ?? STATUS_PICKER_OPTIONS[0]
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button onClick={() => setOpen(o => !o)}
+      <button disabled={disabled} aria-label={ariaLabel} aria-expanded={open && !disabled} onClick={() => setOpen(o => !o)}
         style={{
           padding: '6px 14px', borderRadius: 999, border: 'none',
           background: cur.color || 'var(--overlay-medium)',
           color: cur.color ? '#fff' : 'var(--text-muted)',
-          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: 'pointer',
+          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
           minWidth: 110, textAlign: 'left',
         }}>
         {cur.display}
       </button>
-      {open && (
+      {open && !disabled && (
         <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 10,
           background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
           padding: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -5188,8 +5192,9 @@ export default function PlanningPage() {
     contributionsByCell.get(`${memberId}\u0000${col.key}`) ?? []
 
   // Capacity in the right unit per zoom
-  function colCapacity(weeklyCapacity: number, memberId?: string): number {
+  function colCapacity(weeklyCapacity: number, memberId?: string, col?: Col): number {
     if (zoom === 'dag') {
+      if (memberId && col && isVrijDayForMember(memberId, col.rangeStart)) return 0
       // Per-dag cap = weeklyCap / aantal werkdagen (Mon-Fri minus eigen
       // vrije dagen). Voor 32u/4-dag-week → 8u/dag i.p.v. 6.4u/dag.
       let workdays = 5
@@ -5202,8 +5207,19 @@ export default function PlanningPage() {
       }
       return Math.round((weeklyCapacity / workdays) * 10) / 10
     }
-    if (zoom === 'maand') return Math.round((weeklyCapacity * 4.33) * 10) / 10
-    return weeklyCapacity
+    const baseCapacity = zoom === 'maand' ? weeklyCapacity * 4.33 : weeklyCapacity
+    if (!memberId || !col) return Math.round(baseCapacity * 10) / 10
+    let weekdays = 0
+    let available = 0
+    const end = new Date(col.rangeEnd); end.setHours(0, 0, 0, 0)
+    for (let d = new Date(col.rangeStart); d <= end; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay()
+      if (dow === 0 || dow === 6) continue
+      weekdays++
+      if (!isVrijDayForMember(memberId, d)) available++
+    }
+    const adjusted = weekdays > 0 ? baseCapacity * (available / weekdays) : baseCapacity
+    return Math.round(adjusted * 10) / 10
   }
 
   function toggleExpand(id: string) {
@@ -5747,9 +5763,14 @@ export default function PlanningPage() {
             </div>
           </div>
 
-          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+          <div style={{
+            // Rechts uitlijnen richting Menu i.p.v. absoluut centreren. Op
+            // smallere desktops kon de gecentreerde datum daardoor onder de
+            // Meetings-knop schuiven.
+            marginLeft: 'auto', marginRight: 18,
             display: 'flex', alignItems: 'center', gap: 10, minHeight: 18, fontSize: 12.5,
-            color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 1 }}>
+            color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 2,
+          }}>
             <span style={{ textTransform: 'capitalize' }}>{todayLabel}</span>
             <span aria-hidden style={{ width: 1, height: 12, background: 'var(--border)' }} />
             <span>
@@ -5765,7 +5786,7 @@ export default function PlanningPage() {
             </span>
           </div>
 
-          <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', position: 'relative', height: 40, zIndex: 3 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', height: 40, zIndex: 3, flexShrink: 0 }}>
             <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
               style={{ ...ghostBtn(overflowOpen), padding: '9px 14px', height: 40, display: 'inline-flex', alignItems: 'center', fontSize: 15, fontWeight: 600 }}>
               <IconMore size={18} style={{ marginRight: 6 }} />Menu
@@ -6385,7 +6406,6 @@ export default function PlanningPage() {
               // Workload-bollen per dag, bovenop het Google-Cal raster.
               // Zelfde bol-stijl als Overzicht zodat de visuele continuïteit
               // bewaard blijft tussen beide zoom-niveaus.
-              const cap = colCapacity(m.weeklyCapacity, m.id)
               return (
                 <div key={m.id} data-member-id={m.id} style={{
                   borderBottom: '1px solid var(--border)', background: 'transparent',
@@ -6397,6 +6417,7 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
                       background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
                     {cols.map(col => {
+                      const cap = colCapacity(m.weeklyCapacity, m.id, col)
                       const contribs = contributionsFor(m.id, col)
                       const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                       const isWeekStart = col.rangeStart.getDay() === 1
@@ -6536,7 +6557,6 @@ export default function PlanningPage() {
 
             const renderMember = (member: TeamMember, mIdx: number) => {
             const isExp = expanded.has(member.id)
-            const cap   = colCapacity(member.weeklyCapacity, member.id)
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
 
             return (
@@ -6599,6 +6619,7 @@ export default function PlanningPage() {
 
                   {/* Week/day/month cells */}
                   {cols.map(col => {
+                    const cap = colCapacity(member.weeklyCapacity, member.id, col)
                     const contribs = contributionsFor(member.id, col)
                     const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                     // In Overzicht-zoom is een 'kolom' een hele week, dus

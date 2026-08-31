@@ -15,6 +15,8 @@ import { loadGroups } from './boardStore'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 import type { TodoItem } from './todosStore'
+import { loadAllComments } from './commentsStore'
+import { completionState, type CompletionTarget } from './personalCompletion'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
 import nederlandRaw  from '@/data/boards/nederland.json'
@@ -28,6 +30,8 @@ export type ProjectSeedLink = {
   startDate?: string | null
   endDate?:   string | null
   status?:    string | null
+  googleSeriesId?: string
+  completionTarget?: CompletionTarget
 }
 
 const RAW: Record<string, { groups: BoardGroup[] }> = {
@@ -50,8 +54,9 @@ export function loadAllTodoProjects(): ProjectSeedLink[] {
         startDate: item.startDate ?? null,
         endDate: item.endDate ?? null,
         status: item.status ?? null,
+        completionTarget: { parentItemId: item.id },
       })
-      const subs = (item.subitems as Array<{ name?: string; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+      const subs = item.subitems ?? []
       subs.forEach((sub, idx) => {
         out.push({
           board,
@@ -60,6 +65,8 @@ export function loadAllTodoProjects(): ProjectSeedLink[] {
           startDate: sub.startDate ?? null,
           endDate: sub.endDate ?? sub.startDate ?? null,
           status: sub.status ?? null,
+          googleSeriesId: sub.googleSeriesId,
+          completionTarget: { parentItemId: item.id, subitemId: sub.id },
         })
       })
     }
@@ -98,9 +105,10 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
             endDate: item.endDate ?? null,
           })
         }
-        const subs = (item.subitems as Array<{ id?: string; name?: string; ownerIds?: string[]; status?: string; startDate?: string | null; endDate?: string | null }> | undefined) ?? []
+        const subs = item.subitems ?? []
         if (parentOwns) continue
         subs.forEach((si, idx) => {
+          if (si.googleSeriesId) return // Meetings are not newly seeded as tasks.
           const subOwners = Array.isArray(si.ownerIds) ? si.ownerIds : []
           if (!subOwners.includes(memberId)) return
           if ((si.status ?? '').toLowerCase() === 'done') return
@@ -187,6 +195,7 @@ function loadRemovedProjectKeys(): Set<string> {
 // actuele datums, dedupliceert, en verbergt gekoppelde projecten die
 // inmiddels Done/verlopen/vrij zijn.
 export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): TodoItem[] {
+  const comments = loadAllComments()
   const storedUnique = dedupeTodoItems(stored)
   const existingRefs = new Set(storedUnique.map(todoIdentity))
   const removed = loadRemovedProjectKeys()
@@ -194,6 +203,7 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
   const projectsByKey = new Map(projects.map(p => [`${p.board}:${p.itemId}`, p]))
   const childrenByParent = new Map<string, ProjectSeedLink[]>()
   for (const project of projects) {
+    if (project.googleSeriesId) continue // An attached meeting doesn't define project completion/dates.
     const marker = project.itemId.lastIndexOf('__si')
     if (marker <= 0) continue
     const parentKey = `${project.board}:${project.itemId.slice(0, marker)}`
@@ -230,7 +240,8 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
       const datedCurrent = relevantChild
         ? { ...current, startDate: relevantChild.startDate, endDate: relevantChild.endDate }
         : current
-      return { ...item, projectRef: { ...item.projectRef, ...datedCurrent } }
+      const personal = current.completionTarget ? completionState(comments, current.completionTarget, memberId) : undefined
+      return { ...item, ...(personal ? { done: personal.done } : {}), projectRef: { ...item.projectRef, ...datedCurrent } }
     })
     .filter(item => {
       const ref = item.projectRef

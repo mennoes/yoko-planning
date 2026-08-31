@@ -94,7 +94,10 @@ export function NotificationBell() {
     refresh()
     const offEvent  = onNotificationsChange(refresh)
     const offRemote = subscribeRemoteNotifications(memberId)
-    return () => { offEvent(); offRemote() }
+    // Realtime may reconnect after sleep, or be disabled on older databases.
+    const timer = window.setInterval(() => { if (!document.hidden) refresh() }, 30_000)
+    window.addEventListener('focus', refresh)
+    return () => { offEvent(); offRemote(); window.clearInterval(timer); window.removeEventListener('focus', refresh) }
   }, [memberId])
 
   // sluit op klik buiten — popup leeft via portal, dus check zowel de
@@ -217,7 +220,15 @@ export function NotificationBell() {
             )
             return n.href ? (
               <Link key={n.id} href={n.href}
-                onClick={() => { setOpen(false); markRead(n.id) }}
+                onClick={() => {
+                  setOpen(false); markRead(n.id)
+                  const url = new URL(n.href!, window.location.origin)
+                  const id = url.searchParams.get('drawer')
+                  if (id) window.dispatchEvent(new CustomEvent('yoko-open-item', { detail: {
+                    board: decodeURIComponent(url.pathname.split('/')[2] ?? ''), id,
+                    subitemId: url.searchParams.get('subitem') ?? undefined,
+                  } }))
+                }}
                 style={{ display: 'block', textDecoration: 'none' }}>
                 {Inner}
               </Link>

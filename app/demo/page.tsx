@@ -28,7 +28,7 @@ import {
 } from '@/lib/demoTodosStore'
 import { mergeMemberTodoItems } from '@/lib/demoTodoProjectSeed'
 import teamData  from '@/data/demoTeam.json'
-import { buildDemoBoards } from '@/lib/demoFixtures'
+import { buildDemoBoards, ensureCurrentDemoBoardSeed } from '@/lib/demoFixtures'
 import { loadGroups, saveGroups } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
 import { setVrijDaysFromProjects } from '@/lib/vrijDays'
@@ -431,6 +431,7 @@ export default function HomePage() {
   const memberId = profile?.memberId ?? ''
 
   useEffect(() => {
+    ensureCurrentDemoBoardSeed()
     setCategoryOverrides(loadCategoryOverrides())
     setRecentPages(loadRecentPages().slice(0, 9))
 

@@ -14,6 +14,7 @@ type ShareSubItem = {
   startDate: string | null
   endDate:   string | null
   status:    string
+  estHours:  number
 }
 type ShareItem = {
   id:        string
@@ -22,6 +23,7 @@ type ShareItem = {
   status:    string
   startDate: string | null
   endDate:   string | null
+  estHours:  number
   subitems:  ShareSubItem[]
 }
 type ShareGroup = {
@@ -70,6 +72,21 @@ function addMonths(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth() + n, 1)
 }
 
+function hoursInSelectedRange(start: string | null, end: string | null, hours: number, from: string, until: string): number {
+  if (!start || hours <= 0) return 0
+  const s = new Date(`${start}T00:00:00`)
+  const e = new Date(`${end ?? start}T00:00:00`)
+  if (e < s) return 0
+  const rangeStart = from ? new Date(`${from}T00:00:00`) : s
+  const rangeEnd = until ? new Date(`${until}T23:59:59`) : e
+  const overlapStart = s > rangeStart ? s : rangeStart
+  const overlapEnd = e < rangeEnd ? e : rangeEnd
+  if (overlapEnd < overlapStart) return 0
+  const totalDays = Math.round((e.getTime() - s.getTime()) / 86400000) + 1
+  const overlapDays = Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000) + 1
+  return hours * (overlapDays / Math.max(1, totalDays))
+}
+
 export default function ShareBoardPage() {
   const params = useParams<{ board: string }>()
   const board = params.board
@@ -82,6 +99,7 @@ export default function ShareBoardPage() {
   const [preset, setPreset]     = useState<Preset>('month')
   const [from, setFrom]         = useState('')
   const [until, setUntil]       = useState('')
+  const [groupFilter, setGroupFilter] = useState('all')
 
   useEffect(() => {
     if (!board) { setLoading(false); return }
@@ -119,8 +137,13 @@ export default function ShareBoardPage() {
   }, [preset])
 
   // Items filteren op overlap met from/until.
+  const selectedGroups = useMemo(
+    () => groupFilter === 'all' ? groups : groups.filter(g => g.id === groupFilter),
+    [groups, groupFilter],
+  )
+
   const filteredGroups: ShareGroup[] = useMemo(() => {
-    if (!from && !until) return groups
+    if (!from && !until) return selectedGroups
     const fromTs  = from  ? new Date(from).getTime()           : null
     const untilTs = until ? new Date(until).getTime() + 86400000 - 1 : null
     const overlaps = (s: string | null, e: string | null) => {
@@ -131,14 +154,43 @@ export default function ShareBoardPage() {
       if (untilTs != null && ms > untilTs) return false
       return true
     }
-    return groups
+    return selectedGroups
       .map(g => ({
         ...g,
         items: g.items
           .filter(i => overlaps(i.startDate, i.endDate) || i.subitems.some(s => overlaps(s.startDate, s.endDate))),
       }))
       .filter(g => g.items.length > 0)
-  }, [groups, from, until])
+  }, [selectedGroups, from, until])
+
+  const projectHours = useMemo(() => {
+    return selectedGroups
+      .flatMap(group => group.items.map(item => {
+        const datedSubs = item.subitems.filter(sub => sub.startDate || sub.endDate)
+        const hours = datedSubs.length > 0
+          ? datedSubs.reduce((sum, sub) => sum + hoursInSelectedRange(sub.startDate ?? sub.endDate, sub.endDate ?? sub.startDate, sub.estHours, from, until), 0)
+          : hoursInSelectedRange(item.startDate, item.endDate, item.estHours, from, until)
+        return { id: item.id, name: item.name, groupName: group.name, color: group.color, hours: Math.round(hours * 10) / 10 }
+      }))
+      .filter(item => item.hours > 0)
+      .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name))
+  }, [selectedGroups, from, until])
+
+  const periodHours = Math.round(projectHours.reduce((sum, item) => sum + item.hours, 0) * 10) / 10
+
+  const visibleMonthlyHours = useMemo(() => monthlyHours.map(month => {
+    const [year, monthNumber] = month.key.split('-').map(Number)
+    const monthFrom = `${month.key}-01`
+    const monthUntil = monthEnd(new Date(year, monthNumber - 1, 1))
+    const hours = selectedGroups.flatMap(group => group.items).reduce((total, item) => {
+      const datedSubs = item.subitems.filter(sub => sub.startDate || sub.endDate)
+      if (datedSubs.length > 0) {
+        return total + datedSubs.reduce((sum, sub) => sum + hoursInSelectedRange(sub.startDate ?? sub.endDate, sub.endDate ?? sub.startDate, sub.estHours, monthFrom, monthUntil), 0)
+      }
+      return total + hoursInSelectedRange(item.startDate, item.endDate, item.estHours, monthFrom, monthUntil)
+    }, 0)
+    return { ...month, hours: Math.round(hours * 10) / 10 }
+  }), [monthlyHours, selectedGroups])
 
   const stats = useMemo(() => {
     const items = filteredGroups.flatMap(g => g.items)
@@ -180,9 +232,9 @@ export default function ShareBoardPage() {
           moet kunnen zien: hoeveel tijd is er vorige maand aan besteed,
           hoeveel deze maand, en hoeveel staat er volgende maand gepland.
           Klikbaar: filtert de lijst eronder meteen op die maand. */}
-      {monthlyHours.length === 3 && (
+      {visibleMonthlyHours.length === 3 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
-          {monthlyHours.map((m, idx) => {
+          {visibleMonthlyHours.map((m, idx) => {
             const presetForCard: Preset = idx === 0 ? 'prevMonth' : idx === 1 ? 'month' : 'next'
             const active = preset === presetForCard
             return (
@@ -217,6 +269,18 @@ export default function ShareBoardPage() {
 
       {/* Datum-filter — preset-knoppen + optionele custom range. */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+          <span aria-hidden style={{ fontSize: 14 }}>▽</span>
+          Groep
+          <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
+            style={{ minWidth: 170, padding: '6px 30px 6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            <option value="all">Alle groepen</option>
+            {groups.filter(group => group.items.length > 0).map(group => (
+              <option key={group.id} value={group.id}>{group.name}</option>
+            ))}
+          </select>
+        </label>
+        <span aria-hidden style={{ width: 1, height: 24, background: 'var(--border-light)', marginRight: 2 }} />
         {([
           { id: 'all',       label: 'Alles' },
           { id: 'prevMonth', label: 'Vorige maand' },
@@ -247,6 +311,37 @@ export default function ShareBoardPage() {
           </div>
         )}
       </div>
+
+      <section style={{ marginBottom: 28, padding: '16px 18px', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: projectHours.length > 0 ? 12 : 0 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 750, color: 'var(--text-primary)' }}>Uren per project</h2>
+            <div style={{ marginTop: 2, fontSize: 11.5, color: 'var(--text-muted)' }}>
+              {groupFilter === 'all' ? 'Alle groepen' : groups.find(group => group.id === groupFilter)?.name}
+              {from || until ? ` · ${from ? fmtDate(from) : 'begin'} – ${until ? fmtDate(until) : 'nu'}` : ' · volledige planning'}
+            </div>
+          </div>
+          <strong style={{ fontSize: 22, color: 'var(--text-primary)', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>{periodHours}u</strong>
+        </div>
+        {projectHours.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen geplande uren binnen deze selectie.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {projectHours.map((project, index) => (
+              <div key={`${project.id}-${project.groupName}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 14, alignItems: 'center', padding: '9px 0', borderTop: index === 0 ? '1px solid var(--border-light)' : '1px solid var(--border-light)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, fontSize: 10.5, color: 'var(--text-muted)' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: project.color || color }} />
+                    {project.groupName}
+                  </div>
+                </div>
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{project.hours}u</strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {filteredGroups.length === 0 && (
         <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '20px 0' }}>
@@ -336,7 +431,7 @@ export default function ShareBoardPage() {
       ))}
 
       <footer style={{ marginTop: 40, paddingTop: 16, borderTop: '1px solid var(--border-light)', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
-        Read-only deelweergave · gegenereerd door Yoko Planner · interne notities, contactgegevens en uren-inschattingen worden bewust niet getoond
+        Read-only deelweergave · gegenereerd door Yoko Planner · interne notities, contactgegevens en links worden niet getoond
       </footer>
     </main>
   )

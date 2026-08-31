@@ -11,7 +11,7 @@
 //      wordt naar het demo-equivalent omgeleid, of toont een 'kan niet
 //      in de demo'-toast als er geen equivalent is;
 //   2. een klein 'Live demo'-label + reset-knop.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import SearchPalette from './SearchPalette'
@@ -25,7 +25,7 @@ import { UserAvatar } from './UserAvatar'
 import { useProfile } from './ProfileContext'
 import { useTeam } from './TeamContext'
 import { DEMO_BLOCKED_EVENT, demoSafeHref, notifyDemoBlocked } from '@/lib/demoFixtures'
-import { resetDemoBoards } from '@/lib/demoBoardStore'
+import { refreshDemoBoardsIfNeeded, resetDemoBoards } from '@/lib/demoBoardStore'
 
 export default function DemoShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -33,6 +33,9 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [notice, setNotice] = useState(false)
+  const noticeTimerRef = useRef<number | null>(null)
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const viewerRef = useRef<HTMLDivElement>(null)
   const { profile, setProfile } = useProfile()
   // useTeam() i.p.v. de statische DEMO_MEMBERS-import — zodat leden die een
   // bezoeker zelf toevoegt/verwijdert via /demo/team-admin ook meteen in
@@ -40,6 +43,18 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
   // localStorage-backed lijst die TeamContext op /demo uitleest).
   const { members: liveTeam } = useTeam()
   const bekijkAlsMembers = liveTeam.filter(m => m.id !== 'unassigned' && !m.hidden)
+  const activeViewer = bekijkAlsMembers.find(m => m.id === profile?.memberId) ?? bekijkAlsMembers[0]
+
+  useEffect(() => { refreshDemoBoardsIfNeeded() }, [])
+
+  useEffect(() => {
+    if (!viewerOpen) return
+    function close(e: MouseEvent) {
+      if (!viewerRef.current?.contains(e.target as Node)) setViewerOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [viewerOpen])
 
   // Onderschept ELKE <a>-klik binnen de demo (capture-phase, vóór Next's
   // eigen Link-handler) — of het nou uit de hergebruikte Sidebar komt, uit
@@ -67,12 +82,15 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     function onBlocked() {
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
       setNotice(true)
-      const t = setTimeout(() => setNotice(false), 5000)
-      return () => clearTimeout(t)
+      noticeTimerRef.current = window.setTimeout(() => setNotice(false), 3500)
     }
     window.addEventListener(DEMO_BLOCKED_EVENT, onBlocked)
-    return () => window.removeEventListener(DEMO_BLOCKED_EVENT, onBlocked)
+    return () => {
+      window.removeEventListener(DEMO_BLOCKED_EVENT, onBlocked)
+      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
+    }
   }, [])
 
   function doReset() {
@@ -125,34 +143,58 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
           mobile zit de sidebar achter de hamburger-drawer, geen vaste
           linkerkolom om iets boven te plakken. */}
       {!isMobile && (
-        <div style={{
+        <div ref={viewerRef} style={{
           // bottom: 108 — de Sidebar's eigen 'Volgorde'-toggle + footer
           // (profiel/thema/instellingen) zitten ALTIJD op ~100px van de
           // viewport-onderkant (vast, ongeacht nav-inhoud). Bij bottom: 62
           // stond deze switcher daar bovenop — de avatars overlapten de
           // 'Volgorde'-tekst zodat die onleesbaar werd.
           position: 'fixed', bottom: 108, left: 12, zIndex: 40,
-          display: 'flex', flexDirection: 'column', gap: 6,
+          display: 'flex', flexDirection: 'column', gap: 5, width: 184,
         }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', paddingLeft: 2 }}>
             Bekijk als
           </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {bekijkAlsMembers.map(m => {
-              const active = profile?.memberId === m.id
-              return (
-                <button key={m.id}
-                  onClick={() => setProfile({ memberId: m.id, name: m.name, color: m.color, photo: profile?.memberId === m.id ? profile.photo : null })}
-                  title={`Bekijk demo als ${m.name}`}
-                  style={{
-                    padding: 0, borderRadius: '50%', cursor: 'pointer', lineHeight: 0,
-                    background: 'none', border: active ? `2px solid ${m.color}` : '2px solid transparent',
-                  }}>
-                  <UserAvatar memberId={m.id} size={30} borderless={!active} />
-                </button>
-              )
-            })}
-          </div>
+          <button onClick={() => setViewerOpen(open => !open)} aria-expanded={viewerOpen}
+            style={{
+              width: '100%', height: 38, padding: '4px 8px 4px 5px', borderRadius: 10,
+              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+              color: 'var(--text-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            }}>
+            {activeViewer && <UserAvatar memberId={activeViewer.id} size={28} />}
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left', fontSize: 12.5, fontWeight: 650 }}>
+              {activeViewer?.name ?? 'Kies persoon'}
+            </span>
+            <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 10 }}>{viewerOpen ? '▼' : '▲'}</span>
+          </button>
+          {viewerOpen && (
+            <div style={{
+              position: 'absolute', left: 0, bottom: 46, width: 220, maxHeight: 280, overflowY: 'auto',
+              padding: 5, borderRadius: 11, background: 'var(--bg-card)', border: '1px solid var(--border)',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+            }}>
+              {bekijkAlsMembers.map(m => {
+                const active = profile?.memberId === m.id
+                return (
+                  <button key={m.id}
+                    onClick={() => {
+                      setProfile({ memberId: m.id, name: m.name, color: m.color, photo: active ? profile?.photo ?? null : null })
+                      setViewerOpen(false)
+                    }}
+                    style={{
+                      width: '100%', padding: '6px 8px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left',
+                      background: active ? 'var(--accent-light)' : 'transparent', color: 'var(--text-primary)',
+                    }}>
+                    <UserAvatar memberId={m.id} size={27} borderless={!active} />
+                    <span style={{ flex: 1, fontSize: 12.5, fontWeight: active ? 700 : 500 }}>{m.name}</span>
+                    {active && <span style={{ color: 'var(--accent)', fontWeight: 800 }}>✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -189,11 +231,16 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
           fontSize: 13, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10,
           maxWidth: '92vw',
         }}>
-          <span>Dit is een demo — dat kan niet in deze versie.</span>
-          <a href="mailto:menno@studioyoko.nl" style={{ color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}
+          <span>Dat onderdeel zit niet in de demo.</span>
+          <a href="https://mail.google.com/mail/?view=cm&fs=1&to=menno%40studioyoko.nl&su=Vraag%20over%20Tuesday"
+            style={{ color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}
             onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer">
-            Meer info →
+            Mail Menno →
           </a>
+          <button type="button" aria-label="Melding sluiten" onClick={() => setNotice(false)}
+            style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 1px 3px' }}>
+            ×
+          </button>
         </div>
       )}
 

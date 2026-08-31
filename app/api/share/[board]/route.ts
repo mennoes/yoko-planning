@@ -17,17 +17,16 @@ const SHAREABLE_BOARDS = new Set(['nederland', 'vlaanderen', 'pnp'])
 //   - links / extra.links: kunnen interne Dropbox/Frame.io-URL's bevatten.
 //   - dagen / deadline: planning-intern, geen externe waarde.
 //   - extra.ownerHours, extra.notes, etc.: zelfde reden.
-// Wat WEL gedeeld wordt: name, owner_ids, status, start/end-datums.
-// est_hours zelf blijft ook verborgen PER ITEM — maar we gebruiken 'm hier
-// server-side om een uren-totaal per maand (vorige/deze/volgende) te
-// berekenen, zodat een klant in één oogopslag ziet hoeveel tijd er per
-// maand voor 'm gepland staat, zonder losse item-schattingen te lekken.
+// Wat WEL gedeeld wordt: naam, owners, status, datums en geplande uren.
+// Die uren zijn nodig voor de expliciet gevraagde projectuitsplitsing; alle
+// overige interne iteminformatie blijft buiten de publieke response.
 type ShareSubItem = {
   id:        string
   name:      string
   startDate: string | null
   endDate:   string | null
   status:    string
+  estHours:  number
 }
 type ShareItem = {
   id:        string
@@ -36,6 +35,7 @@ type ShareItem = {
   status:    string
   startDate: string | null
   endDate:   string | null
+  estHours:  number
   subitems:  ShareSubItem[]
 }
 type ShareGroup = {
@@ -140,6 +140,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ boa
     .from('board_groups')
     .select('id, name, color, position')
     .eq('board_id', board)
+    .is('deleted_at', null)
     .order('position', { ascending: true })
   if (gErr) return Response.json({ ok: false, error: 'Kon groepen niet laden' }, { status: 500 })
 
@@ -147,6 +148,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ boa
     .from('board_items')
     .select('id, group_id, name, owner_ids, status, start_date, end_date, est_hours, subitems, position, extra')
     .eq('board_id', board)
+    .is('deleted_at', null)
     .order('position', { ascending: true })
   if (iErr) return Response.json({ ok: false, error: 'Kon items niet laden' }, { status: 500 })
 
@@ -165,6 +167,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ boa
         startDate: s.startDate ?? null,
         endDate:   s.endDate   ?? null,
         status:    s.status ?? '',
+        estHours:  Number(s.estHours) || 0,
       }))
     const arr = itemsByGroup.get(r.group_id) ?? []
     arr.push({
@@ -174,6 +177,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ boa
       status:    r.status ?? '',
       startDate: r.start_date,
       endDate:   r.end_date,
+      estHours:  Number(r.est_hours) || 0,
       subitems:  subs,
     })
     itemsByGroup.set(r.group_id, arr)
