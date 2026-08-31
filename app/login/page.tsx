@@ -38,12 +38,28 @@ export default function LoginPage() {
   const [loading,  setLoading]  = useState(false)
   const [message,  setMessage]  = useState<{ text: string; ok: boolean } | null>(null)
 
+  // Supabase-foutmeldingen zijn Engels en cryptisch ('email rate limit
+  // exceeded'). De rate-limit-variant komt in de praktijk het vaakst voor —
+  // Supabase's ingebouwde mailer staat maar een handvol auth-mails per uur
+  // toe — dus die vertalen we naar iets waar je daadwerkelijk wat aan hebt.
+  function humanAuthError(raw: string): string {
+    const m = raw.toLowerCase()
+    if (m.includes('rate limit')) {
+      return 'Te veel login-mails verstuurd in korte tijd (limiet van de mailserver). '
+        + 'Wacht een uur en probeer opnieuw, of log in met een wachtwoord via het tabblad hiernaast. '
+        + 'Een beheerder kan de limiet wegnemen door een eigen SMTP-server in te stellen in Supabase.'
+    }
+    if (m.includes('invalid login credentials')) return 'E-mailadres of wachtwoord klopt niet.'
+    if (m.includes('email not confirmed'))       return 'Dit account is nog niet bevestigd — check je inbox voor de bevestigingsmail.'
+    return raw
+  }
+
   async function handleMagicLink() {
     if (!email) return
     setLoading(true); setMessage(null)
     const { error } = await supabase!.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } })
     setLoading(false)
-    if (error) setMessage({ text: error.message, ok: false })
+    if (error) setMessage({ text: humanAuthError(error.message), ok: false })
     else       setMessage({ text: `Check je e-mail (${email}) voor de loginlink!`, ok: true })
   }
 
@@ -53,7 +69,7 @@ export default function LoginPage() {
     const fn = isNew ? supabase!.auth.signUp : supabase!.auth.signInWithPassword
     const { error } = await fn.call(supabase!.auth, { email, password })
     setLoading(false)
-    if (error) setMessage({ text: error.message, ok: false })
+    if (error) setMessage({ text: humanAuthError(error.message), ok: false })
     else if (isNew) setMessage({ text: 'Account aangemaakt! Check je e-mail om te bevestigen.', ok: true })
     else window.location.href = safeNext
   }
@@ -65,7 +81,7 @@ export default function LoginPage() {
       redirectTo: `${window.location.origin}/auth/reset`,
     })
     setLoading(false)
-    if (error) setMessage({ text: error.message, ok: false })
+    if (error) setMessage({ text: humanAuthError(error.message), ok: false })
     else setMessage({ text: `Reset-link verstuurd naar ${email}. Check je inbox.`, ok: true })
   }
 

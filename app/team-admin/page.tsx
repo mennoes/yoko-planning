@@ -24,11 +24,25 @@ async function sendInvite(email: string, name: string): Promise<void> {
     })
     const json = await res.json() as { ok: boolean; status?: string; error?: string; actionLink?: string }
     if (!json.ok) {
-      window.alert(`Invite mislukt: ${json.error ?? 'onbekende fout'}`)
+      const raw = json.error ?? 'onbekende fout'
+      window.alert(raw.toLowerCase().includes('rate limit')
+        ? `Invite mislukt: de mailserver heeft z'n limiet bereikt (te veel auth-mails in korte tijd).\n\n`
+          + `Wacht een uur en probeer opnieuw, of stel een eigen SMTP-server in bij Supabase → Authentication → SMTP Settings om de limiet weg te nemen.`
+        : `Invite mislukt: ${raw}`)
       return
     }
     if (json.status === 'invited') {
       window.alert(`Invite-mail verstuurd naar ${email}. ${name} krijgt 'm in de inbox met een link om een wachtwoord te zetten.`)
+    } else if (json.status === 'invited_no_mail') {
+      // Account is aangemaakt, alleen de mail kwam er niet uit (meestal de
+      // rate-limit van Supabase's ingebouwde mailer). De link werkt gewoon —
+      // stuur 'm handmatig door via Slack/WhatsApp.
+      const link = json.actionLink
+      window.alert(
+        `Account voor ${email} is aangemaakt, maar de mail kon niet verstuurd worden `
+        + `(${json.error ?? 'mailserver-limiet'}).\n\nStuur ${name} deze login-link handmatig door:\n\n${link}`,
+      )
+      if (link) { try { await navigator.clipboard.writeText(link) } catch {} }
     } else if (json.status === 'exists') {
       const link = json.actionLink
       window.alert(
