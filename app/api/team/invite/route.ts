@@ -88,6 +88,24 @@ export async function POST(req: NextRequest) {
     data: body.name ? { name: body.name } : undefined,
   })
   if (error) {
+    // Mail versturen mislukt — in de praktijk bijna altijd Supabase's
+    // rate-limit op auth-mails ('email rate limit exceeded'; de ingebouwde
+    // mailer staat maar een handvol per uur toe). Val dan terug op een
+    // handmatig door te sturen invite-link, zodat een nieuw teamlid niet
+    // een uur hoeft te wachten voor 'ie überhaupt kan inloggen.
+    const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'invite',
+      email,
+      options: { redirectTo },
+    })
+    const actionLink = linkData?.properties?.action_link ?? null
+    if (actionLink) {
+      return Response.json({
+        ok: true, status: 'invited_no_mail',
+        actionLink,
+        error: error.message,
+      })
+    }
     return Response.json({ ok: false, error: error.message }, { status: 500 })
   }
   return Response.json({
