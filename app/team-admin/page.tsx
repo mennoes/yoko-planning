@@ -1,21 +1,30 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTeam } from '@/components/TeamContext'
 import { upsertTeamMember, deleteTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
 import { useProfile } from '@/components/ProfileContext'
 import { supabase } from '@/lib/supabase'
 import { IconUsers } from '@/components/Icon'
 
+// Resultaat van een invite-poging. Wordt via een window-event naar de
+// InviteResultDialog op pagina-niveau gestuurd (sendInvite wordt vanuit
+// twee verschillende componenten aangeroepen, dus een event is simpeler
+// dan de state door beide bomen te prop-drillen).
+export type InviteResult = { title: string; body: string; link?: string | null; ok: boolean }
+const INVITE_RESULT_EVENT = 'yoko-invite-result'
+
+function reportInvite(result: InviteResult): void {
+  window.dispatchEvent(new CustomEvent<InviteResult>(INVITE_RESULT_EVENT, { detail: result }))
+}
+
 // Stuur invite naar de geconfigureerde Supabase auth — maakt user aan
 // (of stuurt magic-link als-ie al bestaat) zodat 'ie kan inloggen.
-// Toont feedback via window.alert; voor MVP voldoende, kan later
-// een toast worden.
 async function sendInvite(email: string, name: string): Promise<void> {
-  if (!supabase) { window.alert('Supabase niet geconfigureerd.'); return }
+  if (!supabase) { reportInvite({ ok: false, title: 'Niet geconfigureerd', body: 'Supabase niet geconfigureerd.' }); return }
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
-  if (!token) { window.alert('Je bent niet ingelogd — log opnieuw in en probeer het dan.'); return }
+  if (!token) { reportInvite({ ok: false, title: 'Niet ingelogd', body: 'Log opnieuw in en probeer het dan nog eens.' }); return }
   try {
     const res = await fetch('/api/team/invite', {
       method: 'POST',
@@ -25,33 +34,115 @@ async function sendInvite(email: string, name: string): Promise<void> {
     const json = await res.json() as { ok: boolean; status?: string; error?: string; actionLink?: string }
     if (!json.ok) {
       const raw = json.error ?? 'onbekende fout'
-      window.alert(raw.toLowerCase().includes('rate limit')
-        ? `Invite mislukt: de mailserver heeft z'n limiet bereikt (te veel auth-mails in korte tijd).\n\n`
-          + `Wacht een uur en probeer opnieuw, of stel een eigen SMTP-server in bij Supabase → Authentication → SMTP Settings om de limiet weg te nemen.`
-        : `Invite mislukt: ${raw}`)
+      reportInvite(raw.toLowerCase().includes('rate limit')
+        ? { ok: false, title: 'Mailserver-limiet bereikt',
+            body: 'Er zijn te veel auth-mails in korte tijd verstuurd. Wacht een uur en probeer opnieuw, '
+              + 'of stel een eigen SMTP-server in bij Supabase → Authentication → SMTP Settings om deze limiet weg te nemen.' }
+        : { ok: false, title: 'Invite mislukt', body: raw })
       return
     }
     if (json.status === 'invited') {
-      window.alert(`Invite-mail verstuurd naar ${email}. ${name} krijgt 'm in de inbox met een link om een wachtwoord te zetten.`)
+      reportInvite({ ok: true, title: 'Invite verstuurd',
+        body: `${name} krijgt een mail op ${email} met een link om een wachtwoord te zetten.` })
     } else if (json.status === 'invited_no_mail') {
       // Account is aangemaakt, alleen de mail kwam er niet uit (meestal de
       // rate-limit van Supabase's ingebouwde mailer). De link werkt gewoon —
       // stuur 'm handmatig door via Slack/WhatsApp.
-      const link = json.actionLink
-      window.alert(
-        `Account voor ${email} is aangemaakt, maar de mail kon niet verstuurd worden `
-        + `(${json.error ?? 'mailserver-limiet'}).\n\nStuur ${name} deze login-link handmatig door:\n\n${link}`,
-      )
-      if (link) { try { await navigator.clipboard.writeText(link) } catch {} }
+      reportInvite({ ok: true, title: 'Account aangemaakt — mail niet verstuurd',
+        body: `Het account voor ${email} bestaat nu, maar de mail kon niet verstuurd worden `
+          + `(${json.error ?? 'mailserver-limiet'}). Stuur ${name} onderstaande login-link handmatig door.`,
+        link: json.actionLink })
     } else if (json.status === 'exists') {
-      const link = json.actionLink
-      window.alert(
-        `${email} had al een auth-account. Een nieuwe magic-link is gegenereerd${link ? ' — kopieer en stuur door:\n\n' + link : ' en verstuurd via Supabase SMTP.'}`,
-      )
+      reportInvite({ ok: true, title: 'Bestaand account — nieuwe login-link',
+        body: json.actionLink
+          ? `${email} had al een account. Stuur onderstaande magic-link door zodat ${name} weer in kan loggen.`
+          : `${email} had al een account. Er is een nieuwe magic-link verstuurd via Supabase SMTP.`,
+        link: json.actionLink })
     }
   } catch (e) {
-    window.alert(`Invite-call mislukt: ${e}`)
+    reportInvite({ ok: false, title: 'Invite-call mislukt', body: String(e) })
   }
+}
+
+// Dialog met een SELECTEERBAAR linkveld — een window.alert() laat je de
+// tekst niet selecteren, waardoor een handmatig door te sturen login-link
+// onbruikbaar was.
+function InviteResultDialog() {
+  const [result, setResult] = useState<InviteResult | null>(null)
+  const [copied, setCopied] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function onResult(e: Event) {
+      setResult((e as CustomEvent<InviteResult>).detail)
+      setCopied(false)
+    }
+    window.addEventListener(INVITE_RESULT_EVENT, onResult)
+    return () => window.removeEventListener(INVITE_RESULT_EVENT, onResult)
+  }, [])
+
+  // Link meteen geselecteerd tonen zodat Cmd+C direct werkt, ook als de
+  // clipboard-API geblokkeerd is (bv. zonder https of in een iframe).
+  useEffect(() => {
+    if (result?.link) setTimeout(() => inputRef.current?.select(), 50)
+  }, [result])
+
+  if (!result) return null
+
+  async function copy() {
+    if (!result?.link) return
+    try {
+      await navigator.clipboard.writeText(result.link)
+      setCopied(true); setTimeout(() => setCopied(false), 1800)
+    } catch {
+      inputRef.current?.select()
+    }
+  }
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) setResult(null) }}
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
+        padding: '22px 24px', width: 560, maxWidth: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.35)' }}>
+        <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {result.ok ? '' : '⚠️ '}{result.title}
+        </h2>
+        <p style={{ margin: '0 0 16px', fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+          {result.body}
+        </p>
+
+        {result.link && (
+          <>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input ref={inputRef} readOnly value={result.link}
+                onClick={e => e.currentTarget.select()}
+                style={{ flex: 1, minWidth: 0, padding: '9px 11px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'var(--bg-hover)',
+                  color: 'var(--text-primary)', fontSize: 12, fontFamily: 'monospace', outline: 'none' }} />
+              <button onClick={copy}
+                style={{ flexShrink: 0, padding: '9px 14px', borderRadius: 8, border: 'none',
+                  background: copied ? 'var(--green, #00c875)' : 'var(--accent)', color: '#000',
+                  fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                {copied ? '✓ Gekopieerd' : 'Kopieer'}
+              </button>
+            </div>
+            <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+              Deze link is eenmalig en verloopt — stuur &apos;m meteen door via Slack of WhatsApp.
+            </p>
+          </>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+          <button onClick={() => setResult(null)}
+            style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border)',
+              background: 'var(--bg-hover)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            Sluiten
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // Voorgestelde kleuren-set zodat een nieuwe gebruiker iets te kiezen heeft
@@ -539,6 +630,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         <IconUsers size={26} /> Team beheren
       </h1>
       {children}
+      {/* Eén gedeelde dialog voor alle invite-resultaten — sendInvite wordt
+          vanuit zowel het 'nieuw lid'-formulier als de ✉ Invite-knop per rij
+          aangeroepen en meldt z'n resultaat via een window-event. */}
+      <InviteResultDialog />
     </div>
   )
 }
