@@ -62,6 +62,8 @@ import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
 import { completionTargetForProject } from '@/lib/personalCompletionClient'
+import { useCompletedOwners } from '@/components/useCompletedOwners'
+import type { CompletionTarget } from '@/lib/personalCompletion'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -3529,7 +3531,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
           </div>
         </Row>
-        <Row label="Status">
+        <Row label="Status project">
           <StatusPicker
             value={(rawItem?.status as string) ?? project.status ?? ''}
             onChange={v => commit({ status: v })}
@@ -3755,6 +3757,10 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               onLive={next => setOwnerHours(next)}
               onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
               teamLookup={oid => team.find(t => t.id === oid) ?? null}
+              completionTarget={personalCompletion ? {
+                parentItemId: personalCompletion.parentItemId,
+                ...(personalCompletion.subitemId ? { subitemId: personalCompletion.subitemId } : {}),
+              } : null}
             />
           </Row>
         )}
@@ -4184,7 +4190,7 @@ function StatusPicker({ value, onChange, disabled = false, ariaLabel }: {
 // Wijzig je één persoon, dan herverdelen de overigen proportioneel zodat de
 // som klopt. Door uren én % zij-aan-zij te tonen kun je sneller schakelen
 // tussen "Vincent doet 60% hiervan" en absolute uren.
-function DistributionEditor({ owners, total, values, onChange, onLive, teamLookup }: {
+function DistributionEditor({ owners, total, values, onChange, onLive, teamLookup, completionTarget }: {
   owners:     string[]
   total:      number
   values:     Record<string, number>
@@ -4195,8 +4201,10 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
   // pie-drag. Geen DB-write. Optioneel; valt terug op onChange.
   onLive?:    (next: Record<string, number>) => void
   teamLookup: (id: string) => TeamMember | null
+  completionTarget: CompletionTarget | null
 }) {
   const { getPhoto } = useTeamPhotos()
+  const completedOwners = useCompletedOwners(completionTarget, owners)
   const defaultPer = owners.length > 0 ? total / owners.length : 0
   const current: Record<string, number> = {}
   for (const o of owners) current[o] = values[o] ?? defaultPer
@@ -4292,7 +4300,16 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
             return (
               <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: segColor, flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-primary)' }}>{m.name}</span>
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</span>
+                  {completedOwners.has(oid) && (
+                    <span aria-label={`${m.name} is klaar`} title={`${m.name} heeft de eigen taak afgerond`}
+                      style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 6px', borderRadius: 10,
+                        background: 'rgba(0, 200, 117, 0.14)', color: 'var(--green, #00c875)', fontSize: 10, fontWeight: 700 }}>
+                      ✓ Klaar
+                    </span>
+                  )}
+                </span>
                 <input type="number" step="0.5" min="0" max={total}
                   value={val}
                   onChange={e => setHours(parseFloat(e.target.value) || 0)}

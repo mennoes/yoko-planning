@@ -34,6 +34,8 @@ import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
 import { PersonalCompletionSection } from './PersonalCompletionSection'
+import { useCompletedOwners } from './useCompletedOwners'
+import type { CompletionTarget } from '@/lib/personalCompletion'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -2416,11 +2418,13 @@ function DedupModal({ groups, onClose, onDelete }: {
 // kleur van die persoon en laat je via drag de uren-verdeling tussen
 // aangrenzende segmenten verschuiven. Lokale 'live'-state tijdens 't slepen,
 // DB-write pas op release.
-function OwnerDistributionSection({ item, owners, total, onUpdate }: {
+function OwnerDistributionSection({ item, owners, total, onUpdate, completionTarget }: {
   item: BoardItem; owners: string[]; total: number
   onUpdate: (u: Partial<BoardItem>) => void
+  completionTarget: CompletionTarget
 }) {
   const { getPhoto } = useTeamPhotos()
+  const completedOwners = useCompletedOwners(completionTarget, owners)
   const defaultPer = owners.length > 0 ? total / owners.length : 0
   const ownersKey  = owners.join(',')
   const valuesKey  = JSON.stringify(item.ownerHours ?? {})
@@ -2484,7 +2488,16 @@ function OwnerDistributionSection({ item, owners, total, onUpdate }: {
             return (
               <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                 <span style={{ width: 10, height: 10, borderRadius: 2, background: m.color ?? '#9aa3ad', flexShrink: 0 }} />
-                <span style={{ flex: 1, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                  {completedOwners.has(oid) && (
+                    <span aria-label={`${m.name} is klaar`} title={`${m.name} heeft de eigen taak afgerond`}
+                      style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 6px', borderRadius: 10,
+                        background: 'rgba(0, 200, 117, 0.14)', color: 'var(--green, #00c875)', fontSize: 10, fontWeight: 700 }}>
+                      ✓ Klaar
+                    </span>
+                  )}
+                </span>
                 <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{round1(val)}u · {pct}%</span>
               </div>
             )
@@ -2646,7 +2659,13 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
             const owners = item.ownerIds.filter(id => id && id !== 'unassigned')
             const total  = effectiveHours(item)
             if (owners.length < 2 || total <= 0) return null
-            return <OwnerDistributionSection item={item} owners={owners} total={total} onUpdate={onUpdate} />
+            return <OwnerDistributionSection
+              item={item}
+              owners={owners}
+              total={total}
+              onUpdate={onUpdate}
+              completionTarget={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
+            />
           })()}
 
           {/* Notities-thread (voorheen "Opmerkingen") */}
