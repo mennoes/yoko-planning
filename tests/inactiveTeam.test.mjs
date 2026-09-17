@@ -30,3 +30,15 @@ test('planning uses the shared personal task status from agendas', () => {
   assert.match(source, /layout="row"/)
   assert.match(source, /disabled=\{disabled\}/)
 })
+
+test('planning and agendas show completed owners in their distribution', () => {
+  const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
+  const agendas = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
+  const hook = readFileSync(new URL('../components/useCompletedOwners.ts', import.meta.url), 'utf8')
+  assert.match(planning, /useCompletedOwners\(completionTarget, owners\)/)
+  assert.match(agendas, /useCompletedOwners\(completionTarget, owners\)/)
+  assert.match(planning, /✓ Klaar/)
+  assert.match(agendas, /✓ Klaar/)
+  assert.match(hook, /completionState\(threads, target, memberId\)\?\.done/)
+  assert.match(hook, /onCommentsUpdate\(refresh\)/)
+})
