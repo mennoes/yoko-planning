@@ -37,6 +37,7 @@ export type Project = {
 import { getBoardColor } from './boardsRegistry'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
+import { blockedHoursForWorkdays } from './freeCapacity'
 // Proxy zodat code als BOARD_COLORS[boardId] blijft werken, maar nu
 // dynamisch op de registry. Toegevoegde borden krijgen hun eigen kleur
 // uit de boards-tabel; onbekende keys vallen terug op grijs.
@@ -58,7 +59,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string; externalLink?: string | null; source?: 'manual' | 'google'; googleSeriesId?: string }> | undefined) ?? []
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string; externalLink?: string | null }> | undefined) ?? []
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
         // erbij maar krijgt status='done' zodat 'ie in de planning faded
         // wordt i.p.v. te verdwijnen (anders 'verdwijnen items zomaar' bij
@@ -71,9 +72,8 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         const subsWithDates = subs
           .map((si, origIdx) => ({ si, origIdx }))
           .filter(({ si }) => si.startDate || si.endDate)
-        let attachedMeetings: Project[] = []
         if (subsWithDates.length > 0) {
-          const datedProjects = subsWithDates.map(({ si, origIdx }): Project => {
+          return subsWithDates.map(({ si, origIdx }): Project => {
             // Subitem-ownerIds gebruiken we alleen als 't ECHT toegewezen is
             // (niet leeg en niet alleen 'unassigned'). Anders valt-ie terug
             // op de parent-owners — anders telt een 'unassigned'-subitem 0u
@@ -112,20 +112,15 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               // Done op de subitem zelf óf op de parent telt als done —
               // beide krijgen in de planning een fade i.p.v. weg.
               status:    ((si.status ?? '') === 'Done' || (i.status as string) === 'Done') ? 'done' : 'active',
-              source:    si.source ?? (i.source as 'manual' | 'google' | undefined),
+              source:    (i.source as 'manual' | 'google' | undefined),
               externalLink: si.externalLink ?? (i.externalLink as string | undefined),
               externalSyncedAt: (i.externalSyncedAt as string | undefined),
               meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
               parentName: i.name as string,
             }
           })
-          if (subsWithDates.some(({ si }) => !si.googleSeriesId)) return datedProjects
-          // Auto-attached meetings are extra work, not a breakdown of the
-          // project's existing estimate. Adding a 1h meeting must not make
-          // a previously planned 40h project disappear from the workload.
-          attachedMeetings = datedProjects
         }
-        const activeSubs = subs.filter(si => !si.googleSeriesId && (si.status ?? '') !== 'Done')
+        const activeSubs = subs.filter(si => (si.status ?? '') !== 'Done')
         const hours = activeSubs.length > 0
           ? activeSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
           : (Number(i.estHours) || 0)
@@ -134,7 +129,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         // te verdwijnen.
         const rawOwners = (Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : []).filter(o => o && o !== 'unassigned')
         const ownerIds = rawOwners.length > 0 ? (i.ownerIds as string[]) : ['unassigned']
-        return [...attachedMeetings, {
+        return [{
           id: `${boardName}__${i.id}`,
           name: i.name as string,
           board: boardName,
@@ -335,15 +330,7 @@ export function projectHoursInWeek(
   categoryOverride?: string | null,
 ): number {
   if (!project.ownerIds.includes(memberId)) return 0
-  if (project.estHours === 0) return 0
   if (!project.startDate || !project.endDate) return 0
-
-  // Per-owner override: if ownerHours[memberId] is set, that's this owner's
-  // share. Otherwise split estHours evenly across owners.
-  const myShare = project.ownerHours && memberId in project.ownerHours
-    ? Number(project.ownerHours[memberId]) || 0
-    : project.estHours / Math.max(project.ownerIds.length, 1)
-  if (myShare === 0) return 0
 
   const pStart = new Date(project.startDate)
   const pEnd   = new Date(project.endDate)
@@ -366,8 +353,9 @@ export function projectHoursInWeek(
   // slechts 7,1u zichtbaar. Met dezelfde filter voor totaal én overlap
   // blijft de som over alle zichtbare cellen exact gelijk aan myShare.
   //
-  // Vrij is geen werkbijdrage: het verlaagt capaciteit, maar wordt niet als
-  // gewerkte uren bij het totaal opgeteld.
+  // EXCEPTION: vrij-events zelf moeten WEL meetellen — anders skipt
+  // countWorkdays hun eigen dag weg en wordt een 8u vakantie 0u in de
+  // werkdruk-bol. Voor vrij dus geen memberId-skip; alleen weekend.
   //
   // Gebruikte vroeger een eigen los regex-patroon hier, dat niet 1-op-1
   // overeenkwam met de canonieke VRIJ_PATTERNS in lib/workloadCategory.ts
@@ -383,12 +371,24 @@ export function projectHoursInWeek(
   // werkdruk-totalen, terwijl isVrijDayForMember het lid op die exacte
   // dagen al wél als 'vrij' had gemarkeerd via die groepsnaam.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  if (isVrij) return 0
-  const totalProjectWork = countWorkdays(pStart.getTime(), pEnd.getTime(), memberId)
-  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), memberId)
+  const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime(), isVrij ? undefined : memberId)
+  if (totalWork === 0) return 0
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
 
-  const fraction        = overlapWork / Math.max(1, totalProjectWork)
+  // Vrij blokkeert beschikbaarheid: reken 8u per vrije werkdag voor iedere
+  // toegewezen persoon. Google all-day events hebben vaak estHours=0 en
+  // verdwenen daardoor eerder ten onrechte uit de belasting.
+  if (isVrij) return blockedHoursForWorkdays(overlapWork)
+
+  // Per-owner override: if ownerHours[memberId] is set, that's this owner's
+  // share. Otherwise split estHours evenly across owners.
+  const myShare = project.ownerHours && memberId in project.ownerHours
+    ? Number(project.ownerHours[memberId]) || 0
+    : project.estHours / Math.max(project.ownerIds.length, 1)
+  if (myShare === 0) return 0
+
+  const fraction        = overlapWork / totalWork
   const result          = fraction * myShare
 
   return Math.round(result * 10) / 10

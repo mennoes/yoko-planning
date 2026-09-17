@@ -1,5 +1,4 @@
 'use client'
-import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -16,6 +15,7 @@ import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscrib
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
+import { blockedHoursForWorkdays } from '@/lib/freeCapacity'
 import { loadOwnerExcludes, excludeOwner, onOwnerExcludesChange } from '@/lib/ownerOverrides'
 
 // Helper voor synchrone off-day-check binnen render. Leest dezelfde
@@ -277,7 +277,7 @@ function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): num
 // ─── Hours in arbitrary range ─────────────────────────────────────────────────
 function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, categoryOverride?: string | null): number {
   if (!project.ownerIds.includes(memberId)) return 0
-  if (project.estHours === 0 || !project.startDate || !project.endDate) return 0
+  if (!project.startDate || !project.endDate) return 0
   const pS = new Date(project.startDate)
   const pE = new Date(project.endDate); pE.setHours(23,59,59,999)
   if (re < pS || rs > pE) return 0
@@ -286,8 +286,10 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
   // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
   // duwt in de werkdruk-cellen.
-  // Vrij is geen gepland werk: het verlaagt de beschikbare capaciteit en
-  // hoort dus niet óók als gewerkte uren in de bol te staan.
+  // VRIJ-events zelf moeten echter WEL meetellen op hun eigen dag — anders
+  // skipt countWorkdaysMs hen weg en wordt een 8u vakantiedag 0u in de bol.
+  // Voor vrij gebruiken we daarom GEEN memberId-skip: alleen weekend
+  // wordt nog uitgesloten.
   // Naast naam-patroon (isVrijTitle) ook de GROEPSNAAM checken (zelfde
   // regel als isVrijDayForMember in lib/vrijDays.ts) en de expliciete
   // category-override. Zonder dit: een item als 'Zwitserland' dat in een
@@ -300,11 +302,17 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // bevestigd: item in groep 'Vrij' zonder naam-match → 40u compleet
   // verdwenen uit de werkdruk-totalen.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  if (isVrij) return 0
-  const totalProjectWork = countWorkdaysMs(pS.getTime(), pE.getTime(), memberId)
-  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), memberId)
+  // Gebruik voor de noemer exact dezelfde zichtbare werkdagen als voor de
+  // overlap. Anders verdwijnen weekend-aandelen uit de week-/dagtotalen.
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), isVrij ? undefined : memberId)
+  if (totalWork === 0) return 0
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
   if (overlapWork === 0) return 0
-  const fraction  = overlapWork / Math.max(1, totalProjectWork)
+  // Vrij is geen projectinspanning maar geblokkeerde capaciteit. Een hele
+  // vrije werkdag telt daarom altijd als 8u per toegewezen persoon, ook als
+  // het agenda-item zelf 0 geschatte uren heeft (zoals Google all-day events).
+  if (isVrij) return blockedHoursForWorkdays(overlapWork)
+  const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
   const myShare = project.ownerHours && memberId in project.ownerHours
@@ -707,20 +715,17 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
 
   return (
     <>
-      {/* Eén lijn voor zowel de normale als de aan-de-rand-geklemd variant.
-          Voorheen bleef de lijn ín de scroll-content bestaan terwijl hier
-          óók een randlijn werd getekend; precies op de viewportgrens zag je
-          daardoor twee gele lijnen naast elkaar. */}
-      <div aria-hidden style={{
-        position: 'absolute', top: 0, bottom: 0,
-        ...(todayEdge === 'left'
-          ? { left: nameW + namePad }
-          : todayEdge === 'right'
-            ? { right: 0 }
-            : { left: (nowOffset ?? 0) - scrollLeft }),
-        width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
-        pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
-      }} />
+      {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
+          het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
+          zodat lijn en label nooit over namen/profielfoto's lopen. */}
+      {todayEdge && (
+        <div aria-hidden style={{
+          position: 'absolute', top: 0, bottom: 0,
+          ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
+          width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
+          pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
+        }} />
+      )}
       {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
           verandert bij horizontaal scrollen alleen de x-positie/tekst en
           nooit de verticale layout van de sticky headers eronder. */}
@@ -2036,11 +2041,6 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
   const closeTimer = useRef<number | null>(null)
   const sorted = [...meetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
   const open = hovered || pinned
-  // Alles al afgevinkt? Dan mag de dag-badge zelf ook gedempt + met een
-  // vinkje — zo zie je in één oogopslag of er nog actie nodig is (fel
-  // geel 'G') of de dag al klaar is (grijze '✓'), zonder de popover te
-  // hoeven openen.
-  const allDone = meetings.length > 0 && meetings.every(m => m.status === 'done')
 
   const cancelClose = () => {
     if (closeTimer.current != null) window.clearTimeout(closeTimer.current)
@@ -2075,30 +2075,20 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
           if (meetings.length === 1) onOpen(meetings[0])
           else { show(); setPinned(true) }
         }}
-        aria-label={allDone
-          ? `${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}, allemaal afgerond`
-          : `${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}`}
+        aria-label={`${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}`}
         style={{
           position: 'absolute', left: left + 2, top: 2,
           width: Math.max(18, width - 4), height: 18,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
           padding: '0 3px', borderRadius: 5,
-          border: allDone
-            ? '1px solid var(--border)'
-            : `1px solid ${open ? 'rgba(216,182,46,0.95)' : 'rgba(216,182,46,0.6)'}`,
-          background: allDone
-            ? 'var(--bg-hover)'
-            : (open ? 'rgba(216,182,46,0.85)' : 'rgba(216,182,46,0.55)'),
-          color: allDone ? 'var(--text-muted)' : '#3d2e00',
-          opacity: allDone ? 0.62 : 1,
-          fontSize: 9.5, fontWeight: 850,
+          border: `1px solid ${open ? 'rgba(216,182,46,0.7)' : 'rgba(216,182,46,0.35)'}`,
+          background: open ? 'rgba(216,182,46,0.26)' : 'rgba(216,182,46,0.14)',
+          color: '#765f00', fontSize: 9.5, fontWeight: 850,
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
           pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
           outline: 'none', boxShadow: 'none',
         }}>
-        <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: allDone ? 'var(--green)' : '#2b2000' }}>
-          {allDone ? '✓' : 'G'}
-        </span>
+        <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
         <span aria-hidden style={{ opacity: 0.45 }}>·</span>
         <span>{meetings.length}</span>
       </button>
@@ -2112,36 +2102,27 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
             <div style={{ padding: '5px 7px 7px', fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
-            {sorted.map(meeting => {
-              const isDone = meeting.status === 'done'
-              return (
+            {sorted.map(meeting => (
               <div key={meeting.id}
                 onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                 onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                // Afgeronde meetings blijven zichtbaar — alleen gedempt,
-                // zelfde opacity-behandeling als normale (niet-Google) Done-
-                // items op hun balk. Afvinken mag niet onzichtbaar maken.
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7, opacity: isDone ? 0.5 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7 }}>
                 <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
                   {meeting.startTime ?? 'Hele dag'}
                 </span>
                 <button onClick={ev => { ev.stopPropagation(); onDone(meeting) }}
-                  aria-label={isDone ? `${meeting.name} weer openen` : `${meeting.name} afronden`}
-                  title={isDone ? 'Afgerond — klik om ongedaan te maken' : 'Afronden — verdwijnt automatisch uit gekoppelde to do’s'}
+                  aria-label={`${meeting.name} afronden`}
+                  title="Afronden en naar Done verplaatsen — verdwijnt automatisch uit gekoppelde to do's"
                   style={{ width: 17, height: 17, flexShrink: 0, padding: 0, borderRadius: 4,
-                    border: `1.5px solid ${isDone ? 'var(--green)' : 'var(--border-strong)'}`,
-                    background: isDone ? 'var(--green)' : 'var(--bg-card)',
-                    color: '#fff', fontSize: 11, lineHeight: '14px', textAlign: 'center',
-                    cursor: 'pointer' }}>
-                  {isDone ? '✓' : ''}
-                </button>
+                    border: '1.5px solid var(--border-strong)', background: 'var(--bg-card)',
+                    color: 'var(--text-primary)', cursor: 'pointer' }} />
                 <button onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
                   onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                   onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
                   style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start',
                     padding: '6px 3px', border: 'none', borderRadius: 7, background: 'transparent',
                     color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25, textDecoration: isDone ? 'line-through' : 'none' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
                     {meeting.name}
                   </span>
                 </button>
@@ -2158,8 +2139,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
                   </a>
                 )}
               </div>
-              )
-            })}
+            ))}
             {pinned && <div style={{ padding: '5px 8px 3px', fontSize: 10.5, color: 'var(--text-muted)' }}>Kies een meeting om details te openen</div>}
           </div>
         </>, document.body)}
@@ -2206,12 +2186,9 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   // Google-meetings worden in Overzicht niet langer als balken gestapeld.
   // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
-  // terwijl een hover de concrete afspraken en tijden laat zien. Afgeronde
-  // meetings blijven hier gewoon in staan — 'm afvinken mag 'm niet
-  // onzichtbaar maken, alleen gedempt tonen (net als normale items via
-  // hun opacity), zie de status-check in MeetingDaySummary hieronder.
+  // terwijl een hover de concrete afspraken en tijden laat zien.
   const googleMeetings = (hideMeetings ? [] : owned).filter(p =>
-    p.source === 'google' && !isVrijTitle(p.name))
+    p.status !== 'done' && p.source === 'google' && !isVrijTitle(p.name))
   const meetingsByDay = new Map<string, Project[]>()
   if (zoom === 'week') {
     for (const p of googleMeetings) {
@@ -3085,7 +3062,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   allGroups: Record<string, BoardGroup[]>
   anchor?: { x: number; y: number } | null
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; statusOverride: 'active' | 'done'; hiddenFromPlanning: boolean }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
   onDuplicate?: () => void
   onDelete?: () => void
 }) {
@@ -3106,28 +3083,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     }
     return Array.from(byId.values())
   }, [liveTeam])
-  // project.id is niet altijd het kale '{board}__{itemId}' — subitem-
-  // afgeleide projects (recurring Google-instances, of subitems met eigen
-  // datums) krijgen een '__siN'-suffix, en per-dag vrij-events een
-  // '__vrij_YYYY-MM-DD'-suffix (zie groupsToProjects/handleDetailUpdate).
-  // Zonder deze strip vond de exacte-match hieronder nooit de PARENT-rij
-  // voor zulke projects, waardoor rawItem altijd undefined bleef en velden
-  // als status/notes/contactpersoon in de popup leeg leken terwijl ze op
-  // de subitem/parent wél gezet waren.
-  const rawItemIdFull = project.id.slice(project.board.length + 2)
-  const rawVrijMatch = rawItemIdFull.match(/^(.+)__vrij_\d{4}-\d{2}-\d{2}$/)
-  const rawSiMatch = (rawVrijMatch ? rawVrijMatch[1] : rawItemIdFull).match(/^(.+)__si(\d+)$/)
-  const rawParentId = rawSiMatch ? rawSiMatch[1] : (rawVrijMatch ? rawVrijMatch[1] : rawItemIdFull)
-  const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => i.id === rawParentId)
-  // Voor subitem-projects gelden status/startTime/endTime op de subitem
-  // zelf, niet op de parent — notes/contactpersoon/journal/links/deadline
-  // staan alleen op de parent (subitems hebben die velden niet).
-  const rawSubitem = rawSiMatch
-    ? rawItem?.subitems?.[Number(rawSiMatch[2])]
-    : undefined
-  const rawStatus    = (rawSubitem ? rawSubitem.status    : rawItem?.status)    as string | undefined
-  const rawStartTime = (rawSubitem ? rawSubitem.startTime : rawItem?.startTime) as string | null | undefined
-  const rawEndTime   = (rawSubitem ? rawSubitem.endTime   : rawItem?.endTime)   as string | null | undefined
+  const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => `${project.board}__${i.id}` === project.id)
 
   const [startDate, setStartDate] = useState(project.startDate ?? '')
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
@@ -3175,6 +3131,21 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   }, [ownerPickerOpen])
   const [entryMentions, setEntryMentions] = useState<string[]>([])
   const { profile } = useProfile()
+  const [categoryOverride, setCategoryOverrideState] = useState<WorkloadCategory | null>(loadCategoryOverrides()[project.id] ?? null)
+  useEffect(() => {
+    setCategoryOverrideState(loadCategoryOverrides()[project.id] ?? null)
+    return onCategoryOverridesChange(() => {
+      setCategoryOverrideState(loadCategoryOverrides()[project.id] ?? null)
+    })
+  }, [project.id])
+  const currentCategory = effectiveCategory(
+    { name: project.name, hours: project.estHours ?? 0, source: project.source },
+    categoryOverride,
+  )
+  function changeCategory(c: WorkloadCategory | null) {
+    setCategoryOverrideState(c)
+    setCategoryOverride(project.id, c)
+  }
   const hasSubitems = ((rawItem?.subitems as { estHours?: number }[] | undefined)?.length ?? 0) > 0
   const subitemsTotal = ((rawItem?.subitems as { estHours?: number }[] | undefined) ?? [])
     .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
@@ -3221,7 +3192,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     ownerIds:  string[]
     links:     import('@/lib/boards').ItemLink[]
     status:    string
-    statusOverride: 'active' | 'done'
     hiddenFromPlanning: boolean
   }>
   function commit(patch: Patch) {
@@ -3234,7 +3204,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     if (isGoogle) {
       const allowed: Patch = {}
       if (patch.status              !== undefined) allowed.status              = patch.status
-      if (patch.statusOverride      !== undefined) allowed.statusOverride      = patch.statusOverride
       if (patch.estHours            !== undefined) allowed.estHours            = patch.estHours
       if (patch.ownerHours          !== undefined) allowed.ownerHours          = patch.ownerHours
       if (patch.ownerIds            !== undefined) allowed.ownerIds            = patch.ownerIds
@@ -3551,18 +3520,12 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
           </div>
         </Row>
-        <Row label="Status project">
+        <Row label="Status">
           <StatusPicker
-            value={rawStatus ?? ''}
+            value={(rawItem?.status as string) ?? ''}
             onChange={v => commit({ status: v })}
           />
         </Row>
-        {rawItem && (!rawSiMatch || rawSubitem) && <PersonalCompletionSection
-          key={`${rawItem.id}:${rawSubitem?.id ?? ''}`}
-          target={{ parentItemId: rawItem.id, ...(rawSubitem ? { subitemId: rawSubitem.id } : {}) }}
-          ownerIds={rawSubitem?.ownerIds.some(id => id && id !== 'unassigned') ? rawSubitem.ownerIds : rawItem.ownerIds}
-          status={rawItem.status === 'Done' ? 'Done' : rawStatus ?? ''} layout="row" showMessages
-          renderStatus={(value, onChange, disabled) => <StatusPicker value={value} onChange={onChange} disabled={disabled} ariaLabel="Status mijn taak" />} />}
         <Row label="Bord">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
@@ -3643,6 +3606,36 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
+        <Row label="Categorie">
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {ALL_CATEGORIES.map(c => {
+              const active = currentCategory === c
+              const colorC = CAT_COLOR[c]
+              return (
+                <button key={c} type="button" onClick={() => changeCategory(c)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', borderRadius: 16,
+                    border: active ? `1.5px solid ${colorC}` : '1px solid var(--border)',
+                    background: active ? `${colorC}22` : 'var(--bg-card)',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 12, fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                  }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: colorC }} />
+                  {CAT_LABEL[c]}
+                </button>
+              )
+            })}
+            {categoryOverride && (
+              <button type="button" onClick={() => changeCategory(null)}
+                title="Reset naar automatisch"
+                style={{ padding: '4px 8px', borderRadius: 16, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
+                ↺ auto
+              </button>
+            )}
+          </div>
+        </Row>
         <Row label="Contactpersoon">
           <input
             type="text"
@@ -3690,11 +3683,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               Google-events nemen hun tijden uit de sync zelf. */}
           {!isGoogle && (
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
-              <input type="time" value={rawStartTime ?? ''}
+              <input type="time" value={(rawItem?.startTime as string | undefined) ?? ''}
                 onChange={e => commit({ startTime: e.target.value || null } as Partial<BoardItem>)}
                 style={{ ...dateInput, width: 100 }} />
               <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>tot</span>
-              <input type="time" value={rawEndTime ?? ''}
+              <input type="time" value={(rawItem?.endTime as string | undefined) ?? ''}
                 onChange={e => commit({ endTime: e.target.value || null } as Partial<BoardItem>)}
                 style={{ ...dateInput, width: 100 }} />
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>laat leeg voor de hele dag</span>
@@ -4106,10 +4099,9 @@ const STATUS_PICKER_OPTIONS = [
   { label: 'Working on...', color: '#ff7b24' , display: 'Working on...' },
   { label: 'Done',          color: '#00c875' , display: 'Done' },
   { label: 'Stuck',         color: '#e2445c' , display: 'Stuck' },
-  { label: 'Not started',   color: '#808080' , display: 'Not started' },
   { label: 'Doorlopend',    color: '#579bfc' , display: 'Doorlopend' },
 ]
-function StatusPicker({ value, onChange, disabled = false, ariaLabel }: { value: string; onChange: (v: string) => void; disabled?: boolean; ariaLabel?: string }) {
+function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -4121,17 +4113,17 @@ function StatusPicker({ value, onChange, disabled = false, ariaLabel }: { value:
   const cur = STATUS_PICKER_OPTIONS.find(o => o.label === value) ?? STATUS_PICKER_OPTIONS[0]
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button disabled={disabled} aria-label={ariaLabel} aria-expanded={open && !disabled} onClick={() => setOpen(o => !o)}
+      <button onClick={() => setOpen(o => !o)}
         style={{
           padding: '6px 14px', borderRadius: 999, border: 'none',
           background: cur.color || 'var(--overlay-medium)',
           color: cur.color ? '#fff' : 'var(--text-muted)',
-          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
+          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: 'pointer',
           minWidth: 110, textAlign: 'left',
         }}>
         {cur.display}
       </button>
-      {open && !disabled && (
+      {open && (
         <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 10,
           background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
           padding: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -5192,9 +5184,8 @@ export default function PlanningPage() {
     contributionsByCell.get(`${memberId}\u0000${col.key}`) ?? []
 
   // Capacity in the right unit per zoom
-  function colCapacity(weeklyCapacity: number, memberId?: string, col?: Col): number {
+  function colCapacity(weeklyCapacity: number, memberId?: string): number {
     if (zoom === 'dag') {
-      if (memberId && col && isVrijDayForMember(memberId, col.rangeStart)) return 0
       // Per-dag cap = weeklyCap / aantal werkdagen (Mon-Fri minus eigen
       // vrije dagen). Voor 32u/4-dag-week → 8u/dag i.p.v. 6.4u/dag.
       let workdays = 5
@@ -5207,19 +5198,8 @@ export default function PlanningPage() {
       }
       return Math.round((weeklyCapacity / workdays) * 10) / 10
     }
-    const baseCapacity = zoom === 'maand' ? weeklyCapacity * 4.33 : weeklyCapacity
-    if (!memberId || !col) return Math.round(baseCapacity * 10) / 10
-    let weekdays = 0
-    let available = 0
-    const end = new Date(col.rangeEnd); end.setHours(0, 0, 0, 0)
-    for (let d = new Date(col.rangeStart); d <= end; d.setDate(d.getDate() + 1)) {
-      const dow = d.getDay()
-      if (dow === 0 || dow === 6) continue
-      weekdays++
-      if (!isVrijDayForMember(memberId, d)) available++
-    }
-    const adjusted = weekdays > 0 ? baseCapacity * (available / weekdays) : baseCapacity
-    return Math.round(adjusted * 10) / 10
+    if (zoom === 'maand') return Math.round((weeklyCapacity * 4.33) * 10) / 10
+    return weeklyCapacity
   }
 
   function toggleExpand(id: string) {
@@ -5406,7 +5386,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; statusOverride: 'active' | 'done'; hiddenFromPlanning: boolean }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
     const boardName  = project.board
     let rawIdPart    = project.id.slice(boardName.length + 2)
     // Vrij-events worden per-dag gesynthetiseerd met suffix '__vrij_YYYY-
@@ -5443,7 +5423,6 @@ export default function PlanningPage() {
             if (extra.ownerHours        !== undefined) subPatch.ownerHours        = extra.ownerHours
             if (extra.ownerIds          !== undefined) subPatch.ownerIds          = extra.ownerIds
             if (extra.status            !== undefined) subPatch.status            = extra.status
-            if (extra.statusOverride    !== undefined) subPatch.statusOverride    = extra.statusOverride
             if (extra.startTime         !== undefined) subPatch.startTime         = extra.startTime
             if (extra.endTime           !== undefined) subPatch.endTime           = extra.endTime
             if (extra.hiddenFromPlanning !== undefined) subPatch.hiddenFromPlanning = extra.hiddenFromPlanning
@@ -5472,25 +5451,15 @@ export default function PlanningPage() {
     })
   }
 
-  // Vinkje in het meetings-popovertje — TOGGLET een Google-item (of elk
-  // ander project) tussen Done en niet-Done, zonder eerst de detail-drawer
-  // te hoeven openen. Voorheen zette dit ALTIJD op Done (nooit terug),
-  // waardoor een per ongeluk afgevinkte Google-meeting niet meer ongedaan
-  // te maken was. handleDetailUpdate regelt de status-write (en voor
-  // Google-items is 'status' een van de toegestane velden in commit()).
-  function toggleProjectDone(project: Project) {
-    const wasDone = project.status === 'done'
-    const nextStatus = wasDone ? '' : 'Done'
-    handleDetailUpdate(project, project.startDate, project.endDate, {
-      status: nextStatus,
-      // Alleen status='' was onvoldoende: voor afspraken ouder dan drie
-      // dagen zette de Google-sync ze meteen opnieuw op Done. Bewaar daarom
-      // expliciet dat de gebruiker deze afspraak heropend heeft.
-      statusOverride: wasDone ? 'active' : 'done',
-    })
-    logActivity(wasDone ? 'Heropend' : 'Afgerond', project.name, project.board)
+  // Vinkje in het meetings-popovertje — zet een Google-item (of elk ander
+  // project) direct op Done, zonder eerst de detail-drawer te hoeven
+  // openen. handleDetailUpdate regelt de verhuizing naar de Done-groep;
+  // Todo's plukt 'm er via doneProjectKeys/isAutoDone vanzelf uit.
+  function markProjectDone(project: Project) {
+    handleDetailUpdate(project, project.startDate, project.endDate, { status: 'Done' })
+    logActivity('Afgerond', project.name, project.board)
     const rawId = project.id.slice(project.board.length + 2).split('__si')[0]
-    logItemActivity(rawId, wasDone ? 'zette terug op niet-afgerond' : 'zette op Done', project.name).catch(() => {})
+    logItemActivity(rawId, 'zette op Done', project.name).catch(() => {})
   }
 
   function handleDetailDelete(project: Project) {
@@ -5627,8 +5596,13 @@ export default function PlanningPage() {
   const kpis = useMemo(() => {
     const weekStart = getWeekStart(new Date())
     const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7); weekEnd.setHours(0,0,0,0)
+    // hoursInRange gebruikt inclusieve datumgrenzen. Houd voor de KPI dus
+    // de zondag als laatste dag aan, terwijl weekEnd hieronder exclusief
+    // blijft voor deadlines.
+    const workloadWeekEnd = new Date(weekEnd.getTime() - 1)
     let totalHours = 0, totalCap = 0, overbooked = 0, deadlinesThis = 0
     const activeIds = new Set<string>()
+    const overrides = loadCategoryOverrides()
     for (const m of team) {
       if (isMemberInactive(m.id)) continue
       const cap = m.weeklyCapacity
@@ -5637,14 +5611,9 @@ export default function PlanningPage() {
       for (const p of projects) {
         if (!p.ownerIds.includes(m.id)) continue
         if (!p.startDate || !p.endDate) continue
-        const pS = new Date(p.startDate).getTime()
-        const pE = new Date(p.endDate).getTime() + 86400000
-        if (pE < weekStart.getTime() || pS > weekEnd.getTime()) continue
-        const oS = Math.max(pS, weekStart.getTime())
-        const oE = Math.min(pE, weekEnd.getTime())
-        const fraction = (oE - oS) / (pE - pS)
-        const hpp = p.estHours / Math.max(p.ownerIds.length, 1)
-        memberHours += fraction * hpp
+        const hours = hoursInRange(p, m.id, weekStart, workloadWeekEnd, overrides[p.id])
+        if (hours <= 0) continue
+        memberHours += hours
         if (p.status !== 'done') activeIds.add(p.id)
       }
       memberHours = Math.round(memberHours * 10) / 10
@@ -5763,14 +5732,9 @@ export default function PlanningPage() {
             </div>
           </div>
 
-          <div style={{
-            // Rechts uitlijnen richting Menu i.p.v. absoluut centreren. Op
-            // smallere desktops kon de gecentreerde datum daardoor onder de
-            // Meetings-knop schuiven.
-            marginLeft: 'auto', marginRight: 18,
+          <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             display: 'flex', alignItems: 'center', gap: 10, minHeight: 18, fontSize: 12.5,
-            color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 2,
-          }}>
+            color: 'var(--text-muted)', whiteSpace: 'nowrap', zIndex: 1 }}>
             <span style={{ textTransform: 'capitalize' }}>{todayLabel}</span>
             <span aria-hidden style={{ width: 1, height: 12, background: 'var(--border)' }} />
             <span>
@@ -5786,7 +5750,7 @@ export default function PlanningPage() {
             </span>
           </div>
 
-          <div style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', height: 40, zIndex: 3, flexShrink: 0 }}>
+          <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', position: 'relative', height: 40, zIndex: 3 }}>
             <button onClick={() => setOverflowOpen(o => !o)} aria-label="Meer acties"
               style={{ ...ghostBtn(overflowOpen), padding: '9px 14px', height: 40, display: 'inline-flex', alignItems: 'center', fontSize: 15, fontWeight: 600 }}>
               <IconMore size={18} style={{ marginRight: 6 }} />Menu
@@ -6177,14 +6141,31 @@ export default function PlanningPage() {
             </div>
           )}
 
-          {/* Onzichtbaar geometrie-anker voor de bestaande zoom- en
-              scrolllogica. De zichtbare Vandaag-lijn staat nu één keer in
-              TodayMarker; dit element heeft bewust geen border. */}
+          {/* "Now" indicator — yoko-yellow vertical line at today's exact
+              position with a VANDAAG pill at the top so the marker is hard
+              to miss when scrolling through time. Rendert altijd wanneer
+              nowOffset bekend is (voorheen gegate op !todayEdge, maar die
+              state leeft nu geïsoleerd in <TodayMarker> hierboven) — buiten
+              beeld is deze lijn gewoon off-screen, geen visueel probleem. */}
           {nowOffset !== null && (
-            <div data-today-marker aria-hidden style={{
-              position: 'absolute', left: nowOffset, top: 0,
-              width: 0, height: 1, pointerEvents: 'none', opacity: 0,
-            }} />
+            <>
+              {/* De lijn zelf: hoge z-index zodat 'ie BOVEN ALLES doorloopt
+                  (kolom-headers, maand-groepen, en zelfs de sticky naam-
+                  kolommen). Eerder z=14: dan bleef de lijn ergens achter
+                  een sticky achtergrond hangen en zag de gebruiker een
+                  gat in 't midden. z=30 trekt 'm door tot aan de pill (z=50). */}
+              <div data-today-marker style={{
+                position: 'absolute', top: 0, bottom: 0,
+                left: nowOffset, width: 0,
+                borderLeft: '2px solid var(--yellow)',
+                pointerEvents: 'none',
+                // Boven beide sticky header-rijen (z=24/25), maar onder de
+                // VANDAAG-pill (z=50). Zo blijft de lijn ononderbroken door
+                // maand- en weekheaders heen lopen.
+                zIndex: 40,
+                boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
+              }} />
+            </>
           )}
 
           {/* Month grouping row (only for week/day zoom) — sticky-left bevat
@@ -6282,24 +6263,7 @@ export default function PlanningPage() {
               const headerBg = col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : stickyBg
               const isWeekStart = zoom === 'dag' && dow === 1
               return (
-              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0,
-                // Week-zoom: extra ruimte bovenaan zodat de datum/weekdagen
-                // niet onder de VANDAAG-pill (die er los bovenop zit) komen
-                // te zitten — de pill hangt op een vaste positie, dus de
-                // header zelf schuift een regel naar beneden i.p.v. andersom.
-                //
-                // De weekdagen stonden even (kort) in de sectiebalk
-                // ('showWeekdays' op sectionHeader) om de kop-rij compacter
-                // te maken, maar die absolute positionering ging uit van de
-                // volledige virtuele kolom-breedte i.p.v. de daadwerkelijk
-                // gescrollde viewport — bij een horizontaal gescrolde
-                // Planning (bv. bij openen op 'vandaag', weken verderop dan
-                // kolom 0) landden de 'ma di wo do vr'-labels daardoor ver
-                // buiten beeld (negatieve x-positie), terwijl ze op de
-                // sectiebalk zelf ('TEAM YOKO' etc.) leken te overlappen.
-                // Terug naar hier, waar col's eigen widthPx/positie al
-                // correct is voor de zichtbare viewport.
-                padding: zoom === 'week' ? '22px 2px 3px' : '8px 2px', textAlign: 'center',
+              <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: zoom === 'week' ? '6px 2px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                 background: headerBg }}>
                 {zoom === 'week' ? (
@@ -6309,7 +6273,10 @@ export default function PlanningPage() {
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
                       {col.label2} <span style={{ opacity: 0.8 }}>({col.label1})</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 1, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
+                    {/* Weekdag-rijtje hoort uitsluitend hier, boven de weken —
+                        dit is de kolomkop-rij, los van (en boven) de 'Team
+                        Yoko'-sectiebalk verderop in de lijst. */}
+                    <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 3, fontSize: 8.5, fontWeight: 600, color: col.isCurrent ? 'var(--text-secondary)' : 'var(--text-muted)', letterSpacing: '0.04em' }}>
                       <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>
                     </div>
                   </>
@@ -6406,6 +6373,7 @@ export default function PlanningPage() {
               // Workload-bollen per dag, bovenop het Google-Cal raster.
               // Zelfde bol-stijl als Overzicht zodat de visuele continuïteit
               // bewaard blijft tussen beide zoom-niveaus.
+              const cap = colCapacity(m.weeklyCapacity, m.id)
               return (
                 <div key={m.id} data-member-id={m.id} style={{
                   borderBottom: '1px solid var(--border)', background: 'transparent',
@@ -6417,7 +6385,6 @@ export default function PlanningPage() {
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20,
                       background: stickyBg, borderRight: '1px solid var(--border-light)' }} />
                     {cols.map(col => {
-                      const cap = colCapacity(m.weeklyCapacity, m.id, col)
                       const contribs = contributionsFor(m.id, col)
                       const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                       const isWeekStart = col.rangeStart.getDay() === 1
@@ -6473,7 +6440,7 @@ export default function PlanningPage() {
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)', cursor: onClick ? 'pointer' : 'default', userSelect: 'none' }}>
                 <div style={{ position: 'sticky', left: 0, width: 'max-content',
-                  padding: '6px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {onClick && (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'inline-block',
                       transform: isOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>▶</span>
@@ -6533,7 +6500,7 @@ export default function PlanningPage() {
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
                 <div style={{ position: 'sticky', left: 0, width: 'max-content',
-                  padding: '6px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
                       // pos 2: iedereen in deze sectie staat individueel
@@ -6557,6 +6524,7 @@ export default function PlanningPage() {
 
             const renderMember = (member: TeamMember, mIdx: number) => {
             const isExp = expanded.has(member.id)
+            const cap   = colCapacity(member.weeklyCapacity, member.id)
             const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
 
             return (
@@ -6619,7 +6587,6 @@ export default function PlanningPage() {
 
                   {/* Week/day/month cells */}
                   {cols.map(col => {
-                    const cap = colCapacity(member.weeklyCapacity, member.id, col)
                     const contribs = contributionsFor(member.id, col)
                     const total    = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
                     // In Overzicht-zoom is een 'kolom' een hele week, dus
@@ -6652,7 +6619,7 @@ export default function PlanningPage() {
                         visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
                         visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
-                        onMarkDone={toggleProjectDone} onReassign={handleReassignOwner} />
+                        onMarkDone={markProjectDone} onReassign={handleReassignOwner} />
                     </div>
                   </div>
                 )}

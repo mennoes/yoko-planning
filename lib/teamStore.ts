@@ -6,6 +6,7 @@
 import { supabase } from './supabase'
 import teamData from '@/data/team.json'
 import { getCurrentUserId } from './sync'
+import { START_DATE_META_PREFIX, isTeamMetadataId } from './teamMemberIdentity'
 
 export type TeamKind = 'yoko' | 'freelance' | 'unassigned'
 
@@ -59,7 +60,6 @@ function rowToMember(r: Row): TeamMember {
 }
 
 const YOKO_IDS = new Set(['menno','vincent','odette','anne-fleur','kars'])
-const START_DATE_META_PREFIX = '__team_start_date__:'
 function defaultKindFor(id: string): TeamKind {
   if (id === 'unassigned') return 'unassigned'
   if (YOKO_IDS.has(id))    return 'yoko'
@@ -74,7 +74,7 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
     .from('team_members')
     .select(sel)
     .order('position', { ascending: true })
-  if (!error && data) return (data as Row[]).map(rowToMember)
+  if (!error && data) return (data as Row[]).filter(r => !isTeamMetadataId(r.id)).map(rowToMember)
   // Fallback: migratie 0018/0036/0037 niet gedraaid → kolom 'kind',
   // 'start_date' of 'inactive' bestaat nog niet. Probeer zonder zodat de
   // UI alsnog leden toont. Voor de kind-classificatie vallen we terug op
@@ -95,7 +95,7 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
       : fbWithKind
     if (!fb.error && fb.data) {
       const hasKind = !fbWithKind.error
-      const members = (fb.data as Array<Omit<Row, 'start_date'> & { kind?: string | null }>).map(r => {
+      const members = (fb.data as Array<Omit<Row, 'start_date'> & { kind?: string | null }>).filter(r => !isTeamMetadataId(r.id)).map(r => {
         const member = rowToMember({ ...r, kind: hasKind ? (r.kind ?? null) : null, start_date: null })
         if (!hasKind) member.kind = defaultKindFor(member.id)
         return member
@@ -207,6 +207,7 @@ export async function ensureTeamSeed(): Promise<void> {
   const existing = new Set((data as { id: string }[] | null)?.map(r => r.id) ?? [])
   const seedSource = teamData.members as Array<{ id: string; name: string; email?: string; color?: string; weeklyCapacity?: number }>
   const missing = seedSource
+    .filter(m => !isTeamMetadataId(m.id))
     .filter(m => !existing.has(m.id))
     .map((m, i) => ({
       id:              m.id,

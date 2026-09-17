@@ -30,7 +30,7 @@ import {
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
 import { NotificationBell } from './NotificationBell'
-import { isOnDemoRoute } from '@/lib/demoFixtures'
+import { isOnDemoRoute, notifyDemoBlocked } from '@/lib/demoFixtures'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -173,10 +173,7 @@ function PagesSectionItems({ pathname }: { pathname: string }) {
   }, [])
 
   function createNewIn(folderId: string | null) {
-    // Documenten zijn 100% localStorage (via pagesStore.ts's demo-namespace
-    // op /demo) — geen Supabase-write nodig, dus geen reden om dit op de
-    // demo te blokkeren zoals andere features die wél de echte backend
-    // nodig hebben.
+    if (isOnDemoRoute()) { notifyDemoBlocked(); return }
     const id  = Date.now().toString()
     const now = new Date().toISOString()
     savePage({ id, title: '', content: '', emoji: '📄', createdAt: now, updatedAt: now, folderId })
@@ -1079,6 +1076,7 @@ function reorderArrowBtn(disabled: boolean): React.CSSProperties {
 const DEFAULT_SIDEBAR_W = 248
 const MIN_SIDEBAR_W     = 200
 const MAX_SIDEBAR_W     = 400
+const COLLAPSED_SIDEBAR_W = 68
 
 export default function Sidebar({
   isMobile = false,
@@ -1098,6 +1096,7 @@ export default function Sidebar({
   const [sections,    setSectionsRaw] = useState<SidebarSection[]>([])
   const [hydrated,    setHydrated]    = useState(false)
   const [width,       setWidth]       = useState(DEFAULT_SIDEBAR_W)
+  const [collapsed,   setCollapsed]   = useState(false)
   const [mainNav,     setMainNavRaw]  = useState<MainNavItem[]>(DEFAULT_MAIN)
   const [editingMainId, setEditingMainId] = useState<string | null>(null)
   const [addingFolder,  setAddingFolder]  = useState(false)
@@ -1129,6 +1128,7 @@ export default function Sidebar({
     setTheme(init); applyTheme(init)
     const savedW = parseInt(localStorage.getItem('sidebar-width') ?? '')
     if (!isNaN(savedW)) setWidth(Math.max(MIN_SIDEBAR_W, Math.min(MAX_SIDEBAR_W, savedW)))
+    setCollapsed(localStorage.getItem('sidebar-collapsed') === 'true')
     try {
       const savedMain = localStorage.getItem('sidebar-main-nav')
       if (savedMain) {
@@ -1198,6 +1198,14 @@ export default function Sidebar({
     localStorage.setItem('theme', next)
   }
 
+  function toggleCollapsed() {
+    setCollapsed(value => {
+      const next = !value
+      localStorage.setItem('sidebar-collapsed', String(next))
+      return next
+    })
+  }
+
   function onResizeMouseDown(e: React.MouseEvent) {
     e.preventDefault()
     resizingRef.current = true
@@ -1229,10 +1237,53 @@ export default function Sidebar({
         boxShadow: open ? '0 0 30px rgba(0,0,0,0.3)' : 'none',
       }
     : {
-        width, minWidth: width, maxWidth: width, flexShrink: 0,
+        width: collapsed ? COLLAPSED_SIDEBAR_W : width,
+        minWidth: collapsed ? COLLAPSED_SIDEBAR_W : width,
+        maxWidth: collapsed ? COLLAPSED_SIDEBAR_W : width,
+        flexShrink: 0,
         position: 'sticky', top: 0, height: '100vh',
-        display: 'flex', alignItems: 'stretch',
+        display: 'flex', alignItems: 'stretch', transition: 'width 0.18s ease, min-width 0.18s ease, max-width 0.18s ease',
       }
+
+  if (!isMobile && collapsed) {
+    return (
+      <div style={containerStyle}>
+        <aside aria-label="Ingeklapt menu" style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100vh', overflow: 'hidden' }}>
+          <div style={{ width: '100%', minHeight: 74, borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            <button onClick={toggleCollapsed} aria-label="Menu uitklappen" title="Menu uitklappen"
+              style={{ width: 38, height: 38, borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-hover)', color: 'var(--sup-yellow)', cursor: 'pointer', fontSize: 27, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+          </div>
+          <nav aria-label="Hoofdnavigatie" style={{ width: '100%', padding: '8px 8px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {mainNav.map(item => {
+              const active = pathname === item.href
+              const NavIcon = MAIN_ICONS[item.href]
+              return <Link key={item.id} href={item.href} aria-label={item.label} title={item.label}
+                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)', background: active ? 'var(--accent-light)' : 'transparent', borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent', textDecoration: 'none' }}>
+                {NavIcon ? <NavIcon size={22} /> : null}
+              </Link>
+            })}
+            {onOpenSearch && <button onClick={onOpenSearch} aria-label="Zoeken" title="Zoeken (⌘K)"
+              style={{ height: 44, borderRadius: 9, border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconSearch size={20} /></button>}
+          </nav>
+          <div style={{ marginTop: 'auto', width: '100%', padding: '10px 8px', boxSizing: 'border-box', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <NotificationBell />
+            {profile?.memberId ? (isOnDemoRoute()
+              ? <button onClick={openEdit} aria-label="Mijn profiel" title="Mijn profiel" style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer' }}><UserAvatar memberId={profile.memberId} size={32} /></button>
+              : <Link href={`/profile/${profile.memberId}`} aria-label="Mijn profiel" title="Mijn profiel"><UserAvatar memberId={profile.memberId} size={32} /></Link>) : null}
+            <button onClick={cycleTheme} aria-label="Thema wijzigen" title={`Thema: ${(THEMES.find(t => t.value === theme) ?? THEMES[0]).label}`}
+              style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              {(() => { const T = (THEMES.find(t => t.value === theme) ?? THEMES[0]).Icon; return <T size={17} /> })()}
+            </button>
+            <button onClick={() => setSettingsOpen(true)} aria-label="Instellingen" title="Instellingen"
+              style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-light)', color: 'var(--text-secondary)', cursor: 'pointer' }}><IconSettings size={17} /></button>
+          </div>
+        </aside>
+        {settingsOpen && <SettingsPopup onClose={() => setSettingsOpen(false)} profile={profile}
+          openEdit={() => { setSettingsOpen(false); openEdit() }} theme={theme}
+          setTheme={(t) => { setTheme(t); applyTheme(t); localStorage.setItem('theme', t) }} signOut={signOut} />}
+      </div>
+    )
+  }
 
   return (
     <div style={containerStyle}>
@@ -1282,6 +1333,8 @@ export default function Sidebar({
           </Link>
           {!isMobile && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={toggleCollapsed} aria-label="Menu inklappen" title="Menu inklappen"
+                style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>‹</button>
               {onOpenSearch && (
                 <button onClick={onOpenSearch} aria-label="Zoeken" title="Zoeken (⌘K)"
                   style={{
