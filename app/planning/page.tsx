@@ -6307,10 +6307,11 @@ export default function PlanningPage() {
 
             const me = profile?.memberId
             const yokoVisible = team
-              .filter(m => isYokoCrew(m.id) && isMemberVisible(m.id))
+              .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id) && isMemberVisible(m.id))
               .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
             const unassignedVisible = team.filter(m => m.id === 'unassigned' && isMemberVisible(m.id))
-            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && isMemberVisible(m.id)
+            const inactiveVisible = team.filter(m => isMemberInactive(m.id) && isMemberVisible(m.id))
+            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && isMemberVisible(m.id)
               // Verberg freelancers zonder activiteit in [-2mnd, +3mnd]
               // tenzij de gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
@@ -6457,6 +6458,12 @@ export default function PlanningPage() {
                 {yokoVisible.map(renderPerson)}
                 {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length)}
                 {unassignedVisible.map(renderPerson)}
+                {inactiveVisible.length > 0 && (
+                  <>
+                    {sectionLabel('Inactief team', inactiveVisible.length, () => setInactiveTeamPos(o => o !== 0 ? 0 : 1), inactiveTeamPos !== 0)}
+                    {inactiveTeamPos !== 0 && inactiveVisible.map(renderPerson)}
+                  </>
+                )}
                 {freelancersVisible.length > 0 && (
                   <>
                     {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0)}
@@ -6659,6 +6666,12 @@ export default function PlanningPage() {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
             }
+            if (inactiveTeam.length > 0) {
+              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, { onClick: () => cycleSectionArrow(inactiveTeamPos, setInactiveTeamPos, inactiveTeam), arrowPos: inactiveTeamPos })}</div>)
+              if (inactiveTeamPos !== 0) {
+                inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i)))
+              }
+            }
             if (freelancers.length > 0) {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos })}</div>)
               if (freelancersPos !== 0) {
@@ -6668,12 +6681,6 @@ export default function PlanningPage() {
               // freelancers (met ownership op iets) altijd door — dan kon
               // je de sectie nooit volledig dichtklappen. Wil je een
               // freelancer altijd zien, klap de sectie open.
-            }
-            if (inactiveTeam.length > 0) {
-              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, { onClick: () => cycleSectionArrow(inactiveTeamPos, setInactiveTeamPos, inactiveTeam), arrowPos: inactiveTeamPos })}</div>)
-              if (inactiveTeamPos !== 0) {
-                inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i)))
-              }
             }
             return out
           })()}
