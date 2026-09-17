@@ -21,3 +21,12 @@ test('team admin persists inactive status through the authenticated server route
   assert.match(route, /update\(\{ inactive: body\.inactive \}\)/)
   assert.match(route, /cannot_change_unassigned/)
 })
+
+test('planning uses the shared personal task status from agendas', () => {
+  const source = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
+  assert.match(source, /PersonalCompletionSection/)
+  assert.match(source, /completionTargetForProject/)
+  assert.match(source, /ariaLabel="Status mijn taak"/)
+  assert.match(source, /layout="row"/)
+  assert.match(source, /disabled=\{disabled\}/)
+})

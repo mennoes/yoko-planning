@@ -60,6 +60,8 @@ import {
 } from '@/components/Icon'
 import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
+import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
+import { completionTargetForProject } from '@/lib/personalCompletionClient'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -3084,6 +3086,13 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     return Array.from(byId.values())
   }, [liveTeam])
   const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => `${project.board}__${i.id}` === project.id)
+  // Gebruik exact dezelfde stabiele parent/subitem-identiteit als Agenda's
+  // en To do's. Zo leest en wijzigt Planning niet een kopie, maar dezelfde
+  // persoonlijke taakstatus (opgeslagen als completion-event).
+  const personalCompletion = completionTargetForProject({
+    board: project.board,
+    itemId: project.id.slice(project.board.length + 2),
+  })
 
   const [startDate, setStartDate] = useState(project.startDate ?? '')
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
@@ -3522,10 +3531,29 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         </Row>
         <Row label="Status">
           <StatusPicker
-            value={(rawItem?.status as string) ?? ''}
+            value={(rawItem?.status as string) ?? project.status ?? ''}
             onChange={v => commit({ status: v })}
           />
         </Row>
+        {personalCompletion && (
+          <PersonalCompletionSection
+            target={{
+              parentItemId: personalCompletion.parentItemId,
+              ...(personalCompletion.subitemId ? { subitemId: personalCompletion.subitemId } : {}),
+            }}
+            ownerIds={ownerIds}
+            status={(rawItem?.status as string) ?? project.status ?? personalCompletion.status}
+            layout="row"
+            renderStatus={(value, onChange, disabled) => (
+              <StatusPicker
+                value={value}
+                onChange={onChange}
+                disabled={disabled}
+                ariaLabel="Status mijn taak"
+              />
+            )}
+          />
+        )}
         <Row label="Bord">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
@@ -4099,9 +4127,15 @@ const STATUS_PICKER_OPTIONS = [
   { label: 'Working on...', color: '#ff7b24' , display: 'Working on...' },
   { label: 'Done',          color: '#00c875' , display: 'Done' },
   { label: 'Stuck',         color: '#e2445c' , display: 'Stuck' },
+  { label: 'Not started',   color: '#808080' , display: 'Not started' },
   { label: 'Doorlopend',    color: '#579bfc' , display: 'Doorlopend' },
 ]
-function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function StatusPicker({ value, onChange, disabled = false, ariaLabel }: {
+  value: string
+  onChange: (v: string) => void
+  disabled?: boolean
+  ariaLabel?: string
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -4113,12 +4147,13 @@ function StatusPicker({ value, onChange }: { value: string; onChange: (v: string
   const cur = STATUS_PICKER_OPTIONS.find(o => o.label === value) ?? STATUS_PICKER_OPTIONS[0]
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button onClick={() => setOpen(o => !o)}
+      <button onClick={() => { if (!disabled) setOpen(o => !o) }} disabled={disabled} aria-label={ariaLabel}
         style={{
           padding: '6px 14px', borderRadius: 999, border: 'none',
           background: cur.color || 'var(--overlay-medium)',
           color: cur.color ? '#fff' : 'var(--text-muted)',
-          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: 'pointer',
+          fontSize: 12.5, fontWeight: cur.color ? 600 : 500, cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.65 : 1,
           minWidth: 110, textAlign: 'left',
         }}>
         {cur.display}
