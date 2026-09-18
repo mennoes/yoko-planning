@@ -31,6 +31,7 @@ import teamData  from '@/data/demoTeam.json'
 import { buildDemoBoards, ensureCurrentDemoBoardSeed } from '@/lib/demoFixtures'
 import { loadGroups, saveGroups } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
+import { homeWeekTone } from '@/lib/homeWeekTone'
 import { setVrijDaysFromProjects } from '@/lib/vrijDays'
 import {
   CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
@@ -125,22 +126,6 @@ function joinAnd(names: string[]): string {
   if (names.length === 1) return names[0]
   if (names.length === 2) return `${names[0]} en ${names[1]}`
   return `${names.slice(0, -1).join(', ')} en ${names[names.length - 1]}`
-}
-function pastTone(hours: number, cap: number): string {
-  const r = Math.round
-  if (hours <= 0)          return 'vorige week stond er niets op de planning'
-  if (hours > cap * 1.05)  return `vorige week was pittig (${r(hours)}u 💪)`
-  if (hours >= cap * 0.85) return `vorige week zat lekker vol (${r(hours)}u)`
-  if (hours >= cap * 0.5)  return `vorige week was prima behapbaar (${r(hours)}u)`
-  return `vorige week was rustig (${r(hours)}u)`
-}
-function nextTone(hours: number, cap: number): string {
-  const r = Math.round
-  if (hours <= 0)          return 'volgende week is nog leeg ✨'
-  if (hours > cap * 1.05)  return `volgende week schiet je over je cap met ${r(hours)}u — pas op je tempo`
-  if (hours >= cap * 0.85) return `volgende week wordt vol (${r(hours)}u)`
-  if (hours >= cap * 0.5)  return `volgende week zit prima (${r(hours)}u)`
-  return `volgende week is wat rustiger (${r(hours)}u)`
 }
 function helpHint({ slack, others }: { slack: number; others: { member: { name: string }; pct: number }[] }): string | null {
   if (slack < 4 || others.length === 0) return null
@@ -858,12 +843,8 @@ export default function HomePage() {
   const myThisContribs = memberId
     ? memberContributions(allProjects, memberId, weekStartTeam).slice().sort((a, b) => b.hours - a.hours)
     : []
-  const myLastHours = memberId
-    ? Math.round(memberContributions(allProjects, memberId, myLastWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
-    : 0
-  const myNextHours = memberId
-    ? Math.round(memberContributions(allProjects, memberId, myNextWeekStart).reduce((s, c) => s + c.hours, 0) * 10) / 10
-    : 0
+  const myLastContribs = memberId ? memberContributions(allProjects, memberId, myLastWeekStart) : []
+  const myNextContribs = memberId ? memberContributions(allProjects, memberId, myNextWeekStart) : []
   const myThisHours = Math.round(myThisContribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
 
   const firstNameOf = (id: string) =>
@@ -943,8 +924,8 @@ export default function HomePage() {
 
   const hasAnyWeekProject = pastProjects.length + todayProjects.length + futureProjects.length + weekendProjects.length > 0
   const showSummary = !!memberId && (hasAnyWeekProject || weekCapacity > 0 || behindSchedule.length > 0)
-  const tonePast    = weekCapacity > 0 ? pastTone(myLastHours, weekCapacity) : ''
-  const toneNext    = weekCapacity > 0 ? nextTone(myNextHours, weekCapacity) : ''
+  const tonePast    = weekCapacity > 0 ? homeWeekTone(myLastContribs, weekCapacity, 'past', categoryOverrides) : ''
+  const toneNext    = weekCapacity > 0 ? homeWeekTone(myNextContribs, weekCapacity, 'next', categoryOverrides) : ''
   const tonePastCap = tonePast ? tonePast[0].toUpperCase() + tonePast.slice(1) : ''
   const help        = memberId
     ? helpHint({ slack: weekCapacity - myThisHours, others: overloaded.filter(o => o.member.id !== memberId) })
