@@ -7,6 +7,7 @@ import { loadProfile, saveProfile } from '@/lib/profile'
 import { supabase, hasSupabase, requiresAuth, type DbProfile } from '@/lib/supabase'
 import { clearAuthCache } from '@/lib/sync'
 import { isDemoPath, DEMO_PROFILE } from '@/lib/demoFixtures'
+import { registerLoginDevice } from '@/lib/deviceAlerts'
 
 type Ctx = {
   profile:    UserProfile | null
@@ -89,6 +90,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         // alsof we niet ingelogd zijn.
         clearAuthCache()
         setIsAuthenticated(true)
+        registerLoginDevice(session)
         loadFromSupabase(session.user.id)
       } else {
         // No session: only flip to "not authenticated" if auth is required.
@@ -101,6 +103,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_IN' && session?.user) {
         clearAuthCache()
         setIsAuthenticated(true)
+        registerLoginDevice(session)
         loadFromSupabase(session.user.id)
       }
       if (event === 'TOKEN_REFRESHED' && session?.user) {

@@ -25,3 +25,18 @@ create policy "Eigen profiel aanmaken"
 create policy "Eigen profiel bijwerken"
   on public.profiles for update
   using (auth.uid() = user_id);
+
+-- Bekende browsers per gebruiker. Geen client policies: uitsluitend de
+-- beveiligde server-route met service-role mag deze metadata lezen/schrijven.
+create table if not exists public.login_devices (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid references auth.users(id) on delete cascade not null,
+  device_hash   text not null,
+  label         text not null default '',
+  first_seen_at timestamptz not null default now(),
+  last_seen_at  timestamptz not null default now(),
+  created_at    timestamptz not null default now(),
+  unique (user_id, device_hash)
+);
+create index if not exists login_devices_user_created_idx on public.login_devices (user_id, created_at desc);
+alter table public.login_devices enable row level security;

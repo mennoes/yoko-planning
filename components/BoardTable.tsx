@@ -36,6 +36,7 @@ import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
 import { PersonalCompletionSection } from './PersonalCompletionSection'
 import { useCompletedOwners } from './useCompletedOwners'
 import type { CompletionTarget } from '@/lib/personalCompletion'
+import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -168,6 +169,182 @@ function PortalDropdown({ anchor, onClose, children }: {
       {children}
     </div>,
     document.body
+  )
+}
+
+type MobileCreateValues = {
+  name: string
+  ownerIds: string[]
+  status: string
+  startDate: string | null
+  endDate: string | null
+  deadline: string | null
+  estHours: number
+  notes: string
+}
+
+// Op een smal scherm is een brede, halflege tabelrij geen prettig formulier.
+// Deze sheet verzamelt daarom eerst de belangrijkste itemvelden en voegt de
+// rij pas na bevestigen aan het bord toe.
+function MobileCreateItemSheet({ kind, onClose, onCreate }: {
+  kind: 'item' | 'subitem'
+  onClose: () => void
+  onCreate: (values: MobileCreateValues) => void
+}) {
+  const { members: liveTeam } = useTeam()
+  const [name, setName] = useState('')
+  const [ownerIds, setOwnerIds] = useState<string[]>([])
+  const [status, setStatus] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [deadline, setDeadline] = useState('')
+  const [estHours, setEstHours] = useState('')
+  const [notes, setNotes] = useState('')
+  const inferredWeekKey = useRef('')
+
+  const team = useMemo(() => {
+    const seen = new Set<string>()
+    const result: Array<{ id: string; name: string; color?: string }> = []
+    for (const member of liveTeam) {
+      if (member.hidden || member.id === 'unassigned') continue
+      seen.add(member.id)
+      result.push(member)
+    }
+    for (const member of teamData.members) {
+      if (seen.has(member.id) || member.id === 'unassigned') continue
+      seen.add(member.id)
+      result.push(member)
+    }
+    return result
+  }, [liveTeam])
+
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = previous
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  useEffect(() => {
+    const inferred = inferWeekPlanning(name)
+    if (!inferred) {
+      inferredWeekKey.current = ''
+      return
+    }
+    const key = `${inferred.year}-${inferred.week}`
+    if (inferredWeekKey.current === key) return
+    inferredWeekKey.current = key
+    setStartDate(inferred.startDate)
+    setEndDate(inferred.endDate)
+    setEstHours(String(inferred.estHours))
+  }, [name])
+
+  if (typeof document === 'undefined') return null
+  const fieldStyle: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-strong)',
+    borderRadius: 10, background: 'var(--bg-base)', color: 'var(--text-primary)',
+    padding: '11px 12px', fontSize: 16, outline: 'none', minHeight: 44,
+  }
+  const labelStyle: React.CSSProperties = {
+    display: 'grid', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)',
+  }
+  const title = kind === 'item' ? 'Nieuw item' : 'Nieuw subitem'
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const cleanName = name.trim()
+    if (!cleanName) return
+    onCreate({
+      name: cleanName, ownerIds, status,
+      startDate: startDate || null, endDate: endDate || null,
+      deadline: deadline || null,
+      estHours: Math.max(0, Number(estHours) || 0),
+      notes: notes.trim(),
+    })
+  }
+
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label={title}
+      style={{ position: 'fixed', inset: 0, zIndex: 12000, display: 'flex', alignItems: 'flex-end' }}>
+      <button type="button" aria-label="Sluiten" onClick={onClose}
+        style={{ position: 'absolute', inset: 0, border: 0, background: 'rgba(11, 18, 32, 0.52)' }} />
+      <form onSubmit={submit} style={{
+        position: 'relative', width: '100%', maxHeight: '92dvh', overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch', background: 'var(--bg-card)',
+        borderRadius: '20px 20px 0 0', boxShadow: '0 -16px 50px rgba(0,0,0,0.28)',
+        padding: '10px 18px calc(18px + env(safe-area-inset-bottom))',
+      }}>
+        <div aria-hidden style={{ width: 42, height: 4, borderRadius: 4, background: 'var(--border-strong)', margin: '0 auto 12px' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 20, color: 'var(--text-primary)' }}>{title}</h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--text-muted)' }}>Vul in wat je nodig hebt; je kunt dit later altijd aanpassen.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Sluiten"
+            style={{ border: 0, background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: 20, width: 36, height: 36, fontSize: 22 }}>×</button>
+        </div>
+
+        <div style={{ display: 'grid', gap: 15 }}>
+          <label style={labelStyle}>Naam
+            <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={title} style={fieldStyle} />
+          </label>
+
+          <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 7 }}>
+            <legend style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 7 }}>Owners</legend>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {team.map(member => {
+                const selected = ownerIds.includes(member.id)
+                return <button key={member.id} type="button"
+                  onClick={() => setOwnerIds(ids => selected ? ids.filter(id => id !== member.id) : [...ids, member.id])}
+                  aria-pressed={selected}
+                  style={{ border: `1px solid ${selected ? (member.color ?? 'var(--accent)') : 'var(--border-strong)'}`, background: selected ? `${member.color ?? '#579bfc'}24` : 'var(--bg-base)', color: 'var(--text-primary)', borderRadius: 999, padding: '8px 11px', fontSize: 13, fontWeight: selected ? 700 : 500 }}>
+                  {selected ? '✓ ' : ''}{member.name}
+                </button>
+              })}
+            </div>
+          </fieldset>
+
+          <label style={labelStyle}>Status
+            <select value={status} onChange={e => setStatus(e.target.value)} style={fieldStyle}>
+              <option value="">Geen status</option>
+              {STATUS_OPTIONS.filter(option => option.label).map(option => <option key={option.label} value={option.label}>{option.label}</option>)}
+            </select>
+          </label>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label style={labelStyle}>Startdatum
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={fieldStyle} />
+            </label>
+            <label style={labelStyle}>Einddatum
+              <input type="date" min={startDate || undefined} value={endDate} onChange={e => setEndDate(e.target.value)} style={fieldStyle} />
+            </label>
+          </div>
+
+          <label style={labelStyle}>Geschatte uren
+            <input type="number" min="0" step="0.25" inputMode="decimal" value={estHours} onChange={e => setEstHours(e.target.value)} placeholder="0" style={fieldStyle} />
+          </label>
+
+          {kind === 'item' && <>
+            <label style={labelStyle}>Deadline
+              <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} style={fieldStyle} />
+            </label>
+            <label style={labelStyle}>Notities
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} placeholder="Extra context, afspraken of vervolgstappen…" style={{ ...fieldStyle, resize: 'vertical' }} />
+            </label>
+          </>}
+        </div>
+
+        <div style={{ position: 'sticky', bottom: 0, display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, paddingTop: 18, background: 'var(--bg-card)' }}>
+          <button type="button" onClick={onClose} style={{ minHeight: 46, borderRadius: 10, border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontWeight: 700 }}>Annuleren</button>
+          <button type="submit" disabled={!name.trim()} style={{ minHeight: 46, borderRadius: 10, border: 0, background: name.trim() ? 'var(--accent)' : 'var(--bg-hover)', color: name.trim() ? '#111' : 'var(--text-muted)', fontWeight: 800 }}>Aanmaken</button>
+        </div>
+      </form>
+    </div>,
+    document.body,
   )
 }
 
@@ -771,6 +948,14 @@ function RangeCalendar({
   function nextMonth() { vm === 11 ? (setVm(0), setVy(y => y + 1)) : setVm(m => m + 1) }
 
   const cells = buildCalGrid(vy, vm)
+  const calendarWeeks = Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7))
+  const selectedWeekLabel = selA
+    ? (() => {
+        const first = isoWeekNumber(selA)
+        const last = isoWeekNumber(selB ?? selA)
+        return first === last ? `week ${first}` : `week ${first}–${last}`
+      })()
+    : null
 
   return (
     <div style={{
@@ -780,11 +965,14 @@ function RangeCalendar({
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Datums instellen</span>
-        {days !== null && (
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--overlay-medium)', padding: '2px 7px', borderRadius: 10 }}>
-            {days} dag{days !== 1 ? 'en' : ''}
-          </span>
-        )}
+        <div style={{ display: 'flex', gap: 5 }}>
+          {selectedWeekLabel && <span style={{ fontSize: 11, color, background: color + '18', padding: '2px 7px', borderRadius: 10, fontWeight: 700 }}>{selectedWeekLabel}</span>}
+          {days !== null && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--overlay-medium)', padding: '2px 7px', borderRadius: 10 }}>
+              {days} dag{days !== 1 ? 'en' : ''}
+            </span>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 14 }}>
@@ -846,40 +1034,49 @@ function RangeCalendar({
         <button onClick={nextMonth} style={navBtnStyle}>▶</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 3 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '28px repeat(7, 1fr)', marginBottom: 3 }}>
+        <div style={{ textAlign: 'center', fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', padding: '2px 0' }}>wk</div>
         {NL_DAYS_SHORT.map(d => (
           <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', padding: '2px 0' }}>{d}</div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
-        {cells.map((cell, i) => {
-          if (!cell) return <div key={`e-${i}`} style={{ height: 30 }} />
-          const day    = parseInt(cell.split('-')[2])
-          const isS    = cell === effA
-          const isE    = cell === effB
-          const inRng  = effA && effB && cell > effA && cell < effB
-          const isTdy  = cell === today
-          const isEdge = isS || isE
-          return (
-            <div key={cell}
-              onClick={() => clickDay(cell)}
-              onMouseEnter={() => setHov(cell)}
-              onMouseLeave={() => setHov(null)}
-              style={{
-                height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, cursor: 'pointer', userSelect: 'none',
-                borderRadius: isEdge ? 6 : 0,
-                background: isEdge ? color : inRng ? color + '28' : 'transparent',
-                color: isEdge ? '#fff' : isTdy ? color : inRng ? 'var(--text-primary)' : 'var(--text-secondary)',
-                fontWeight: isEdge || isTdy ? 700 : 400,
-                outline: isTdy && !isEdge ? `1px solid ${color}55` : undefined,
-                outlineOffset: '-2px',
-                transition: 'background 0.08s',
-              }}>
-              {day}
+      <div style={{ display: 'grid', gridTemplateColumns: '28px repeat(7, 1fr)' }}>
+        {calendarWeeks.map((weekCells, row) => {
+          const weekDate = weekCells.find((cell): cell is string => !!cell)
+          return <div key={`week-${row}`} style={{ display: 'contents' }}>
+            <div title="Weeknummer" style={{ height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, color: 'var(--text-muted)', fontWeight: 700, borderRight: '1px solid var(--border-light)' }}>
+              {weekDate ? isoWeekNumber(weekDate) : ''}
             </div>
-          )
+            {weekCells.map((cell, dayIndex) => {
+              if (!cell) return <div key={`e-${row}-${dayIndex}`} style={{ height: 30 }} />
+              const day    = parseInt(cell.split('-')[2])
+              const isS    = cell === effA
+              const isE    = cell === effB
+              const inRng  = effA && effB && cell > effA && cell < effB
+              const isTdy  = cell === today
+              const isEdge = isS || isE
+              return (
+                <div key={cell}
+                  onClick={() => clickDay(cell)}
+                  onMouseEnter={() => setHov(cell)}
+                  onMouseLeave={() => setHov(null)}
+                  style={{
+                    height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, cursor: 'pointer', userSelect: 'none',
+                    borderRadius: isEdge ? 6 : 0,
+                    background: isEdge ? color : inRng ? color + '28' : 'transparent',
+                    color: isEdge ? '#fff' : isTdy ? color : inRng ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: isEdge || isTdy ? 700 : 400,
+                    outline: isTdy && !isEdge ? `1px solid ${color}55` : undefined,
+                    outlineOffset: '-2px',
+                    transition: 'background 0.08s',
+                  }}>
+                  {day}
+                </div>
+              )
+            })}
+          </div>
         })}
       </div>
 
@@ -1557,6 +1754,8 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   dismissedInstanceIds?: string[]
   onUpdate: (u: SubItem[], itemPatch?: { dismissedInstanceIds?: string[] }) => void
 }) {
+  const isMobile = useIsMobile()
+  const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
   function updateOne(id: string, u: Partial<SubItem>) {
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
     // wijziging op alle geselecteerde subitems binnen dit item toe. Zo kun
@@ -1598,6 +1797,10 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   }
   const [justCreatedSubId, setJustCreatedSubId] = useState<string | null>(null)
   function addOne() {
+    if (isMobile) {
+      setMobileCreateOpen(true)
+      return
+    }
     const id = Date.now().toString()
     onUpdate([...subitems, { id, name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
     // Onthoud de net-aangemaakte id zodat de rij meteen in edit-mode
@@ -1605,6 +1808,15 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     // 'Nieuw subitem' apart te moeten aanklikken.
     setJustCreatedSubId(id)
     setTimeout(() => setJustCreatedSubId(prev => prev === id ? null : prev), 5000)
+  }
+  function createMobileSubitem(values: MobileCreateValues) {
+    const id = Date.now().toString()
+    onUpdate([...subitems, {
+      id, name: values.name, ownerIds: values.ownerIds, status: values.status,
+      startDate: values.startDate, endDate: values.endDate,
+      deadline: values.deadline, estHours: values.estHours,
+    }])
+    setMobileCreateOpen(false)
   }
   const rail = accentColor ?? 'var(--accent)'
   const hdrCell: React.CSSProperties = { padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border)' }
@@ -1696,6 +1908,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           </button>
         </div>
       </div>
+      {mobileCreateOpen && <MobileCreateItemSheet kind="subitem" onClose={() => setMobileCreateOpen(false)} onCreate={createMobileSubitem} />}
     </div>
   )
 }
@@ -1914,6 +2127,20 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   const subitems    = item.subitems ?? []
   const hasSubitems = subitems.length > 0
 
+  function saveItemName() {
+    const inferred = defaultEditName ? inferWeekPlanning(nameDraft) : null
+    onUpdate({
+      name: nameDraft,
+      ...(inferred ? {
+        startDate: inferred.startDate,
+        endDate: inferred.endDate,
+        estHours: inferred.estHours,
+        dagen: inferred.estHours / 8,
+      } : {}),
+    })
+    setEditName(false)
+  }
+
   // Voor recurring Google-events: bereken de link naar de éérstvolgende
   // instance (of de laatste als alles voorbij is). We gebruiken 'm zowel
   // voor 't Google-badge naast de naam als voor de naam-klik zelf op
@@ -2119,9 +2346,9 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
             <input autoFocus value={nameDraft}
               onChange={e => setNameDraft(e.target.value)}
               onFocus={e => e.currentTarget.select()}
-              onBlur={() => { onUpdate({ name: nameDraft }); setEditName(false) }}
+              onBlur={saveItemName}
               onKeyDown={e => {
-                if (e.key === 'Enter') { onUpdate({ name: nameDraft }); setEditName(false) }
+                if (e.key === 'Enter') saveItemName()
                 if (e.key === 'Escape') setEditName(false)
               }}
               style={{ ...editInput, flex: 1 }} />
@@ -2783,6 +3010,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
 }) {
+  const isMobile = useIsMobile()
+  const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
   const [dropHover, setDropHover] = useState(false)
   // 'Ghost mode': zodra ergens op het bord een subitem versleept wordt,
   // krijgt elke groep een opvallende drop-zone-stijl zodat de gebruiker
@@ -3102,6 +3331,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   }, [group.items, justCreatedId])
 
   function addItem() {
+    if (isMobile) {
+      setMobileCreateOpen(true)
+      return
+    }
     const newId = Date.now().toString()
     // Bescherm de net-aangemaakte rij tegen de loadGroups-filter (die
     // standaard lege 'Nieuw item'-rijen uitfiltert). Anders verdwijnt
@@ -3120,6 +3353,20 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
       startDate: null, endDate: null, deadline: null, estHours: 0, dagen: 0,
     }] })
     setJustCreatedId(newId)
+  }
+
+  function createMobileItem(values: MobileCreateValues) {
+    const newId = Date.now().toString()
+    const existingEmpties = group.items.filter(isEmptyPlaceholder)
+    if (existingEmpties.length > 0) hardDeleteItems(existingEmpties.map(item => item.id)).catch(() => {})
+    const cleanedItems = group.items.filter(item => !isEmptyPlaceholder(item))
+    onUpdateGroup({ ...group, items: [...cleanedItems, {
+      id: newId, name: values.name, ownerIds: values.ownerIds, status: values.status,
+      startDate: values.startDate, endDate: values.endDate, deadline: values.deadline,
+      estHours: values.estHours, dagen: Math.round(values.estHours / 8 * 10) / 10,
+      ...(values.notes ? { notes: values.notes } : {}),
+    }] })
+    setMobileCreateOpen(false)
   }
 
   const totHours = group.items.reduce((s, i) => s + effectiveHours(i), 0)
@@ -3636,6 +3883,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                 + Voeg item toe
               </button>
             </div>
+
+            {mobileCreateOpen && <MobileCreateItemSheet kind="item" onClose={() => setMobileCreateOpen(false)} onCreate={createMobileItem} />}
 
             {group.items.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, borderBottom: '2px solid var(--border)', background: 'var(--overlay-faint)' }}>
@@ -4774,7 +5023,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           gewoon overflow: visible zodat popovers er niet door geclipt
           worden. */}
       <div style={isMobile
-        ? { overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' as const, margin: '0 -16px', padding: '0 16px' }
+        ? {
+            width: 'calc(100% + 32px)', maxWidth: '100vw', boxSizing: 'border-box',
+            overflowX: 'scroll', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' as const,
+            overscrollBehaviorX: 'contain' as const, touchAction: 'pan-x pan-y',
+            margin: '0 -16px', padding: '0 16px 10px',
+          }
         : { overflow: 'visible' }}>
         <div style={isMobile ? { minWidth: 720 } : undefined}>
         {filteredGroups.map((group, gIdx) => {

@@ -386,14 +386,15 @@ function SectionBlock({
         if (t.closest('button') || t.closest('input')) return
         const nextOpen = !open
         setOpen(nextOpen)
-        if (nextOpen && section.type === 'projects') {
-          // Agenda's toont meteen het Yoko-bord. In de publieke demo bestaat
-          // Yoko niet; daar opent het eerste fictieve bord uit deze sectie.
+        if (nextOpen && section.type === 'projects' && !onNavigate) {
+          // Desktop: Agenda's toont meteen het Yoko-bord. Op mobiel blijft
+          // de drawer juist open en klapt alleen de lijst uit; de gebruiker
+          // kiest daar expliciet een agenda. In de publieke demo bestaat
+          // Yoko niet; daar opent desktop het eerste fictieve bord.
           const destination = visibleItems.find(item => item.id === 'yoko' || item.href === '/projects/yoko')
             ?? visibleItems[0]
           if (destination) {
             router.push(destination.href)
-            onNavigate?.()
           }
         }
       }}

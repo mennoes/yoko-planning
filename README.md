@@ -34,3 +34,14 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Loginwaarschuwingen
+
+Voer `supabase/0038_login_devices.sql` eenmalig uit en configureer deze server-side omgevingsvariabelen in Vercel:
+
+- `RESEND_API_KEY`
+- `AUTH_ALERT_FROM_EMAIL` (bijvoorbeeld `Yoko Planner <beveiliging@studioyoko.nl>`; het domein moet in Resend geverifieerd zijn)
+- `DEVICE_HASH_SECRET` (een willekeurige lange geheime waarde)
+- optioneel `NEXT_PUBLIC_APP_URL` (de productie-URL, zonder slash aan het einde)
+
+Na iedere geldige login registreert de server de browser. Een onbekende browser ontvangt één waarschuwing op het e-mailadres van de ingelogde gebruiker. IP-adressen worden alleen in die waarschuwing gebruikt en niet opgeslagen.
