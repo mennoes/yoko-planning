@@ -8,7 +8,10 @@ const CONTACTS_KEY = 'yoko-contacts-overrides'
 const CAP_EVENT    = 'yoko-capacities-update'
 const CON_EVENT    = 'yoko-contacts-update'
 
-export type Contact = { id: string; name: string; role: string; email: string; phone: string }
+export type Contact = {
+  id: string; name: string; role: string; email: string; phone: string
+  daysOff?: string[]; inactive?: boolean
+}
 export type ContactGroup = { id: string; name: string; color: string; contacts: Contact[] }
 
 export function getCapacities(): Record<string, number> {

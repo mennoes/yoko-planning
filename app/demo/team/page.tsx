@@ -33,7 +33,7 @@ import {
 } from '@/lib/demoTeamPageStore'
 
 // ─── Contacts types ───────────────────────────────────────────────────────────
-type Contact = { id: string; name: string; role: string; email: string; phone: string }
+type Contact = { id: string; name: string; role: string; email: string; phone: string; daysOff?: string[]; inactive?: boolean }
 type Group   = { id: string; name: string; color: string; contacts: Contact[] }
 
 // ─── Photo cropper ────────────────────────────────────────────────────────────
@@ -279,6 +279,9 @@ function ContactGroup({ group, onChange }: {
   onChange: (g: Group) => void
 }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [inactiveOpen, setInactiveOpen] = useState(false)
+  const activeContacts = group.contacts.filter(c => !c.inactive)
+  const inactiveContacts = group.contacts.filter(c => c.inactive)
   function updateContact(id: string, patch: Partial<Contact>) {
     onChange({ ...group, contacts: group.contacts.map(c => c.id === id ? { ...c, ...patch } : c) })
   }
@@ -288,7 +291,7 @@ function ContactGroup({ group, onChange }: {
     onChange({ ...group, contacts: group.contacts.filter(c => c.id !== id) })
   }
   function addContact() {
-    onChange({ ...group, contacts: [...group.contacts, { id: `c_${Date.now()}`, name: '', role: '', email: '', phone: '' }] })
+    onChange({ ...group, contacts: [...group.contacts, { id: `c_${Date.now()}`, name: '', role: '', email: '', phone: '', daysOff: [], inactive: false }] })
   }
 
   return (
@@ -297,10 +300,10 @@ function ContactGroup({ group, onChange }: {
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '8px 14px', borderLeft: `4px solid ${group.color}`,
         background: 'var(--overlay-subtle)', cursor: 'pointer',
-      }} onClick={() => setCollapsed(c => !c)}>
+      }} onClick={() => { setCollapsed(c => !c); setInactiveOpen(false) }}>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{collapsed ? '▶' : '▼'}</span>
         <span style={{ fontSize: 14, fontWeight: 700, color: group.color }}>{group.name}</span>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{group.contacts.length} personen</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{activeContacts.length} actief{inactiveContacts.length > 0 ? ` · ${inactiveContacts.length} inactief` : ''}</span>
       </div>
 
       {!collapsed && (
@@ -317,7 +320,7 @@ function ContactGroup({ group, onChange }: {
               }}>{h}</div>
             ))}
           </div>
-          {group.contacts.map(contact => (
+          {activeContacts.map(contact => (
             <ContactRow key={contact.id} contact={contact} color={group.color}
               onUpdate={u => updateContact(contact.id, u)}
               onDelete={() => deleteContact(contact.id)} />
@@ -330,6 +333,23 @@ function ContactGroup({ group, onChange }: {
               + Voeg contact toe
             </button>
           </div>
+          {inactiveContacts.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)' }}>
+              <button type="button" aria-expanded={inactiveOpen}
+                onClick={() => setInactiveOpen(open => !open)}
+                style={{ width: '100%', padding: '10px 14px', display: 'flex', gap: 8,
+                  alignItems: 'center', background: 'var(--bg-hover)', border: 'none',
+                  color: 'var(--text-secondary)', cursor: 'pointer', textAlign: 'left', fontSize: 12, fontWeight: 700 }}>
+                <span aria-hidden="true">{inactiveOpen ? '▼' : '▶'}</span>
+                Inactief · {inactiveContacts.length}
+              </button>
+              {inactiveOpen && inactiveContacts.map(contact => (
+                <ContactRow key={contact.id} contact={contact} color={group.color}
+                  onUpdate={u => updateContact(contact.id, u)}
+                  onDelete={() => deleteContact(contact.id)} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -344,10 +364,10 @@ function ContactRow({ contact, color, onUpdate, onDelete }: {
   const [hover, setHover] = useState(false)
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '1fr 160px 220px 160px 36px',
-      alignItems: 'center', minHeight: 44, borderBottom: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
       background: hover ? 'var(--overlay-hover)' : 'transparent', transition: 'background 0.1s',
     }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 220px 160px 36px', alignItems: 'center', minHeight: 44 }}>
       <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <Avatar name={contact.name} color={color} />
         <InlineField value={contact.name} placeholder="Naam" onSave={v => onUpdate({ name: v })}
@@ -372,6 +392,36 @@ function ContactRow({ contact, color, onUpdate, onDelete }: {
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>
         )}
+      </div>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
+        padding: '5px 14px 9px 56px', borderTop: '1px solid var(--border-light)', fontSize: 11 }}>
+        <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Werkt niet op:</span>
+        {DAY_KEYS.map((day, index) => {
+          const selected = (contact.daysOff ?? []).includes(day)
+          return <button key={day} type="button" aria-pressed={selected}
+            title={`${contact.name || 'Contact'} werkt ${selected ? 'niet' : 'wel'} op ${['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag'][index]}`}
+            onClick={() => onUpdate({ daysOff: selected
+              ? (contact.daysOff ?? []).filter(d => d !== day)
+              : [...(contact.daysOff ?? []), day] })}
+            style={{ minWidth: 27, height: 24, padding: '0 5px', borderRadius: 5,
+              border: selected ? '1px solid var(--accent)' : '1px solid var(--border)',
+              background: selected ? 'var(--accent)' : 'var(--bg-card)',
+              color: selected ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+            {['Ma', 'Di', 'Wo', 'Do', 'Vr'][index]}
+          </button>
+        })}
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto', color: 'var(--text-muted)' }}>
+          Status
+          <select value={contact.inactive ? 'inactive' : 'active'}
+            aria-label={`Status van ${contact.name || 'contact'}`}
+            onChange={e => onUpdate({ inactive: e.target.value === 'inactive' })}
+            style={{ padding: '3px 7px', borderRadius: 5, border: '1px solid var(--border)',
+              background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 11, cursor: 'pointer' }}>
+            <option value="active">Actief</option>
+            <option value="inactive">Inactief</option>
+          </select>
+        </label>
       </div>
     </div>
   )
