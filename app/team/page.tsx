@@ -161,36 +161,35 @@ function TeamMemberCard({ member, capacity, daysOff, compact, onDaysOffChange, o
           {/* Avatar */}
           <div style={{ position: 'relative', flexShrink: 0 }}
             onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-            {photo ? (
-              <img src={photo} alt={member.name}
-                style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', border: `${compact ? 2 : 3}px solid ${member.color}`, display: 'block' }} />
-            ) : (
-              <div style={{
-                width: AV, height: AV, borderRadius: '50%', flexShrink: 0,
-                background: member.color + '25', border: `${compact ? 2 : 3}px solid ${member.color}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: compact ? 14 : 22, fontWeight: 700, color: member.color,
-              }}>
-                {/* Try static /team/ photo as fallback */}
-                <img src={fallback} alt={member.name}
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                  style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} />
-                {initials}
-              </div>
-            )}
+            <Link href={`/profile/${encodeURIComponent(member.id)}`} aria-label={`Bekijk profiel van ${member.name}`}
+              title={`Bekijk profiel van ${member.name}`}
+              style={{ display: 'block', width: AV, height: AV, borderRadius: '50%', position: 'relative' }}>
+              {photo ? (
+                <img src={photo} alt=""
+                  style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', border: `${compact ? 2 : 3}px solid ${member.color}`, display: 'block' }} />
+              ) : (
+                <div style={{
+                  width: AV, height: AV, borderRadius: '50%', flexShrink: 0,
+                  background: member.color + '25', border: `${compact ? 2 : 3}px solid ${member.color}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: compact ? 14 : 22, fontWeight: 700, color: member.color,
+                }}>
+                  {/* Try static /team/ photo as fallback */}
+                  <img src={fallback} alt=""
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} />
+                  {initials}
+                </div>
+              )}
+            </Link>
             {hover && !isMe && (
-              <button onClick={() => fileRef.current?.click()} style={{
-                position: 'absolute', inset: 0, borderRadius: '50%', border: 'none', cursor: 'pointer',
-                background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 11, fontWeight: 600,
+              <button onClick={() => fileRef.current?.click()} aria-label={`Foto van ${member.name} wijzigen`}
+                title="Foto wijzigen" style={{
+                position: 'absolute', right: -5, bottom: -5, width: compact ? 21 : 25, height: compact ? 21 : 25,
+                borderRadius: '50%', border: '1px solid var(--border)', cursor: 'pointer',
+                background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: compact ? 10 : 12,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>📷</button>
-            )}
-            {isMe && hover && (
-              <div style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
-                background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 9.5,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 4,
-              }}>profiel instelling</div>
             )}
           </div>
 
@@ -198,7 +197,8 @@ function TeamMemberCard({ member, capacity, daysOff, compact, onDaysOffChange, o
 
           {/* Name + capacity (capacity is inline-editable + gedeeld met Planning) */}
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: NAME_FS, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{member.name}</div>
+            <Link href={`/profile/${encodeURIComponent(member.id)}`} title={`Bekijk profiel van ${member.name}`}
+              style={{ display: 'block', fontSize: NAME_FS, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2, textDecoration: 'none' }}>{member.name}</Link>
             {capEdit ? (
               <input autoFocus type="number" min={0} value={capDraft}
                 onChange={e => setCapDraft(e.target.value)}
@@ -631,7 +631,7 @@ export default function TeamPage() {
           )
         })()}
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
-          Hover over een foto om te wijzigen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · indeling Yoko/Freelance/Inactief wijzig je via <Link href="/team-admin" style={{ color: 'var(--accent)' }}>Team beheren</Link>
+          Klik op een foto of naam om het profiel te openen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · indeling Yoko/Freelance/Inactief wijzig je via <Link href="/team-admin" style={{ color: 'var(--accent)' }}>Team beheren</Link>
         </p>
       </div>
 
