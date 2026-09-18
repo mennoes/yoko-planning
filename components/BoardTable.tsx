@@ -4614,6 +4614,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // parent-breedte zodat ongetoete kolommen 'meeschalen' totdat de
   // gebruiker ze expliciet apart resized.
   const subGridTemplate = `48px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  // De grid-tracks zijn vaste pixels. Zonder minimaal deze breedte blijft
+  // de groep op viewportbreedte staan en knipt overflow:hidden de laatste
+  // kolommen af. Op desktop scrolt <main> horizontaal; mobiel behoudt de
+  // eigen tabel-scroller.
+  const tableMinWidth = Math.max(
+    48 + nameW + columns.reduce((sum, c) => sum + (colWidths[c.key] ?? c.width), 0) + 36,
+    48 + nameW + columns.reduce((sum, c) => sum + (subColWidths[c.key] ?? colWidths[c.key] ?? c.width), 0) + 36,
+  ) + 6
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
 
@@ -5052,7 +5060,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             margin: '0 -16px', padding: '0 16px 10px',
           }
         : { overflow: 'visible' }}>
-        <div style={isMobile ? { minWidth: 720 } : undefined}>
+        <div style={{ minWidth: isMobile ? Math.max(720, tableMinWidth) : tableMinWidth }}>
         {filteredGroups.map((group, gIdx) => {
           const isDraggingMe = groupDragging === group.id
           const showLineBefore = groupDrop?.groupId === group.id && groupDrop.side === 'before'
