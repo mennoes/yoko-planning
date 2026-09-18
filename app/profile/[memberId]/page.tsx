@@ -11,6 +11,9 @@ import { getCurrentUserId } from '@/lib/sync'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { fmtMinutes, loadEntries } from '@/lib/timerStore'
 import { VacationModal } from '@/components/VacationModal'
+import { upsertTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
+import { setCapacity } from '@/lib/capacitiesStore'
+import { isTeamAdmin } from '@/lib/teamAdmin'
 
 type ExtendedProfile = {
   user_id?:           string
@@ -56,7 +59,8 @@ export default function PublicProfilePage() {
 
   const [data, setData] = useState<ExtendedProfile | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const { members: liveTeam } = useTeam()
+  const [saveError, setSaveError] = useState('')
+  const { allMembers: liveTeam, refresh: refreshTeam } = useTeam()
   // Eerst kijken in live team_members (Supabase), valt terug op team.json
   // voor pre-DB / legacy ids. Anders krijgt Manuel (alleen in team_members)
   // 'Onbekend teamlid'-fallback.
@@ -65,6 +69,8 @@ export default function PublicProfilePage() {
     ? { id: liveMember.id, name: liveMember.name, color: liveMember.color, email: liveMember.email, weeklyCapacity: liveMember.weeklyCapacity }
     : teamData.members.find(m => m.id === memberId)
   const isMe = myProfile?.memberId === memberId
+  const admin = isTeamAdmin(myProfile?.memberId)
+  const canEditProfile = isMe || (admin && !!data)
 
   useEffect(() => {
     if (!supabase) { setLoaded(true); return }
@@ -81,10 +87,26 @@ export default function PublicProfilePage() {
   }, [memberId])
 
   async function persistField(patch: Partial<ExtendedProfile>) {
-    if (!supabase || !isMe) return
-    const next = { ...(data ?? {}), ...patch }
-    setData(next)
-    await supabase.from('profiles').update(patch).eq('member_id', memberId)
+    if (!supabase || !canEditProfile) return
+    setSaveError('')
+    if (isMe) {
+      const { error } = await supabase.from('profiles').update(patch).eq('member_id', memberId)
+      if (error) { setSaveError(error.message); return }
+    } else {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) { setSaveError('Log opnieuw in om dit profiel te bewerken.'); return }
+      try {
+        const daysOff = patch.days_off
+        const response = await fetch(daysOff !== undefined ? '/api/team/days-off' : '/api/team/profile', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(daysOff !== undefined ? { memberId, daysOff } : { memberId, patch }),
+        })
+        const result = await response.json() as { ok?: boolean; error?: string }
+        if (!response.ok || !result.ok) { setSaveError(result.error ?? 'Opslaan mislukt.'); return }
+      } catch { setSaveError('Opslaan mislukt. Probeer opnieuw.'); return }
+    }
+    setData(current => ({ ...(current ?? {}), ...patch }))
   }
 
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
@@ -94,7 +116,7 @@ export default function PublicProfilePage() {
     return <div style={{ padding: 40 }}><h1>Onbekend teamlid</h1></div>
   }
 
-  const name    = data?.name ?? baseMember.name
+  const name    = liveMember?.name ?? data?.name ?? baseMember.name
   const color   = data?.color ?? baseMember.color
   const photo   = data?.photo ?? (memberId ? getPhoto(memberId) : null) ?? `/team/${memberId}.jpg`
   const cap     = data?.weekly_capacity ?? baseMember.weeklyCapacity ?? 40
@@ -146,12 +168,13 @@ export default function PublicProfilePage() {
             }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-              Studio Yoko · Teamlid
+              {liveMember?.kind === 'freelance' ? 'Freelance' : 'Studio Yoko'} · Teamlid
             </div>
             <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.035em', lineHeight: 1 }}>
               {name}
             </h1>
             {data?.role && <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>{data.role}{data.office ? ` · ${data.office}` : ''}</div>}
+            {liveMember?.inactive && <div style={{ display: 'inline-flex', marginTop: 10, padding: '4px 10px', borderRadius: 999, background: 'rgba(216,182,46,0.16)', color: '#b49724', fontSize: 12, fontWeight: 700 }}>◒ Inactief team</div>}
             {onVacationNow && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,123,36,0.18)', color: '#a05400', fontSize: 12, fontWeight: 700 }}>
                 🏝 Op vakantie {data?.vacation_from ? `${fmtDate(data.vacation_from)} – ${fmtDate(data.vacation_until!)}` : `tot ${fmtDate(data.vacation_until!)}`}
@@ -174,9 +197,19 @@ export default function PublicProfilePage() {
         </div>
       </div>
 
+      {admin && liveMember && memberId !== 'unassigned' && (
+        <AdminTeamCard member={liveMember} refresh={refreshTeam} onError={setSaveError} />
+      )}
+      {saveError && <p role="alert" style={{ color: 'var(--red, #e2445c)', fontSize: 12, margin: '0 0 16px' }}>Opslaan mislukt: {saveError}</p>}
+      {admin && !isMe && !data && (
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 18px' }}>
+          Dit teamlid heeft nog geen ingelogd profiel. Teamgegevens kun je hierboven al aanpassen; persoonlijke profielvelden worden beschikbaar na de eerste login.
+        </p>
+      )}
+
       {/* Bio */}
-      {(data?.bio || isMe) && (
-        <BioField value={data?.bio ?? ''} editable={isMe}
+      {(data?.bio || canEditProfile) && (
+        <BioField value={data?.bio ?? ''} editable={canEditProfile}
           onSave={v => persistField({ bio: v })} />
       )}
 
@@ -200,7 +233,7 @@ export default function PublicProfilePage() {
                       alignItems: 'center',
                     }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</span>
-                      {isMe ? (
+                      {canEditProfile ? (
                         <EditableValue field={f} data={data} onSave={persistField} />
                       ) : (
                         <span style={{ fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
@@ -222,7 +255,7 @@ export default function PublicProfilePage() {
         </div>
       )}
 
-      {isMe && hiddenFields.length > 0 && (
+      {canEditProfile && hiddenFields.length > 0 && (
         <AddFieldPicker fields={hiddenFields} onPick={k => setRevealedKeys(s => new Set(s).add(k))} />
       )}
 
@@ -243,6 +276,108 @@ export default function PublicProfilePage() {
       )}
     </div>
   )
+}
+
+function AdminTeamCard({ member, refresh, onError }: {
+  member: TeamMember; refresh: () => Promise<void>; onError: (message: string) => void
+}) {
+  const [draft, setDraft] = useState(() => ({
+    name: member.name, email: member.email, weeklyCapacity: member.weeklyCapacity,
+    startDate: member.startDate ?? '', kind: member.kind,
+  }))
+  const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    setDraft({ name: member.name, email: member.email, weeklyCapacity: member.weeklyCapacity,
+      startDate: member.startDate ?? '', kind: member.kind })
+  }, [member.id, member.name, member.email, member.weeklyCapacity, member.startDate, member.kind])
+
+  async function saveDetails() {
+    if (!draft.name.trim() || !Number.isFinite(draft.weeklyCapacity) || draft.weeklyCapacity < 0 || draft.weeklyCapacity > 80) {
+      onError('Vul een naam en een geldig aantal uren per week (0–80) in.'); return
+    }
+    setBusy(true); setSaved(false); onError('')
+    try {
+      const result = await upsertTeamMember({ ...member, ...draft, name: draft.name.trim(), email: draft.email.trim(), startDate: draft.startDate || null })
+      if (!result.ok || result.error) { onError(result.error ?? 'Opslaan mislukt.'); return }
+      if (draft.weeklyCapacity !== member.weeklyCapacity) setCapacity(member.id, draft.weeklyCapacity)
+      await refresh()
+      setSaved(true)
+    } catch { onError('Opslaan mislukt. Probeer opnieuw.') }
+    finally { setBusy(false) }
+  }
+
+  async function setInactive(inactive: boolean) {
+    if (inactive === member.inactive) return
+    if (!window.confirm(inactive
+      ? `${member.name} inactief maken? In Planning verschijnt dit lid onderaan in Inactief team; historische items blijven behouden.`
+      : `${member.name} weer actief maken? Dit lid komt terug in de actieve planning.`)) return
+    if (!supabase) return
+    setBusy(true); onError('')
+    try {
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) { onError('Log opnieuw in om de teamstatus te wijzigen.'); return }
+      const response = await fetch('/api/team/status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: member.id, inactive }),
+      })
+      const result = await response.json() as { ok?: boolean; error?: string }
+      if (!response.ok || !result.ok) { onError(result.error ?? 'Teamstatus opslaan mislukt.'); return }
+      await refresh()
+    } catch { onError('Teamstatus opslaan mislukt. Probeer opnieuw.') }
+    finally { setBusy(false) }
+  }
+
+  async function setVisibility(hidden: boolean) {
+    if (hidden === member.hidden) return
+    if (!window.confirm(hidden
+      ? `${member.name} verbergen? Deze persoon verdwijnt helemaal uit teamoverzichten; dit is anders dan inactief.`
+      : `${member.name} weer zichtbaar maken?`)) return
+    setBusy(true); onError('')
+    try {
+      const result = await upsertTeamMember({ ...member, hidden })
+      if (!result.ok || result.error) { onError(result.error ?? 'Zichtbaarheid opslaan mislukt.'); return }
+      await refresh()
+    } catch { onError('Zichtbaarheid opslaan mislukt. Probeer opnieuw.') }
+    finally { setBusy(false) }
+  }
+
+  const fieldStyle: React.CSSProperties = {
+    minWidth: 0, width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 7,
+    border: '1px solid var(--border)', background: 'var(--bg-hover)', color: 'var(--text-primary)', fontSize: 13,
+  }
+  const labelStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }
+  return <section aria-label="Teambeheer" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 14, padding: 18, marginBottom: 22 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+      <div>
+        <div style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 800 }}>Teambeheer</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 3 }}>Alleen beheerders · gekoppeld aan Planning en Team beheren</div>
+      </div>
+      <span style={{ color: member.inactive ? '#d8b62e' : '#00a765', fontSize: 12, fontWeight: 700 }}>{member.inactive ? '◒ Inactief' : '● Actief'}</span>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+      <label style={labelStyle}>Naam<input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} style={fieldStyle} /></label>
+      <label style={labelStyle}>E-mail<input type="email" value={draft.email} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} style={fieldStyle} /></label>
+      <label style={labelStyle}>Uren per week<input type="number" min={0} max={80} value={draft.weeklyCapacity} onChange={e => setDraft(d => ({ ...d, weeklyCapacity: Number(e.target.value) }))} style={fieldStyle} /></label>
+      <label style={labelStyle}>Startdatum<input type="date" value={draft.startDate} onChange={e => setDraft(d => ({ ...d, startDate: e.target.value }))} style={fieldStyle} /></label>
+      <label style={labelStyle}>Team<select value={draft.kind} onChange={e => setDraft(d => ({ ...d, kind: e.target.value as TeamKind }))} style={fieldStyle}>
+        <option value="yoko">Studio Yoko</option><option value="freelance">Freelance</option>
+      </select></label>
+      <label style={labelStyle}>Planningstatus<select value={member.inactive ? 'inactive' : 'active'} disabled={busy} onChange={e => void setInactive(e.target.value === 'inactive')} style={fieldStyle}>
+        <option value="active">Actief — in teamplanning</option><option value="inactive">Inactief — apart ingeklapt</option>
+      </select></label>
+      <label style={labelStyle}>Zichtbaarheid<select value={member.hidden ? 'hidden' : 'visible'} disabled={busy} onChange={e => void setVisibility(e.target.value === 'hidden')} style={fieldStyle}>
+        <option value="visible">Zichtbaar</option><option value="hidden">Verborgen</option>
+      </select></label>
+    </div>
+    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 14 }}>
+      {saved && <span role="status" style={{ color: '#00a765', fontSize: 12 }}>Opgeslagen</span>}
+      <button disabled={busy} onClick={() => void saveDetails()} style={{ border: 'none', borderRadius: 8, padding: '8px 14px', background: 'var(--accent)', color: '#000', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>
+        {busy ? 'Opslaan…' : 'Teamgegevens opslaan'}
+      </button>
+    </div>
+  </section>
 }
 
 function PasswordResetCard() {

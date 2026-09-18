@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useTeam } from '@/components/TeamContext'
 import { upsertTeamMember, deleteTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
 import { useProfile } from '@/components/ProfileContext'
 import { supabase } from '@/lib/supabase'
 import { IconUsers } from '@/components/Icon'
+import { isTeamAdmin } from '@/lib/teamAdmin'
+import { setCapacity } from '@/lib/capacitiesStore'
 
 // Stuur invite naar de geconfigureerde Supabase auth — maakt user aan
 // (of stuurt magic-link als-ie al bestaat) zodat 'ie kan inloggen.
@@ -58,7 +61,9 @@ function slugify(name: string): string {
 type FilterKind = 'all' | 'yoko' | 'freelance' | 'unassigned' | 'hidden' | 'inactive'
 
 export default function TeamAdminPage() {
-  const { isAuthenticated, authChecked } = useProfile()
+  const router = useRouter()
+  const { isAuthenticated, authChecked, profile } = useProfile()
+  const canChangeStatus = isTeamAdmin(profile?.memberId)
   const { allMembers: members, refresh } = useTeam()
   const [adding, setAdding] = useState(false)
   const [filter, setFilter] = useState<FilterKind>('all')
@@ -103,6 +108,7 @@ export default function TeamAdminPage() {
       )
     }
     await refresh()
+    setCapacity(id, draft.weeklyCapacity)
     setAdding(false)
     // Direct ook een Supabase auth-invite versturen zodat de nieuwe persoon
     // meteen kan inloggen, zonder dat de admin nog naar het Supabase
@@ -119,6 +125,7 @@ export default function TeamAdminPage() {
     if (!current) return
     const res = await upsertTeamMember({ ...current, ...patch })
     if (!res.ok) { alert(`Opslaan mislukt: ${res.error}`); return }
+    if (patch.weeklyCapacity !== undefined) setCapacity(id, patch.weeklyCapacity)
     await refresh()
   }
 
@@ -226,10 +233,9 @@ export default function TeamAdminPage() {
     <Shell>
       <div style={{ marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0, maxWidth: 580, lineHeight: 1.5 }}>
-          Voeg hier nieuwe teamleden toe of werk gegevens van bestaande leden bij. Bij een nieuw lid
-          met email gaat automatisch een invite-mail uit — die persoon klikt de link, kiest een
-          wachtwoord, en kan inloggen. Voor bestaande leden kun je met de <strong>✉ Invite</strong>
-          knop opnieuw een login-link sturen.
+          Bewerk gegevens direct in de rij. Via <strong>Acties</strong> open je het profiel,
+          wijzig je de zichtbaarheid of actieve status, verstuur je een invite of verwijder je een lid.
+          Inactief verplaatst iemand in Planning naar de ingeklapte groep onderaan; Verbergen haalt iemand helemaal uit beeld.
         </p>
         <button onClick={() => setAdding(a => !a)}
           style={{
@@ -346,21 +352,22 @@ export default function TeamAdminPage() {
 
       {(() => {
         const sorted = [...members].sort((a, b) => a.position - b.position)
-        const kindFilter = (m: TeamMember) =>
-          filter === 'hidden' ? m.hidden : filter === 'inactive' ? m.inactive : !m.hidden
-        const yoko       = sorted.filter(m => m.kind === 'yoko' && m.id !== 'unassigned' && kindFilter(m))
-        const freelance  = sorted.filter(m => m.kind === 'freelance' && m.id !== 'unassigned' && kindFilter(m))
-        const unassigned = sorted.filter(m => m.id === 'unassigned' || m.kind === 'unassigned')
+        const kindFilter = (m: TeamMember) => filter === 'hidden' ? m.hidden : !m.hidden
+        const yoko       = sorted.filter(m => m.kind === 'yoko' && m.id !== 'unassigned' && !m.inactive && kindFilter(m))
+        const freelance  = sorted.filter(m => m.kind === 'freelance' && m.id !== 'unassigned' && !m.inactive && kindFilter(m))
+        const unassigned = sorted.filter(m => (m.id === 'unassigned' || m.kind === 'unassigned') && kindFilter(m))
+        const inactive   = sorted.filter(m => m.id !== 'unassigned' && m.inactive && (filter === 'inactive' || kindFilter(m)))
 
-        const showYoko       = filter === 'all' || filter === 'yoko'       || filter === 'hidden' || filter === 'inactive'
-        const showFreelance  = filter === 'all' || filter === 'freelance'  || filter === 'hidden' || filter === 'inactive'
+        const showYoko       = filter === 'all' || filter === 'yoko'       || filter === 'hidden'
+        const showFreelance  = filter === 'all' || filter === 'freelance'  || filter === 'hidden'
         const showSysteem    = filter === 'all' || filter === 'unassigned'
+        const showInactive   = filter === 'all' || filter === 'inactive' || filter === 'hidden'
 
-        const renderSection = (label: string, rows: TeamMember[], sectionKind: TeamKind) => rows.length === 0 ? null : (
+        const renderSection = (label: string, rows: TeamMember[], sectionKind: TeamKind | null) => rows.length === 0 ? null : (
           <div key={label} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, padding: '0 2px' }}>{label} · {rows.length}</div>
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 150px 80px 28px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflowX: 'auto' }}>
+              <div style={{ display: 'grid', minWidth: 1060, gridTemplateColumns: '20px 28px minmax(120px, 1.1fr) minmax(150px, 1.3fr) 90px 76px 112px 98px 94px 150px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
                 <span></span>
                 <span></span>
                 <span>Naam</span>
@@ -370,8 +377,7 @@ export default function TeamAdminPage() {
                 <span>Start</span>
                 <span>Team</span>
                 <span>Status</span>
-                <span>Login</span>
-                <span></span>
+                <span>Acties</span>
               </div>
               {rows.map(m => (
                 <Row key={m.id} member={m}
@@ -379,13 +385,15 @@ export default function TeamAdminPage() {
                   onDelete={() => remove(m.id)}
                   onToggleHidden={() => toggleHidden(m.id)}
                   onToggleInactive={() => toggleInactive(m.id)}
+                  canChangeStatus={canChangeStatus}
+                  onOpenProfile={() => router.push(`/profile/${encodeURIComponent(m.id)}`)}
                   onDragStart={() => { dragFromRef.current = m.id }}
-                  onDropOn={() => {
+                  onDropOn={sectionKind ? () => {
                     const from = dragFromRef.current
                     if (!from) return
                     dragFromRef.current = null
                     reorderDrop(from, m.id, sectionKind)
-                  }}
+                  } : undefined}
                   onDragEnd={() => { dragFromRef.current = null }}
                 />
               ))}
@@ -397,6 +405,7 @@ export default function TeamAdminPage() {
             {showYoko       && renderSection('Studio Yoko', yoko,      'yoko')}
             {showFreelance  && renderSection('Freelance',   freelance, 'freelance')}
             {showSysteem    && renderSection('Systeem',     unassigned,'unassigned')}
+            {showInactive   && renderSection('Inactief team', inactive, null)}
           </>
         )
       })()}
@@ -404,12 +413,14 @@ export default function TeamAdminPage() {
   )
 }
 
-function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onDragStart, onDropOn, onDragEnd }: {
+function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onOpenProfile, canChangeStatus, onDragStart, onDropOn, onDragEnd }: {
   member: TeamMember
   onChange: (patch: Partial<TeamMember>) => void
   onDelete: () => void
   onToggleHidden: () => void
   onToggleInactive: () => void
+  onOpenProfile: () => void
+  canChangeStatus: boolean
   onDragStart?: () => void
   onDropOn?:    () => void
   onDragEnd?:   () => void
@@ -422,6 +433,21 @@ function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onD
 
   function blurField<T>(key: keyof TeamMember, value: T, current: T) {
     if (value !== current) onChange({ [key]: value } as Partial<TeamMember>)
+  }
+
+  function handleAction(action: string) {
+    if (action === 'profile') onOpenProfile()
+    if (action === 'inactive' && window.confirm(member.inactive
+      ? `${member.name} weer actief maken? De persoon verschijnt opnieuw onder het actieve team in Planning.`
+      : `${member.name} inactief maken? De persoon verhuist naar de ingeklapte groep Inactief team in Planning. Historische items blijven behouden.`)) onToggleInactive()
+    if (action === 'hidden' && window.confirm(member.hidden
+      ? `${member.name} weer zichtbaar maken in de teamoverzichten?`
+      : `${member.name} verbergen? Dit is anders dan inactief: de persoon wordt helemaal uit de teamoverzichten gehaald.`)) onToggleHidden()
+    if (action === 'invite') {
+      if (!member.email) { window.alert('Vul eerst een email-adres in.'); return }
+      if (window.confirm(`Invite versturen naar ${member.email}?`)) void sendInvite(member.email, member.name)
+    }
+    if (action === 'delete') onDelete()
   }
 
   return (
@@ -452,7 +478,7 @@ function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onD
         onDropOn()
       }}
       onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
-      style={{ display: 'grid', gridTemplateColumns: '20px 28px 1.1fr 1.3fr .8fr 80px 115px 95px 150px 80px 28px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
+      style={{ display: 'grid', minWidth: 1060, gridTemplateColumns: '20px 28px minmax(120px, 1.1fr) minmax(150px, 1.3fr) 90px 76px 112px 98px 94px 150px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
         borderBottom: dropHover ? '2px solid var(--accent)' : '1px solid var(--border-light)',
         background: dropHover ? 'var(--accent-light)' : 'transparent',
         cursor: draggable ? 'grab' : 'default',
@@ -481,48 +507,20 @@ function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onD
         <option value="freelance">Freelance</option>
         <option value="unassigned">Systeem</option>
       </select>
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        <button onClick={onToggleHidden}
-          title={member.hidden ? 'Lid is verborgen — klik om weer zichtbaar te maken' : 'Lid is zichtbaar — klik om te verbergen (blijft bestaan)'}
-          style={{
-            padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)',
-            background: member.hidden ? 'var(--bg-hover)' : 'transparent',
-            color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          }}>
-          {member.hidden ? '👁 Verborgen' : 'Zichtbaar'}
-        </button>
-        {member.id !== 'unassigned' && (
-          <button onClick={onToggleInactive}
-            title={member.inactive
-              ? 'Lid is inactief (gestopt) — klik om weer actief te maken'
-              : 'Lid telt mee in actieve capaciteit — klik om als inactief (gestopt) te markeren'}
-            style={{
-              padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)',
-              background: member.inactive ? 'var(--bg-hover)' : 'transparent',
-              color: 'var(--text-secondary)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-            }}>
-            {member.inactive ? '💤 Inactief' : 'Actief'}
-          </button>
-        )}
-      </div>
-      <button
-        onClick={() => {
-          if (!member.email) { window.alert('Geen email-adres voor dit lid — vul eerst de email in.'); return }
-          if (!window.confirm(`Invite versturen naar ${member.email}?\n\n${member.name} krijgt een mail met een link om een wachtwoord te zetten.`)) return
-          sendInvite(member.email, member.name)
-        }}
-        disabled={!member.email || member.id === 'unassigned'}
-        title={!member.email ? 'Vul eerst een email-adres in' : `Stuur login-invite naar ${member.email}`}
-        style={{
-          padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border)',
-          background: member.email ? 'var(--bg-card)' : 'var(--bg-hover)',
-          color: member.email ? 'var(--text-secondary)' : 'var(--text-muted)',
-          fontSize: 11, fontWeight: 600,
-          cursor: member.email && member.id !== 'unassigned' ? 'pointer' : 'not-allowed',
-        }}>
-        ✉ Invite
-      </button>
-      <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--red, #C9483D)', cursor: 'pointer', fontSize: 14 }}>×</button>
+      <span title={member.hidden ? 'Verborgen in teamoverzichten' : member.inactive ? 'Historie blijft zichtbaar, actieve planning niet' : 'Zichtbaar in actieve planning'}
+        style={{ fontSize: 11, fontWeight: 700, color: member.hidden ? 'var(--text-muted)' : member.inactive ? '#d8b62e' : '#00a765' }}>
+        {member.hidden ? '◌ Verborgen' : member.inactive ? '◒ Inactief' : '● Actief'}
+      </span>
+      <select aria-label={`Acties voor ${member.name}`} defaultValue=""
+        onChange={e => { handleAction(e.target.value); e.currentTarget.value = '' }}
+        style={{ ...cellInput, border: '1px solid var(--border)', background: 'var(--bg-hover)', padding: '6px 8px', cursor: 'pointer', fontWeight: 600 }}>
+        <option value="">Acties…</option>
+        <option value="profile">Profiel bekijken / bewerken</option>
+        {canChangeStatus && member.id !== 'unassigned' && <option value="inactive">{member.inactive ? 'Weer actief maken' : 'Inactief maken'}</option>}
+        <option value="hidden">{member.hidden ? 'Weer zichtbaar maken' : 'Verbergen'}</option>
+        {member.email && member.id !== 'unassigned' && <option value="invite">Login-invite sturen</option>}
+        {member.id !== 'unassigned' && <option value="delete">Permanent verwijderen…</option>}
+      </select>
     </div>
   )
 }
