@@ -69,37 +69,24 @@ function defaultKindFor(id: string): TeamKind {
 export async function pullTeam(): Promise<TeamMember[] | null> {
   if (!supabase) return null
   if (!await getCurrentUserId()) return null
-  const sel = 'id, name, email, color, weekly_capacity, position, hidden, kind, start_date, inactive'
-  const { data, error } = await supabase
-    .from('team_members')
-    .select(sel)
-    .order('position', { ascending: true })
-  if (!error && data) return (data as Row[]).filter(r => !isTeamMetadataId(r.id)).map(rowToMember)
-  // Fallback: migratie 0018/0036/0037 niet gedraaid → kolom 'kind',
-  // 'start_date' of 'inactive' bestaat nog niet. Probeer zonder zodat de
-  // UI alsnog leden toont. Voor de kind-classificatie vallen we terug op
-  // defaultKindFor(id) zodat freelancers niet allemaal als 'yoko'
-  // verschijnen (wat zou gebeuren als normalizeKind z'n default 'yoko'
-  // zou toepassen). 'inactive' ontbreekt dan simpelweg → rowToMember
-  // defaultet 'm naar false, wat exact het pre-migratie gedrag is.
-  if (error && /(kind|start_date|inactive)/.test(error.message)) {
-    const fbWithKind = await supabase
+  const base = 'id, name, email, color, weekly_capacity, position, hidden'
+  // Some installations have start_date in a legacy metadata row while the
+  // newer inactive column does exist. Dropping all optional columns in one
+  // fallback silently turned every stopped member active again. Remove ONLY
+  // the column the server reports as missing, preserving inactive/kind.
+  let optional = ['kind', 'start_date', 'inactive']
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    const { data, error } = await supabase
       .from('team_members')
-      .select('id, name, email, color, weekly_capacity, position, hidden, kind')
+      .select(`${base}${optional.length ? ', ' + optional.join(', ') : ''}`)
       .order('position', { ascending: true })
-    const fb = fbWithKind.error
-      ? await supabase
-      .from('team_members')
-      .select('id, name, email, color, weekly_capacity, position, hidden')
-      .order('position', { ascending: true })
-      : fbWithKind
-    if (!fb.error && fb.data) {
-      const hasKind = !fbWithKind.error
-      const members = (fb.data as Array<Omit<Row, 'start_date'> & { kind?: string | null }>).filter(r => !isTeamMetadataId(r.id)).map(r => {
-        const member = rowToMember({ ...r, kind: hasKind ? (r.kind ?? null) : null, start_date: null })
-        if (!hasKind) member.kind = defaultKindFor(member.id)
+    if (!error && data) {
+      const members = (data as Partial<Row>[]).filter(r => !!r.id && !isTeamMetadataId(r.id)).map(r => {
+        const member = rowToMember(r as Row)
+        if (!optional.includes('kind')) member.kind = defaultKindFor(member.id)
         return member
       })
+      if (optional.includes('start_date')) return members
       const { data: metaRows } = await supabase
         .from('team_members_extra')
         .select('id, email')
@@ -108,6 +95,9 @@ export async function pullTeam(): Promise<TeamMember[] | null> {
         .map(r => [r.id.slice(START_DATE_META_PREFIX.length), r.email] as const))
       return members.map(member => ({ ...member, startDate: starts.get(member.id) || null }))
     }
+    const missing = optional.find(column => new RegExp(`\\b${column}\\b`).test(error?.message ?? ''))
+    if (!missing) break
+    optional = optional.filter(column => column !== missing)
   }
   return null
 }

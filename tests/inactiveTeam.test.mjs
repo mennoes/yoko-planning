@@ -4,13 +4,15 @@ import { readFileSync } from 'node:fs'
 
 test('planning keeps inactive members in a separate collapsed section', () => {
   const source = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
-  assert.match(source, /planning-inactive-team-open', false/)
+  assert.match(source, /\[inactiveTeamPos, setInactiveTeamPos\] = useState<number>\(0\)/)
   assert.match(source, /sectionHeader\('Inactief team'/)
   assert.match(source, /sectionLabel\('Inactief team'/)
   assert.match(source, /const inactiveVisible = team\.filter/)
   assert.match(source, /isYokoCrew\(m\.id\) && !isMemberInactive\(m\.id\)/)
   assert.match(source, /if \(inactiveTeamPos !== 0\)/)
   assert.match(source, /if \(isMemberInactive\(m\.id\)\) continue/)
+  assert.ok(source.lastIndexOf("sectionHeader('Inactief team'") > source.lastIndexOf("sectionHeader('Freelancers'"))
+  assert.ok(source.lastIndexOf("sectionLabel('Inactief team'") > source.lastIndexOf("sectionLabel('Freelancers'"))
 })
 
 test('team admin persists inactive status through the authenticated server route', () => {
