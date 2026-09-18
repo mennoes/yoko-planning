@@ -276,37 +276,19 @@ export type ProjectContribution = {
   hours: number
 }
 
-// Telt het aantal werkdagen (Ma-Vr) tussen twee datums inclusief beide
-// uiteinden — minus eventuele off-days voor `memberId` (statische vrije
-// weekdagen via daysOffStore + dynamische Vrij-events via vrijDays).
-//   - Weekend altijd uitgesloten.
-//   - memberId optioneel: zonder member checken we alleen Ma-Vr.
-function countWorkdays(startMs: number, endMs: number, memberId?: string): number {
+// Telt de geplande werkdagen (Ma-Vr) tussen twee datums. Vakantie telt
+// daarnaast als geblokkeerde capaciteit; overlappende projecten moeten
+// zichtbaar blijven als overboeking, niet op die dagen 0 uur worden.
+function countWorkdays(startMs: number, endMs: number): number {
   if (endMs < startMs) return 0
   let count = 0
   const oneDay = 86400000
   const start = new Date(startMs); start.setHours(0, 0, 0, 0)
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
-  // Days-off filter UITGESCHAKELD voor uren-distributie. Was bron van
-  // 'maandag toont niks' wanneer de localStorage-cache ergens stale of
-  // verkeerd was. Weekend-skip blijft. Voor de zichtbare dim-stripe op
-  // off-days check ik elders rechtstreeks profilesById.
-  void memberId
-  const off: number[] = []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
     const d = new Date(t)
     const dow = d.getDay()                       // 0=Sun..6=Sat
     if (dow === 0 || dow === 6) continue          // weekend altijd uit
-    if (memberId) {
-      const iso = dow === 0 ? 7 : dow             // ISO weekday 1..7
-      if (off.includes(iso)) continue             // statische vrije dag
-      // Dynamische Vrij-event via lazy require om circular imports te
-      // vermijden. vrijDays.ts cached zelf in module-scope.
-      try {
-        const { isVrijDayForMember } = require('./vrijDays') as typeof import('./vrijDays')
-        if (isVrijDayForMember(memberId, d)) continue
-      } catch {}
-    }
     count++
   }
   return count
@@ -353,27 +335,12 @@ export function projectHoursInWeek(
   // slechts 7,1u zichtbaar. Met dezelfde filter voor totaal én overlap
   // blijft de som over alle zichtbare cellen exact gelijk aan myShare.
   //
-  // EXCEPTION: vrij-events zelf moeten WEL meetellen — anders skipt
-  // countWorkdays hun eigen dag weg en wordt een 8u vakantie 0u in de
-  // werkdruk-bol. Voor vrij dus geen memberId-skip; alleen weekend.
-  //
-  // Gebruikte vroeger een eigen los regex-patroon hier, dat niet 1-op-1
-  // overeenkwam met de canonieke VRIJ_PATTERNS in lib/workloadCategory.ts
-  // (miste bv. 'ziek', 'thuiswerken', losse 'Pinksterdag' zonder 'tweede').
-  // Zo'n item werd overal ELDERS in de app (todo-filter, categorie-badge,
-  // balk-hoogte) wél als vrij herkend, maar hier niet — met 0u als gevolg
-  // op precies de dagen die countWorkdays dan alsnog wegskipte. isVrijTitle
-  // is nu de ENIGE bron van waarheid voor naam-matching; plus de expliciete
-  // category-override én de GROEPSNAAM (zelfde regel als isVrijDayForMember
-  // in lib/vrijDays.ts) voor namen die geen enkel patroon raken, zoals
-  // 'Zwitserland' in een groep 'Vrij'. Reproduceerbaar bevestigd: zonder
-  // de groepsnaam-check verdween zo'n item volledig (0u) uit de
-  // werkdruk-totalen, terwijl isVrijDayForMember het lid op die exacte
-  // dagen al wél als 'vrij' had gemarkeerd via die groepsnaam.
+  // Dezelfde categoriedetectie geldt voor naam, override en groepsnaam;
+  // een vakantieblok met een neutrale titel telt daardoor eveneens mee.
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime(), isVrij ? undefined : memberId)
+  const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime())
   if (totalWork === 0) return 0
-  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime(), isVrij ? undefined : memberId)
+  const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime())
   if (overlapWork === 0) return 0
 
   // Vrij blokkeert beschikbaarheid: reken 8u per vrije werkdag voor iedere

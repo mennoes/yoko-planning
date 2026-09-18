@@ -42,4 +42,7 @@ test('planning and shared workload totals both use blocked vrij hours', () => {
   assert.match(planning, /if \(isVrij\) return blockedHoursForWorkdays\(overlapWork\)/)
   assert.match(workload, /if \(isVrij\) return blockedHoursForWorkdays\(overlapWork\)/)
   assert.match(planning, /memberHours \+= hours/)
+  assert.match(planning, /const totalWork = countWorkdaysMs\(pS\.getTime\(\), pE\.getTime\(\)\)/)
+  assert.match(planning, /const overlapWork = countWorkdaysMs\(oS\.getTime\(\), oE\.getTime\(\)\)/)
+  assert.doesNotMatch(planning, /if \(isVrijDayForMember\(memberId, d\)\) continue/)
 })
