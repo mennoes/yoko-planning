@@ -1266,7 +1266,7 @@ export default function Sidebar({
             <button onClick={toggleCollapsed} aria-label="Menu uitklappen" title="Menu uitklappen"
               style={{ width: 38, height: 38, borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-hover)', color: 'var(--sup-yellow)', cursor: 'pointer', fontSize: 27, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
           </div>
-          <nav aria-label="Hoofdnavigatie" style={{ width: '100%', padding: '8px 8px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <nav aria-label="Hoofdnavigatie" style={{ width: '100%', padding: '8px 8px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
             {mainNav.map(item => {
               const active = pathname === item.href
               const NavIcon = MAIN_ICONS[item.href]
@@ -1278,7 +1278,7 @@ export default function Sidebar({
             {onOpenSearch && <button onClick={onOpenSearch} aria-label="Zoeken" title="Zoeken (⌘K)"
               style={{ height: 44, borderRadius: 9, border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconSearch size={20} /></button>}
           </nav>
-          <div style={{ marginTop: 'auto', width: '100%', padding: '10px 8px', boxSizing: 'border-box', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: '100%', padding: '10px 8px', boxSizing: 'border-box', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <NotificationBell />
             {profile?.memberId ? (isOnDemoRoute()
               ? <button onClick={openEdit} aria-label="Mijn profiel" title="Mijn profiel" style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer' }}><UserAvatar memberId={profile.memberId} size={32} /></button>
@@ -1300,7 +1300,7 @@ export default function Sidebar({
 
   return (
     <div style={containerStyle}>
-      <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}
+      <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}
         onClick={e => {
           if (!isMobile || !onClose || editOrder) return
           const target = e.target as HTMLElement
@@ -1333,7 +1333,7 @@ export default function Sidebar({
         )}
 
         {/* Logo + my-avatar header */}
-        <div style={{ padding: isMobile ? '20px 88px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ padding: isMobile ? '20px 88px 16px 18px' : '20px 18px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
           <Link href="/"
             onClick={e => { if (editOrder) e.preventDefault() }}
             style={{ textDecoration: 'none', display: 'block', minWidth: 0 }}
@@ -1368,7 +1368,7 @@ export default function Sidebar({
         </div>
 
         {/* Nav */}
-        <nav style={{ padding: '8px 8px', flex: 1 }}>
+        <nav style={{ padding: '8px 8px', flex: '1 1 0', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
 
           {/* Main nav */}
           {mainNav.map((item, idx) => {
@@ -1470,7 +1470,7 @@ export default function Sidebar({
         </nav>
 
         {/* Reorder toggle — small, just above footer */}
-        <div style={{ padding: '4px 12px 6px' }}>
+        <div style={{ padding: '4px 12px 6px', flexShrink: 0 }}>
           <button onClick={() => setEditOrder(o => !o)}
             title={editOrder ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
             style={{ display: 'flex', alignItems: 'center', gap: 6,
@@ -1486,7 +1486,7 @@ export default function Sidebar({
         </div>
 
         {/* Footer — profile + theme + settings */}
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {profile?.memberId && isOnDemoRoute() ? (
             // /demo: geen echte profielpagina — klik opent meteen de
             // edit-modal (zelfde als de 'Profiel instellen'-knop), zodat
