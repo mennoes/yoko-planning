@@ -255,24 +255,19 @@ function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; wi
 }
 
 // Werkdag-teller (ma-vr) tussen twee timestamps, beide uiteinden incl.
-// Skipt óók statische vrije dagen + Vrij-events voor `memberId`.
-function countWorkdaysMs(startMs: number, endMs: number, memberId?: string): number {
+// Sla Vrij-dagen hier NIET over: projecten die tijdens vakantie gepland
+// blijven moeten naast de geblokkeerde vakantie-uren als conflict zichtbaar
+// zijn in de werkdruk, in plaats van stilletjes tot 0u te verdwijnen.
+function countWorkdaysMs(startMs: number, endMs: number): number {
   if (endMs < startMs) return 0
   let count = 0
   const oneDay = 86400000
   const start = new Date(startMs); start.setHours(0, 0, 0, 0)
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
-  void memberId
-  const off: number[] = []
   for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
     const d = new Date(t)
     const dow = d.getDay()
     if (dow === 0 || dow === 6) continue
-    if (memberId) {
-      const iso = dow === 0 ? 7 : dow
-      if (off.includes(iso)) continue
-      if (isVrijDayForMember(memberId, d)) continue
-    }
     count++
   }
   return count
@@ -290,27 +285,13 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // Werkdagen tellen (ma-vr). Weekend = 0u, ook als 't project er overheen
   // loopt. Voorkomt dat een ma-vr-project z'n vrijdag-uren naar zaterdag
   // duwt in de werkdruk-cellen.
-  // VRIJ-events zelf moeten echter WEL meetellen op hun eigen dag — anders
-  // skipt countWorkdaysMs hen weg en wordt een 8u vakantiedag 0u in de bol.
-  // Voor vrij gebruiken we daarom GEEN memberId-skip: alleen weekend
-  // wordt nog uitgesloten.
-  // Naast naam-patroon (isVrijTitle) ook de GROEPSNAAM checken (zelfde
-  // regel als isVrijDayForMember in lib/vrijDays.ts) en de expliciete
-  // category-override. Zonder dit: een item als 'Zwitserland' dat in een
-  // groep 'Vrij'/'Vakantie' hangt (naam zelf matcht geen patroon) werd
-  // door isVrijDayForMember wél als vrije dag voor dit lid herkend — dus
-  // memberId werd elders al als 'af' geskipt op die dagen — maar hier
-  // niet als vrij herkend, dus WEL de memberId-skip toegepast op ZICHZELF.
-  // Resultaat: precies het project dat de vrije dagen veroorzaakt kwam op
-  // 0u uit i.p.v. de vrije-dag-uren te representeren. Reproduceerbaar
-  // bevestigd: item in groep 'Vrij' zonder naam-match → 40u compleet
-  // verdwenen uit de werkdruk-totalen.
+  // Naast naam-patroon ook de groepsnaam en expliciete categorie gebruiken
+  // voor vakantieblokken met een neutrale titel (bv. 'Zwitserland').
   const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
-  // Gebruik voor de noemer exact dezelfde zichtbare werkdagen als voor de
-  // overlap. Anders verdwijnen weekend-aandelen uit de week-/dagtotalen.
-  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime(), isVrij ? undefined : memberId)
+  // Gebruik voor de noemer exact dezelfde werkdagen als voor de overlap.
+  const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime())
   if (totalWork === 0) return 0
-  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime(), isVrij ? undefined : memberId)
+  const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime())
   if (overlapWork === 0) return 0
   // Vrij is geen projectinspanning maar geblokkeerde capaciteit. Een hele
   // vrije werkdag telt daarom altijd als 8u per toegewezen persoon, ook als
