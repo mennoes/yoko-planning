@@ -5,6 +5,7 @@
 import { NextRequest } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { isTeamAdmin } from '@/lib/teamAdmin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
   const { data: userData, error: userErr } = await supabase.auth.getUser(auth.slice(7))
   if (userErr || !userData.user) {
     return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  }
+  const { data: actor, error: actorError } = await supabaseAdmin.from('profiles')
+    .select('member_id').eq('user_id', userData.user.id).maybeSingle()
+  if (actorError || !isTeamAdmin(actor?.member_id)) {
+    return Response.json({ ok: false, error: 'forbidden' }, { status: 403 })
   }
 
   let body: { id?: string; inactive?: boolean }
