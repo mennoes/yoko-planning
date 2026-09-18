@@ -4286,7 +4286,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         .filter(item => {
           if (item.id === openRequest?.id) return true
           if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
-          if (filterOwner && !item.ownerIds.includes(filterOwner)) return false
+          if (filterOwner && !item.ownerIds.includes(filterOwner)
+            && !(item.subitems ?? []).some(sub => sub.ownerIds.includes(filterOwner))) return false
           if (filterStatus && item.status !== filterStatus) return false
           // Periode-filter: item moet OVERLAPPEN met de gekozen range.
           // Subitems tellen ook mee — een parent zonder eigen datum maar met
@@ -4361,10 +4362,21 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     })
   }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter, openRequest])
 
-  const allOwners = useMemo(() => {
-    const ids = new Set<string>()
-    groups.forEach(g => g.items.forEach(i => i.ownerIds.forEach(id => ids.add(id))))
-    return Array.from(ids)
+  const ownerItemCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const group of groups) {
+      for (const item of group.items) {
+        // Een persoon telt één keer per item, ook als die daarnaast op
+        // meerdere subitems staat. Subitem-only eigenaren moeten eveneens
+        // met hun avatar op dit bord kunnen filteren.
+        const owners = new Set([
+          ...item.ownerIds,
+          ...(item.subitems ?? []).flatMap(sub => sub.ownerIds),
+        ])
+        for (const id of owners) counts.set(id, (counts.get(id) ?? 0) + 1)
+      }
+    }
+    return counts
   }, [groups])
 
   // Quick-filter chips & dropdown tonen iedereen die in team.json zit —
@@ -4373,11 +4385,11 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // we wél uitsluiten: 'unassigned' en gcal-contactpersonen die niet in
   // team.json staan (die zouden de chip-rij vol-pollutten).
   const yokoOwners = useMemo(() => {
-    return allOwners.filter(id => {
+    return [...ownerItemCounts.keys()].filter(id => {
       if (!id || id === 'unassigned') return false
       return teamData.members.some(t => t.id === id)
     })
-  }, [allOwners])
+  }, [ownerItemCounts])
 
   const isMobile = useIsMobile()
   const [moreOpen, setMoreOpen] = useState(false)
@@ -4890,14 +4902,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                         if (!m) return null
                         const active = filterOwner === id
                         return (
-                          <button key={id} onClick={() => { setFilterOwner(active ? '' : id); setMoreOpen(false) }}
+                          <button key={id} aria-pressed={active}
+                            onClick={() => { setFilterOwner(active ? '' : id); setMoreOpen(false) }}
                             style={{ padding: '4px 10px', borderRadius: 999,
                               border: `1.5px solid ${active ? m.color : 'var(--border-light)'}`,
                               background: active ? m.color + '22' : 'var(--bg-card)',
                               cursor: 'pointer', fontSize: 12,
                               fontWeight: active ? 700 : 500,
                               color: active ? m.color : 'var(--text-secondary)' }}>
-                            {m.name.split(' ')[0]}
+                            {active ? '✓ ' : ''}{m.name.split(' ')[0]} · {ownerItemCounts.get(id) ?? 0}
                           </button>
                         )
                       })}
@@ -4914,17 +4927,22 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           Op mobiel zit deze in het ⋯-menu hierboven, dus alleen op desktop tonen. */}
       {!isMobile && yokoOwners.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
+            Filter op persoon
+          </span>
           {yokoOwners.map(id => {
             const m = teamData.members.find(t => t.id === id)
             if (!m) return null
             const active = filterOwner === id
             return (
-              <button key={id} onClick={() => setFilterOwner(active ? '' : id)} title={m.name}
+              <button key={id} aria-pressed={active}
+                onClick={() => setFilterOwner(active ? '' : id)}
+                title={`${m.name}: ${ownerItemCounts.get(id) ?? 0} items · klik om te filteren`}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   padding: '3px 9px 3px 3px', borderRadius: 999,
-                  border: `1.5px solid ${active ? m.color : 'var(--border-light)'}`,
-                  background: active ? m.color + '18' : 'var(--bg-card)',
+                  border: `2px solid ${active ? m.color : 'var(--border-light)'}`,
+                  background: active ? m.color + '30' : 'var(--bg-card)',
                   cursor: 'pointer', transition: 'all 0.12s',
                 }}>
                 <MemberAvatar id={id} size={24} />
@@ -4934,6 +4952,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                 }}>
                   {m.name.split(' ')[0]}
                 </span>
+                <span style={{ fontSize: 11, color: active ? m.color : 'var(--text-muted)', fontWeight: 700 }}>
+                  {ownerItemCounts.get(id) ?? 0}
+                </span>
+                {active && <span aria-hidden style={{ color: m.color, fontSize: 13, fontWeight: 800 }}>✓</span>}
               </button>
             )
           })}
