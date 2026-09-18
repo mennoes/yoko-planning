@@ -251,7 +251,7 @@ function PagesSectionItems({ pathname }: { pathname: string }) {
 function SectionBlock({
   section, allSections, setAllSections, pathname, onDelete,
   editOrder, isFirstSection, isLastSection, onMoveSection,
-  showToast,
+  showToast, onNavigate,
 }: {
   section:        SidebarSection
   allSections:    SidebarSection[]
@@ -263,7 +263,9 @@ function SectionBlock({
   isLastSection:  boolean
   onMoveSection:  (dir: -1 | 1) => void
   showToast:      (message: string) => void
+  onNavigate?:   () => void
 }) {
+  const router = useRouter()
   // Items met visibleTo (bv. de Budget-pagina) alleen tonen aan de
   // toegestane member-ID's. Puur UX-filter — de echte afscherming zit
   // server-side in de Supabase RLS-policy van de onderliggende data.
@@ -382,7 +384,18 @@ function SectionBlock({
       <div onClick={e => {
         const t = e.target as HTMLElement
         if (t.closest('button') || t.closest('input')) return
-        setOpen(o => !o)
+        const nextOpen = !open
+        setOpen(nextOpen)
+        if (nextOpen && section.type === 'projects') {
+          // Agenda's toont meteen het Yoko-bord. In de publieke demo bestaat
+          // Yoko niet; daar opent het eerste fictieve bord uit deze sectie.
+          const destination = visibleItems.find(item => item.id === 'yoko' || item.href === '/projects/yoko')
+            ?? visibleItems[0]
+          if (destination) {
+            router.push(destination.href)
+            onNavigate?.()
+          }
+        }
       }}
         style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 12px', borderRadius: 8, cursor: 'pointer',
           color: 'var(--text-primary)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em' }}
@@ -1430,6 +1443,7 @@ export default function Sidebar({
                 isLastSection={idx === sections.length - 1}
                 onMoveSection={dir => moveSection(idx, dir)}
                 showToast={showToast}
+                onNavigate={isMobile ? onClose : undefined}
               />
             </div>
           ))}
