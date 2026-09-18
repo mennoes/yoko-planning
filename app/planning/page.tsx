@@ -700,17 +700,20 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
 
   return (
     <>
-      {/* Buiten beeld? Klem de hele Vandaag-markering aan de rand van
-          het TIJDLIJNDEEL. Links is dat exact ná de sticky naamkolom,
-          zodat lijn en label nooit over namen/profielfoto's lopen. */}
-      {todayEdge && (
-        <div aria-hidden style={{
-          position: 'absolute', top: 0, bottom: 0,
-          ...(todayEdge === 'left' ? { left: nameW + namePad } : { right: 0 }),
-          width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
-          pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
-        }} />
-      )}
+      {/* Eén zichtbare lijn voor zowel vandaag in beeld als aan de rand.
+          De scroll-content heeft alleen een onzichtbaar geometrie-anker;
+          anders verschijnt bij de linkergrens een tweede lijn in de
+          sticky naamkolom. */}
+      <div aria-hidden style={{
+        position: 'absolute', top: 0, bottom: 0,
+        ...(todayEdge === 'left'
+          ? { left: nameW + namePad }
+          : todayEdge === 'right'
+            ? { right: 0 }
+            : { left: (nowOffset ?? 0) - scrollLeft }),
+        width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
+        pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
+      }} />
       {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
           verandert bij horizontaal scrollen alleen de x-positie/tekst en
           nooit de verticale layout van de sticky headers eronder. */}
@@ -6216,27 +6219,13 @@ export default function PlanningPage() {
             </div>
           )}
 
-          {/* "Now" indicator — yoko-yellow vertical line at today's exact
-              position with a VANDAAG pill at the top so the marker is hard
-              to miss when scrolling through time. Rendert altijd wanneer
-              nowOffset bekend is (voorheen gegate op !todayEdge, maar die
-              state leeft nu geïsoleerd in <TodayMarker> hierboven) — buiten
-              beeld is deze lijn gewoon off-screen, geen visueel probleem. */}
+          {/* Onzichtbaar geometrie-anker voor zoom en Naar vandaag. De
+              zichtbare lijn wordt precies één keer door TodayMarker getekend. */}
           {nowOffset !== null && (
-            <>
-              {/* De echte lijn blijft boven de tijdlijn, maar ONDER de
-                  sticky naam-/avatarcellen (z=20). Bij horizontaal scrollen
-                  kan hij daardoor nooit meer door de mensen heen lopen. De
-                  geklemde randlijn uit TodayMarker blijft wel zichtbaar. */}
-              <div data-today-marker style={{
-                position: 'absolute', top: 0, bottom: 0,
-                left: nowOffset, width: 0,
-                borderLeft: '2px solid var(--yellow)',
-                pointerEvents: 'none',
-                zIndex: 19,
-                boxShadow: '0 0 0 0.5px rgba(216, 182, 46, 0.4)',
-              }} />
-            </>
+            <div data-today-marker aria-hidden style={{
+              position: 'absolute', left: nowOffset, top: 0,
+              width: 0, height: 1, pointerEvents: 'none', opacity: 0,
+            }} />
           )}
 
           {/* Month grouping row (only for week/day zoom) — sticky-left bevat
