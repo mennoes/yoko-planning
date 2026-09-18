@@ -2786,14 +2786,20 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
   onClick: () => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
+  const isMobile = useIsMobile()
   const [hovered, setHovered] = useState(false)
+  const [pinned, setPinned] = useState(false)
   const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const hoverTimer = useRef<number | null>(null)
   const cancel = () => { if (hoverTimer.current != null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null } }
   // Korte close-delay (40ms i.p.v. 120) zodat de overgang van de ene bar
   // naar de andere niet voelt alsof 't oude kaartje blijft hangen.
-  const schedule = () => { cancel(); hoverTimer.current = window.setTimeout(() => setHovered(false), 40) }
+  const schedule = () => {
+    cancel()
+    if (pinned) return
+    hoverTimer.current = window.setTimeout(() => setHovered(false), 40)
+  }
 
   // Exclusieve hover: zodra ergens een ANDERE bar opent, sluiten we direct.
   // Zo verschijnt de popup van een net-aangehoverde bar onmiddellijk en
@@ -2804,6 +2810,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
       const ce = e as CustomEvent<{ id: string }>
       if (ce.detail?.id !== project.id) {
         cancel()
+        setPinned(false)
         setHovered(false)
       }
     }
@@ -2812,6 +2819,20 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
       return () => window.removeEventListener('yoko-bar-hover-open', onOther)
     }
   }, [project.id])
+
+  useEffect(() => {
+    if (!pinned) return
+    const close = (event: Event) => {
+      const target = event.target as HTMLElement | null
+      if (target && (wrapRef.current?.contains(target) || target.closest?.(`[data-meeting-hover="${project.id}"]`))) return
+      setPinned(false)
+      setHovered(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [pinned, project.id])
+
+  useEffect(() => () => cancel(), [])
 
   function openPopover(ev?: React.MouseEvent) {
     cancel()
@@ -2840,6 +2861,26 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
     setPopPos({ top: baseY, left: Math.max(8, lx) })
   }
 
+  function toggleMobilePopover() {
+    if (!isMobile || project.source !== 'google') { onClick(); return }
+    cancel()
+    if (pinned) {
+      setPinned(false)
+      setHovered(false)
+      return
+    }
+    const r = wrapRef.current?.getBoundingClientRect()
+    const popW = Math.min(280, window.innerWidth - 16)
+    const popH = 150
+    const left = Math.max(8, Math.min((r?.left ?? 8), window.innerWidth - popW - 8))
+    const below = (r?.bottom ?? 80) + 8
+    const top = below + popH <= window.innerHeight ? below : Math.max(8, (r?.top ?? 170) - popH - 8)
+    setPopPos({ top, left })
+    setPinned(true)
+    setHovered(true)
+    window.dispatchEvent(new CustomEvent('yoko-bar-hover-open', { detail: { id: project.id } }))
+  }
+
   const hours = project.estHours || 0
   const startTime = project.startTime
   const endTime   = project.endTime
@@ -2856,15 +2897,15 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
       <DraggableBar project={project} memberId={memberId} team={team} left={left} width={width} colW={colW} small={false}
         laneH={laneH} stackH={stackH} laneIdx={laneIdx} scaleByHours={scaleByHours ?? false}
         barHeightOverride={barHeightOverride} topOverride={topOverride}
-        onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={onClick} onReassign={onReassign} />
+        onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={toggleMobilePopover} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
         // pointer-events: none op de buitenkant zodat de muis door 't
         // kaartje heen kan om de balk eronder te bereiken. Eventuele
         // klikbare elementen binnenin (zoals de Google-link) krijgen
         // expliciet pointer-events: auto.
-        <div
+        <div data-meeting-hover={project.id}
           style={{ position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9000,
-            width: 280, pointerEvents: 'none',
+            width: 'min(280px, calc(100vw - 16px))', pointerEvents: pinned ? 'auto' : 'none',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
             padding: '10px 12px',
             boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.12)' }}>

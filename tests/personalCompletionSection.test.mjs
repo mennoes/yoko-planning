@@ -18,13 +18,15 @@ function render({ ownerIds = ['menno', 'odette'], memberId = 'menno', demo = fal
     'next/navigation': { usePathname: () => demo ? '/demo/planning' : '/planning' },
     './ProfileContext': { useProfile: () => ({ profile: memberId ? { memberId } : null }) },
     './TeamContext': { useTeam: () => ({ members: [{ id: 'menno', name: 'Menno' }, { id: 'odette', name: 'Odette' }] }) },
-    '@/lib/commentsStore': {},
+    '@/lib/commentsStore': { newCommentId: () => 'id', saveComment: () => {} },
     '@/lib/personalCompletion': {
       completionContext: () => 'board-item:item',
       completionState: (_threads, _target, id) => id === memberId ? { done, status: personalStatus } : undefined,
       personalTaskStatus: state => state?.done ? 'Done' : state?.status ?? 'Not started',
     },
     '@/lib/personalCompletionClient': { updatePersonalCompletion: () => { throw new Error('Rendering must not save changes') } },
+    '@/lib/notificationsStore': { createNotification: async () => {} },
+    '@/lib/handoff': { handoffCommentBody: (name, note) => `Overdracht aan @${name}\n\n${note}` },
   }
   runInNewContext(js, { exports, require: id => id in mocks ? mocks[id] : require(id) })
   return renderToStaticMarkup(createElement(exports.PersonalCompletionSection, {
