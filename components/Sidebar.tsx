@@ -1247,7 +1247,8 @@ export default function Sidebar({
         position: 'fixed', top: 0, left: 0, height: '100dvh',
         transform: open ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.22s ease',
-        zIndex: 60, display: 'flex', alignItems: 'stretch',
+        // Stay above planning overlays and floating action buttons while open.
+        zIndex: 9500, display: 'flex', alignItems: 'stretch',
         boxShadow: open ? '0 0 30px rgba(0,0,0,0.3)' : 'none',
       }
     : {
