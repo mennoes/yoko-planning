@@ -1669,7 +1669,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
           (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
           checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}
-      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined, zIndex: isMobile ? 9 : undefined, background: stickyBg, padding: '0 0 0 23px',
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined, zIndex: isMobile ? 9 : undefined, background: stickyBg, padding: '0 0 0 23px',
         borderLeft: isMobile ? `4px solid ${rail ?? 'var(--accent)'}` : undefined,
         boxSizing: 'border-box' }}>
         {onToggleSelect && (
@@ -1685,7 +1685,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         <div aria-hidden style={{ position: 'absolute', right: 0, top: '50%', width: 6, height: 2, background: rail ?? 'var(--accent)' }} />
       </div>
       <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
-        position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
+        position: isMobile ? 'sticky' : 'relative', left: isMobile ? 24 : undefined,
         zIndex: isMobile ? 8 : undefined, background: stickyBg,
         boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>
         {/* Google-link badge. Drie bronnen om het te detecteren:
@@ -2385,7 +2385,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
 
         {/* Selection checkbox */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', paddingLeft: 16,
-          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+          position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
           zIndex: isMobile ? 9 : undefined, background: stickyBg,
           borderLeft: isMobile ? `4px solid ${accentColor}` : undefined,
           boxSizing: 'border-box' }}>
@@ -2396,7 +2396,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         </div>
 
         <div style={{ padding: '6px 14px 6px 4px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, cursor: 'pointer',
-          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
+          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 24 : undefined,
           zIndex: isMobile ? 8 : undefined, background: stickyBg,
           boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}
           onClick={e => {
@@ -3586,8 +3586,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             chevron + gekleurde naam + telling. De gekleurde linker-strip
             zit alleen op de inhoud (rijen) eronder. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 6px',
-          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
-          width: isMobile ? 'calc(100vw - 32px)' : undefined, boxSizing: 'border-box',
+          position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
+          width: isMobile ? '100vw' : undefined, boxSizing: 'border-box',
           zIndex: isMobile ? 12 : undefined, background: 'var(--bg-base)' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
 
@@ -3730,7 +3730,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
               background: 'var(--bg-card)', borderBottom: '1px solid var(--border)',
               position: 'sticky', top: 0, zIndex: 5 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
                 zIndex: isMobile ? 8 : undefined, background: 'var(--bg-card)',
                 borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
                 boxSizing: 'border-box' }}>
@@ -3740,7 +3740,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   onChange={e => onSelectGroup(group.id, e.target.checked)}
                   style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15 }} />
               </div>
-              <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
+              <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 24 : undefined,
                 zIndex: isMobile ? 7 : undefined, display: 'flex', background: 'var(--bg-card)',
                 boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>
                 <button onClick={() => onToggleSort('name')}
@@ -3960,14 +3960,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       <button type="button"
                         onClick={e => { e.preventDefault(); e.stopPropagation(); setOpkomendOpen(o => !o) }}
                         style={{
-                          width: isMobile ? 'calc(100vw - 32px)' : '100%', textAlign: 'left',
+                          width: isMobile ? '100vw' : '100%', textAlign: 'left',
                           background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)', border: 'none',
                           borderBottom: '1px solid var(--border)',
                           padding: '9px 14px 9px 32px', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 10,
                           fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
                           textTransform: 'uppercase', letterSpacing: '0.05em',
-                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
                           zIndex: isMobile ? 10 : undefined,
                           borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
                           boxSizing: 'border-box',
@@ -3988,14 +3988,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       <button type="button"
                         onClick={e => { e.preventDefault(); e.stopPropagation(); setDoneOpen(o => !o) }}
                         style={{
-                          width: isMobile ? 'calc(100vw - 32px)' : '100%', textAlign: 'left',
+                          width: isMobile ? '100vw' : '100%', textAlign: 'left',
                           background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)', border: 'none',
                           borderBottom: '1px solid var(--border)',
                           padding: '9px 14px 9px 32px', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 10,
                           fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
                           textTransform: 'uppercase', letterSpacing: '0.05em',
-                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
                           zIndex: isMobile ? 10 : undefined,
                           borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
                           boxSizing: 'border-box',
@@ -4016,8 +4016,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             })()}
 
             <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)',
-              position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
-              width: isMobile ? 'calc(100vw - 32px)' : undefined,
+              position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
+              width: isMobile ? '100vw' : undefined,
               zIndex: isMobile ? 10 : undefined, background: 'var(--bg-card)',
               borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
               boxSizing: 'border-box' }}>
@@ -4032,12 +4032,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
 
             {group.items.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, borderBottom: '2px solid var(--border)', background: 'var(--overlay-faint)' }}>
-                <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
                   zIndex: isMobile ? 9 : undefined, background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)',
                   borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
                   boxSizing: 'border-box' }} />
                 <div style={{ padding: '5px 14px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600,
-                  position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
+                  position: isMobile ? 'sticky' : 'relative', left: isMobile ? 24 : undefined,
                   zIndex: isMobile ? 8 : undefined, background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)',
                   boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>Som</div>
                 {cols.map(col => (
@@ -4781,7 +4781,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }
 
   const selectionW = isMobile ? 40 : 48
-  const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 180) : (colWidths['name'] ?? 200)
+  const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 196) : (colWidths['name'] ?? 200)
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.
   const gridTemplate = `${selectionW}px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
