@@ -2028,6 +2028,8 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
   const anchorRef = useRef<HTMLButtonElement>(null)
   const closeTimer = useRef<number | null>(null)
   const sorted = [...meetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
+  const activeCount = meetings.filter(meeting => meeting.status !== 'done').length
+  const allDone = activeCount === 0
   const open = hovered || pinned
 
   const cancelClose = () => {
@@ -2057,11 +2059,19 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
   return (
     <>
       <button ref={anchorRef} className="planning-meeting-summary"
-        onPointerEnter={show} onPointerLeave={scheduleClose}
+        onPointerEnter={ev => { if (ev.pointerType === 'mouse') show() }}
+        onPointerLeave={ev => { if (ev.pointerType === 'mouse') scheduleClose() }}
         onClick={ev => {
           ev.stopPropagation()
-          if (meetings.length === 1) onOpen(meetings[0])
-          else { show(); setPinned(true) }
+          const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+          if (canHover && meetings.length === 1) onOpen(meetings[0])
+          else if (pinned) {
+            setPinned(false)
+            setHovered(false)
+          } else {
+            show()
+            setPinned(true)
+          }
         }}
         aria-label={`${meetings.length} Google-meeting${meetings.length === 1 ? '' : 's'}`}
         style={{
@@ -2069,20 +2079,20 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
           width: Math.max(18, width - 4), height: 18,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
           padding: '0 3px', borderRadius: 5,
-          border: `1px solid ${open ? 'rgba(216,182,46,0.7)' : 'rgba(216,182,46,0.35)'}`,
-          background: open ? 'rgba(216,182,46,0.26)' : 'rgba(216,182,46,0.14)',
-          color: '#765f00', fontSize: 9.5, fontWeight: 850,
+          border: `1px solid ${allDone ? 'var(--border-strong)' : '#d8b62e'}`,
+          background: allDone ? 'var(--bg-hover)' : (open ? '#e2c53f' : '#d8b62e'),
+          color: allDone ? 'var(--text-muted)' : '#17150b', fontSize: 9.5, fontWeight: 900,
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
           pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
-          outline: 'none', boxShadow: 'none',
+          outline: 'none', boxShadow: open ? '0 2px 7px rgba(216,182,46,0.32)' : 'none',
+          opacity: allDone ? 0.62 : 1,
         }}>
-        <span aria-hidden style={{ fontSize: 9, fontWeight: 950, color: '#806700' }}>G</span>
-        <span aria-hidden style={{ opacity: 0.45 }}>·</span>
-        <span>{meetings.length}</span>
+        <span aria-hidden style={{ fontSize: 9, fontWeight: 950 }}>{allDone ? '✓' : 'G'}</span>
+        <span>{activeCount || meetings.length}</span>
       </button>
       {open && pos && typeof document !== 'undefined' && createPortal(
         <>
-          {pinned && <div onClick={() => setPinned(false)} style={{ position: 'fixed', inset: 0, zIndex: 8998 }} />}
+          {pinned && <div onClick={() => { setPinned(false); setHovered(false) }} style={{ position: 'fixed', inset: 0, zIndex: 8998 }} />}
           <div onPointerEnter={cancelClose} onPointerLeave={() => { if (!pinned) scheduleClose() }}
             style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 8999, width: 300,
               background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
@@ -2090,27 +2100,32 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
             <div style={{ padding: '5px 7px 7px', fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
-            {sorted.map(meeting => (
+            {sorted.map(meeting => {
+              const isDone = meeting.status === 'done'
+              return (
               <div key={meeting.id}
                 onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                 onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7, opacity: isDone ? 0.52 : 1 }}>
                 <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
                   {meeting.startTime ?? 'Hele dag'}
                 </span>
                 <button onClick={ev => { ev.stopPropagation(); onDone(meeting) }}
-                  aria-label={`${meeting.name} afronden`}
-                  title="Afronden en naar Done verplaatsen — verdwijnt automatisch uit gekoppelde to do's"
+                  aria-label={isDone ? `${meeting.name} is afgerond` : `${meeting.name} afronden`}
+                  title={isDone ? 'Afgerond' : 'Afronden'}
                   style={{ width: 17, height: 17, flexShrink: 0, padding: 0, borderRadius: 4,
-                    border: '1.5px solid var(--border-strong)', background: 'var(--bg-card)',
-                    color: 'var(--text-primary)', cursor: 'pointer' }} />
+                    border: `1.5px solid ${isDone ? 'var(--green)' : 'var(--border-strong)'}`,
+                    background: isDone ? 'var(--green)' : 'var(--bg-card)',
+                    color: '#fff', fontSize: 11, lineHeight: '14px', textAlign: 'center', cursor: 'pointer' }}>
+                  {isDone ? '✓' : ''}
+                </button>
                 <button onClick={() => { setPinned(false); setHovered(false); onOpen(meeting) }}
                   onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                   onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
                   style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start',
                     padding: '6px 3px', border: 'none', borderRadius: 7, background: 'transparent',
                     color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, lineHeight: 1.25, textDecoration: isDone ? 'line-through' : 'none' }}>
                     {meeting.name}
                   </span>
                 </button>
@@ -2127,7 +2142,8 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
                   </a>
                 )}
               </div>
-            ))}
+              )
+            })}
             {pinned && <div style={{ padding: '5px 8px 3px', fontSize: 10.5, color: 'var(--text-muted)' }}>Kies een meeting om details te openen</div>}
           </div>
         </>, document.body)}
@@ -2174,9 +2190,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   // Google-meetings worden in Overzicht niet langer als balken gestapeld.
   // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
-  // terwijl een hover de concrete afspraken en tijden laat zien.
+  // terwijl hover (desktop) of tik (touch) de concrete afspraken en tijden
+  // laat zien. Done-afspraken blijven zichtbaar en worden alleen gedempt;
+  // een afgeronde recurring parent mag toekomstige instances niet verbergen.
   const googleMeetings = (hideMeetings ? [] : owned).filter(p =>
-    p.status !== 'done' && p.source === 'google' && !isVrijTitle(p.name))
+    p.source === 'google' && !isVrijTitle(p.name))
   const meetingsByDay = new Map<string, Project[]>()
   if (zoom === 'week') {
     for (const p of googleMeetings) {
