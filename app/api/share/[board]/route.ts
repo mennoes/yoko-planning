@@ -127,7 +127,7 @@ function computeMonthlyHours(itemRows: ItemRow[], isHidden: (extra: Record<strin
   })
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ board: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ board: string }> }) {
   const { board } = await params
   if (!SHAREABLE_BOARDS.has(board)) {
     return Response.json({ ok: false, error: 'Bord niet gedeeld' }, { status: 404 })
@@ -152,12 +152,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ boa
     .order('position', { ascending: true })
   if (iErr) return Response.json({ ok: false, error: 'Kon items niet laden' }, { status: 500 })
 
+  // Een share-link kan één of meerdere groepen begrenzen met
+  // ?groups=id1,id2. Filter dit op de server, zodat niet-geselecteerde
+  // groepen ook niet ongemerkt in de publieke API-response meekomen.
+  const requestedGroupIds = new Set(
+    (req.nextUrl.searchParams.get('groups') ?? '')
+      .split(',')
+      .map(id => id.trim())
+      .filter(Boolean)
+      .slice(0, 50),
+  )
+  const hasGroupScope = requestedGroupIds.size > 0
+  const scopedGroupRows = ((groupRows as GroupRow[] | null) ?? [])
+    .filter(group => !hasGroupScope || requestedGroupIds.has(group.id))
+  const scopedGroupIds = new Set(scopedGroupRows.map(group => group.id))
+  const scopedItemRows = ((itemRows as ItemRow[] | null) ?? [])
+    .filter(item => scopedGroupIds.has(item.group_id))
+
   // Verberg items met hiddenFromPlanning=true (gebruiker heeft 'm
   // expliciet uit overzichten gehaald — dan ook niet extern delen).
   const isHidden = (extra: Record<string, unknown> | null): boolean => !!(extra && (extra as { hiddenFromPlanning?: boolean }).hiddenFromPlanning)
 
   const itemsByGroup = new Map<string, ShareItem[]>()
-  for (const r of (itemRows as ItemRow[] | null) ?? []) {
+  for (const r of scopedItemRows) {
     if (isHidden(r.extra)) continue
     const subs: ShareSubItem[] = (r.subitems ?? [])
       .filter(s => !s?.hiddenFromPlanning)
@@ -183,14 +200,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ boa
     itemsByGroup.set(r.group_id, arr)
   }
 
-  const groups: ShareGroup[] = ((groupRows as GroupRow[] | null) ?? []).map(g => ({
+  const groups: ShareGroup[] = scopedGroupRows.map(g => ({
     id:    g.id,
     name:  g.name ?? '',
     color: g.color ?? '#9aadbd',
     items: itemsByGroup.get(g.id) ?? [],
   }))
 
-  const monthlyHours = computeMonthlyHours((itemRows as ItemRow[] | null) ?? [], isHidden)
+  const monthlyHours = computeMonthlyHours(scopedItemRows, isHidden)
 
   return Response.json({ ok: true, board, groups, monthlyHours })
 }

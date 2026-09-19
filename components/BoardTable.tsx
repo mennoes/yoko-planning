@@ -538,11 +538,45 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel }: { value: s
 // voor teruggeeft (whitelist daar parallel). De popup legt ook uit wat
 // een externe lezer NIET ziet — zo weet de gebruiker waar 'ie tegenover
 // staat voordat-ie de link verstuurt.
-function ShareButton({ boardId, isMobile }: { boardId: string; isMobile: boolean }) {
+function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[] }) {
   const [open, setOpen]     = useState(false)
   const [copied, setCopied] = useState(false)
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(() => new Set(groups.map(group => group.id)))
+  const previousAvailableGroupIds = useRef<Set<string>>(new Set())
   const btnRef = useRef<HTMLButtonElement>(null)
-  const url = typeof window !== 'undefined' ? `${window.location.origin}/share/${boardId}` : `/share/${boardId}`
+  const shareableGroups = useMemo(() => groups.filter(group => group.items.length > 0), [groups])
+  const allSelected = shareableGroups.length > 0 && shareableGroups.every(group => selectedGroupIds.has(group.id))
+  const selectedCount = shareableGroups.filter(group => selectedGroupIds.has(group.id)).length
+  const url = (() => {
+    const base = typeof window !== 'undefined' ? `${window.location.origin}/share/${boardId}` : `/share/${boardId}`
+    if (allSelected) return base
+    const ids = shareableGroups.filter(group => selectedGroupIds.has(group.id)).map(group => group.id)
+    return ids.length > 0 ? `${base}?groups=${encodeURIComponent(ids.join(','))}` : base
+  })()
+
+  useEffect(() => {
+    const previousAvailable = previousAvailableGroupIds.current
+    const available = new Set(shareableGroups.map(group => group.id))
+    setSelectedGroupIds(previous => {
+      const next = new Set([...previous].filter(id => available.has(id)))
+      // Nieuwe groepen standaard meenemen zolang de gebruiker nog de
+      // volledige selectie deelt; zo verdwijnen ze niet stil uit de link.
+      const hadAllPrevious = previousAvailable.size === 0 || [...previousAvailable].every(id => previous.has(id))
+      if (hadAllPrevious) available.forEach(id => next.add(id))
+      return next
+    })
+    previousAvailableGroupIds.current = available
+  }, [shareableGroups])
+
+  function toggleGroup(id: string) {
+    setSelectedGroupIds(previous => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    setCopied(false)
+  }
 
   async function copy() {
     try {
@@ -581,9 +615,45 @@ function ShareButton({ boardId, isMobile }: { boardId: string; isMobile: boolean
               Deelbare read-only link
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
-              Iedereen met deze URL kan dit bord zonder login bekijken.
-              Notities, contactgegevens, uren-inschattingen en deadlines
-              worden niet getoond.
+              Iedereen met deze URL kan de gekozen groepen zonder login bekijken.
+              Interne notities, contactgegevens en deadlines worden niet getoond.
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 7 }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  Groepen · {selectedCount} geselecteerd
+                </span>
+                <button type="button"
+                  onClick={() => {
+                    setSelectedGroupIds(allSelected ? new Set() : new Set(shareableGroups.map(group => group.id)))
+                    setCopied(false)
+                  }}
+                  style={{ border: 'none', background: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: 0 }}>
+                  {allSelected ? 'Deselecteer alles' : 'Selecteer alles'}
+                </button>
+              </div>
+              <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, padding: 6,
+                border: '1px solid var(--border-light)', borderRadius: 8, background: 'var(--bg-base)' }}>
+                {shareableGroups.map(group => {
+                  const checked = selectedGroupIds.has(group.id)
+                  return (
+                    <label key={group.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 7px', borderRadius: 6,
+                      background: checked ? group.color + '18' : 'transparent', cursor: 'pointer', fontSize: 12,
+                      color: checked ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleGroup(group.id)}
+                        style={{ accentColor: group.color, cursor: 'pointer' }} />
+                      <span style={{ width: 8, height: 8, borderRadius: 2, background: group.color, flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: checked ? 650 : 500 }}>
+                        {group.name}
+                      </span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 10.5 }}>{group.items.length}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {selectedCount === 0 && (
+                <div style={{ color: 'var(--red)', fontSize: 11, marginTop: 6 }}>Kies minimaal één groep.</div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
               <input readOnly value={url}
@@ -591,16 +661,17 @@ function ShareButton({ boardId, isMobile }: { boardId: string; isMobile: boolean
                 style={{ flex: 1, padding: '6px 10px', borderRadius: 6,
                   border: '1px solid var(--border-light)', background: 'var(--bg-base)',
                   color: 'var(--text-primary)', fontSize: 11.5, outline: 'none', fontFamily: 'inherit' }} />
-              <button onClick={copy}
+              <button onClick={copy} disabled={selectedCount === 0}
                 style={{ padding: '6px 14px', borderRadius: 6, border: 'none',
                   background: copied ? 'var(--accent)' : 'var(--bg-hover)',
                   color: copied ? '#fff' : 'var(--text-primary)',
-                  fontSize: 11.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  fontSize: 11.5, fontWeight: 700, cursor: selectedCount === 0 ? 'not-allowed' : 'pointer', flexShrink: 0,
+                  opacity: selectedCount === 0 ? 0.45 : 1,
                   transition: 'background 0.15s' }}>
                 {copied ? '✓ Gekopieerd' : 'Kopieer'}
               </button>
             </div>
-            <a href={url} target="_blank" rel="noopener noreferrer"
+            <a href={selectedCount > 0 ? url : undefined} target="_blank" rel="noopener noreferrer"
               style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer' }}>
               Open in nieuwe tab →
             </a>
@@ -4843,10 +4914,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           {/* Share-knop: alleen voor borden in de SHAREABLE_BOARDS-whitelist
               op de server (zelfde lijst). Geeft een copy-able URL die
               externen zonder login kunnen openen. Gevoelige velden
-              (notes / contactpersoon / journal / uren / deadline) worden
+              (notes / contactpersoon / journal / deadline) worden
               server-side al gestript in /api/share/[board]. */}
           {(['nederland', 'vlaanderen', 'pnp'].includes(boardId)) && (
-            <ShareButton boardId={boardId} isMobile={isMobile} />
+            <ShareButton boardId={boardId} groups={groups} />
           )}
           {!isMobile && (
             <button onClick={exportCSV} title="Exporteer als CSV"
