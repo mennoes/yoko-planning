@@ -811,8 +811,9 @@ export default function HomePage() {
     const seen = new Set<string>()
     const out: Array<{ id: string; name: string; color?: string; weeklyCapacity?: number }> = []
     for (const m of liveTeam) {
-      if (m.hidden || m.id === 'unassigned') continue
+      if (m.id === 'unassigned') continue
       seen.add(m.id)
+      if (m.hidden || m.inactive) continue
       out.push({ id: m.id, name: m.name, color: m.color, weeklyCapacity: m.weeklyCapacity })
     }
     for (const m of teamData.members) {
