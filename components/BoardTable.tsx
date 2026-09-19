@@ -1594,6 +1594,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
 
   const [isDraggingMe, setIsDraggingMe] = useState(false)
   const rowBg = isDraggingMe ? 'var(--accent-light)' : (selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'var(--bg-card)'))
+  const stickyBg = isMobile ? 'var(--bg-card)' : rowBg
   return (
     <div
       onDragOver={e => {
@@ -1668,7 +1669,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
           (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
           checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}
-      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined, zIndex: isMobile ? 9 : undefined, background: rowBg, padding: '0 0 0 27px',
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined, zIndex: isMobile ? 9 : undefined, background: stickyBg, padding: '0 0 0 23px',
         borderLeft: isMobile ? `4px solid ${rail ?? 'var(--accent)'}` : undefined,
         boxSizing: 'border-box' }}>
         {onToggleSelect && (
@@ -1684,8 +1685,8 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         <div aria-hidden style={{ position: 'absolute', right: 0, top: '50%', width: 6, height: 2, background: rail ?? 'var(--accent)' }} />
       </div>
       <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
-        position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
-        zIndex: isMobile ? 8 : undefined, background: rowBg,
+        position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
+        zIndex: isMobile ? 8 : undefined, background: stickyBg,
         boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>
         {/* Google-link badge. Drie bronnen om het te detecteren:
             - subitem.source === 'google' (set bij handmatige nesting)
@@ -2367,6 +2368,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   }
 
   const rowBg = selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'var(--bg-card)')
+  const stickyBg = isMobile ? 'var(--bg-card)' : rowBg
 
   return (
     <>
@@ -2384,7 +2386,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         {/* Selection checkbox */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', paddingLeft: 16,
           position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
-          zIndex: isMobile ? 9 : undefined, background: rowBg,
+          zIndex: isMobile ? 9 : undefined, background: stickyBg,
           borderLeft: isMobile ? `4px solid ${accentColor}` : undefined,
           boxSizing: 'border-box' }}>
           <input type="checkbox" checked={selected} onChange={onToggleSelect}
@@ -2394,8 +2396,8 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         </div>
 
         <div style={{ padding: '6px 14px 6px 4px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, cursor: 'pointer',
-          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
-          zIndex: isMobile ? 8 : undefined, background: rowBg,
+          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
+          zIndex: isMobile ? 8 : undefined, background: stickyBg,
           boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}
           onClick={e => {
             // Klik op een 'leeg' deel van de title-cel (tussen checkbox en
@@ -2413,7 +2415,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               background: 'none', border: 'none', padding: '3px 4px', cursor: 'pointer',
               fontSize: 13, lineHeight: 1,
               color: hasSubitems ? (expanded ? 'var(--text-primary)' : 'var(--text-secondary)') : hover ? 'rgba(122,132,160,0.4)' : 'transparent',
-              flexShrink: 0, width: 22, textAlign: 'center', transition: 'color 0.1s',
+              flexShrink: 0, width: isMobile ? 18 : 22, textAlign: 'center', transition: 'color 0.1s',
             }}>{expanded ? '▼' : '▶'}</button>
 
           {/* Subitem-count badge weggehaald — de '5'-pill voegde visuele
@@ -2523,7 +2525,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
             title={commentCount > 0 ? `${commentCount} opmerking${commentCount === 1 ? '' : 'en'}` : 'Plaats opmerking'}
             style={commentCount > 0 ? {
               display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '4px 11px', borderRadius: 999,
+              padding: isMobile ? '3px 7px' : '4px 11px', borderRadius: 999,
               background: 'var(--accent)',
               border: '1px solid var(--accent)',
               color: '#000',
@@ -2534,7 +2536,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               border: '1px solid var(--border)',
               cursor: 'pointer',
               color: 'var(--accent)',
-              padding: '4px 8px', borderRadius: 999, flexShrink: 0,
+              padding: isMobile ? '3px 5px' : '4px 8px', borderRadius: 999, flexShrink: 0,
               display: 'inline-flex', alignItems: 'center', gap: 4,
               opacity: 1, transition: 'background 0.15s, color 0.15s',
             }}
@@ -2548,7 +2550,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
                 e.currentTarget.style.background = 'var(--bg-card)'
               }
             }}>
-            <IconComment size={22} strokeWidth={1.8} />
+            <IconComment size={isMobile ? 18 : 22} strokeWidth={1.8} />
             {commentCount > 0 && <span style={{ minWidth: 8, textAlign: 'center' }}>{commentCount}</span>}
           </button>
         </div>
@@ -3738,7 +3740,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   onChange={e => onSelectGroup(group.id, e.target.checked)}
                   style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15 }} />
               </div>
-              <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
+              <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
                 zIndex: isMobile ? 7 : undefined, display: 'flex', background: 'var(--bg-card)',
                 boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>
                 <button onClick={() => onToggleSort('name')}
@@ -3959,7 +3961,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                         onClick={e => { e.preventDefault(); e.stopPropagation(); setOpkomendOpen(o => !o) }}
                         style={{
                           width: isMobile ? 'calc(100vw - 32px)' : '100%', textAlign: 'left',
-                          background: 'var(--overlay-faint)', border: 'none',
+                          background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)', border: 'none',
                           borderBottom: '1px solid var(--border)',
                           padding: '9px 14px 9px 32px', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 10,
@@ -3987,7 +3989,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                         onClick={e => { e.preventDefault(); e.stopPropagation(); setDoneOpen(o => !o) }}
                         style={{
                           width: isMobile ? 'calc(100vw - 32px)' : '100%', textAlign: 'left',
-                          background: 'var(--overlay-faint)', border: 'none',
+                          background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)', border: 'none',
                           borderBottom: '1px solid var(--border)',
                           padding: '9px 14px 9px 32px', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 10,
@@ -4031,12 +4033,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             {group.items.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, borderBottom: '2px solid var(--border)', background: 'var(--overlay-faint)' }}>
                 <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
-                  zIndex: isMobile ? 9 : undefined, background: 'var(--overlay-faint)',
+                  zIndex: isMobile ? 9 : undefined, background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)',
                   borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
                   boxSizing: 'border-box' }} />
                 <div style={{ padding: '5px 14px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600,
-                  position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
-                  zIndex: isMobile ? 8 : undefined, background: 'var(--overlay-faint)',
+                  position: isMobile ? 'sticky' : 'relative', left: isMobile ? 40 : undefined,
+                  zIndex: isMobile ? 8 : undefined, background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)',
                   boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>Som</div>
                 {cols.map(col => (
                   <div key={col.key} style={{ padding: '5px 8px', fontSize: 11, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', fontWeight: 600 }}>
@@ -4778,21 +4780,22 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
-  const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 150) : (colWidths['name'] ?? 200)
+  const selectionW = isMobile ? 40 : 48
+  const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 180) : (colWidths['name'] ?? 200)
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.
-  const gridTemplate = `48px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const gridTemplate = `${selectionW}px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
   // Subitem-tabel mag eigen breedtes hebben. Fallback per kolom op de
   // parent-breedte zodat ongetoete kolommen 'meeschalen' totdat de
   // gebruiker ze expliciet apart resized.
-  const subGridTemplate = `48px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const subGridTemplate = `${selectionW}px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
   // De grid-tracks zijn vaste pixels. Zonder minimaal deze breedte blijft
   // de groep op viewportbreedte staan en knipt overflow:hidden de laatste
   // kolommen af. Op desktop scrolt <main> horizontaal; mobiel behoudt de
   // eigen tabel-scroller.
   const tableMinWidth = Math.max(
-    48 + nameW + columns.reduce((sum, c) => sum + (colWidths[c.key] ?? c.width), 0) + 36,
-    48 + nameW + columns.reduce((sum, c) => sum + (subColWidths[c.key] ?? colWidths[c.key] ?? c.width), 0) + 36,
+    selectionW + nameW + columns.reduce((sum, c) => sum + (colWidths[c.key] ?? c.width), 0) + 36,
+    selectionW + nameW + columns.reduce((sum, c) => sum + (subColWidths[c.key] ?? colWidths[c.key] ?? c.width), 0) + 36,
   ) + 6
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
@@ -5033,10 +5036,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               ↓ CSV
             </button>
           )}
-          <button onClick={isMobile ? () => setMobileBoardCreateOpen(true) : addGroup} className="yoko-primary-button"
-            style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            + {isMobile ? 'Item' : 'Nieuwe groep'}
-          </button>
+          {!isMobile && (
+            <button onClick={addGroup} className="yoko-primary-button"
+              style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              + Nieuwe groep
+            </button>
+          )}
           {isMobile && (
             <button ref={moreBtnRef} onClick={() => setMoreOpen(v => !v)} className={moreOpen ? 'yoko-primary-button' : 'yoko-control-button'}
               title="Meer acties"
@@ -5238,6 +5243,22 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
       {isMobile && mobileBoardCreateOpen && (
         <MobileCreateItemSheet kind="item" groups={groups} onClose={() => setMobileBoardCreateOpen(false)} onCreate={createMobileBoardItem} />
+      )}
+
+      {isMobile && !mobileBoardCreateOpen && (
+        <button type="button" onClick={() => setMobileBoardCreateOpen(true)}
+          aria-label="Nieuw item" title="Nieuw item"
+          style={{
+            position: 'fixed', right: 16,
+            bottom: 'max(20px, calc(env(safe-area-inset-bottom) + 12px))',
+            width: 54, height: 54, borderRadius: '50%', zIndex: 79,
+            border: 'none', background: 'var(--accent)', color: '#111',
+            fontSize: 28, fontWeight: 600, lineHeight: 1, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 5px 18px rgba(0,0,0,0.28)',
+          }}>
+          +
+        </button>
       )}
 
       <BoardActivityDrawer
