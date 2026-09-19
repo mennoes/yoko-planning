@@ -173,6 +173,7 @@ function PortalDropdown({ anchor, onClose, children }: {
 }
 
 type MobileCreateValues = {
+  groupId?: string
   name: string
   ownerIds: string[]
   status: string
@@ -186,8 +187,9 @@ type MobileCreateValues = {
 // Op een smal scherm is een brede, halflege tabelrij geen prettig formulier.
 // Deze sheet verzamelt daarom eerst de belangrijkste itemvelden en voegt de
 // rij pas na bevestigen aan het bord toe.
-function MobileCreateItemSheet({ kind, onClose, onCreate }: {
+function MobileCreateItemSheet({ kind, groups, onClose, onCreate }: {
   kind: 'item' | 'subitem'
+  groups?: BoardGroup[]
   onClose: () => void
   onCreate: (values: MobileCreateValues) => void
 }) {
@@ -200,6 +202,8 @@ function MobileCreateItemSheet({ kind, onClose, onCreate }: {
   const [deadline, setDeadline] = useState('')
   const [estHours, setEstHours] = useState('')
   const [notes, setNotes] = useState('')
+  const defaultGroupId = groups?.find(group => !group.name.toLowerCase().trim().startsWith('done'))?.id ?? groups?.[0]?.id ?? ''
+  const [groupId, setGroupId] = useState(defaultGroupId)
   const inferredWeekKey = useRef('')
 
   const team = useMemo(() => {
@@ -259,6 +263,7 @@ function MobileCreateItemSheet({ kind, onClose, onCreate }: {
     const cleanName = name.trim()
     if (!cleanName) return
     onCreate({
+      ...(groupId ? { groupId } : {}),
       name: cleanName, ownerIds, status,
       startDate: startDate || null, endDate: endDate || null,
       deadline: deadline || null,
@@ -289,6 +294,14 @@ function MobileCreateItemSheet({ kind, onClose, onCreate }: {
         </div>
 
         <div style={{ display: 'grid', gap: 15 }}>
+          {kind === 'item' && groups && groups.length > 1 && (
+            <label style={labelStyle}>Groep
+              <select value={groupId} onChange={e => setGroupId(e.target.value)} style={fieldStyle}>
+                {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select>
+            </label>
+          )}
+
           <label style={labelStyle}>Naam
             <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={title} style={fieldStyle} />
           </label>
@@ -4305,6 +4318,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const [activityOpen,  setActivityOpen] = useState(false)
   const [trashOpen,     setTrashOpen]    = useState(false)
   const [recoveryOpen,  setRecoveryOpen] = useState(false)
+  const [mobileBoardCreateOpen, setMobileBoardCreateOpen] = useState(false)
 
   function resizeCol(key: string, newWidth: number) {
     const updated = { ...colWidths, [key]: Math.max(60, newWidth) }
@@ -4318,6 +4332,23 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     // onderaan na de eerstvolgende pull. Voorkomt dat 'ie bovenaan
     // landt en bestaande groepen overschaduwt.
     onChange([...groups, { id: Date.now().toString(), name: 'Nieuwe groep', color, collapsed: false, items: [] }])
+  }
+
+  function createMobileBoardItem(values: MobileCreateValues) {
+    const targetGroupId = values.groupId ?? groups[0]?.id
+    if (!targetGroupId) return
+    const newId = Date.now().toString()
+    onChange(groups.map(group => group.id === targetGroupId ? {
+      ...group,
+      collapsed: false,
+      items: [...group.items, {
+        id: newId, name: values.name, ownerIds: values.ownerIds, status: values.status,
+        startDate: values.startDate, endDate: values.endDate, deadline: values.deadline,
+        estHours: values.estHours, dagen: Math.round(values.estHours / 8 * 10) / 10,
+        ...(values.notes ? { notes: values.notes } : {}),
+      }],
+    } : group))
+    setMobileBoardCreateOpen(false)
   }
 
   const hasFilter = !!(search || filterOwner || filterStatus || filterFrom || filterUntil)
@@ -4925,9 +4956,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               ↓ CSV
             </button>
           )}
-          <button onClick={addGroup} className="yoko-primary-button"
+          <button onClick={isMobile ? () => setMobileBoardCreateOpen(true) : addGroup} className="yoko-primary-button"
             style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            + {isMobile ? 'Groep' : 'Nieuwe groep'}
+            + {isMobile ? 'Item' : 'Nieuwe groep'}
           </button>
           {isMobile && (
             <button ref={moreBtnRef} onClick={() => setMoreOpen(v => !v)} className={moreOpen ? 'yoko-primary-button' : 'yoko-control-button'}
@@ -4943,6 +4974,22 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             <PortalDropdown anchor={moreBtnRef} onClose={() => setMoreOpen(false)}>
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
                 boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, minWidth: 220 }}>
+                <button onClick={() => { addGroup(); setMoreOpen(false) }}
+                  style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
+                    padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, textAlign: 'left', borderRadius: 6 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  + Nieuwe groep
+                </button>
+                <div style={{ position: 'relative', margin: '4px 6px 6px' }}>
+                  <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', display: 'inline-flex' }}>
+                    <IconSearch size={14} />
+                  </span>
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Zoeken…"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 9px 8px 29px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
+                </div>
+                <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                 <button onClick={() => { setReorderMode(r => !r); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
                     padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
@@ -5049,7 +5096,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
       {/* Filter bar */}
       <div style={{ display: 'flex', gap: isMobile ? 6 : 10, marginBottom: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: isMobile ? '1 1 100%' : '0 0 auto' }}>
+        <div style={{ position: 'relative', flex: '0 0 auto', display: isMobile ? 'none' : 'block' }}>
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', display: 'inline-flex' }}>
             <IconSearch size={isMobile ? 14 : 16} />
           </span>
@@ -5088,6 +5135,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         )}
 
       </div>
+
+      {isMobile && mobileBoardCreateOpen && (
+        <MobileCreateItemSheet kind="item" groups={groups} onClose={() => setMobileBoardCreateOpen(false)} onCreate={createMobileBoardItem} />
+      )}
 
       <BoardActivityDrawer
         boardId={boardId}
