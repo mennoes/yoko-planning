@@ -379,6 +379,7 @@ export default function HomePage() {
   const [weekOffset,   setWeekOffset]   = useState(0)
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
+  const [homeMenuOpen, setHomeMenuOpen] = useState(false)
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(DEFAULT_SECTION_ORDER)
   // Bump re-render zodra de profileDaysOff-cache wijzigt (bv. iemand
   // klikt op /team Manuels vrijdag uit). Anders blijft 'Team vandaag'
@@ -1410,12 +1411,13 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ maxWidth: 1160, padding: isMobile ? '60px 16px 60px' : '48px 40px 100px' }}>
+    <div style={{ maxWidth: 1160, padding: isMobile ? '16px 16px 60px' : '48px 40px 100px' }}>
 
       {/* ── Greeting ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 18,
+        paddingLeft: isMobile ? 56 : 0,
         marginBottom: showSummary ? (isMobile ? 14 : 22) : (isMobile ? 18 : 40) }}>
-        {memberId && (
+        {memberId && !isMobile && (
           <UserAvatar memberId={memberId} size={isMobile ? 44 : 60}
             onClick={e => showMember(memberId, e)} />
         )}
@@ -1432,32 +1434,44 @@ export default function HomePage() {
           <p style={{ margin: 0, fontSize: isMobile ? 13 : 15, color: 'var(--text-muted)' }}>
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          {/* Vakantie-chip op mobiel onder de datum (ruimte schaars); op
-              desktop verhuist 'ie naar rechts naast de groet zodat 'ie op
-              dezelfde hoogte staat als de samenvattings-balk eronder. */}
-          {memberId && isMobile && (
-            <div style={{ marginTop: 10 }}>
-              <VacationButton variant="chip" />
-            </div>
+        </div>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setHomeMenuOpen(o => !o)}
+            title="Meer acties" aria-label="Meer acties"
+            style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border)',
+              background: homeMenuOpen ? 'var(--bg-hover)' : 'var(--bg-card)',
+              color: 'var(--text-secondary)', fontSize: 18, fontWeight: 700,
+              lineHeight: 1, cursor: 'pointer' }}>
+            ⋯
+          </button>
+          {homeMenuOpen && (
+            <>
+              <div onClick={() => setHomeMenuOpen(false)}
+                style={{ position: 'fixed', inset: 0, zIndex: 98 }} />
+              <div style={{ position: 'absolute', top: 42, right: 0, zIndex: 99,
+                width: 220, padding: 6, borderRadius: 10,
+                border: '1px solid var(--border)', background: 'var(--bg-card)',
+                boxShadow: '0 10px 28px rgba(0,0,0,0.2)' }}>
+                {memberId && (
+                  <div onClick={() => setHomeMenuOpen(false)}>
+                    <VacationButton variant="row" />
+                  </div>
+                )}
+                {isMobile && (
+                  <button onClick={() => { setEditOrder(o => !o); setHomeMenuOpen(false) }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', borderRadius: 8, border: 'none',
+                      background: 'transparent', color: editOrder ? 'var(--accent)' : 'var(--text-primary)',
+                      fontSize: 13, fontWeight: editOrder ? 700 : 500,
+                      cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ width: 14, textAlign: 'center' }}>↕</span>
+                    {editOrder ? 'Klaar met sorteren' : 'Kaarten herordenen'}
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
-        {memberId && !isMobile && (
-          <div style={{ flexShrink: 0 }}>
-            <VacationButton variant="chip" />
-          </div>
-        )}
-        {isMobile && (
-          <button onClick={() => setEditOrder(o => !o)}
-            title={editOrder ? 'Klaar met sorteren' : 'Kaarten herordenen'}
-            aria-label={editOrder ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
-            style={{ padding: editOrder ? '6px 10px' : '6px 9px',
-              borderRadius: 8, border: '1px solid var(--border)',
-              background: editOrder ? 'var(--accent)' : 'var(--bg-card)',
-              color: editOrder ? '#fff' : 'var(--text-secondary)',
-              fontSize: 13, fontWeight: 700, lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}>
-            {editOrder ? 'Klaar' : '↕'}
-          </button>
-        )}
       </div>
 
       {/* ── Yellow week summary card ── */}
