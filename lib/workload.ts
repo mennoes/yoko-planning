@@ -109,9 +109,14 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               startTime: si.startTime ?? null,
               endTime:   si.endTime ?? null,
               estHours:  Number(si.estHours) || 0,
-              // Done op de subitem zelf óf op de parent telt als done —
-              // beide krijgen in de planning een fade i.p.v. weg.
-              status:    ((si.status ?? '') === 'Done' || (i.status as string) === 'Done') ? 'done' : 'active',
+              // Een Google parent is een hele terugkerende reeks. Een oude
+              // Done-status op die parent mag daarom nooit alle toekomstige
+              // occurrences afvinken; elke Google-occurrence bepaalt z'n
+              // eigen status. Voor handmatige parents blijft overerving wel
+              // logisch en behouden we het bestaande gedrag.
+              status:    ((si.status ?? '') === 'Done' ||
+                           ((i.source as string) !== 'google' && (i.status as string) === 'Done'))
+                           ? 'done' : 'active',
               source:    (i.source as 'manual' | 'google' | undefined),
               externalLink: si.externalLink ?? (i.externalLink as string | undefined),
               externalSyncedAt: (i.externalSyncedAt as string | undefined),
