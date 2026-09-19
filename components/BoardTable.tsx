@@ -1517,6 +1517,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   onUpdate: (u: Partial<SubItem>) => void; onDelete: () => void
   onReorderBefore?: (draggedId: string, targetId: string) => void
 }) {
+  const isMobile = useIsMobile()
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(defaultEditName ? '' : subitem.name)
@@ -1592,6 +1593,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   }
 
   const [isDraggingMe, setIsDraggingMe] = useState(false)
+  const rowBg = isDraggingMe ? 'var(--accent-light)' : (selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'var(--bg-card)'))
   return (
     <div
       onDragOver={e => {
@@ -1619,7 +1621,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       display: 'grid', gridTemplateColumns: gridTemplate,
       alignItems: 'center', minHeight: 44,
       borderBottom: '1px solid var(--border)',
-      background: isDraggingMe ? 'var(--accent-light)' : (selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent')),
+      background: rowBg,
       opacity:    isDraggingMe ? 0.5 : 1,
       transform:  isDraggingMe ? 'scale(0.985)' : 'none',
       transition: 'background 0.1s, opacity 0.1s, transform 0.1s',
@@ -1666,7 +1668,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
           (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
           checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}
-      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: 'relative', padding: '0 0 0 27px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined, zIndex: isMobile ? 9 : undefined, background: rowBg, padding: '0 0 0 27px' }}>
         {onToggleSelect && (
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
@@ -1679,7 +1681,10 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         <div aria-hidden style={{ position: 'absolute', right: 4, top: 0, bottom: isLast ? '50%' : 0, width: 2, background: rail ?? 'var(--accent)' }} />
         <div aria-hidden style={{ position: 'absolute', right: 0, top: '50%', width: 6, height: 2, background: rail ?? 'var(--accent)' }} />
       </div>
-      <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <div style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
+        position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
+        zIndex: isMobile ? 8 : undefined, background: rowBg,
+        boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>
         {/* Google-link badge. Drie bronnen om het te detecteren:
             - subitem.source === 'google' (set bij handmatige nesting)
             - subitem.externalLink aanwezig (zelfde)
@@ -2204,6 +2209,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   // eerst nog eens op de naam te hoeven klikken.
   defaultEditName?: boolean
 }) {
+  const isMobile = useIsMobile()
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(item.name)
@@ -2358,6 +2364,8 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     if (Object.keys(updates).length > 0) effectiveItem = { ...item, ...updates }
   }
 
+  const rowBg = selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'var(--bg-card)')
+
   return (
     <>
       <div style={{
@@ -2366,20 +2374,25 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         // Rij-onderlijn iets prominenter dan border-light maar nog steeds
         // zachter dan de groep-rand zelf.
         borderBottom: expanded ? 'none' : '1px solid var(--border)',
-        background: selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'transparent'),
+        background: rowBg,
         transition: 'background 0.1s',
       }}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
 
         {/* Selection checkbox */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', paddingLeft: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', paddingLeft: 16,
+          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+          zIndex: isMobile ? 9 : undefined, background: rowBg }}>
           <input type="checkbox" checked={selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
             style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15,
               opacity: selected || hover ? 1 : 0.5, transition: 'opacity 0.15s' }} />
         </div>
 
-        <div style={{ padding: '6px 14px 6px 4px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, cursor: 'pointer' }}
+        <div style={{ padding: '6px 14px 6px 4px', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, cursor: 'pointer',
+          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
+          zIndex: isMobile ? 8 : undefined, background: rowBg,
+          boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}
           onClick={e => {
             // Klik op een 'leeg' deel van de title-cel (tussen checkbox en
             // titel of net naast de pill-knoppen) opent 't detail-drawer.
@@ -3518,7 +3531,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
         // Eigen rondingen + kader maakt 't visueel minder hoekig en geeft
         // duidelijker een 'card per groep'-gevoel.
         border: `1px solid var(--border)`,
-        overflow: 'hidden',
+        overflow: isMobile ? 'visible' : 'hidden',
         outline: dropHover
           ? `3px solid ${group.color}`
           : isDropTarget
@@ -3551,7 +3564,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
         {/* Groep header — Monday-stijl: geen balk, geen achtergrond, alleen
             chevron + gekleurde naam + telling. De gekleurde linker-strip
             zit alleen op de inhoud (rijen) eronder. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 6px' }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 6px',
+          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+          width: isMobile ? 'calc(100vw - 32px)' : undefined, boxSizing: 'border-box',
+          zIndex: isMobile ? 12 : undefined, background: 'var(--bg-base)' }}
           onMouseEnter={() => setHeaderHover(true)} onMouseLeave={() => setHeaderHover(false)}>
 
           {/* Drag-handle voor group-reorder. Groot, altijd zichtbaar en met
@@ -3688,14 +3704,18 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             <div style={{ display: 'grid', gridTemplateColumns: gridTemplate,
               background: 'var(--bg-card)', borderBottom: '1px solid var(--border)',
               position: 'sticky', top: 0, zIndex: 5 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+                position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                zIndex: isMobile ? 8 : undefined, background: 'var(--bg-card)' }}>
                 <input type="checkbox"
                   checked={group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))}
                   ref={el => { if (el) el.indeterminate = group.items.some(i => selectedIds.has(i.id)) && !group.items.every(i => selectedIds.has(i.id)) }}
                   onChange={e => onSelectGroup(group.id, e.target.checked)}
                   style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15 }} />
               </div>
-              <div style={{ position: 'relative', display: 'flex' }}>
+              <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
+                zIndex: isMobile ? 7 : undefined, display: 'flex', background: 'var(--bg-card)',
+                boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>
                 <button onClick={() => onToggleSort('name')}
                   style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 14px', fontSize: 12, fontWeight: 600, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>
                   Item
@@ -4103,9 +4123,10 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
 }
 
 // ─── Periode-filter knop ─ chic pill die RangeCalendar opent ─────────────────
-function PeriodFilterButton({ from, until, color, onChange }: {
+function PeriodFilterButton({ from, until, color, onChange, menu = false }: {
   from: string; until: string; color: string
   onChange: (from: string | null, until: string | null) => void
+  menu?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -4124,11 +4145,13 @@ function PeriodFilterButton({ from, until, color, onChange }: {
         title="Filter op periode (overlap met timeline)"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '9px 14px', borderRadius: 8,
-          border: hasAny ? `1px solid ${color}66` : '1px solid var(--border)',
-          background: hasAny ? color + '18' : 'var(--bg-card)',
+          width: menu ? '100%' : undefined,
+          padding: menu ? '9px 12px' : '9px 14px', borderRadius: menu ? 6 : 8,
+          border: menu ? 'none' : hasAny ? `1px solid ${color}66` : '1px solid var(--border)',
+          background: menu ? (hasAny ? color + '18' : 'none') : hasAny ? color + '18' : 'var(--bg-card)',
           color: hasAny ? 'var(--text-primary)' : 'var(--text-muted)',
-          fontSize: 14, cursor: 'pointer', outline: 'none', fontWeight: hasAny ? 600 : 400,
+          fontSize: 14, cursor: 'pointer', outline: 'none', fontWeight: hasAny ? 600 : menu ? 500 : 400,
+          textAlign: 'left',
         }}>
         <span aria-hidden style={{ display: 'inline-flex' }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -4711,7 +4734,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
-  const nameW = colWidths['name'] ?? 200
+  const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 150) : (colWidths['name'] ?? 200)
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.
   const gridTemplate = `48px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
@@ -4925,18 +4948,18 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               papierbak. Opent de trash-drawer; binnenin staat een knop
               naar het volledige wijzigingen-logboek voor wie meer
               detail wil. */}
-          <button onClick={() => setTrashOpen(true)} className="yoko-control-button"
+          {!isMobile && <button onClick={() => setTrashOpen(true)} className="yoko-control-button"
             title={`Geschiedenis van bord '${title}'`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
               background: 'var(--bg-card)', border: '1px solid var(--border)',
               color: 'var(--text-secondary)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <IconHistory size={13} /> {isMobile ? '' : 'Geschiedenis'}
-          </button>
+          </button>}
           {/* Recovery: haalt verdwenen subitems uit de laatste snapshot terug
               op de HUIDIGE items. Top-level edits blijven staan. Per-bord
               zichtbaar zodat je 'm direct vanuit elke agenda kunt gebruiken. */}
-          <button onClick={() => setRecoveryOpen(true)} className="yoko-control-button"
+          {!isMobile && <button onClick={() => setRecoveryOpen(true)} className="yoko-control-button"
             title={`Snapshot-picker voor '${title}' — kies een versie om verdwenen subitems uit te herstellen`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700,
               background: 'var(--accent-light, rgba(88,150,255,0.18))',
@@ -4944,7 +4967,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               color: 'var(--text-primary)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             ↩︎ {isMobile ? '' : 'Recovery'}
-          </button>
+          </button>}
           {/* Share-knop: alleen voor borden in de SHAREABLE_BOARDS-whitelist
               op de server (zelfde lijst). Geeft een copy-able URL die
               externen zonder login kunnen openen. Gevoelige velden
@@ -4963,10 +4986,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             + {isMobile ? 'Item' : 'Nieuwe groep'}
           </button>
-          {isMobile && (
-            <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
-              onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
-          )}
           {isMobile && (
             <button ref={moreBtnRef} onClick={() => setMoreOpen(v => !v)} className={moreOpen ? 'yoko-primary-button' : 'yoko-control-button'}
               title="Meer acties"
@@ -4997,7 +5016,26 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                     style={{ width: '100%', boxSizing: 'border-box', padding: '8px 9px 8px 29px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
                 </div>
                 <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
+                  onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} menu />
                 <ColumnManagerButton boardId={boardId} columns={columns} color={color} menu />
+                <button onClick={() => { setTrashOpen(true); setMoreOpen(false) }}
+                  style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
+                    padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left', borderRadius: 6 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  <IconHistory size={15} /> Geschiedenis
+                </button>
+                <button onClick={() => { setRecoveryOpen(true); setMoreOpen(false) }}
+                  style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
+                    padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left', borderRadius: 6 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  ↩︎ Recovery
+                </button>
+                <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                 <button onClick={() => { setReorderMode(r => !r); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
                     padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
