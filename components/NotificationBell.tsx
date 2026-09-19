@@ -153,7 +153,10 @@ export function NotificationBell({ label }: { label?: string } = {}) {
       </button>
       {open && popPos && typeof document !== 'undefined' && createPortal(
         <div data-bell-popover style={{
-          position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 9050,
+          // Het mobiele fullscreen-menu staat op z=9500. De popover leeft
+          // via een portal in document.body en moet daar dus expliciet boven
+          // staan; anders opent hij wel maar blijft volledig achter het menu.
+          position: 'fixed', top: popPos.top, left: popPos.left, zIndex: 10020,
           width: 'min(360px, calc(100vw - 16px))', maxHeight: '70vh', overflowY: 'auto',
           background: 'var(--bg-card)', border: '1px solid var(--border)',
           borderRadius: 12, padding: 4,
