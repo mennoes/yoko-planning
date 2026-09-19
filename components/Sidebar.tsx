@@ -1371,6 +1371,18 @@ export default function Sidebar({
           )}
         </div>
 
+        {isMobile && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            {onOpenSearch && (
+              <button onClick={onOpenSearch} aria-label="Zoeken"
+                style={{ height: 36, borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', fontSize: 13, fontWeight: 600 }}>
+                <IconSearch size={18} />Zoeken
+              </button>
+            )}
+            <NotificationBell label="Meldingen" />
+          </div>
+        )}
+
         {/* Nav */}
         <nav style={{ padding: '8px 8px', flex: '1 1 0', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
 
