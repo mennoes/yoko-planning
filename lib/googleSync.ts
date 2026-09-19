@@ -80,6 +80,12 @@ function isPastByDays(end: string | null | undefined, days: number): boolean {
   return Date.now() - endTs > days * 86400000
 }
 
+function isTodayOrFuture(end: string | null | undefined): boolean {
+  if (!end) return false
+  const today = new Date().toISOString().slice(0, 10)
+  return end.slice(0, 10) >= today
+}
+
 function resolveStatus(existing: string | null | undefined, end: string | null | undefined, previousEnd?: string | null, statusOverride?: unknown): string {
   const prev = (existing ?? '').trim()
   // Stuck nooit overschrijven — daar wil de gebruiker bewust naar kijken.
@@ -88,6 +94,10 @@ function resolveStatus(existing: string | null | undefined, end: string | null |
   // Dit maakt 'Done ongedaan maken' blijvend, ook na een Google-sync.
   if (statusOverride === 'active') return prev === 'Done' ? '' : prev
   if (statusOverride === 'done') return 'Done'
+  // Een oude, automatisch geërfde Done-status mag niet blijven plakken als
+  // de occurrence vandaag of in de toekomst ligt. Alleen een expliciete
+  // override hierboven kan een toekomstige afspraak bewust Done houden.
+  if (prev === 'Done' && isTodayOrFuture(end)) return ''
   // Een Google-afspraak die na een eerdere datum opnieuw is ingepland, is
   // niet langer het oude afgeronde item. Maak 'm weer actief als de nieuwe
   // datum niet opnieuw ruimschoots voorbij is.
@@ -108,6 +118,7 @@ function resolveRecurringStatus(existing: string | null | undefined, lastEnd: st
   if (prev === 'Stuck') return prev
   if (statusOverride === 'active') return prev === 'Done' ? '' : prev
   if (statusOverride === 'done') return 'Done'
+  if (prev === 'Done' && isTodayOrFuture(lastEnd)) return 'Doorlopend'
   if (prev === 'Done')  return prev
   if (isPastByDays(lastEnd, AUTO_DONE_AFTER_DAYS)) return 'Done'
   return 'Doorlopend'
