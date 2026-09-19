@@ -4007,10 +4007,11 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'nummers',        label: 'Nummers',        type: 'currency',  width: 110 },
 ]
 
-function ColumnManagerButton({ boardId, columns, color }: {
+function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   boardId: string
   columns: ColumnDef[]
   color:   string
+  menu?:   boolean
 }) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -4038,9 +4039,11 @@ function ColumnManagerButton({ boardId, columns, color }: {
         title="Kolommen beheren — toevoegen, verwijderen, herordenen"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '9px 14px', borderRadius: 8,
-          border: '1px solid var(--border)', background: 'var(--bg-card)',
-          color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none',
+          width: menu ? '100%' : undefined,
+          padding: menu ? '9px 12px' : '9px 14px', borderRadius: menu ? 6 : 8,
+          border: menu ? 'none' : '1px solid var(--border)', background: menu ? 'none' : 'var(--bg-card)',
+          color: menu ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: 14, cursor: 'pointer', outline: 'none',
+          fontWeight: menu ? 500 : 400, textAlign: 'left',
         }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3"  y="4" width="5" height="16" rx="1" />
@@ -4961,6 +4964,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             + {isMobile ? 'Item' : 'Nieuwe groep'}
           </button>
           {isMobile && (
+            <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
+              onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
+          )}
+          {isMobile && (
             <button ref={moreBtnRef} onClick={() => setMoreOpen(v => !v)} className={moreOpen ? 'yoko-primary-button' : 'yoko-control-button'}
               title="Meer acties"
               style={{ padding: '7px 10px', borderRadius: 6, fontSize: 16, fontWeight: 700, lineHeight: 1,
@@ -4990,6 +4997,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                     style={{ width: '100%', boxSizing: 'border-box', padding: '8px 9px 8px 29px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
                 </div>
                 <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
+                <ColumnManagerButton boardId={boardId} columns={columns} color={color} menu />
                 <button onClick={() => { setReorderMode(r => !r); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
                     padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
@@ -5095,7 +5103,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       )}
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', gap: isMobile ? 6 : 10, marginBottom: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: isMobile && !hasFilter ? 'none' : 'flex', gap: isMobile ? 6 : 10, marginBottom: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '0 0 auto', display: isMobile ? 'none' : 'block' }}>
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', display: 'inline-flex' }}>
             <IconSearch size={isMobile ? 14 : 16} />
@@ -5109,10 +5117,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
         {/* Periode-filter: items waarvan de timeline OVERLAPT met
             [van, tot]. Leeg laten = geen ondergrens / bovengrens. */}
-        <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
-          onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
-
-        <ColumnManagerButton boardId={boardId} columns={columns} color={color} />
+        {!isMobile && (
+          <>
+            <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
+              onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
+            <ColumnManagerButton boardId={boardId} columns={columns} color={color} />
+          </>
+        )}
 
         {hasFilter && (
           <>
