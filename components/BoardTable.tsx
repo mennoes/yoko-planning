@@ -588,7 +588,7 @@ function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[
 
   return (
     <>
-      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} onClick={() => setOpen(o => !o)} className={open ? 'yoko-primary-button' : 'yoko-control-button'}
         title="Deel: genereer een publieke read-only link"
         aria-label="Deel"
         style={{ padding: '7px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600,
@@ -4021,7 +4021,7 @@ function ColumnManagerButton({ boardId, columns, color }: {
 
   return (
     <>
-      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} onClick={() => setOpen(o => !o)} className={open ? 'yoko-primary-button' : 'yoko-control-button'}
         title="Kolommen beheren — toevoegen, verwijderen, herordenen"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -4104,7 +4104,7 @@ function PeriodFilterButton({ from, until, color, onChange }: {
 
   return (
     <>
-      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} onClick={() => setOpen(o => !o)} className={hasAny || open ? 'yoko-primary-button' : 'yoko-control-button'}
         title="Filter op periode (overlap met timeline)"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -4891,7 +4891,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               papierbak. Opent de trash-drawer; binnenin staat een knop
               naar het volledige wijzigingen-logboek voor wie meer
               detail wil. */}
-          <button onClick={() => setTrashOpen(true)}
+          <button onClick={() => setTrashOpen(true)} className="yoko-control-button"
             title={`Geschiedenis van bord '${title}'`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
               background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -4902,7 +4902,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           {/* Recovery: haalt verdwenen subitems uit de laatste snapshot terug
               op de HUIDIGE items. Top-level edits blijven staan. Per-bord
               zichtbaar zodat je 'm direct vanuit elke agenda kunt gebruiken. */}
-          <button onClick={() => setRecoveryOpen(true)}
+          <button onClick={() => setRecoveryOpen(true)} className="yoko-control-button"
             title={`Snapshot-picker voor '${title}' — kies een versie om verdwenen subitems uit te herstellen`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700,
               background: 'var(--accent-light, rgba(88,150,255,0.18))',
@@ -4920,17 +4920,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             <ShareButton boardId={boardId} groups={groups} />
           )}
           {!isMobile && (
-            <button onClick={exportCSV} title="Exporteer als CSV"
+            <button onClick={exportCSV} title="Exporteer als CSV" className="yoko-control-button"
               style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
               ↓ CSV
             </button>
           )}
-          <button onClick={addGroup}
+          <button onClick={addGroup} className="yoko-primary-button"
             style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             + {isMobile ? 'Groep' : 'Nieuwe groep'}
           </button>
           {isMobile && (
-            <button ref={moreBtnRef} onClick={() => setMoreOpen(v => !v)}
+            <button ref={moreBtnRef} onClick={() => setMoreOpen(v => !v)} className={moreOpen ? 'yoko-primary-button' : 'yoko-control-button'}
               title="Meer acties"
               style={{ padding: '7px 10px', borderRadius: 6, fontSize: 16, fontWeight: 700, lineHeight: 1,
                 background: moreOpen ? 'var(--accent-light)' : 'var(--bg-card)',
