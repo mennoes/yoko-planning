@@ -338,8 +338,8 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
 
 const card: React.CSSProperties = {
   background: 'var(--bg-card)', borderRadius: 14,
-  border: '1px solid var(--border-light)', overflow: 'hidden',
-  boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.04)',
+  border: '1px solid transparent', overflow: 'hidden',
+  boxShadow: 'var(--surface-shadow)',
 }
 const cardHeader: React.CSSProperties = {
   padding: '14px 18px 12px', borderBottom: '1px solid var(--border-light)',

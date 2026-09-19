@@ -45,13 +45,21 @@
   --bg-card:    #FFFFFF;
   --bg-hover:   rgba(0,0,0,0.04);
 
+  /* Functional surfaces. Controls are filled; fields keep the outline.
+     This prevents every clickable element from looking like an input. */
+  --control-fill:       #E7EAF0;
+  --control-fill-hover: #DDE2EA;
+  --control-active:     #D8E4F5;
+  --field-border:       #B7BEC8;
+  --surface-shadow:     0 1px 2px rgba(24, 28, 34, 0.05), 0 8px 24px rgba(24, 28, 34, 0.04);
+
   --border:        #E2E4E8;
   --border-light:  #ECEEF2;
   --border-strong: #CCD0D6;
 
   --text-primary:   #1A1714;
   --text-secondary: #4A4540;
-  --text-muted:     #9A9590;
+  --text-muted:     #716C66;
 
   /* Status / chart colors (used sparingly) */
   --green:  #6FA181;
@@ -100,13 +108,19 @@
   --bg-card:    #1B1E23;
   --bg-hover:   rgba(255,255,255,0.07);
 
+  --control-fill:       #292E36;
+  --control-fill-hover: #343A44;
+  --control-active:     #334157;
+  --field-border:       #555D69;
+  --surface-shadow:     0 1px 2px rgba(0,0,0,0.22), 0 12px 30px rgba(0,0,0,0.16);
+
   --border:        #3A3F47;
   --border-light:  #2E3239;
   --border-strong: #4D525B;
 
   --text-primary:   #ECEDEF;
   --text-secondary: #C8CCD2;
-  --text-muted:     #8A8E94;
+  --text-muted:     #A3A8B0;
 
   --green:  #7FB392;
   --red:    #D45A50;
@@ -147,12 +161,17 @@
     --bg-sidebar: #0E1014;
     --bg-card:    #1B1E23;
     --bg-hover:   rgba(255,255,255,0.07);
+    --control-fill:       #292E36;
+    --control-fill-hover: #343A44;
+    --control-active:     #334157;
+    --field-border:       #555D69;
+    --surface-shadow:     0 1px 2px rgba(0,0,0,0.22), 0 12px 30px rgba(0,0,0,0.16);
     --border:        #3A3F47;
     --border-light:  #2E3239;
     --border-strong: #4D525B;
     --text-primary:   #ECEDEF;
     --text-secondary: #C8CCD2;
-    --text-muted:     #8A8E94;
+    --text-muted:     #A3A8B0;
     --green:  #7FB392;
     --red:    #D45A50;
     --yellow: #D8B62E;
@@ -200,6 +219,46 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+button, input, select, textarea { font: inherit; }
+button:not(:disabled), [role="button"] { -webkit-tap-highlight-color: transparent; }
+
+/* Keyboard focus is deliberately clear, while pointer interaction stays
+   visually quiet. Fields retain a border; actions use filled surfaces. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--field-border) !important;
+  box-shadow: 0 0 0 3px var(--accent-light);
+  outline: none !important;
+}
+
+/* Shared action treatments for the main toolbars. The fill carries the
+   affordance; a decorative outline is intentionally omitted. */
+.yoko-control-button {
+  background: var(--control-fill) !important;
+  border-color: transparent !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+.yoko-control-button:hover { background: var(--control-fill-hover) !important; }
+.yoko-primary-button {
+  background: var(--accent) !important;
+  border-color: transparent !important;
+  color: #15191f !important;
+  box-shadow: none !important;
+}
+.yoko-primary-button:hover { background: var(--accent-hover) !important; }
+.yoko-surface {
+  border-color: transparent !important;
+  box-shadow: var(--surface-shadow);
 }
 
 /* Scrollbar */

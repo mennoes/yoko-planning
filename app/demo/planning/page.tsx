@@ -6714,7 +6714,7 @@ export default function PlanningPage() {
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 const navBtn: React.CSSProperties = {
-  background: 'var(--bg-card)', border: '1px solid var(--border)',
+  background: 'var(--control-fill)', border: '1px solid transparent',
   borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer',
   padding: '5px 10px', fontSize: 13,
 }
@@ -6729,8 +6729,8 @@ const overflowItemStyle: React.CSSProperties = {
 
 const segGroup: React.CSSProperties = {
   display: 'inline-flex',
-  background: 'var(--bg-card)',
-  border: '1px solid var(--border-light)',
+  background: 'var(--control-fill)',
+  border: '1px solid transparent',
   borderRadius: 8, overflow: 'hidden',
 }
 function segBtn(active: boolean, color?: string, weight?: number): React.CSSProperties {
@@ -6739,8 +6739,8 @@ function segBtn(active: boolean, color?: string, weight?: number): React.CSSProp
     padding: isMobile ? '3px 9px' : '6px 12px',
     fontSize: isMobile ? 11.5 : 12.5, fontWeight: weight ?? (active ? 600 : 500),
     border: 'none', cursor: 'pointer',
-    background: active ? 'var(--text-primary)' : 'transparent',
-    color: active ? 'var(--bg-base)' : (color ?? 'var(--text-secondary)'),
+    background: active ? 'var(--accent)' : 'transparent',
+    color: active ? '#15191f' : (color ?? 'var(--text-secondary)'),
     transition: 'background 0.15s, color 0.15s',
   }
 }
@@ -6749,9 +6749,9 @@ function ghostBtn(active: boolean): React.CSSProperties {
     padding: '6px 11px',
     fontSize: 12.5, fontWeight: 500,
     borderRadius: 7,
-    border: `1px solid ${active ? 'var(--accent)' : 'var(--border-light)'}`,
-    background: active ? 'var(--accent-light)' : 'var(--bg-card)',
-    color: active ? 'var(--accent)' : 'var(--text-secondary)',
+    border: '1px solid transparent',
+    background: active ? 'var(--control-active)' : 'var(--control-fill)',
+    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
     cursor: 'pointer',
     transition: 'background 0.15s, color 0.15s, border-color 0.15s',
   }
@@ -6766,7 +6766,8 @@ function KpiCard({ label, value, sub, tone = 'normal', compact = false }: {
     <div style={{
       padding: compact ? '8px 12px' : '10px 14px',
       background: 'var(--bg-card)',
-      border: '1px solid var(--border-light)',
+      border: '1px solid transparent',
+      boxShadow: 'var(--surface-shadow)',
       borderRadius: 10,
       flexShrink: 0,
       minWidth: compact ? 120 : undefined,

@@ -92,7 +92,7 @@ function PageLink({ p, active }: { p: PageDoc; active: boolean }) {
         padding: '6px 10px 6px 28px',
         borderRadius: 6, marginBottom: 1,
         color: 'var(--text-primary)',
-        background: active ? 'var(--bg-hover)' : 'transparent',
+        background: active ? 'var(--control-active)' : 'transparent',
         textDecoration: 'none', fontSize: 14, fontWeight: active ? 600 : 500, minWidth: 0,
       }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
@@ -545,7 +545,7 @@ function SectionBlock({
                       padding: '9px 10px 9px 22px',
                       borderRadius: 6, marginBottom: 1,
                       color: 'var(--text-primary)',
-                      background: active ? 'var(--bg-hover)' : 'transparent',
+                      background: active ? 'var(--control-active)' : 'transparent',
                       textDecoration: 'none', fontSize: 16, fontWeight: active ? 600 : 500, minWidth: 0,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
@@ -1104,6 +1104,9 @@ export default function Sidebar({
   onOpenSearch?: () => void
 } = {}) {
   const pathname              = usePathname()
+  // Demo pages reuse the production sidebar links. Normalise the route so
+  // active navigation keeps the same visual hierarchy in both environments.
+  const navigationPathname    = pathname.startsWith('/demo') ? pathname.slice(5) || '/' : pathname
   const { profile, openEdit, signOut } = useProfile()
   const { showToast }         = useUndo()
   const [theme,       setTheme]       = useState<Theme>('light')
@@ -1269,10 +1272,10 @@ export default function Sidebar({
           </div>
           <nav aria-label="Hoofdnavigatie" style={{ width: '100%', padding: '8px 8px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
             {mainNav.map(item => {
-              const active = pathname === item.href
+              const active = navigationPathname === item.href
               const NavIcon = MAIN_ICONS[item.href]
               return <Link key={item.id} href={item.href} aria-label={item.label} title={item.label}
-                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)', background: active ? 'var(--accent-light)' : 'transparent', borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent', textDecoration: 'none' }}>
+                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)', background: active ? 'var(--control-active)' : 'transparent', textDecoration: 'none' }}>
                 {NavIcon ? <NavIcon size={22} /> : null}
               </Link>
             })}
@@ -1373,7 +1376,7 @@ export default function Sidebar({
 
           {/* Main nav */}
           {mainNav.map((item, idx) => {
-            const active  = pathname === item.href
+            const active  = navigationPathname === item.href
             const editing = editingMainId === item.id
             return (
               <div key={item.id} draggable={!editOrder}
@@ -1397,11 +1400,11 @@ export default function Sidebar({
                       display: 'flex', alignItems: 'center', gap: 11, flex: 1,
                       padding: '11px 12px', borderRadius: 8,
                       color: 'var(--text-primary)',
-                      background: active ? 'var(--accent-light)' : 'transparent',
+                      background: active ? 'var(--control-active)' : 'transparent',
                       textDecoration: 'none', fontSize: 18, fontWeight: active ? 800 : 600,
                       letterSpacing: '-0.02em',
-                      borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
-                      paddingLeft: active ? 9 : 12,
+                      borderLeft: '3px solid transparent',
+                      paddingLeft: 12,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
@@ -1437,7 +1440,7 @@ export default function Sidebar({
                 section={section}
                 allSections={sections}
                 setAllSections={setSections}
-                pathname={pathname}
+                pathname={navigationPathname}
                 onDelete={() => deleteSection(section.id)}
                 editOrder={editOrder}
                 isFirstSection={idx === 0}
