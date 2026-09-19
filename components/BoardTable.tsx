@@ -2416,8 +2416,8 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               ruis toe. Het chevron-icoon laat al genoeg zien dat er
               subitems onder zitten. */}
 
-          {item.source === 'google' && <GoogleBadge href={googleHref} />}
-          {typeof item.meetLink === 'string' && item.meetLink && (
+          {item.source === 'google' && !isMobile && <GoogleBadge href={googleHref} />}
+          {typeof item.meetLink === 'string' && item.meetLink && !isMobile && (
             <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
               title={nextMeetingTime ? `Open Google Meet (${nextMeetingTime})` : 'Open Google Meet'}
@@ -2496,6 +2496,21 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
                 </button>
               )}
             </>
+          )}
+
+          {typeof item.meetLink === 'string' && item.meetLink && isMobile && (
+            <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              title={nextMeetingTime ? `Open Google Meet (${nextMeetingTime})` : 'Open Google Meet'}
+              aria-label={nextMeetingTime ? `Open Google Meet om ${nextMeetingTime}` : 'Open Google Meet'}
+              style={{
+                width: 26, height: 26, borderRadius: 6,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                background: '#00ac47', color: '#fff', textDecoration: 'none',
+                fontSize: 13, fontWeight: 700, lineHeight: 1, flexShrink: 0,
+              }}>
+              ↗
+            </a>
           )}
 
           {/* Comments-knop — opent het detail-drawer en scrolt naar opmerkingen.
@@ -3587,6 +3602,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             onDragEnd={() => window.dispatchEvent(new CustomEvent('yoko-group-drag-end'))}
             title="Sleep om groep-volgorde te wijzigen"
             style={{ cursor: 'grab',
+              display: isMobile ? 'none' : 'flex',
               color: 'var(--text-secondary)',
               fontSize: 20, lineHeight: 1, padding: '6px 8px', borderRadius: 6,
               flexShrink: 0, userSelect: 'none',
@@ -3629,16 +3645,19 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
               onChange={e => setNameDraft(e.target.value)}
               onBlur={saveName}
               onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setEditName(false); setNameDraft(group.name) } }}
-              style={{ ...editInput, fontSize: 14, fontWeight: 700, color: group.color, background: 'transparent', border: '1px solid ' + group.color, width: 160 }}
+              style={{ ...editInput, fontSize: 14, fontWeight: 700, color: group.color, background: 'transparent', border: '1px solid ' + group.color, width: isMobile ? 130 : 160 }}
             />
           ) : (
             <span onClick={() => { setNameDraft(group.name); setEditName(true) }}
-              style={{ fontSize: 14, fontWeight: 700, color: group.color, cursor: 'text' }}>
+              title={group.name}
+              style={{ fontSize: 14, fontWeight: 700, color: group.color, cursor: 'text',
+                flex: isMobile ? 1 : undefined, minWidth: 0,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {group.name}
             </span>
           )}
 
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>
             {group.items.length} items
           </span>
 
@@ -3660,7 +3679,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   onChange={e => onSelectGroup(group.id, e.target.checked)}
                   onClick={e => e.stopPropagation()}
                   style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                selecteer alles
+                {!isMobile && 'selecteer alles'}
               </label>
               <button onClick={e => {
                   e.stopPropagation()
@@ -3669,10 +3688,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   onDeleteGroup()
                 }}
                 title="Verwijder groep"
-                style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, padding: '3px 9px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: isMobile ? 16 : 12, padding: isMobile ? '2px 8px' : '3px 9px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'var(--red)' }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}>
-                × Verwijder
+                × {!isMobile && 'Verwijder'}
               </button>
             </div>
           )}
@@ -3933,13 +3952,15 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       <button type="button"
                         onClick={e => { e.preventDefault(); e.stopPropagation(); setOpkomendOpen(o => !o) }}
                         style={{
-                          width: '100%', textAlign: 'left',
+                          width: isMobile ? 'calc(100vw - 32px)' : '100%', textAlign: 'left',
                           background: 'var(--overlay-faint)', border: 'none',
                           borderBottom: '1px solid var(--border)',
                           padding: '9px 14px 9px 32px', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 10,
                           fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
                           textTransform: 'uppercase', letterSpacing: '0.05em',
+                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                          zIndex: isMobile ? 10 : undefined,
                         }}>
                         <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
                           {opkomendOpen ? '▼' : '▶'}
@@ -3957,13 +3978,15 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       <button type="button"
                         onClick={e => { e.preventDefault(); e.stopPropagation(); setDoneOpen(o => !o) }}
                         style={{
-                          width: '100%', textAlign: 'left',
+                          width: isMobile ? 'calc(100vw - 32px)' : '100%', textAlign: 'left',
                           background: 'var(--overlay-faint)', border: 'none',
                           borderBottom: '1px solid var(--border)',
                           padding: '9px 14px 9px 32px', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 10,
                           fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
                           textTransform: 'uppercase', letterSpacing: '0.05em',
+                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                          zIndex: isMobile ? 10 : undefined,
                         }}>
                         <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
                           {doneOpen ? '▼' : '▶'}
