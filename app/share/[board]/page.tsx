@@ -99,16 +99,20 @@ export default function ShareBoardPage() {
   const [preset, setPreset]     = useState<Preset>('month')
   const [from, setFrom]         = useState('')
   const [until, setUntil]       = useState('')
-  const [groupFilter, setGroupFilter] = useState('all')
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!board) { setLoading(false); return }
     setLoading(true); setError(null)
-    fetch(`/api/share/${board}`, { cache: 'no-store' })
+    const groupScope = new URLSearchParams(window.location.search).get('groups')
+    const apiUrl = `/api/share/${board}${groupScope ? `?groups=${encodeURIComponent(groupScope)}` : ''}`
+    fetch(apiUrl, { cache: 'no-store' })
       .then(async r => {
         const j = await r.json().catch(() => ({}))
         if (!r.ok || !j?.ok) { setError(j?.error ?? 'Kon bord niet laden'); setGroups([]); return }
-        setGroups((j.groups ?? []) as ShareGroup[])
+        const loadedGroups = (j.groups ?? []) as ShareGroup[]
+        setGroups(loadedGroups)
+        setSelectedGroupIds(new Set(loadedGroups.map(group => group.id)))
         setMonthlyHours((j.monthlyHours ?? []) as MonthlyHours[])
       })
       .catch(() => setError('Netwerkfout'))
@@ -138,9 +142,25 @@ export default function ShareBoardPage() {
 
   // Items filteren op overlap met from/until.
   const selectedGroups = useMemo(
-    () => groupFilter === 'all' ? groups : groups.filter(g => g.id === groupFilter),
-    [groups, groupFilter],
+    () => groups.filter(group => selectedGroupIds.has(group.id)),
+    [groups, selectedGroupIds],
   )
+
+  const allGroupsSelected = groups.length > 0 && groups.every(group => selectedGroupIds.has(group.id))
+  const selectedGroupLabel = selectedGroups.length === 0
+    ? 'Geen groepen'
+    : selectedGroups.length === groups.length
+      ? 'Alle gedeelde groepen'
+      : selectedGroups.map(group => group.name).join(', ')
+
+  function toggleGroup(id: string) {
+    setSelectedGroupIds(previous => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const filteredGroups: ShareGroup[] = useMemo(() => {
     if (!from && !until) return selectedGroups
@@ -269,17 +289,38 @@ export default function ShareBoardPage() {
 
       {/* Datum-filter — preset-knoppen + optionele custom range. */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginRight: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
-          <span aria-hidden style={{ fontSize: 14 }}>▽</span>
-          Groep
-          <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
-            style={{ minWidth: 170, padding: '6px 30px 6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            <option value="all">Alle groepen</option>
-            {groups.filter(group => group.items.length > 0).map(group => (
-              <option key={group.id} value={group.id}>{group.name}</option>
-            ))}
-          </select>
-        </label>
+        <details style={{ position: 'relative', marginRight: 6 }}>
+          <summary style={{ listStyle: 'none', display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 190,
+            padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)',
+            color: 'var(--text-primary)', fontSize: 12, fontWeight: 650, cursor: 'pointer' }}>
+            <span aria-hidden style={{ fontSize: 12 }}>▽</span>
+            <span style={{ flex: 1 }}>
+              {selectedGroups.length === 0 ? 'Kies groepen' : selectedGroups.length === groups.length ? 'Alle groepen' : `${selectedGroups.length} groepen`}
+            </span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>▼</span>
+          </summary>
+          <div style={{ position: 'absolute', top: 'calc(100% + 5px)', left: 0, zIndex: 40, width: 260, maxHeight: 280, overflowY: 'auto',
+            padding: 8, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: '0 12px 30px rgba(0,0,0,0.28)' }}>
+            <button type="button"
+              onClick={() => setSelectedGroupIds(allGroupsSelected ? new Set() : new Set(groups.map(group => group.id)))}
+              style={{ width: '100%', textAlign: 'left', padding: '6px 8px', marginBottom: 4, border: 'none', borderRadius: 6,
+                background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+              {allGroupsSelected ? 'Deselecteer alles' : 'Selecteer alles'}
+            </button>
+            {groups.map(group => {
+              const checked = selectedGroupIds.has(group.id)
+              return (
+                <label key={group.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7,
+                  background: checked ? group.color + '18' : 'transparent', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 12 }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleGroup(group.id)} style={{ accentColor: group.color }} />
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: group.color, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontWeight: checked ? 650 : 500 }}>{group.name}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 10.5 }}>{group.items.length}</span>
+                </label>
+              )
+            })}
+          </div>
+        </details>
         <span aria-hidden style={{ width: 1, height: 24, background: 'var(--border-light)', marginRight: 2 }} />
         {([
           { id: 'all',       label: 'Alles' },
@@ -317,7 +358,7 @@ export default function ShareBoardPage() {
           <div>
             <h2 style={{ margin: 0, fontSize: 14, fontWeight: 750, color: 'var(--text-primary)' }}>Uren per project</h2>
             <div style={{ marginTop: 2, fontSize: 11.5, color: 'var(--text-muted)' }}>
-              {groupFilter === 'all' ? 'Alle groepen' : groups.find(group => group.id === groupFilter)?.name}
+              {selectedGroupLabel}
               {from || until ? ` · ${from ? fmtDate(from) : 'begin'} – ${until ? fmtDate(until) : 'nu'}` : ' · volledige planning'}
             </div>
           </div>
