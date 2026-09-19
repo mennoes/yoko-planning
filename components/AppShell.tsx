@@ -10,6 +10,7 @@ import { UndoProvider } from './UndoContext'
 import Sidebar from './Sidebar'
 import DemoShell from './DemoShell'
 import ProfileSetup from './ProfileSetup'
+import { hasStaticAvatar } from './UserAvatar'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
@@ -47,7 +48,7 @@ const BOARD_INITIALS: Record<string, { groups: unknown[] }> = {
 }
 
 function Inner({ children }: { children: ReactNode }) {
-  const { needsSetup, editOpen, isAuthenticated, authChecked, profile } = useProfile()
+  const { needsSetup, editOpen, isAuthenticated, authChecked, profile, openEdit } = useProfile()
   // Profile leeft in een ref zodat de sync-effecten (met empty deps) altijd
   // de laatste memberId zien zonder herstart van pulls/subscriptions.
   const profileRef = useRef(profile)
@@ -57,7 +58,27 @@ function Inner({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [avatarReminderOpen, setAvatarReminderOpen] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (!authChecked || !isAuthenticated || !profile?.memberId || profile.photo) return
+    if (pathname.startsWith('/demo') || pathname === '/login' || hasStaticAvatar(profile.memberId)) return
+    const key = `yoko-avatar-reminder-v1:${profile.memberId}`
+    try {
+      if (window.localStorage.getItem(key)) return
+    } catch {}
+    const timer = window.setTimeout(() => setAvatarReminderOpen(true), 500)
+    return () => window.clearTimeout(timer)
+  }, [authChecked, isAuthenticated, pathname, profile])
+
+  function dismissAvatarReminder(openProfile = false) {
+    if (profile?.memberId) {
+      try { window.localStorage.setItem(`yoko-avatar-reminder-v1:${profile.memberId}`, '1') } catch {}
+    }
+    setAvatarReminderOpen(false)
+    if (openProfile) openEdit()
+  }
 
   // Scroll-positie onthouden per pad. Onze <main> scrolt intern, dus
   // Next's eigen scroll-restore (die alleen documentScroll bewaakt) doet
@@ -365,6 +386,40 @@ function Inner({ children }: { children: ReactNode }) {
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />
       <FeedbackBubble />
+
+      {avatarReminderOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9900,
+          background: 'rgba(0,0,0,0.38)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20, backdropFilter: 'blur(3px)' }}>
+          <div role="dialog" aria-modal="true" aria-label="Voeg een profielfoto toe"
+            style={{ width: 360, maxWidth: '100%', borderRadius: 16,
+              border: '1px solid var(--border)', background: 'var(--bg-card)',
+              boxShadow: '0 18px 50px rgba(0,0,0,0.3)', padding: 24, textAlign: 'center' }}>
+            <div style={{ width: 58, height: 58, borderRadius: '50%', margin: '0 auto 14px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: (profile?.color ?? '#9aadbd') + '25', color: profile?.color ?? '#9aadbd',
+              fontSize: 20, fontWeight: 800 }}>
+              {(profile?.name ?? profile?.memberId ?? '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <h2 style={{ margin: '0 0 8px', fontSize: 20, color: 'var(--text-primary)' }}>Maak het wat persoonlijker</h2>
+            <p style={{ margin: '0 0 20px', fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-muted)' }}>
+              Een profielfoto maakt de planning net wat leuker en helpt iedereen je sneller herkennen.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 8 }}>
+              <button onClick={() => dismissAvatarReminder(false)}
+                style={{ padding: '10px 12px', borderRadius: 9, border: '1px solid var(--border)',
+                  background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}>
+                Later
+              </button>
+              <button onClick={() => dismissAvatarReminder(true)}
+                style={{ padding: '10px 12px', borderRadius: 9, border: 'none',
+                  background: 'var(--accent)', color: '#111', cursor: 'pointer', fontWeight: 800 }}>
+                Foto toevoegen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main ref={mainRef} style={{
         flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,
