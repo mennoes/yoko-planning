@@ -5772,7 +5772,7 @@ export default function PlanningPage() {
             hoger dan de sticky kolomkop-rij (z=24) eronder — anders kan de
             sticky header er bij het scrollen overheen schuiven en de
             Menu-knop (en z'n dropdown-trigger) onbereikbaar maken. ── */}
-      <header style={{ flexShrink: 0, position: 'relative', zIndex: 30, background: 'var(--bg-base)', padding: isMobile ? '56px 14px 0' : '24px 32px 0' }}>
+      <header style={{ flexShrink: 0, position: 'relative', zIndex: 30, background: 'var(--bg-base)', padding: isMobile ? '10px 10px 0 56px' : '24px 32px 0' }}>
 
         {/* Title + nav — desktop only; op mobiel scrollt 't mee bovenin de
             grid (zie title-row in de scrollable area). */}
@@ -5861,7 +5861,7 @@ export default function PlanningPage() {
         )}
 
         {/* Toolbar */}
-        <div style={{ display: isMobile ? 'flex' : 'none', alignItems: 'center', gap: 6, flexWrap: 'nowrap', marginBottom: 6 }}>
+        <div style={{ display: isMobile ? 'flex' : 'none', alignItems: 'center', gap: 4, flexWrap: 'nowrap', marginBottom: 6 }}>
           {/* Overzicht en Week zijn samengesmolten in één continue zoom:
               de kolom-breedte-slider stuurt zowel kolommen als zoom-niveau.
               Voorbij de bovengrens van de week-zoom-slider klapt 'ie auto-
@@ -5878,7 +5878,7 @@ export default function PlanningPage() {
                 title="Smaller" aria-label="Smaller"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
-                  padding: '6px 8px', lineHeight: 1 }}>−</button>
+                  padding: '6px', lineHeight: 1 }}>−</button>
               <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
                 <input type="range"
                   min={zoom === 'week' ? VIRTUAL_MIN : VIRTUAL_CROSS}
@@ -5886,14 +5886,14 @@ export default function PlanningPage() {
                   step={5}
                   value={virtualZoom} onChange={e => anchoredColWZoom(() => parseInt(e.target.value))}
                   title={`Zoom ${zoom === 'week' ? 'Overzicht' : 'Week-view'} · kolom ${colWZoom}%`}
-                  style={{ width: 96, accentColor: 'var(--accent)' }} />
+                  style={{ width: 70, accentColor: 'var(--accent)' }} />
               </div>
               <span style={{
                 fontSize: 9.5, fontWeight: 700, color: 'var(--text-muted)',
                 textTransform: 'uppercase', letterSpacing: '0.06em',
-                padding: '2px 6px', borderRadius: 999,
+                padding: '2px 4px', borderRadius: 999,
                 background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                marginLeft: 4,
+                marginLeft: 2,
               }}>
                 {zoom === 'dag' ? 'Week' : 'Overz.'}
               </span>
@@ -5901,7 +5901,7 @@ export default function PlanningPage() {
                 title="Breder" aria-label="Breder"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer',
                   color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700,
-                  padding: '6px 8px', lineHeight: 1 }}>+</button>
+                  padding: '6px', lineHeight: 1 }}>+</button>
             </div>
           )}
 
@@ -5913,7 +5913,7 @@ export default function PlanningPage() {
                 <button onClick={stepForward} style={segBtn(false)}><IconChevronRight size={14} /></button>
               </div>
               <button onClick={() => setOverflowOpen(true)} aria-label="Meer acties"
-                style={{ ...ghostBtn(false), padding: '6px 10px' }}>
+                style={{ ...ghostBtn(false), padding: '6px 8px' }}>
                 <IconMore size={18} />
               </button>
             </>
