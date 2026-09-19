@@ -39,7 +39,7 @@ function actionLabel(n: Notification): string {
   }
 }
 
-export function NotificationBell() {
+export function NotificationBell({ label }: { label?: string } = {}) {
   const { profile }  = useProfile()
   const { getPhoto } = useTeamPhotos()
   const memberId     = profile?.memberId
@@ -129,15 +129,16 @@ export function NotificationBell() {
           background: unread > 0 ? 'var(--accent-light)' : 'var(--bg-card)',
           border: `1px solid ${unread > 0 ? 'var(--accent)' : 'var(--border-light)'}`,
           cursor: 'pointer',
-          width: 36, height: 36, borderRadius: 9, position: 'relative',
+          width: label ? '100%' : 36, height: 36, borderRadius: 9, position: 'relative',
           color: unread > 0 ? 'var(--accent)' : 'var(--text-secondary)',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          padding: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: label ? 'flex-start' : 'center', gap: 8,
+          padding: label ? '0 12px' : 0, boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
           transition: 'background 0.15s',
         }}
         onMouseEnter={e => (e.currentTarget.style.background = unread > 0 ? 'var(--accent-light)' : 'var(--bg-hover)')}
         onMouseLeave={e => (e.currentTarget.style.background = unread > 0 ? 'var(--accent-light)' : 'var(--bg-card)')}>
         <IconBell size={18} strokeWidth={1.8} />
+        {label && <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>}
         {unread > 0 && (
           <span style={{
             position: 'absolute', top: 2, right: 2,
