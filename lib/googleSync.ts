@@ -63,7 +63,10 @@ function resolveAttendeeEmailWith(memberKeys: MemberKey[], email: string): strin
 // begrenzen we afzonderlijk: zo verdwijnen save-the-dates niet meer na twee
 // weken, zonder dat een wekelijkse reeks honderden subitems produceert.
 const WINDOW_DAYS_FUTURE = 180
-const RECURRING_DAYS_FUTURE = 56
+// Houd terugkerende afspraken over hetzelfde volledige venster beschikbaar
+// als losse afspraken. De oude 56-dagenknip liet de planning na een paar
+// weken plots leeg lijken, ook al stonden de meetings gewoon in Google.
+const RECURRING_DAYS_FUTURE = WINDOW_DAYS_FUTURE
 const WINDOW_DAYS_PAST   = 180  // 6 months back — zodat recurring meetings
                                  //   ook hun historische instances meenemen
 const AUTO_DONE_AFTER_DAYS = 3  // events waarvan de end-date > N dagen
