@@ -1243,11 +1243,8 @@ export default function Sidebar({
 
   const containerStyle: React.CSSProperties = isMobile
     ? {
-        // 320 was te krap: YOKO-logo (148) + Settings+Sluit-knoppen (2×32 + gap)
-        // raakten elkaar. 360 geeft net genoeg adem op smalle telefoons en
-        // blijft binnen iPhone-SE breedte (375).
-        width: 360, minWidth: 360, maxWidth: 360,
-        position: 'fixed', top: 0, left: 0, height: '100vh',
+        width: '100vw', minWidth: '100vw', maxWidth: '100vw',
+        position: 'fixed', top: 0, left: 0, height: '100dvh',
         transform: open ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.22s ease',
         zIndex: 60, display: 'flex', alignItems: 'stretch',
@@ -1304,7 +1301,7 @@ export default function Sidebar({
 
   return (
     <div style={containerStyle}>
-      <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}
+      <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: isMobile ? 'none' : '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: isMobile ? '100dvh' : '100vh', overflow: 'hidden' }}
         onClick={e => {
           if (!isMobile || !onClose || editOrder) return
           const target = e.target as HTMLElement
