@@ -54,7 +54,7 @@ const RAW: Record<string, { groups: unknown[] }> = {
 type TodoItem = { id: string; text: string; done: boolean }
 
 type SectionId = 'taken' | 'werkdruk' | 'team' | 'deadlines' | 'overload' | 'documenten' | 'paginas'
-const DEFAULT_SECTION_ORDER: SectionId[] = ['taken', 'werkdruk', 'team', 'deadlines', 'overload', 'paginas', 'documenten']
+const DEFAULT_SECTION_ORDER: SectionId[] = ['werkdruk', 'team', 'deadlines', 'overload', 'paginas', 'documenten']
 
 type RemoteProfile = {
   member_id:       string | null
@@ -501,7 +501,7 @@ export default function HomePage() {
       if (saved) {
         const parsed = JSON.parse(saved) as SectionId[]
         if (Array.isArray(parsed) && DEFAULT_SECTION_ORDER.every(id => parsed.includes(id))) {
-          setSectionOrder(parsed)
+          setSectionOrder(parsed.filter(id => id !== 'taken'))
         }
       }
     } catch {}
@@ -1073,15 +1073,15 @@ export default function HomePage() {
     ),
     werkdruk: (
       <div style={card}>
-        <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ ...cardHeader, alignItems: 'center', flexWrap: 'nowrap' }}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'baseline', gap: 8, whiteSpace: 'nowrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <IconHourglass size={isMobile ? 17 : 15} />
-              Werkdruk
+              To do&apos;s
             </span>
             {/* Kleine datumlabel zodat je in één oogopslag ziet om welke week
                 het gaat — vooral handig na een paar klikken op </>. */}
-            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', letterSpacing: 0 }}>
+            {!isMobile && <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', letterSpacing: 0 }}>
               {(() => {
                 const base = getWeekStart(new Date())
                 const monday = new Date(base); monday.setDate(monday.getDate() + weekOffset * 7)
@@ -1091,21 +1091,20 @@ export default function HomePage() {
                 const friStr = friday.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
                 return `${monStr} – ${friStr}`
               })()}
-            </span>
+            </span>}
           </h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, marginLeft: 'auto' }}>
             <button onClick={() => setWeekOffset(o => o - 1)}
               title="Vorige week"
               style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>‹</button>
             <button onClick={() => setWeekOffset(0)}
               title="Naar deze week"
-              style={{ background: weekOffset === 0 ? 'var(--accent-light)' : 'transparent', border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 6, color: weekOffset === 0 ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', padding: '3px 9px', fontSize: 11, fontWeight: 600, minWidth: 90, textAlign: 'center' }}>
+              style={{ background: weekOffset === 0 ? 'var(--accent-light)' : 'transparent', border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 6, color: weekOffset === 0 ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', padding: '3px 7px', fontSize: 11, fontWeight: 600, minWidth: isMobile ? 76 : 90, textAlign: 'center', whiteSpace: 'nowrap' }}>
               {weekOffset === 0 ? 'Deze week' : weekOffset === -1 ? 'Vorige week' : weekOffset === 1 ? 'Volgende week' : `${weekOffset > 0 ? '+' : ''}${weekOffset} weken`}
             </button>
             <button onClick={() => setWeekOffset(o => o + 1)}
               title="Volgende week"
               style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>›</button>
-            <Link href="/planning" style={{ ...cardLink, marginLeft: 4 }}>Planning →</Link>
           </div>
         </div>
         <div style={{ padding: '16px 20px 14px' }}>
@@ -1201,6 +1200,21 @@ export default function HomePage() {
           ) : (
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Stel je profiel in om werkdruk te zien.</p>
           )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+          padding: '10px 20px 14px', borderTop: '1px solid var(--border-light)' }}>
+          <Link href="/planning"
+            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)',
+              background: 'var(--bg-card)', color: 'var(--text-primary)', textDecoration: 'none',
+              textAlign: 'center', fontSize: 12, fontWeight: 700 }}>
+            Planning →
+          </Link>
+          <Link href="/todos"
+            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)',
+              background: 'var(--bg-card)', color: 'var(--text-primary)', textDecoration: 'none',
+              textAlign: 'center', fontSize: 12, fontWeight: 700 }}>
+            Alle to do&apos;s →
+          </Link>
         </div>
       </div>
     ),
@@ -1543,14 +1557,14 @@ export default function HomePage() {
 
       {isMobile ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {sectionOrder.map((id, i) => (
+          {sectionOrder.filter(id => id !== 'taken').map((id, i, visible) => (
             <div key={id}>
               {editOrder && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
                   <button onClick={() => moveSection(id, -1)} disabled={i === 0}
                     style={reorderBtn(i === 0)}>↑</button>
-                  <button onClick={() => moveSection(id, 1)} disabled={i === sectionOrder.length - 1}
-                    style={reorderBtn(i === sectionOrder.length - 1)}>↓</button>
+                  <button onClick={() => moveSection(id, 1)} disabled={i === visible.length - 1}
+                    style={reorderBtn(i === visible.length - 1)}>↓</button>
                 </div>
               )}
               {sections[id]}
@@ -1565,7 +1579,7 @@ export default function HomePage() {
           columnCount: isMobile ? 1 : 2,
           columnGap: 18,
         }}>
-          {(['taken','werkdruk','team','deadlines','overload','documenten','paginas'] as SectionId[])
+          {(['werkdruk','team','deadlines','overload','documenten','paginas'] as SectionId[])
             .filter(id => sectionOrder.includes(id))
             .map(id => (
               <div key={id} style={{ breakInside: 'avoid', marginBottom: 18 }}>
