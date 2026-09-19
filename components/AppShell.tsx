@@ -59,7 +59,41 @@ function Inner({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [avatarReminderOpen, setAvatarReminderOpen] = useState(false)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [pullRefreshing, setPullRefreshing] = useState(false)
+  const pullStartRef = useRef<{ x: number; y: number } | null>(null)
   const mainRef = useRef<HTMLElement>(null)
+
+  const pullThreshold = 70
+  function onPullStart(e: React.TouchEvent<HTMLElement>) {
+    if (!isMobile || pullRefreshing || e.touches.length !== 1 || (mainRef.current?.scrollTop ?? 0) > 0) {
+      pullStartRef.current = null
+      return
+    }
+    pullStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  function onPullMove(e: React.TouchEvent<HTMLElement>) {
+    const start = pullStartRef.current
+    if (!start || e.touches.length !== 1 || (mainRef.current?.scrollTop ?? 0) > 0) return
+    const dx = e.touches[0].clientX - start.x
+    const dy = e.touches[0].clientY - start.y
+    if (dy <= 0 || Math.abs(dx) > Math.abs(dy)) {
+      if (pullDistance > 0) setPullDistance(0)
+      return
+    }
+    e.preventDefault()
+    setPullDistance(Math.min(96, dy * 0.42))
+  }
+  function onPullEnd() {
+    pullStartRef.current = null
+    if (pullDistance >= pullThreshold) {
+      setPullRefreshing(true)
+      setPullDistance(52)
+      window.setTimeout(() => window.location.reload(), 120)
+      return
+    }
+    setPullDistance(0)
+  }
 
   useEffect(() => {
     if (!authChecked || !isAuthenticated || !profile?.memberId || profile.photo) return
@@ -421,9 +455,30 @@ function Inner({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <main ref={mainRef} style={{
+      {isMobile && (pullDistance > 0 || pullRefreshing) && (
+        <div aria-live="polite" style={{
+          position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 69,
+          display: 'flex', alignItems: 'center', gap: 7, padding: '7px 11px', borderRadius: 999,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          boxShadow: '0 3px 12px rgba(0,0,0,0.16)', color: 'var(--text-secondary)',
+          fontSize: 11.5, fontWeight: 700, pointerEvents: 'none',
+        }}>
+          <span style={{ display: 'inline-block', fontSize: 16,
+            transform: pullRefreshing ? undefined : `rotate(${Math.min(180, pullDistance * 2.5)}deg)`,
+            animation: pullRefreshing ? 'spin 0.8s linear infinite' : undefined }}>↻</span>
+          {pullRefreshing ? 'Vernieuwen…' : pullDistance >= pullThreshold ? 'Loslaten' : 'Trek om te vernieuwen'}
+        </div>
+      )}
+
+      <main ref={mainRef}
+        onTouchStart={onPullStart} onTouchMove={onPullMove}
+        onTouchEnd={onPullEnd} onTouchCancel={onPullEnd}
+        style={{
         flex: 1, overflow: 'auto', background: 'var(--bg-base)', minWidth: 0,
         width: isMobile ? '100%' : undefined, position: 'relative',
+        overscrollBehaviorY: isMobile ? 'contain' : undefined,
+        transform: isMobile && pullDistance > 0 ? `translateY(${pullDistance}px)` : undefined,
+        transition: pullStartRef.current ? 'none' : 'transform 0.18s ease',
       }}>
         {!isMobile && <BackButton pathname={pathname} />}
         {children}
