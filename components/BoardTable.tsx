@@ -1668,7 +1668,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       {/* Eerste kolom: checkbox links, daarna ruimte, dan de tree-connector
           (verticale lijn + horizontale elbow) helemaal rechts. Eerder zat de
           checkbox tegen de lijn aan; nu staan ze duidelijk gescheiden. */}
-      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined, zIndex: isMobile ? 9 : undefined, background: rowBg, padding: '0 0 0 27px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined, zIndex: isMobile ? 9 : undefined, background: rowBg, padding: '0 0 0 27px',
+        borderLeft: isMobile ? `4px solid ${rail ?? 'var(--accent)'}` : undefined,
+        boxSizing: 'border-box' }}>
         {onToggleSelect && (
           <input type="checkbox" checked={!!selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
@@ -2382,7 +2384,9 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
         {/* Selection checkbox */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', paddingLeft: 16,
           position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
-          zIndex: isMobile ? 9 : undefined, background: rowBg }}>
+          zIndex: isMobile ? 9 : undefined, background: rowBg,
+          borderLeft: isMobile ? `4px solid ${accentColor}` : undefined,
+          boxSizing: 'border-box' }}>
           <input type="checkbox" checked={selected} onChange={onToggleSelect}
             onClick={e => e.stopPropagation()}
             style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15,
@@ -3717,7 +3721,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
         })()}
 
         {!collapsed && (
-          <div style={{ borderLeft: `4px solid ${group.color}` }}>
+          <div style={{ borderLeft: isMobile ? undefined : `4px solid ${group.color}` }}>
             {/* Kolom headers — sticky bovenaan zodat ze in beeld blijven
                 tijdens scroll door lange lijsten (Monday-stijl). */}
             <div style={{ display: 'grid', gridTemplateColumns: gridTemplate,
@@ -3725,7 +3729,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
               position: 'sticky', top: 0, zIndex: 5 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
                 position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
-                zIndex: isMobile ? 8 : undefined, background: 'var(--bg-card)' }}>
+                zIndex: isMobile ? 8 : undefined, background: 'var(--bg-card)',
+                borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
+                boxSizing: 'border-box' }}>
                 <input type="checkbox"
                   checked={group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))}
                   ref={el => { if (el) el.indeterminate = group.items.some(i => selectedIds.has(i.id)) && !group.items.every(i => selectedIds.has(i.id)) }}
@@ -3961,6 +3967,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                           textTransform: 'uppercase', letterSpacing: '0.05em',
                           position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
                           zIndex: isMobile ? 10 : undefined,
+                          borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
+                          boxSizing: 'border-box',
                         }}>
                         <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
                           {opkomendOpen ? '▼' : '▶'}
@@ -3987,6 +3995,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                           textTransform: 'uppercase', letterSpacing: '0.05em',
                           position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
                           zIndex: isMobile ? 10 : undefined,
+                          borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
+                          boxSizing: 'border-box',
                         }}>
                         <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
                           {doneOpen ? '▼' : '▶'}
@@ -4003,7 +4013,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
               )
             })()}
 
-            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)',
+              position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+              width: isMobile ? 'calc(100vw - 32px)' : undefined,
+              zIndex: isMobile ? 10 : undefined, background: 'var(--bg-card)',
+              borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
+              boxSizing: 'border-box' }}>
               <button onClick={addItem} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: 0 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
@@ -4015,8 +4030,14 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
 
             {group.items.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, borderBottom: '2px solid var(--border)', background: 'var(--overlay-faint)' }}>
-                <div />
-                <div style={{ padding: '5px 14px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Som</div>
+                <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 0 : undefined,
+                  zIndex: isMobile ? 9 : undefined, background: 'var(--overlay-faint)',
+                  borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
+                  boxSizing: 'border-box' }} />
+                <div style={{ padding: '5px 14px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600,
+                  position: isMobile ? 'sticky' : 'relative', left: isMobile ? 48 : undefined,
+                  zIndex: isMobile ? 8 : undefined, background: 'var(--overlay-faint)',
+                  boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>Som</div>
                 {cols.map(col => (
                   <div key={col.key} style={{ padding: '5px 8px', fontSize: 11, color: 'var(--text-muted)', borderLeft: '1px solid var(--border)', fontWeight: 600 }}>
                     {col.key === 'estHours' ? `${totHours}u` : col.key === 'dagen' ? totDagen : ''}
@@ -4945,8 +4966,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     <div style={{ padding: isMobile ? '14px 14px 48px' : '32px 32px 64px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: isMobile ? 10 : 20, flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: isMobile ? 16 : 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+        marginBottom: isMobile ? 10 : 20, flexWrap: isMobile ? 'nowrap' : 'wrap',
+        paddingLeft: isMobile ? 96 : 0, boxSizing: 'border-box' }}>
+        <h1 style={{ fontSize: isMobile ? 16 : 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0,
+          display: 'flex', alignItems: 'center', minWidth: 0, flex: 1,
+          overflow: isMobile ? 'hidden' : undefined }}>
           {!isMobile && <>
             <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Agenda</span>
             <span style={{ color: 'var(--border)', margin: '0 8px' }}>/</span>
@@ -4961,12 +4986,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           ) : (
             <span onClick={() => { if (onRenameTitle) { setTitleDraft(title); setEditingTitle(true) } }}
               title={onRenameTitle ? 'Klik om naam te wijzigen' : undefined}
-              style={{ cursor: onRenameTitle ? 'text' : 'default' }}>
+              style={{ cursor: onRenameTitle ? 'text' : 'default', minWidth: 0,
+                overflow: isMobile ? 'hidden' : undefined,
+                textOverflow: isMobile ? 'ellipsis' : undefined,
+                whiteSpace: isMobile ? 'nowrap' : undefined }}>
               {title}
             </span>
           )}
         </h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           {/* Eén Geschiedenis-knop voor zowel wijzigingen-logboek als
               papierbak. Opent de trash-drawer; binnenin staat een knop
               naar het volledige wijzigingen-logboek voor wie meer
