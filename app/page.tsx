@@ -1431,12 +1431,12 @@ export default function HomePage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 18,
         paddingLeft: isMobile ? 56 : 0,
         marginBottom: showSummary ? (isMobile ? 14 : 22) : (isMobile ? 18 : 40) }}>
-        {memberId && !isMobile && (
-          <UserAvatar memberId={memberId} size={isMobile ? 44 : 60}
+        {memberId && (
+          <UserAvatar memberId={memberId} size={isMobile ? 34 : 60}
             onClick={e => showMember(memberId, e)} />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: isMobile ? 22 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em',
+          <h1 style={{ fontSize: isMobile ? 20 : 34, fontWeight: 900, color: 'var(--text-primary)', margin: '0 0 5px', letterSpacing: '-0.04em',
             // Op mobiel forceren we één regel — "Goedemiddag, Menno" mag
             // niet over twee regels lopen, dat oogde rommelig. Bij echt
             // smalle schermen of een lange naam komt er een ellipsis.
