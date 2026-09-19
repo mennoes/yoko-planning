@@ -5,6 +5,9 @@ import { useTeamPhotos } from './TeamPhotosContext'
 import { useProfile } from './ProfileContext'
 import { useTeam } from './TeamContext'
 
+const STATIC_AVATAR_IDS = new Set(['menno', 'vincent', 'odette', 'anne-fleur'])
+export const hasStaticAvatar = (memberId: string): boolean => STATIC_AVATAR_IDS.has(memberId)
+
 // Single source of truth for rendering a member avatar.
 // Resolves photo in this order:
 //   1. profile.photo (when this is the signed-in user)
@@ -36,7 +39,7 @@ export function UserAvatar({
   const photoCandidates = [
     isMe ? profile?.photo : null,
     getPhoto(memberId),
-    `/team/${memberId}.jpg`,
+    hasStaticAvatar(memberId) ? `/team/${memberId}.jpg` : null,
   ].filter(Boolean) as string[]
 
   const [idx, setIdx] = useState(0)
