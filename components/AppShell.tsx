@@ -13,8 +13,7 @@ import ProfileSetup from './ProfileSetup'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
-import { IconMenu, IconSearch } from './Icon'
-import { NotificationBell } from './NotificationBell'
+import { IconMenu } from './Icon'
 import { FeedbackBubble } from './FeedbackBubble'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
@@ -335,7 +334,10 @@ function Inner({ children }: { children: ReactNode }) {
   return (
     <>
       <Sidebar isMobile={isMobile} open={!isMobile || drawerOpen} onClose={() => setDrawerOpen(false)}
-        onOpenSearch={!isMobile ? () => setSearchOpen(true) : undefined} />
+        onOpenSearch={() => {
+          setSearchOpen(true)
+          if (isMobile) setDrawerOpen(false)
+        }} />
 
       {isMobile && drawerOpen && (
         <div onClick={() => setDrawerOpen(false)}
@@ -343,39 +345,22 @@ function Inner({ children }: { children: ReactNode }) {
       )}
 
       {isMobile && !drawerOpen && (
-        <>
-          {/* Menu + home linksboven — meest gebruikte knoppen, sluit aan op
-              standaard mobile-conventie (hamburger linksboven). */}
-          <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
-              style={{
-                width: 38, height: 38, borderRadius: 9,
-                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                color: 'var(--text-primary)', padding: 0,
-              }}>
-              <IconMenu size={20} />
-            </button>
-          </div>
-          {/* Notificaties + papierbak + zoeken rechtsboven. */}
-          <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
-            <NotificationBell />
-            <button onClick={() => setSearchOpen(true)} aria-label="Zoeken"
-              style={{
-                width: 38, height: 38, borderRadius: 9,
-                background: 'var(--bg-card)', border: '1px solid var(--border-light)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                color: 'var(--text-primary)', padding: 0,
-              }}>
-              <IconSearch size={18} />
-            </button>
-          </div>
-        </>
+        /* Alleen de hamburger blijft in de mobiele header. Zoeken en
+           meldingen staan in het uitklapmenu, zodat paginaknoppen ernaast
+           op dezelfde compacte regel kunnen staan. */
+        <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 70, display: 'flex', alignItems: 'center' }}>
+          <button onClick={() => setDrawerOpen(true)} aria-label="Menu openen"
+            style={{
+              width: 38, height: 38, borderRadius: 9,
+              background: 'var(--bg-card)', border: '1px solid var(--border-light)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+              color: 'var(--text-primary)', padding: 0,
+            }}>
+            <IconMenu size={20} />
+          </button>
+        </div>
       )}
-      {/* Desktop bell zit nu in de sidebar-header (naast het logo).
-          Op mobile blijft 'm rechtsboven naast de hamburger. */}
 
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />
