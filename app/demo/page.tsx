@@ -416,9 +416,11 @@ export default function HomePage() {
   const memberId = profile?.memberId ?? ''
 
   useEffect(() => {
-    ensureCurrentDemoBoardSeed()
-    setCategoryOverrides(loadCategoryOverrides())
-    setRecentPages(loadRecentPages().slice(0, 9))
+    let offTodos: () => void = () => {}
+    try {
+      ensureCurrentDemoBoardSeed()
+      setCategoryOverrides(loadCategoryOverrides())
+      setRecentPages(loadRecentPages().slice(0, 9))
 
     // My todos: lees uit de live todosStore (zelfde bron als /todos pagina)
     // i.p.v. de statische initial-data JSON. Subscribe op updates zodat
@@ -449,7 +451,7 @@ export default function HomePage() {
         setMyTodos(mergeStoredWithProjects(stored))
       }
     }).catch(() => {})
-    const offTodos = onTodosUpdate(loadMine)
+      offTodos = onTodosUpdate(loadMine)
 
     // Load all boards once for team status / deadlines / workload widgets
     const projectList: Project[] = []
@@ -504,7 +506,13 @@ export default function HomePage() {
       }
     } catch {}
 
-    setHydrated(true)
+    } catch (error) {
+      // Een oude of halfgeschreven mobiele localStorage-cache mag de
+      // publieke demo nooit in een blanco/error-scherm laten eindigen.
+      console.error('[demo] initialisatie overgeslagen:', error)
+    } finally {
+      setHydrated(true)
+    }
 
     return () => { offTodos() }
   }, [memberId])

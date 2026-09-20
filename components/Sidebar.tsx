@@ -1104,6 +1104,7 @@ export default function Sidebar({
   onOpenSearch?: () => void
 } = {}) {
   const pathname              = usePathname()
+  const demoRoute             = pathname.startsWith('/demo')
   // Demo pages reuse the production sidebar links. Normalise the route so
   // active navigation keeps the same visual hierarchy in both environments.
   const navigationPathname    = pathname.startsWith('/demo') ? pathname.slice(5) || '/' : pathname
@@ -1282,7 +1283,7 @@ export default function Sidebar({
           </nav>
           <div style={{ width: '100%', padding: '10px 8px', boxSizing: 'border-box', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <NotificationBell />
-            {profile?.memberId ? (isOnDemoRoute()
+            {profile?.memberId ? (demoRoute
               ? <button onClick={openEdit} aria-label="Mijn profiel" title="Mijn profiel" style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer' }}><UserAvatar memberId={profile.memberId} size={32} /></button>
               : <Link href={`/profile/${profile.memberId}`} aria-label="Mijn profiel" title="Mijn profiel"><UserAvatar memberId={profile.memberId} size={32} /></Link>) : null}
             <button onClick={cycleTheme} aria-label="Thema wijzigen" title={`Thema: ${(THEMES.find(t => t.value === theme) ?? THEMES[0]).label}`}
@@ -1501,7 +1502,7 @@ export default function Sidebar({
 
         {/* Footer — profile + theme + settings */}
         <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {profile?.memberId && isOnDemoRoute() ? (
+          {profile?.memberId && demoRoute ? (
             // /demo: geen echte profielpagina — klik opent meteen de
             // edit-modal (zelfde als de 'Profiel instellen'-knop), zodat
             // een bezoeker z'n eigen naam/foto/avatar kan aanpassen.

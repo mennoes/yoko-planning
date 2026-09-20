@@ -34,8 +34,11 @@ function dbToProfile(db: DbProfile): UserProfile {
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const demo = isDemoPath(pathname)
-  const [profile,         setProfileState] = useState<UserProfile | null>(null)
-  const [loaded,          setLoaded]       = useState(false)
+  // De publieke demo heeft altijd een profiel. Geef dat al tijdens de
+  // eerste render mee, zodat mobiel niet eerst een lege/auth-shell hoeft te
+  // hydrateren voordat Bert verschijnt.
+  const [profile,         setProfileState] = useState<UserProfile | null>(() => demo ? DEMO_PROFILE : null)
+  const [loaded,          setLoaded]       = useState(demo)
   const [editOpen,        setEditOpen]     = useState(false)
   // When auth is not required (bypass on), we're auto-authenticated.
   // When auth IS required and we have a supabase client, we wait for session.
