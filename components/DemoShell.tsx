@@ -30,6 +30,7 @@ import { refreshDemoBoardsIfNeeded, resetDemoBoards } from '@/lib/demoBoardStore
 export default function DemoShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const isMobile = useIsMobile()
+  const [mounted, setMounted] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [notice, setNotice] = useState(false)
@@ -45,7 +46,14 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
   const bekijkAlsMembers = liveTeam.filter(m => m.id !== 'unassigned' && !m.hidden)
   const activeViewer = bekijkAlsMembers.find(m => m.id === profile?.memberId) ?? bekijkAlsMembers[0]
 
-  useEffect(() => { refreshDemoBoardsIfNeeded() }, [])
+  useEffect(() => {
+    setMounted(true)
+    // Wacht één tick met het vullen van de demo-opslag. Zo kan een mobiele
+    // in-appbrowser eerst de lichte schil tekenen voordat fixtures, menu en
+    // widgets tegelijk werk gaan doen.
+    const id = window.setTimeout(() => refreshDemoBoardsIfNeeded(), 0)
+    return () => window.clearTimeout(id)
+  }, [])
 
   useEffect(() => {
     if (!viewerOpen) return
@@ -98,10 +106,23 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
     window.location.reload()
   }
 
+  // De eerste server- en client-render blijven bewust klein en identiek.
+  // useIsMobile kent het viewport pas na mount; zonder deze stap werd op een
+  // iPhone eerst de volledige desktop-sidebar opgebouwd en direct vervangen.
+  if (!mounted) {
+    return (
+      <main style={{ flex: 1, minWidth: 0, minHeight: '100dvh', overflow: 'auto', background: 'var(--bg-base)' }}>
+        {children}
+      </main>
+    )
+  }
+
   return (
     <>
-      <Sidebar isMobile={isMobile} open={!isMobile || drawerOpen} onClose={() => setDrawerOpen(false)}
-        onOpenSearch={!isMobile ? () => setSearchOpen(true) : undefined} />
+      {(!isMobile || drawerOpen) && (
+        <Sidebar isMobile={isMobile} open={!isMobile || drawerOpen} onClose={() => setDrawerOpen(false)}
+          onOpenSearch={!isMobile ? () => setSearchOpen(true) : undefined} />
+      )}
 
       {isMobile && drawerOpen && (
         <div onClick={() => setDrawerOpen(false)}
