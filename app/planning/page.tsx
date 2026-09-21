@@ -5505,7 +5505,12 @@ export default function PlanningPage() {
         if (i.id !== parentId) return i
         if (!isSubitem) {
           // Top-level item: gewoon velden mergen.
-          return { ...i, startDate: newStart, endDate: newEnd, ...(extra ?? {}) }
+          return { ...i, startDate: newStart, endDate: newEnd, ...(extra ?? {}),
+            // Google sync must distinguish a user's choice from automatic Done.
+            ...(i.source === 'google' && extra?.status !== undefined
+              ? { statusOverride: extra.status === 'Done' ? 'done' as const : 'active' as const }
+              : {}),
+          }
         }
         // Subitem: muteer de juiste entry binnen i.subitems. Niet alle
         // top-level velden gelden hier (notes/links/journal staan op de
@@ -5519,6 +5524,9 @@ export default function PlanningPage() {
             if (extra.ownerHours        !== undefined) subPatch.ownerHours        = extra.ownerHours
             if (extra.ownerIds          !== undefined) subPatch.ownerIds          = extra.ownerIds
             if (extra.status            !== undefined) subPatch.status            = extra.status
+            if ((i.source === 'google' || subs[subIdx].source === 'google') && extra.status !== undefined) {
+              subPatch.statusOverride = extra.status === 'Done' ? 'done' : 'active'
+            }
             if (extra.startTime         !== undefined) subPatch.startTime         = extra.startTime
             if (extra.endTime           !== undefined) subPatch.endTime           = extra.endTime
             if (extra.hiddenFromPlanning !== undefined) subPatch.hiddenFromPlanning = extra.hiddenFromPlanning
