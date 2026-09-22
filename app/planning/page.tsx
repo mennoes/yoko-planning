@@ -4578,6 +4578,20 @@ export default function PlanningPage() {
   useEffect(() => cancelPendingDragMove, [])
   const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
+  const [hiddenAgendas, setHiddenAgendas] = useState<string[]>([])
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('planning-hidden-agendas') ?? '[]')
+      if (Array.isArray(saved)) setHiddenAgendas(saved.filter((id): id is string => typeof id === 'string'))
+    } catch { /* Invalid preferences must not prevent planning from loading. */ }
+  }, [])
+  function toggleAgenda(board: string) {
+    const next = hiddenAgendas.includes(board)
+      ? hiddenAgendas.filter(id => id !== board)
+      : [...hiddenAgendas, board]
+    setHiddenAgendas(next)
+    try { localStorage.setItem('planning-hidden-agendas', JSON.stringify(next)) } catch { /* Storage may be unavailable. */ }
+  }
   const [peopleOpen,   setPeopleOpen]   = useState(false)
   const [shiftOpen,    setShiftOpen]    = useState(false)
   const [shiftPicked,  setShiftPicked]  = useState<Set<string>>(new Set())
@@ -5080,7 +5094,7 @@ export default function PlanningPage() {
   useEffect(() => onCategoryOverridesChange(() => setCategoryRevision(t => t + 1)), [])
 
   const effectiveProjects = useMemo(() => {
-    let next = projects
+    let next = projects.filter(p => !hiddenAgendas.includes(p.board))
     if (shadowDrag) {
       next = next.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
     }
@@ -5113,7 +5127,7 @@ export default function PlanningPage() {
       })
     }
     return next
-  }, [projects, shadowDrag, zoom, hiddenIds, ownerExcludesTick])
+  }, [projects, shadowDrag, zoom, hiddenIds, ownerExcludesTick, hiddenAgendas])
 
   // Inactieve freelancers: freelancers zonder activiteit in de afgelopen
   // 2 maanden EN zonder activiteit in de komende 3 maanden zijn waar-
@@ -5956,7 +5970,7 @@ export default function PlanningPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {[
               { icon: IconUsers,     label: filterMembers.size > 0 ? `Mensen · ${filterMembers.size}` : 'Mensen', active: filterMembers.size > 0, onClick: () => { setOverflowOpen(false); setPeopleOpen(true) } },
-              { icon: IconBoard,     label: "Agenda's", active: false, onClick: () => { setOverflowOpen(false); setAgendasOpen(true) } },
+              { icon: IconBoard,     label: "Agenda's", active: hiddenAgendas.length > 0, onClick: () => { setOverflowOpen(false); setAgendasOpen(true) } },
               { icon: IconHourglass, label: 'Capaciteit',                 active: false, onClick: () => { setOverflowOpen(false); setUrenOpen(true) } },
               { icon: IconRange,     label: 'Verschuif projecten',        active: false, onClick: () => { setOverflowOpen(false); setShiftOpen(true) } },
               { icon: IconDownload,  label: 'Exporteer als iCal',         active: false, onClick: () => { setOverflowOpen(false); downloadIcs(projects) } },
@@ -5995,16 +6009,19 @@ export default function PlanningPage() {
       {/* ── Agenda's popup ── */}
       {agendasOpen && (
         <Popup title="Agenda's" onClose={() => setAgendasOpen(false)}>
+          <p style={{ marginTop: 0, fontSize: 12, color: 'var(--text-muted)' }}>Kies welke agenda’s meetellen in de planning en werkdruk.</p>
           {/* BOARD_COLORS is een Proxy zonder enumeratie — gebruik
               BOARD_NAMES (registry-driven lijst) zodat alle borden
               daadwerkelijk zichtbaar zijn. */}
           {BOARD_NAMES.map(b => (
-            <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
+            <label key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', cursor: 'pointer', borderBottom: '1px solid var(--border-light)' }}>
+              <input type="checkbox" checked={!hiddenAgendas.includes(b)} onChange={() => toggleAgenda(b)}
+                style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer' }} />
               <span style={{ width: 14, height: 14, borderRadius: 3, background: BOARD_COLORS[b], flexShrink: 0 }} />
               <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500, textTransform: 'capitalize' }}>
                 {BOARD_CONFIGS[b]?.name ?? b}
               </span>
-            </div>
+            </label>
           ))}
         </Popup>
       )}
