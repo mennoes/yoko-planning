@@ -3568,7 +3568,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </span>
             <select
               defaultValue=""
-              onChange={(e) => {
+              onChange={async (e) => {
                 const target = e.target.value
                 if (!target || target === project.board) return
                 const targetName = BOARD_CONFIGS[target]?.name ?? target
@@ -3583,7 +3583,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
                   e.target.value = ''
                   return
                 }
-                const res = moveItemToBoard(rawItemId, project.board, target, allGroups)
+                const res = await moveItemToBoard(rawItemId, project.board, target, allGroups)
                 if (!res.ok) {
                   alert(res.message ?? 'Verplaatsen mislukt')
                   e.target.value = ''

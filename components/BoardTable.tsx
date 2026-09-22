@@ -560,12 +560,39 @@ function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[
   const shareableGroups = useMemo(() => groups.filter(group => group.items.length > 0), [groups])
   const allSelected = shareableGroups.length > 0 && shareableGroups.every(group => selectedGroupIds.has(group.id))
   const selectedCount = shareableGroups.filter(group => selectedGroupIds.has(group.id)).length
-  const url = (() => {
+  const baseUrl = (() => {
     const base = typeof window !== 'undefined' ? `${window.location.origin}/share/${boardId}` : `/share/${boardId}`
     if (allSelected) return base
     const ids = shareableGroups.filter(group => selectedGroupIds.has(group.id)).map(group => group.id)
     return ids.length > 0 ? `${base}?groups=${encodeURIComponent(ids.join(','))}` : base
   })()
+
+  const [signedLink, setSignedLink] = useState<{ base: string; url: string } | null>(null)
+  const [shareError, setShareError] = useState('')
+  const legacyShare = ['nederland', 'vlaanderen', 'pnp'].includes(boardId)
+  const url = legacyShare ? baseUrl : signedLink?.base === baseUrl ? signedLink.url : ''
+  useEffect(() => {
+    if (!open || legacyShare) return
+    let cancelled = false
+    setShareError('')
+    async function prepare() {
+      try {
+        const session = await supabase?.auth.getSession()
+        const token = session?.data.session?.access_token
+        if (!token) throw new Error('Log opnieuw in om te delen.')
+        const scope = new URL(baseUrl, window.location.origin).searchParams.get('groups') ?? ''
+        const response = await fetch(`/api/share/${boardId}`, {
+          method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groups: scope }),
+        })
+        const result = await response.json()
+        if (!response.ok || !result.token) throw new Error(result.error ?? 'Deellink maken mislukt')
+        if (!cancelled) setSignedLink({ base: baseUrl, url: baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'token=' + result.token })
+      } catch (error) { if (!cancelled) setShareError(error instanceof Error ? error.message : 'Deellink maken mislukt') }
+    }
+    void prepare()
+    return () => { cancelled = true }
+  }, [open, legacyShare, baseUrl, boardId])
 
   useEffect(() => {
     const previousAvailable = previousAvailableGroupIds.current
@@ -592,6 +619,7 @@ function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[
   }
 
   async function copy() {
+    if (!url) return
     try {
       await navigator.clipboard.writeText(url)
       setCopied(true)
@@ -674,7 +702,7 @@ function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[
                 style={{ flex: 1, padding: '6px 10px', borderRadius: 6,
                   border: '1px solid var(--border-light)', background: 'var(--bg-base)',
                   color: 'var(--text-primary)', fontSize: 11.5, outline: 'none', fontFamily: 'inherit' }} />
-              <button onClick={copy} disabled={selectedCount === 0}
+              <button onClick={copy} disabled={selectedCount === 0 || !url}
                 style={{ padding: '6px 14px', borderRadius: 6, border: 'none',
                   background: copied ? 'var(--accent)' : 'var(--bg-hover)',
                   color: copied ? '#fff' : 'var(--text-primary)',
@@ -684,7 +712,9 @@ function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[
                 {copied ? '✓ Gekopieerd' : 'Kopieer'}
               </button>
             </div>
-            <a href={selectedCount > 0 ? url : undefined} target="_blank" rel="noopener noreferrer"
+            {shareError && <p role="alert">{shareError}</p>}
+            {!url && !shareError && <p>Deellink wordt gemaakt…</p>}
+            <a href={selectedCount > 0 && url ? url : undefined} target="_blank" rel="noopener noreferrer"
               style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer' }}>
               Open in nieuwe tab →
             </a>
@@ -3510,6 +3540,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     // Top-level item(s) naar deze groep
     const rawItem = e.dataTransfer.getData('application/x-yoko-item')
     if (rawItem) {
+      e.stopPropagation()
       try {
         const data = JSON.parse(rawItem) as { itemId: string; fromGroupId: string; itemIds?: string[] }
         // Multi-select drag: alle geselecteerde items naar deze groep.
@@ -3874,7 +3905,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       const data = JSON.parse(rawItem) as { itemId: string; fromGroupId: string; fromBoard?: string }
                       if (!data.itemId || data.itemId === item.id) return
                       if (data.fromBoard && data.fromBoard !== boardId) return
+                      // Dropping into another group (including Vrij) moves
+                      // the whole series, rather than nesting it under a row.
+                      if (data.fromGroupId !== group.id) return
                       e.preventDefault()
+                      e.stopPropagation()
                       onNestItem(data.itemId, data.fromGroupId, item.id)
                     } catch {}
                     return
@@ -3887,6 +3922,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       const data = JSON.parse(rawSub) as { subitemId: string; parentItemId: string; fromGroupId: string }
                       if (!data.subitemId || !data.parentItemId || data.parentItemId === item.id) return
                       e.preventDefault()
+                      e.stopPropagation()
                       onReparentSubitem(data.subitemId, data.parentItemId, data.fromGroupId, item.id)
                     } catch {}
                   }
@@ -5027,7 +5063,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               externen zonder login kunnen openen. Gevoelige velden
               (notes / contactpersoon / journal / deadline) worden
               server-side al gestript in /api/share/[board]. */}
-          {(['nederland', 'vlaanderen', 'pnp'].includes(boardId)) && (
+          {boardId && (
             <ShareButton boardId={boardId} groups={groups} />
           )}
           {!isMobile && (

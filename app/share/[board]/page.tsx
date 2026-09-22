@@ -104,8 +104,8 @@ export default function ShareBoardPage() {
   useEffect(() => {
     if (!board) { setLoading(false); return }
     setLoading(true); setError(null)
-    const groupScope = new URLSearchParams(window.location.search).get('groups')
-    const apiUrl = `/api/share/${board}${groupScope ? `?groups=${encodeURIComponent(groupScope)}` : ''}`
+    const search = new URLSearchParams(window.location.search)
+    const apiUrl = `/api/share/${board}?${search.toString()}`
     fetch(apiUrl, { cache: 'no-store' })
       .then(async r => {
         const j = await r.json().catch(() => ({}))

@@ -547,7 +547,16 @@ export async function pushBoardToRemote(boardName: string, groups: BoardGroup[])
   }
 
   if (itemRows.length > 0) {
-    const { error: iErr } = await supabase.from('board_items').upsert(itemRows, { onConflict: 'id' })
+    // A stale tab must not move a row back by saving its old board snapshot.
+    // Cross-board changes belong exclusively to moveItemToBoard.
+    const { data: locations, error: locationError } = await supabase.from('board_items')
+      .select('id, board_id').in('id', itemRows.map(row => String(row.id)))
+    if (locationError) return false
+    const movedAway = new Set((locations ?? []).filter((row: { id: string; board_id: string }) => row.board_id !== boardName).map((row: { id: string }) => row.id))
+    const safeRows = itemRows.filter(row => !movedAway.has(String(row.id)))
+    const { error: iErr } = safeRows.length > 0
+      ? await supabase.from('board_items').upsert(safeRows, { onConflict: 'id' })
+      : { error: null }
     if (iErr) {
       // eslint-disable-next-line no-console
       console.error(`[boardStore] item upsert FAILED voor '${boardName}':`, iErr.message, iErr.details, iErr.hint)
@@ -906,12 +915,12 @@ async function logRoutingRuleChange(pattern: string, targetBoard: string, action
   })
 }
 
-export function moveItemToBoard(
+export async function moveItemToBoard(
   itemId:        string,
   sourceBoard:   string,
   targetBoard:   string,
   fallbackGroups: Record<string, BoardGroup[]>,
-): { ok: boolean; message?: string } {
+): Promise<{ ok: boolean; message?: string }> {
   if (sourceBoard === targetBoard) return { ok: false, message: 'Zelfde bord' }
   if (typeof window === 'undefined') return { ok: false, message: 'No window' }
 
@@ -922,9 +931,6 @@ export function moveItemToBoard(
   // Leer een routing-regel wanneer een Google-event handmatig naar een ander
   // bord wordt gezet. Volgende syncs vinden events met dezelfde (genormali-
   // seerde) titel automatisch hier terug — geen handmatig verslepen meer.
-  if (movedItem.source === 'google') {
-    learnBoardRoutingRule(movedItem.name, targetBoard).catch(() => {})
-  }
   const updatedSource = srcGroups.map(g => ({
     ...g,
     items: g.items.filter(i => i.id !== itemId),
@@ -936,7 +942,7 @@ export function moveItemToBoard(
   let updatedTarget: BoardGroup[]
   if (tgtGroups.length > 0) {
     updatedTarget = tgtGroups.map((g, idx) =>
-      idx === 0 ? { ...g, items: [...g.items, movedItem] } : g
+      ({ ...g, items: [...g.items.filter(i => i.id !== itemId), ...(idx === 0 ? [movedItem] : [])] })
     )
   } else {
     const newGroup: BoardGroup = {
@@ -949,8 +955,34 @@ export function moveItemToBoard(
     updatedTarget = [newGroup]
   }
 
-  saveGroups(sourceBoard, updatedSource)
-  saveGroups(targetBoard, updatedTarget)
+  if (supabase) {
+    try {
+      if (!await getCurrentUserId()) return { ok: false, message: 'Log opnieuw in om te verplaatsen.' }
+      const targetGroup = updatedTarget[0]
+      const { error: groupError } = await supabase.from('board_groups').upsert({
+        id: targetGroup.id, board_id: targetBoard, name: targetGroup.name,
+        color: targetGroup.color, collapsed: targetGroup.collapsed, position: 0,
+      }, { onConflict: 'id' })
+      if (groupError) throw groupError
+      // Move the existing row, never copy or rewrite its contents.
+      const { data, error } = await supabase.from('board_items')
+        .update({ board_id: targetBoard, group_id: targetGroup.id, position: targetGroup.items.length - 1 })
+        .eq('id', itemId).eq('board_id', sourceBoard).select('id')
+      if (error) throw error
+      if (!data?.length) return { ok: false, message: 'Item is niet verplaatst. Vernieuw de agenda en probeer opnieuw.' }
+    } catch {
+      return { ok: false, message: 'Verplaatsen kon niet worden opgeslagen. Het item blijft in de oorspronkelijke agenda.' }
+    }
+  }
+  // Publish both caches together after the server confirms the move.
+  // Do not push the whole source board: a stale snapshot could move it back.
+  for (const [board, groups] of [[sourceBoard, updatedSource], [targetBoard, updatedTarget]] as const) {
+    localStorage.setItem(key(board), JSON.stringify(groups))
+  }
+  for (const boardName of [sourceBoard, targetBoard]) {
+    window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
+  }
+  if (movedItem.source === 'google') learnBoardRoutingRule(movedItem.name, targetBoard).catch(() => {})
   return { ok: true }
 }
 

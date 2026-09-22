@@ -506,7 +506,7 @@ function SectionBlock({
                   e.currentTarget.style.outline = ''
                   e.currentTarget.style.outlineOffset = ''
                 }}
-                onDrop={e => {
+                onDrop={async e => {
                   e.currentTarget.style.background = ''
                   e.currentTarget.style.outline = ''
                   e.currentTarget.style.outlineOffset = ''
@@ -521,7 +521,7 @@ function SectionBlock({
                     // gebruikt deze als-localStorage-leeg fallback.
                     const fallback: Record<string, BoardGroup[]> = {}
                     for (const b of BOARD_NAMES) fallback[b] = loadGroups(b, [])
-                    const res = moveItemToBoard(data.itemId, data.fromBoard, targetBoardId, fallback)
+                    const res = await moveItemToBoard(data.itemId, data.fromBoard, targetBoardId, fallback)
                     if (!res.ok) alert(res.message ?? 'Verplaatsen mislukt')
                     else showToast(`Verplaatst: ${data.fromBoard} → ${targetBoardId}`)
                   } catch {}

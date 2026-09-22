@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import BoardTable from '@/components/BoardTable'
 import type { BoardGroup, BoardConfig } from '@/lib/boards'
@@ -25,7 +25,6 @@ export default function DynamicBoardPage() {
 
   const { title, renameTitle } = useBoardTitle(slug, cfg?.name ?? slug)
   const [groups, setGroups] = useState<BoardGroup[]>([])
-  const loadedRef = useRef(false)
 
   useEffect(() => {
     setGroups(loadGroups(slug, []))
@@ -39,10 +38,10 @@ export default function DynamicBoardPage() {
     return () => window.removeEventListener('yoko-board-update', onUpdate)
   }, [slug])
 
-  useEffect(() => {
-    if (!loadedRef.current) { loadedRef.current = true; return }
-    saveGroups(slug, groups)
-  }, [groups, slug])
+  function updateGroups(next: BoardGroup[]) {
+    setGroups(next)
+    saveGroups(slug, next)
+  }
 
   if (!cfg) {
     return (
@@ -57,5 +56,5 @@ export default function DynamicBoardPage() {
   }
 
   return <BoardTable boardId={slug} title={title} emoji={cfg.emoji} color={cfg.color}
-    columns={cfg.columns} groups={groups} onChange={setGroups} onRenameTitle={renameTitle} />
+    columns={cfg.columns} groups={groups} onChange={updateGroups} onRenameTitle={renameTitle} />
 }

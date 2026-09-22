@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { signShare, validShare } from '@/lib/shareToken'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -129,7 +130,7 @@ function computeMonthlyHours(itemRows: ItemRow[], isHidden: (extra: Record<strin
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ board: string }> }) {
   const { board } = await params
-  if (!SHAREABLE_BOARDS.has(board)) {
+  if (!SHAREABLE_BOARDS.has(board) && !validShare(board, req.nextUrl.searchParams.get('groups') ?? '', req.nextUrl.searchParams.get('token') ?? '')) {
     return Response.json({ ok: false, error: 'Bord niet gedeeld' }, { status: 404 })
   }
   if (!supabaseAdmin) {
@@ -210,4 +211,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
   const monthlyHours = computeMonthlyHours(scopedItemRows, isHidden)
 
   return Response.json({ ok: true, board, groups, monthlyHours })
+}
+
+// New boards are private until an authenticated team member creates a link.
+export async function POST(req: NextRequest, { params }: { params: Promise<{ board: string }> }) {
+  if (!supabaseAdmin) return Response.json({ error: 'Niet geconfigureerd' }, { status: 503 })
+  const auth = req.headers.get('authorization') ?? ''
+  if (!auth.startsWith('Bearer ')) return Response.json({ error: 'Log opnieuw in' }, { status: 401 })
+  const { data, error } = await supabaseAdmin.auth.getUser(auth.slice(7))
+  if (error || !data.user) return Response.json({ error: 'Log opnieuw in' }, { status: 401 })
+  const { data: profile } = await supabaseAdmin.from('profiles').select('user_id').eq('user_id', data.user.id).maybeSingle()
+  if (!profile) return Response.json({ error: 'Geen toegang' }, { status: 403 })
+  const { board } = await params
+  const { data: found } = await supabaseAdmin.from('boards').select('id').eq('id', board).maybeSingle()
+  if (!found && !SHAREABLE_BOARDS.has(board)) return Response.json({ error: 'Agenda niet gevonden' }, { status: 404 })
+  const body = await req.json().catch(() => ({}))
+  const groups = typeof body.groups === 'string' ? body.groups : ''
+  return Response.json({ token: signShare(board, groups) }, { headers: { 'Cache-Control': 'no-store' } })
 }
