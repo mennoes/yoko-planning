@@ -14,7 +14,7 @@
 import { loadGroups } from './boardStore'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
-import type { TodoItem } from './todosStore'
+import { loadSections, type TodoItem } from './todosStore'
 import { loadAllComments } from './commentsStore'
 import { completionState, type CompletionTarget } from './personalCompletion'
 import yokoRaw       from '@/data/boards/yoko.json'
@@ -211,7 +211,10 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
     children.push(project)
     childrenByParent.set(parentKey, children)
   }
+  const movedAway = new Set(loadSections([]).flatMap(s => s.items.flatMap(i =>
+    i.projectRef?.movedFromSections?.includes(memberId) ? [`${i.projectRef.board}:${i.projectRef.itemId}`] : [])))
   const extras: TodoItem[] = loadMyOpenProjects(memberId)
+    .filter(p => !movedAway.has(`${p.board}:${p.itemId}`))
     .filter(p => !existingRefs.has(`project:${p.board}:${p.itemId}`))
     .filter(p => !removed.has(`${p.board}:${p.itemId}`))
     .map(p => ({

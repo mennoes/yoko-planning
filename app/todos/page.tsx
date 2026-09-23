@@ -1,7 +1,7 @@
 'use client'
 import { completeLinkedTask, completionTargetForProject } from '@/lib/personalCompletionClient'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
@@ -156,6 +156,8 @@ function reorderArrowBtn(disabled: boolean): React.CSSProperties {
 }
 
 // ─── Todo card ─────────────────────────────────────────────────────────────────
+const MoveTodoContext = createContext<(item: TodoItem, from: string, to: string) => void>(() => {})
+
 function TodoCard({
   section, isMember, onUpdate, allProjects, doneProjectKeys,
   editOrder, isFirstCard, isLastCard, onMoveCard,
@@ -180,6 +182,8 @@ function TodoCard({
   onDropOnCard?: () => void
 }) {
   const { profile: actingProfile } = useProfile()
+  const moveTodo = useContext(MoveTodoContext)
+  const [itemDropHover, setItemDropHover] = useState(false)
   const pendingToggle = useRef(new Set<string>())
   const [newText, setNewText] = useState('')
   const [editId,  setEditId]  = useState<string | null>(null)
@@ -469,20 +473,35 @@ function TodoCard({
 
   return (
     <div
+      data-todo-section={section.id}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setItemDropHover(false) }}
       onDragOver={e => {
+        if (e.dataTransfer.types.includes('application/x-yoko-todo')) {
+          e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setItemDropHover(true); return
+        }
         if (!onDropOnCard) return
         if (!e.dataTransfer.types.includes('application/x-yoko-todo-section')) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'move'
       }}
       onDrop={e => {
+        setItemDropHover(false)
+        const todoRaw = e.dataTransfer.getData('application/x-yoko-todo')
+        if (todoRaw) {
+          e.preventDefault(); e.stopPropagation()
+          try {
+            const payload = JSON.parse(todoRaw)
+            if (payload.item?.id && typeof payload.sectionId === 'string' && payload.sectionId !== section.id) moveTodo(payload.item, payload.sectionId, section.id)
+          } catch {}
+          return
+        }
         if (!onDropOnCard) return
         const raw = e.dataTransfer.getData('application/x-yoko-todo-section')
         if (!raw) return
         e.preventDefault()
         onDropOnCard()
       }}
-      style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+      style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', outline: itemDropHover ? '2px solid var(--accent)' : undefined, overflow: 'hidden' }}>
       {/* Header */}
       <div
         onMouseEnter={() => setHeaderHover(true)}
@@ -677,6 +696,7 @@ function TodoCard({
             {done.map(item => (
               <TodoRow key={item.id} item={item} memberId={section.id} isMember={isMember}
                 editing={false} editTxt=""
+                dragIdx={section.items.findIndex(i => i.id === item.id)} onDragStart={() => {}}
                 editOrder={false} isFirstItem={true} isLastItem={true}
                 onMoveUp={() => {}} onMoveDown={() => {}}
                 onToggle={() => toggle(item.id)} onRemove={() => remove(item.id)}
@@ -815,7 +835,12 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
         if (!onDropOnIdx || typeof dragIdx !== 'number') return
         const raw = e.dataTransfer.getData('application/x-yoko-todo')
         if (!raw) return
+        try {
+          const payload = JSON.parse(raw)
+          if (payload.sectionId !== e.currentTarget.closest('[data-todo-section]')?.getAttribute('data-todo-section')) return
+        } catch { return }
         e.preventDefault()
+        e.stopPropagation()
         onDropOnIdx(dp === 'after' ? dragIdx + 1 : dragIdx)
       }}
       onDragEnd={() => { setDropPos(null); onDragEnd?.() }}
@@ -840,7 +865,7 @@ function TodoRow({ item, isMember, memberId, editing, editTxt, editOrder, isFirs
           title="Sleep om te verplaatsen"
           onDragStart={e => {
             e.dataTransfer.effectAllowed = 'move'
-            e.dataTransfer.setData('application/x-yoko-todo', String(dragIdx))
+            e.dataTransfer.setData('application/x-yoko-todo', JSON.stringify({ item, sectionId: e.currentTarget.closest('[data-todo-section]')?.getAttribute('data-todo-section') }))
             // Gebruik de hele rij als drag-image i.p.v. alleen het icoontje,
             // anders ziet de gebruiker bij 't slepen alleen een puntjes-glyph.
             const li = e.currentTarget.closest('li')
@@ -1084,6 +1109,19 @@ export default function TodosPage() {
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [editOrder, setEditOrder] = useState(false)
+  const [memberVisibility, setMemberVisibility] = useState<Record<string, boolean>>({})
+  const [peopleOpen, setPeopleOpen] = useState(false)
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('todos-member-visibility') ?? '{}')
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) setMemberVisibility(saved)
+    } catch {}
+  }, [])
+  function toggleMember(id: string, visible: boolean) {
+    const next = { ...memberVisibility, [id]: visible }
+    setMemberVisibility(next)
+    localStorage.setItem('todos-member-visibility', JSON.stringify(next))
+  }
   const [allProjects, setAllProjects] = useState<ProjectLink[]>([])
   const [doneProjectKeys, setDoneProjectKeys] = useState<Set<string>>(new Set())
 
@@ -1258,6 +1296,7 @@ export default function TodosPage() {
           .filter((x): x is string => !!x)
       )
       const toAdd = memberProjects.filter(p => {
+        if (sections.some(s => s.items.some(i => i.projectRef?.board === p.board && i.projectRef.itemId === p.itemId && i.projectRef.movedFromSections?.includes(section.id)))) return false
         const key = `${p.board}:${p.itemId}`
         if (removed.has(key))              return false
         if (existingItemIds.has(p.itemId)) return false
@@ -1332,6 +1371,20 @@ export default function TodosPage() {
         saveSections(reverted)
       })
     }
+  }
+
+  function moveTodo(item: TodoItem, from: string, to: string) {
+    if (from === to || !sections.some(s => s.id === to) || !sections.some(s => s.id === from)) return
+    const stored = sections.find(s => s.id === from)?.items.find(i => i.id === item.id) ?? item
+    const moved = { ...stored, ...(stored.projectRef ? { projectRef: {
+      ...stored.projectRef, movedFromSections: [...new Set([...(stored.projectRef.movedFromSections ?? []), from])].filter(id => id !== to),
+    } } : {}) }
+    const before = sections
+    const next = sections.map(s => ({ ...s, items: [
+      ...s.items.filter(i => i.id !== item.id), ...(s.id === to ? [moved] : []),
+    ] }))
+    setSections(next); saveSections(next)
+    pushUndo(() => { setSections(before); saveSections(before) }, 'Taak verplaatst')
   }
 
   function moveCard(sectionId: string, dir: -1 | 1) {
@@ -1443,6 +1496,7 @@ export default function TodosPage() {
   const personal = sections.filter(isPersonalSection)
     .map(s => ({ ...s, items: mergeMemberTodoItems(s.items, s.id) }))
     .filter(s => {
+      if (typeof memberVisibility[s.id] === 'boolean') return memberVisibility[s.id]
       if (s.items.length > 0) return true
       const m = liveTeam.find(lt => lt.id === s.id)
       if (!m) return true
@@ -1463,6 +1517,7 @@ export default function TodosPage() {
   if (!hydrated) return null
 
   return (
+    <MoveTodoContext.Provider value={moveTodo}>
     <div style={{ maxWidth: 1900, padding: isMobile ? '60px 16px 60px' : '44px 36px 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 20 : 32 }}>
         <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1487,6 +1542,17 @@ export default function TodosPage() {
         </button>
       </div>
 
+      <details open={peopleOpen} onToggle={e => setPeopleOpen(e.currentTarget.open)} style={{ marginBottom: 18 }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Personen — zichtbare persoonlijke tabellen</summary>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 0' }}>
+          {sections.filter(isPersonalSection).map(s => (
+            <label key={s.id} style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={personal.some(p => p.id === s.id)} onChange={e => toggleMember(s.id, e.target.checked)} />
+              {liveTeam.find(m => m.id === s.id)?.name ?? s.title}
+            </label>
+          ))}
+        </div>
+      </details>
       {isMobile ? (() => {
         // Op mobiel: alle persoonlijke kaarten stacken we volledig onder
         // elkaar (eigen kaart bovenaan). De horizontale scroll-rij die
@@ -1622,5 +1688,6 @@ export default function TodosPage() {
         )
       })()}
     </div>
+    </MoveTodoContext.Provider>
   )
 }

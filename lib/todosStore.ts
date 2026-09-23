@@ -3,7 +3,7 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 
-export type ProjectLink = { board: string; itemId: string; name: string; startDate?: string | null; endDate?: string | null; status?: string | null; googleSeriesId?: string }
+export type ProjectLink = { board: string; itemId: string; name: string; startDate?: string | null; endDate?: string | null; status?: string | null; googleSeriesId?: string; movedFromSections?: string[] }
 export type TodoItem    = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
 export type Section     = { id: string; title: string; emoji: string; items: TodoItem[]; kind?: 'personal' | 'general' }
 
@@ -113,7 +113,12 @@ export function mergeSections(local: Section[], remote: Section[]): Section[] {
     if (seen.has(rs.id) || deletedSectionIds.has(rs.id)) continue
     merged.push({ ...rs, items: rs.items.filter(i => !deletedItemIds.has(i.id)) })
   }
-  return merged
+  // A todo has exactly one section. Never merge a moved row back into its
+  // previous section; use local locations while a local write is pending.
+  const locations = new Map<string, string>()
+  const preferred = withinLocalWriteLock() ? [...remote, ...local] : [...local, ...remote]
+  for (const section of preferred) for (const item of section.items) locations.set(item.id, section.id)
+  return merged.map(s => ({ ...s, items: s.items.filter(i => locations.get(i.id) === s.id) }))
 }
 
 function mergeItems(localItems: TodoItem[], remoteItems: TodoItem[], deletedItemIds: Set<string>): TodoItem[] {
