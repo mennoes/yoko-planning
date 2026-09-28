@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom'
 // veilig.
 import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
-import { setBoardColumns } from '@/lib/boardsRegistry'
+import { setBoardColumns, getBoards } from '@/lib/boardsRegistry'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { useTeam }        from './TeamContext'
@@ -24,7 +24,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard } from '@/lib/boardStore'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
@@ -4840,7 +4840,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   function selectGroup(groupId: string, allSelected: boolean) {
-    const group = groups.find(g => g.id === groupId)
+    const group = filteredGroups.find(g => g.id === groupId)
     if (!group) return
     setSelectedIds(prev => {
       const n = new Set(prev)
@@ -5494,6 +5494,16 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           onDelete={bulkDelete}
           onUpdate={bulkUpdate}
           onMoveTo={bulkMoveTo}
+          boardId={boardId}
+          onMoveBoard={async target => {
+            const ids = groups.flatMap(g => g.items).filter(i => selectedIds.has(i.id)).map(i => i.id)
+            if (ids.length !== selectedIds.size) { window.alert('Selecteer hoofditems om naar een andere agenda te verplaatsen. Subitems verhuizen mee met hun hoofditem.'); return }
+            for (const id of ids) {
+              const result = await moveItemToBoard(id, boardId, target, { [boardId]: groups })
+              if (!result.ok) { window.alert(result.message ?? 'Verplaatsen mislukt.'); return }
+              setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next })
+            }
+          }}
         />
       )}
     </div>
@@ -5504,12 +5514,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 // Toolbar wanneer er meerdere items in een groep aangevinkt zijn. Iedere
 // "waarde" die in een rij bewerkt kan worden, kan hier op alle geselecteerde
 // items in één keer worden gezet.
-function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMoveTo }: {
+function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMoveTo, boardId, onMoveBoard }: {
   count: number; color: string; groups: BoardGroup[]
   onClear: () => void; onDelete: () => void
   onUpdate: (patch: Partial<BoardItem>) => void
   onMoveTo: (groupId: string) => void
+  boardId: string
+  onMoveBoard: (boardId: string) => Promise<void>
 }) {
+  const [movingBoard, setMovingBoard] = useState(false)
   type OpenMenu = '' | 'status' | 'owner' | 'move' | 'timeline' | 'deadline' | 'est' | 'echt'
   const [open, setOpen] = useState<OpenMenu>('')
   const toggle = (m: OpenMenu) => setOpen(o => o === m ? '' : m)
@@ -5646,7 +5659,7 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
       </div>
 
       <div style={{ position: 'relative' }}>
-        <button onClick={() => toggle('move')} style={barBtn}>Verplaats…</button>
+        <button disabled={movingBoard} onClick={() => toggle('move')} style={barBtn}>{movingBoard ? 'Verplaatsen…' : 'Verplaats…'}</button>
         {open === 'move' && (
           <div style={popoverStyle}>
             {groups.map(g => (
@@ -5654,6 +5667,13 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
                 style={popoverItem}>
                 {g.name}
               </button>
+            ))}
+            <div style={{ borderTop: '1px solid var(--border)', padding: '6px 10px', fontSize: 11 }}>Naar agenda</div>
+            {getBoards().filter(b => b.id !== boardId).map(b => (
+              <button key={b.id} disabled={movingBoard} style={popoverItem} onClick={async () => {
+                setMovingBoard(true); setOpen('')
+                try { await onMoveBoard(b.id) } finally { setMovingBoard(false) }
+              }}>{b.name}</button>
             ))}
           </div>
         )}

@@ -1,4 +1,5 @@
 'use client'
+import { getBoardIds } from '@/lib/boardsRegistry'
 import { completeLinkedTask, completionTargetForProject, loadPersonalCompletion } from '@/lib/personalCompletionClient'
 import { onCommentsUpdate } from '@/lib/commentsStore'
 
@@ -458,8 +459,8 @@ export default function HomePage() {
     const projectList: Project[] = []
     const allDeadlines: { board: string; item: BoardItem }[] = []
     const now = Date.now(); const weekAhead = now + 7 * 86400000
-    for (const [name, raw] of Object.entries(RAW)) {
-      const groups = loadGroups(name, raw.groups as BoardGroup[])
+    for (const name of getBoardIds()) {
+      const groups = loadGroups(name, (RAW[name]?.groups ?? []) as BoardGroup[])
       projectList.push(...groupsToProjects(name, groups))
       for (const g of groups) for (const item of g.items) {
         if (!item.deadline) continue

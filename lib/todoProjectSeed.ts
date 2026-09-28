@@ -12,6 +12,7 @@
 //  - memberId moet in ownerIds zitten (echte eigenaar)
 
 import { loadGroups } from './boardStore'
+import { getBoardIds } from './boardsRegistry'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 import { loadSections, type TodoItem } from './todosStore'
@@ -45,8 +46,8 @@ const RAW: Record<string, { groups: BoardGroup[] }> = {
 export function loadAllTodoProjects(): ProjectSeedLink[] {
   if (typeof window === 'undefined') return []
   const out: ProjectSeedLink[] = []
-  for (const [board, raw] of Object.entries(RAW)) {
-    const groups = loadGroups(board, raw.groups)
+  for (const board of getBoardIds()) {
+    const groups = loadGroups(board, RAW[board]?.groups ?? [])
     for (const g of groups) for (const item of g.items) {
       if (!item.name) continue
       out.push({
@@ -79,8 +80,8 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
   const today = new Date().toISOString().slice(0, 10)
   const out: ProjectSeedLink[] = []
   const catOverrides = loadCategoryOverrides()
-  for (const [board, raw] of Object.entries(RAW)) {
-    const groups = loadGroups(board, raw.groups)
+  for (const board of getBoardIds()) {
+    const groups = loadGroups(board, RAW[board]?.groups ?? [])
     for (const g of groups) {
       const groupName = (g.name ?? '').toLowerCase()
       if (groupName === 'done') continue
@@ -135,8 +136,8 @@ export function loadDoneTodoProjectKeys(): Set<string> {
   if (typeof window === 'undefined') return new Set()
   const out = new Set<string>()
   const today = new Date().toISOString().slice(0, 10)
-  for (const [board, raw] of Object.entries(RAW)) {
-    const groups = loadGroups(board, raw.groups)
+  for (const board of getBoardIds()) {
+    const groups = loadGroups(board, RAW[board]?.groups ?? [])
     for (const g of groups) {
       const groupIsDone = (g.name ?? '').toLowerCase() === 'done'
       for (const item of g.items) {
