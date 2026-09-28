@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useProfile } from './ProfileContext'
 import {
-  loadSections, saveSections,
+  loadSections, saveSections, reconcileAgendaSections,
   type NavItem, type SidebarSection,
 } from '@/lib/navStore'
 import { loadRecentPages, savePage, loadDocFolders, saveDocFolders, type PageDoc, type DocFolder } from '@/lib/pagesStore'
@@ -19,7 +19,10 @@ import {
 import { BOARD_CONFIGS } from '@/lib/boards'
 import { pullBoardFromRemote, BOARD_NAMES, moveItemToBoard, loadGroups, saveGroups } from '@/lib/boardStore'
 import type { BoardGroup } from '@/lib/boards'
-import { upsertBoard, defaultColumnsForNewBoard, pullBoardsFromRemote } from '@/lib/boardsRegistry'
+import {
+  upsertBoard, defaultColumnsForNewBoard, pullBoardsFromRemote,
+  getBoards, onBoardsRegistryUpdate,
+} from '@/lib/boardsRegistry'
 import { VacationButton } from './VacationButton'
 import {
   IconHome, IconAgenda, IconCheckList, IconClose, IconSettings,
@@ -1133,6 +1136,21 @@ export default function Sidebar({
     window.addEventListener('yoko-nav-update', onNavUpdate)
     return () => window.removeEventListener('yoko-nav-update', onNavUpdate)
   }, [])
+
+  useEffect(() => {
+    if (demoRoute) return
+    function restoreSharedAgendas() {
+      setSectionsRaw(current => {
+        const base = current.length > 0 ? current : loadSections()
+        const next = reconcileAgendaSections(base, getBoards())
+        if (next === base) return base
+        saveSections(next)
+        return next
+      })
+    }
+    restoreSharedAgendas()
+    return onBoardsRegistryUpdate(restoreSharedAgendas)
+  }, [demoRoute])
 
   useEffect(() => {
     setSectionsRaw(loadSections())

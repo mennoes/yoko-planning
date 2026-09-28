@@ -1,7 +1,7 @@
 import type { BoardGroup, BoardItem, SubItem } from './boards'
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
-import { getBoardIds } from './boardsRegistry'
+import { getBoardIds, getBoardConfig, upsertBoard, defaultColumnsForNewBoard } from './boardsRegistry'
 import { normalizeTitle } from './subitemRules'
 
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
@@ -968,6 +968,21 @@ export async function moveItemToBoard(
   if (supabase) {
     try {
       if (!await getCurrentUserId()) return { ok: false, message: 'Log opnieuw in om te verplaatsen.' }
+      // Garandeer dat het doel-bord bestaat vóór board_groups wordt geschreven.
+      // Dit voorkomt de FK-fout die optrad bij lokaal aangemaakte agenda's
+      // zoals Omdenken en maakt de agenda meteen gedeeld met andere accounts.
+      const existingTarget = getBoardConfig(targetBoard)
+      const targetConfig = existingTarget ?? {
+        id: targetBoard,
+        name: targetBoard === 'omdenken' ? 'Omdenken' : targetBoard,
+        emoji: '📋',
+        color: targetBoard === 'omdenken' ? '#c73561' : '#9aadbd',
+        columns: defaultColumnsForNewBoard(),
+      }
+      const targetPosition = Math.max(0, getBoardIds().indexOf(targetBoard))
+      if (!await upsertBoard(targetConfig, targetPosition)) {
+        return { ok: false, message: 'De doel-agenda kon niet gedeeld worden. Het item blijft in de oorspronkelijke agenda.' }
+      }
       const targetGroup = updatedTarget[0]
       const { error: groupError } = await supabase.from('board_groups').upsert({
         id: targetGroup.id, board_id: targetBoard, name: targetGroup.name,

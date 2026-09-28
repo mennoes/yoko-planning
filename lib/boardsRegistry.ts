@@ -1,6 +1,6 @@
 // Boards registry — dynamische lijst van agenda's. Vervangt de hardcoded
 // BOARD_CONFIGS constante uit lib/boards.ts. Leest uit Supabase + cache in
-// localStorage, met de oorspronkelijke 5 borden als ingebouwde fallback
+// localStorage, met de vaste gedeelde borden als ingebouwde fallback
 // zodat de app blijft werken op een verse install of zonder login.
 
 import type { BoardConfig, ColumnDef } from './boards'
@@ -86,6 +86,18 @@ const FALLBACK: BoardConfig[] = [
     { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
     { key: 'framelink',      label: 'Frame link',     type: 'url',       width: 110 },
   ] },
+  // Omdenken was oorspronkelijk alleen lokaal aangemaakt. Daardoor kon het
+  // na een remote pull uit de registry verdwijnen en bestond de parent-row
+  // niet altijd wanneer een item erheen werd verplaatst. Het is nu een vast,
+  // gedeeld bord en wordt net als de kern-agenda's automatisch hersteld.
+  { id: 'omdenken', name: 'Omdenken', emoji: '📋', color: '#c73561', columns: [
+    { key: 'ownerIds',  label: 'Owner',    type: 'owners',    width: 90  },
+    { key: 'status',    label: 'Status',   type: 'status',    width: 145 },
+    { key: 'timeline',  label: 'Timeline', type: 'daterange', width: 175 },
+    { key: 'deadline',  label: 'Deadline', type: 'date',      width: 105 },
+    { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
+    { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
+  ] },
   { id: 'dienjaar', name: 'Dienjaar', emoji: '📋', color: '#00c875', columns: [
     { key: 'ownerIds', label: 'Owner',    type: 'owners',    width: 90  },
     { key: 'timeline', label: 'Tijdlijn', type: 'daterange', width: 175 },
@@ -100,7 +112,7 @@ const FALLBACK: BoardConfig[] = [
 let cached: BoardConfig[] | null = null
 let localRevision = 0
 
-// Zorgt dat de 5 kern-agenda's (yoko/pnp/nederland/vlaanderen/dienjaar)
+// Zorgt dat de vaste gedeelde agenda's (incl. Omdenken)
 // nooit stil verdwijnen — niet als de localStorage-cache corrupt/incompleet
 // is, en niet als een remote pull van de 'boards'-tabel toevallig zonder
 // (een van) hen terugkomt. Zonder dit brak een corrupte cache zowel de
@@ -178,8 +190,36 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
     .select('id, name, emoji, color, columns, position')
     .order('position', { ascending: true })
   if (error || !data || revision !== localRevision) return false
-  if (data.length === 0) return false
-  const boards: BoardConfig[] = withCoreBoards((data as Row[]).map(r => ({
+
+  // Maak ontbrekende vaste agenda's eerst ook echt remote aan. Alleen lokaal
+  // aanvullen is onvoldoende: board_groups heeft een FK naar boards en een
+  // verplaatsing naar zo'n lokaal-only agenda faalt dan alsnog.
+  const remoteRows = data as Row[]
+  const missing = FALLBACK.filter(f => !remoteRows.some(r => r.id === f.id))
+  if (missing.length > 0) {
+    const { error: seedError } = await supabase.from('boards').upsert(
+      missing.map((cfg, index) => ({
+        id: cfg.id,
+        name: cfg.name,
+        emoji: cfg.emoji,
+        color: cfg.color,
+        columns: cfg.columns,
+        position: remoteRows.length + index,
+        updated_at: new Date().toISOString(),
+      })),
+      { onConflict: 'id' },
+    )
+    if (seedError) return false
+  }
+
+  const seededRows: Row[] = [
+    ...remoteRows,
+    ...missing.map((cfg, index) => ({
+      id: cfg.id, name: cfg.name, emoji: cfg.emoji, color: cfg.color,
+      columns: cfg.columns, position: remoteRows.length + index,
+    })),
+  ]
+  const boards: BoardConfig[] = withCoreBoards(seededRows.map(r => ({
     id:      r.id,
     name:    r.name ?? r.id,
     emoji:   r.emoji ?? '📋',

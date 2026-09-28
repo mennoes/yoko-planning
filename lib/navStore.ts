@@ -36,6 +36,7 @@ const DEFAULT_PROJECTS: NavItem[] = [
   { id: 'pnp',        label: 'PnP',        href: '/projects/pnp',        color: '#e2445c' },
   { id: 'nederland',  label: 'Nederland',  href: '/projects/nederland',  color: '#9c7ee8' },
   { id: 'vlaanderen', label: 'Vlaanderen', href: '/projects/vlaanderen', color: '#ff7a00' },
+  { id: 'omdenken',   label: 'Omdenken',   href: '/projects/omdenken',   color: '#c73561' },
   { id: 'dienjaar',   label: 'Dienjaar',  href: '/projects/dienjaar',   color: '#00c875' },
 ]
 
@@ -150,4 +151,32 @@ export function saveSections(sections: SidebarSection[]): void {
   if (isOnDemoRoute()) return
   localStorage.setItem(SECTIONS_KEY, JSON.stringify(sections))
   window.dispatchEvent(new CustomEvent('yoko-nav-update'))
+}
+
+/**
+ * Voegt gedeelde agenda's die in de registry staan weer toe aan het menu.
+ * Bestaande labels en volgorde blijven onaangeraakt; alleen echt ontbrekende
+ * hrefs worden achteraan toegevoegd. Zo werkt dit ook voor toekomstige,
+ * door gebruikers aangemaakte agenda's op andere apparaten.
+ */
+export function reconcileAgendaSections(
+  sections: SidebarSection[],
+  boards: Array<{ id: string; name: string; color?: string }>,
+): SidebarSection[] {
+  const sectionIndex = sections.findIndex(s => s.type === 'projects')
+  if (sectionIndex < 0) return sections
+  const agendaSection = sections[sectionIndex]
+  const existingHrefs = new Set(agendaSection.items.map(item => item.href))
+  const additions: NavItem[] = boards
+    .filter(board => !existingHrefs.has(`/projects/${board.id}`))
+    .map(board => ({
+      id: `agenda-${board.id}`,
+      label: board.name,
+      href: `/projects/${board.id}`,
+      color: board.color,
+    }))
+  if (additions.length === 0) return sections
+  return sections.map((section, index) => index === sectionIndex
+    ? { ...section, items: [...section.items, ...additions] }
+    : section)
 }
