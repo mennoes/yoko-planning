@@ -54,7 +54,7 @@ export default function PublicProfilePage() {
   const params = useParams<{ memberId: string }>()
   const memberId = params.memberId
   const { profile: myProfile, openEdit } = useProfile()
-  const { getPhoto } = useTeamPhotos()
+  const { getPhoto, setPhoto } = useTeamPhotos()
   const isMobile = useIsMobile()
 
   const [data, setData] = useState<ExtendedProfile | null>(null)
@@ -163,6 +163,7 @@ export default function PublicProfilePage() {
                 if (supabase && await getCurrentUserId()) {
                   await supabase.from('profiles').update({ photo: dataUrl }).eq('member_id', memberId)
                 }
+                setPhoto(memberId, dataUrl)
                 setData(d => ({ ...(d ?? {}), photo: dataUrl }))
               }
             }} />

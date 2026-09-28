@@ -10,7 +10,10 @@ function load(): Record<string, string> {
 }
 
 function save(photos: Record<string, string>) {
-  localStorage.setItem(KEY, JSON.stringify(photos))
+  try { localStorage.setItem(KEY, JSON.stringify(photos)) } catch {
+    // Grote foto's kunnen de browserquota overschrijden. Supabase blijft
+    // in dat geval de gedeelde bron; de interface is al direct bijgewerkt.
+  }
 }
 
 export function getTeamPhoto(memberId: string): string | null {
