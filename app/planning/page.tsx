@@ -2168,6 +2168,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const RS = rowScale ?? 1
+  const [hoveredBarId, setHoveredBarId] = useState<string | null>(null)
+  const [activeBarId, setActiveBarId] = useState<string | null>(null)
   const BAR_GAP_S = Math.max(1, Math.round(BAR_GAP * RS))
   // Overrides voor workload-categorieën meedoen: items die de gebruiker
   // expliciet als 'meeting' heeft gemarkeerd moeten zich ook gedragen als
@@ -2466,6 +2468,10 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   // deze prioriteit zowel op gewone als Vrij-balken te zetten kan een brede
   // achtergrondbalk nooit meer een kort item afdekken.
   const durationZIndex = (days: number): number => 1001 - Math.min(1000, Math.max(1, days))
+  // Lift the outer stacking context, not just the bar inside it. Keep
+  // meeting controls (5000) above bars and preserve the normal layout.
+  const barZIndex = (id: string, days: number): number =>
+    hoveredBarId === id ? 2002 : activeBarId === id ? 2001 : durationZIndex(days)
   const naturalHeights = new Map<string, number>(
     bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
   )
@@ -2713,6 +2719,9 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         }
         return (
           <div key={`vrij_${b.p.id}`}
+            onPointerEnter={() => setHoveredBarId(b.p.id)}
+            onPointerLeave={() => setHoveredBarId(id => id === b.p.id ? null : id)}
+            onPointerDownCapture={() => setActiveBarId(b.p.id)}
             onMouseDown={isReadOnly ? undefined : startVrijDrag}
             onClick={isReadOnly ? () => onBarClick(b.p) : undefined}
             title={isReadOnly ? `${b.p.name} · bewerk in Google Calendar` : `${b.p.name} · sleep om te verplaatsen`}
@@ -2734,7 +2743,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
               padding: '5px 9px', gap: 6,
               cursor: isReadOnly ? 'pointer' : 'grab',
               userSelect: 'none',
-              zIndex: durationZIndex(b.durationDays),
+              zIndex: barZIndex(b.p.id, b.durationDays),
               fontSize: 12.5, fontWeight: 700, color: '#fff',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               textShadow: '0 1px 2px rgba(0,0,0,0.4)',
@@ -2754,7 +2763,11 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const wrapperH = height
         const barH = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
         return (
-          <div key={b.p.id} style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: durationZIndex(b.durationDays) }}>
+          <div key={b.p.id}
+            onPointerEnter={() => setHoveredBarId(b.p.id)}
+            onPointerLeave={() => setHoveredBarId(id => id === b.p.id ? null : id)}
+            onPointerDownCapture={() => setActiveBarId(b.p.id)}
+            style={{ position: 'absolute', top, left: 0, right: 0, height: wrapperH, pointerEvents: 'none', zIndex: barZIndex(b.p.id, b.durationDays) }}>
             {/* laneH hoeft nu geen gedeelde tabelwaarde meer te zijn —
                  elke bar krijgt gewoon z'n eigen hoogte + gap. barHeight-
                  Override/topOverride komen uit de skyline-berekening
