@@ -980,8 +980,9 @@ export async function moveItemToBoard(
         .eq('id', itemId).eq('board_id', sourceBoard).select('id')
       if (error) throw error
       if (!data?.length) return { ok: false, message: 'Item is niet verplaatst. Vernieuw de agenda en probeer opnieuw.' }
-    } catch {
-      return { ok: false, message: 'Verplaatsen kon niet worden opgeslagen. Het item blijft in de oorspronkelijke agenda.' }
+    } catch (error) {
+      const detail = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Onbekende opslagfout'
+      return { ok: false, message: `Verplaatsen kon niet worden opgeslagen: ${detail}. Het item blijft in de oorspronkelijke agenda.` }
     }
   }
   // Publish both caches together after the server confirms the move.
