@@ -54,7 +54,7 @@ import { downloadIcs }   from '@/lib/ical'
 import { startTimer, stopTimer, getActiveTimer, totalMinutesForProject, onTimerUpdate, fmtMinutes } from '@/lib/timerStore'
 import { logActivity }   from '@/lib/activityLog'
 import {
-  IconMore, IconUsers, IconBoard, IconHourglass, IconRange, IconShare,
+  IconMore, IconUsers, IconBoard, IconRange, IconShare,
   IconDownload, IconSort, IconChevronLeft, IconChevronRight,
   IconPlay, IconStop, IconClose, IconEye, IconEyeOff,
 } from '@/components/Icon'
@@ -4597,7 +4597,6 @@ export default function PlanningPage() {
     if (dragRafRef.current != null) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = null }
   }
   useEffect(() => cancelPendingDragMove, [])
-  const [urenOpen,     setUrenOpen]     = useState(false)
   const [agendasOpen,  setAgendasOpen]  = useState(false)
   const [hiddenAgendas, setHiddenAgendas] = useState<string[]>([])
   useEffect(() => {
@@ -4622,7 +4621,16 @@ export default function PlanningPage() {
   const [copiedBoard,  setCopiedBoard]  = useState<string | null>(null)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
-  const [filterMembers, setFilterMembers] = useState<Set<string>>(new Set())
+  const [filterMembers, setFilterMembers] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem('planning-filter-members') ?? '[]')
+      return new Set(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : [])
+    } catch { return new Set() }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('planning-filter-members', JSON.stringify([...filterMembers])) } catch {}
+  }, [filterMembers])
   // Team Yoko/Freelancers/Inactief-pijltje: 4-staps cyclus i.p.v. een platte
   // open/dicht-toggle. Vervangt ook de losse 'Alles uitklappen'-knop uit de
   // zoom-toolbar (die gold voorheen voor ALLE leden ongeacht sectie) — die
@@ -5914,9 +5922,8 @@ export default function PlanningPage() {
                 }}>
                   <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}><span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item</button>
                   <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
-                  <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}><IconUsers size={14} /> Mensen{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}</button>
+                  <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}><IconUsers size={14} /> Mensen &amp; capaciteit{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}</button>
                   <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}><IconBoard size={14} /> Agenda&apos;s</button>
-                  <button onClick={() => { setOverflowOpen(false); setUrenOpen(true) }} style={overflowItemStyle}><IconHourglass size={14} /> Capaciteit</button>
                   <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}><IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}</button>
                   <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                   <button onClick={() => { setOverflowOpen(false); downloadIcs(projects) }} style={overflowItemStyle}><IconDownload size={14} /> Exporteer als iCal</button>
@@ -5998,9 +6005,8 @@ export default function PlanningPage() {
         <Popup title="Acties" onClose={() => setOverflowOpen(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {[
-              { icon: IconUsers,     label: filterMembers.size > 0 ? `Mensen · ${filterMembers.size}` : 'Mensen', active: filterMembers.size > 0, onClick: () => { setOverflowOpen(false); setPeopleOpen(true) } },
+              { icon: IconUsers,     label: filterMembers.size > 0 ? `Mensen & capaciteit · ${filterMembers.size}` : 'Mensen & capaciteit', active: filterMembers.size > 0, onClick: () => { setOverflowOpen(false); setPeopleOpen(true) } },
               { icon: IconBoard,     label: "Agenda's", active: hiddenAgendas.length > 0, onClick: () => { setOverflowOpen(false); setAgendasOpen(true) } },
-              { icon: IconHourglass, label: 'Capaciteit',                 active: false, onClick: () => { setOverflowOpen(false); setUrenOpen(true) } },
               { icon: IconRange,     label: 'Verschuif projecten',        active: false, onClick: () => { setOverflowOpen(false); setShiftOpen(true) } },
               { icon: IconDownload,  label: 'Exporteer als iCal',         active: false, onClick: () => { setOverflowOpen(false); downloadIcs(projects) } },
               { icon: IconShare,     label: 'Deelbare link maken',        active: false, onClick: () => { setOverflowOpen(false); setShareOpen(true) } },
@@ -6016,22 +6022,6 @@ export default function PlanningPage() {
               </button>
             ))}
           </div>
-        </Popup>
-      )}
-
-      {/* ── Uren popup ── */}
-      {urenOpen && (
-        <Popup title="Capaciteit per persoon" onClose={() => setUrenOpen(false)}>
-          {team.map(m => (
-            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
-              <input type="number" value={m.weeklyCapacity} min={0}
-                onChange={e => updateCapacity(m.id, parseInt(e.target.value) || 0)}
-                style={{ width: 60, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 5, padding: '4px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', textAlign: 'right' }} />
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>u/w</span>
-            </div>
-          ))}
         </Popup>
       )}
 
@@ -6190,19 +6180,24 @@ export default function PlanningPage() {
         const row = (m: TeamMember) => {
           const checked = filterMembers.size === 0 ? (isYokoCrew(m.id) && !isMemberInactive(m.id)) || m.id === 'unassigned' : filterMembers.has(m.id)
           return (
-            <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
               <input type="checkbox" checked={checked} onChange={() => toggle(m.id)}
                 style={{ width: 18, height: 18, accentColor: m.color, cursor: 'pointer', flexShrink: 0 }} />
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+              <MemberAvatar member={m} size={30} />
               <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
-            </label>
+              <input type="number" value={m.weeklyCapacity} min={0} step={1}
+                aria-label={`Capaciteit ${m.name} in uren per week`}
+                onChange={e => updateCapacity(m.id, Math.max(0, parseInt(e.target.value) || 0))}
+                style={{ width: 58, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 7px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', textAlign: 'right' }} />
+              <span style={{ width: 24, fontSize: 11, color: 'var(--text-muted)' }}>u/w</span>
+            </div>
           )
         }
         return (
-          <Popup title="Filter op mensen" onClose={() => setPeopleOpen(false)}>
+          <Popup title="Mensen & capaciteit" onClose={() => setPeopleOpen(false)}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {filterMembers.size === 0 ? 'Alleen Studio Yoko zichtbaar (standaard)' : `${filterMembers.size} geselecteerd`}
+                {filterMembers.size === 0 ? 'Alleen Studio Yoko zichtbaar (standaard)' : `${filterMembers.size} geselecteerd`} · pas rechts de uren per week aan
               </span>
               {filterMembers.size > 0 && (
                 <button onClick={() => setFilterMembers(new Set())}
