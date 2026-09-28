@@ -10,6 +10,7 @@ import { useTeam } from '@/components/TeamContext'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { isTeamMetadataId } from '@/lib/teamMemberIdentity'
 import { IconCheckList, IconComment } from '@/components/Icon'
 import initialData from '@/data/todos.json'
 import teamData    from '@/data/team.json'
@@ -1175,6 +1176,7 @@ export default function TodosPage() {
       if (raw) deletedIds = new Set(JSON.parse(raw) as string[])
     } catch {}
     for (const m of liveTeam) {
+      if (isTeamMetadataId(m.id)) continue
       if (m.hidden) continue
       if (m.id === 'unassigned') continue
       if (existing.has(m.id)) continue

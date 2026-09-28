@@ -1,17 +1,24 @@
 'use client'
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
+import { isTeamMetadataId } from './teamMemberIdentity'
 export type ProjectLink = { board: string; itemId: string; name: string; startDate?: string | null; endDate?: string | null; status?: string | null; googleSeriesId?: string; movedFromSections?: string[] }
 export type TodoItem = { id: string; text: string; done: boolean; projectRef?: ProjectLink }
 export type Section = { id: string; title: string; emoji: string; items: TodoItem[]; kind?: 'personal' | 'general' }
+// Old clients created todo sections for internal team start-date records.
+// Hide only empty metadata sections, never real sections or user tasks.
+export function visibleTodoSections(sections: Section[]): Section[] {
+  return sections.filter(s => !isTeamMetadataId(s.id) || s.items.length > 0)
+}
 const KEY = 'yoko-todos', QUEUE = 'yoko-todos-outbox-v2', EVENT = 'yoko-todos-update'
 type Row = Record<string, unknown> & { id: string }
 type Op = { token: string; table: 'todo_sections' | 'todo_items'; action: 'insert' | 'update' | 'delete'; row: Row }
 export function loadSections(fallback: Section[]): Section[] {
   if (typeof window === 'undefined') return fallback
-  try { return JSON.parse(localStorage.getItem(KEY) ?? 'null') ?? fallback } catch { return fallback }
+  try { return visibleTodoSections(JSON.parse(localStorage.getItem(KEY) ?? 'null') ?? fallback) } catch { return visibleTodoSections(fallback) }
 }
 export function cacheRemoteSections(sections: Section[]) {
+  sections = visibleTodoSections(sections)
   // Keep the pre-upgrade cache recoverable; never delete local-only legacy data.
   if (!localStorage.getItem('yoko-todos-before-sync-v2')) {
     const previous = localStorage.getItem(KEY)
@@ -110,8 +117,9 @@ export async function pullFromRemote(): Promise<Section[] | null> {
     id: s.id, title: s.title, emoji: s.emoji,
     items: items.filter(i => i.section_id === s.id && !i.project_ref?._deleted).map(i => ({ id: i.id, text: i.text, done: i.done, projectRef: i.project_ref ?? undefined })),
   }))
-  cacheRemoteSections(result)
-  return result
+  const visible = visibleTodoSections(result)
+  cacheRemoteSections(visible)
+  return visible
 }
 let listeners = 0
 let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null

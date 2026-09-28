@@ -16,12 +16,18 @@ const client = { from(table) {
 function boot() {
   const c = { exports: {}, crypto: require('node:crypto').webcrypto, localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v) },
     window: { dispatchEvent() {}, addEventListener() {}, removeEventListener() {} }, CustomEvent: class {}, setTimeout: () => 1, clearTimeout() {},
-    require: name => name === './supabase' ? { supabase: client } : { getCurrentUserId: async () => 'user' },
+    require: name => name === './supabase' ? { supabase: client } : name === './teamMemberIdentity' ? { isTeamMetadataId: id => id.startsWith('__team_start_date__:') } : { getCurrentUserId: async () => 'user' },
   }
   vm.createContext(c); vm.runInContext(source, c); return c.exports
 }
 async function run() {
   let api = boot()
+  const ghost = { id: '__team_start_date__:menno', title: 'Team startdatum', items: [] }
+  assert.equal(api.visibleTodoSections([ghost]).length, 0)
+  assert.equal(api.visibleTodoSections([{ ...ghost, items: sections[0].items }]).length, 1)
+  assert.equal(api.visibleTodoSections([{ ...ghost, id: 'real-section' }]).length, 1)
+  storage.set('yoko-todos', JSON.stringify([ghost, sections[0]]))
+  assert.equal(api.loadSections([]).length, 1)
   const reordered = [sections[1], sections[0]]
   let diff = api.diffTodoRows(sections, reordered)
   assert.equal(diff.length, 2); assert.ok(diff.every(x => x.table === 'todo_sections' && Object.keys(x.row).join(',') === 'id,position'))
