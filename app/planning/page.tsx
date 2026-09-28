@@ -61,7 +61,8 @@ import {
 import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
-import { completionTargetForProject } from '@/lib/personalCompletionClient'
+import { completionTargetForProject, completeLinkedTask, loadPersonalCompletion } from '@/lib/personalCompletionClient'
+import { onCommentsUpdate } from '@/lib/commentsStore'
 import { useCompletedOwners } from '@/components/useCompletedOwners'
 import type { CompletionTarget } from '@/lib/personalCompletion'
 import type { BoardGroup } from '@/lib/boards'
@@ -2012,18 +2013,24 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   )
 }
 
-function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
-  meetings: Project[]; left: number; width: number
+function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: {
+  meetings: Project[]; memberId: string; left: number; width: number
   onOpen: (project: Project) => void
   onDone: (project: Project) => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [, refreshCompletion] = useState(0)
+  useEffect(() => onCommentsUpdate(() => refreshCompletion(n => n + 1)), [])
+  function isMeetingDone(meeting: Project) {
+    const target = completionTargetForProject({ board: meeting.board, itemId: meeting.id.slice(meeting.board.length + 2) })
+    return (target ? loadPersonalCompletion(target, memberId)?.done : undefined) ?? meeting.status === 'done'
+  }
   const [pinned, setPinned] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const anchorRef = useRef<HTMLButtonElement>(null)
   const closeTimer = useRef<number | null>(null)
   const sorted = [...meetings].sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
-  const activeCount = meetings.filter(meeting => meeting.status !== 'done').length
+  const activeCount = meetings.filter(meeting => !isMeetingDone(meeting)).length
   const allDone = activeCount === 0
   const open = hovered || pinned
 
@@ -2096,7 +2103,7 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
               {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'}
             </div>
             {sorted.map(meeting => {
-              const isDone = meeting.status === 'done'
+              const isDone = isMeetingDone(meeting)
               return (
               <div key={meeting.id}
                 onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
@@ -2106,8 +2113,8 @@ function MeetingDaySummary({ meetings, left, width, onOpen, onDone }: {
                   {meeting.startTime ?? 'Hele dag'}
                 </span>
                 <button onClick={ev => { ev.stopPropagation(); onDone(meeting) }}
-                  aria-label={isDone ? `${meeting.name} is afgerond` : `${meeting.name} afronden`}
-                  title={isDone ? 'Afgerond' : 'Afronden'}
+                  aria-label={isDone ? `${meeting.name} heropenen` : `${meeting.name} afronden`}
+                  title={isDone ? 'Heropenen' : 'Afronden'}
                   style={{ width: 17, height: 17, flexShrink: 0, padding: 0, borderRadius: 4,
                     border: `1.5px solid ${isDone ? 'var(--green)' : 'var(--border-strong)'}`,
                     background: isDone ? 'var(--green)' : 'var(--bg-card)',
@@ -2159,7 +2166,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   onDragMove: (p: Project, s: string | null, e: string | null) => void
   onDragEnd:  (p: Project, s: string | null, e: string | null) => void
   onBarClick: (p: Project) => void
-  onMarkDone: (p: Project) => void
+  onMarkDone: (p: Project, memberId: string) => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
 }) {
   const RS = rowScale ?? 1
@@ -2619,8 +2626,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
         const daySlice = colW / 5
         const left = dateToWeekPx(dayStart, gridStart, colW)
         return (
-          <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} left={left} width={daySlice}
-            onOpen={onBarClick} onDone={onMarkDone} />
+          <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} memberId={memberId} left={left} width={daySlice}
+            onOpen={onBarClick} onDone={p => onMarkDone(p, memberId)} />
         )
       })}
       {/* Meetings hangen nu bovenop project-balken — geen aparte divider
@@ -5585,15 +5592,21 @@ export default function PlanningPage() {
     })
   }
 
-  // Vinkje in het meetings-popovertje — zet een Google-item (of elk ander
-  // project) direct op Done, zonder eerst de detail-drawer te hoeven
-  // openen. handleDetailUpdate regelt de verhuizing naar de Done-groep;
-  // Todo's plukt 'm er via doneProjectKeys/isAutoDone vanzelf uit.
-  function markProjectDone(project: Project) {
-    handleDetailUpdate(project, project.startDate, project.endDate, { status: 'Done' })
-    logActivity('Afgerond', project.name, project.board)
-    const rawId = project.id.slice(project.board.length + 2).split('__si')[0]
-    logItemActivity(rawId, 'zette op Done', project.name).catch(() => {})
+  // Same per-member completion events as Home and To do's. Do not change
+  // the whole meeting's status when just one participant finishes their task.
+  async function markProjectDone(project: Project, memberId: string) {
+    if (profile?.memberId !== memberId) {
+      showToast('Alleen dit teamlid kan zijn of haar persoonlijke taak afronden.', 5000)
+      return
+    }
+    const ref = { board: project.board, itemId: project.id.slice(project.board.length + 2) }
+    const target = completionTargetForProject(ref)
+    const done = (target ? loadPersonalCompletion(target, memberId)?.done : undefined) ?? project.status === 'done'
+    try {
+      if (!await completeLinkedTask(ref, memberId, !done)) throw new Error('Taak niet gevonden. Ververs de planning en probeer opnieuw.')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Opslaan mislukt. Probeer opnieuw.', 8000)
+    }
   }
 
   function handleDetailDelete(project: Project) {
