@@ -67,8 +67,10 @@ function report(error: boolean) {
 }
 export function pushToRemote(_sections?: Section[]): Promise<boolean> {
   if (flight) return flight
-  flight = (typeof navigator !== 'undefined' && navigator.locks
-    ? navigator.locks.request('yoko-todos-sync', flush) : flush()).finally(() => { flight = null })
+  flight = (async (): Promise<boolean> => {
+    if (typeof navigator !== 'undefined' && navigator.locks) return await navigator.locks.request('yoko-todos-sync', flush)
+    return await flush()
+  })().finally(() => { flight = null })
   return flight
 }
 async function flush(): Promise<boolean> {
