@@ -103,14 +103,9 @@ const HANDLE_W = 8
 
 // Gedeelde uren-per-dag → hoogte-ratio, gebruikt door zowel DraggableBar
 // (Week/Overzicht-zoom) als de all-day-pills in WeekTimeGrid (Dag-zoom).
-// sqrt i.p.v. lineair: puur lineair (ratio=uren/8) duwt de meerderheid
-// (2-4u/dag, niet 8u/dag) naar de ondergrens. sqrt trekt gangbare
-// belastingen omhoog. 0.1 baseline + 0.9 schaal (was 0.3+0.7 — te veel
-// compressie in het midden, 4u/dag en 8u/dag oogden bijna even hoog):
-// 0.5u≈32%, 2u≈55%, 4u≈74%, 6u≈88%, 8u=100%. Duidelijk oplopend over
-// het HELE bereik, niet alleen aan de uiterste onderkant. Kost niets aan
-// witruimte dankzij de skyline-packing (elke balk pakt precies z'n
-// eigen ruimte, geen gedeelde vaste pitch).
+// Lineaire schaal maakt verschillen nadrukkelijker dan de oude sqrt:
+// 2u/dag=29%, 4u=53%, 6u=76%, 8u=100%. De renderers houden een
+// minimale klikbare hoogte aan; skyline-packing volgt de echte hoogte.
 function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
   const FULL_DAY_HOURS = 8
   const projectDays = (() => {
@@ -129,7 +124,7 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
     : (project.estHours || 0) / owners
   const hoursPerDay = memberHours / projectDays
   const dayIntensity = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  const dayHeight = 0.1 + 0.9 * Math.sqrt(dayIntensity)
+  const dayHeight = 0.05 + 0.95 * dayIntensity
   // Dag-intensiteit alleen is niet genoeg: een project van 32u verspreid
   // over 10 dagen (3,2u/dag) en een project van 16u verspreid over 5
   // dagen (ook 3,2u/dag) kregen zo EXACT dezelfde hoogte, terwijl de een
@@ -140,7 +135,7 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
   // duidelijk uit elkaar (46% vs 82%).
   const TOTAL_REF_HOURS = 40
   const totalIntensity = Math.min(1, Math.max(0, memberHours / TOTAL_REF_HOURS))
-  const totalHeight = 0.1 + 0.9 * totalIntensity
+  const totalHeight = 0.05 + 0.95 * totalIntensity
   // MAX van beide zodat een korte felle meeting (hoge dag-intensiteit,
   // laag totaal) én een lang groot project (laag tempo, hoog totaal)
   // allebei goed opvallen.
