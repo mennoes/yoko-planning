@@ -3138,7 +3138,13 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     }
     return Array.from(byId.values())
   }, [liveTeam])
-  const rawItem = allGroups[project.board]?.flatMap(g => g.items).find(i => `${project.board}__${i.id}` === project.id)
+  const rawProjectId = project.id.slice(project.board.length + 2).replace(/__vrij_\d{4}-\d{2}-\d{2}$/, '')
+  const rawSubMatch = rawProjectId.match(/^(.+)__si(\d+)$/)
+  const rawParent = allGroups[project.board]?.flatMap(g => g.items).find(i => i.id === (rawSubMatch?.[1] ?? rawProjectId))
+  // Read the same subitem that handleDetailUpdate writes, not just parents.
+  const rawItem = (rawSubMatch
+    ? rawParent?.subitems?.[Number(rawSubMatch[2])]
+    : rawParent) as typeof rawParent
   // Gebruik exact dezelfde stabiele parent/subitem-identiteit als Agenda's
   // en To do's. Zo leest en wijzigt Planning niet een kopie, maar dezelfde
   // persoonlijke taakstatus (opgeslagen als completion-event).

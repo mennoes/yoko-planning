@@ -59,7 +59,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string; externalLink?: string | null }> | undefined) ?? []
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string; externalLink?: string | null }> | undefined) ?? []
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
         // erbij maar krijgt status='done' zodat 'ie in de planning faded
         // wordt i.p.v. te verdwijnen (anders 'verdwijnen items zomaar' bij
@@ -104,6 +104,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               board:     boardName,
               group:     g.name,
               ownerIds:  owners,
+              ownerHours: si.ownerHours,
               startDate: si.startDate ?? null,
               endDate:   si.endDate ?? si.startDate ?? null,
               startTime: si.startTime ?? null,
