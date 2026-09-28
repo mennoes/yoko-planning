@@ -98,6 +98,7 @@ const FALLBACK: BoardConfig[] = [
 ]
 
 let cached: BoardConfig[] | null = null
+let localRevision = 0
 
 // Zorgt dat de 5 kern-agenda's (yoko/pnp/nederland/vlaanderen/dienjaar)
 // nooit stil verdwijnen — niet als de localStorage-cache corrupt/incompleet
@@ -168,6 +169,7 @@ export function onBoardsRegistryUpdate(handler: () => void): () => void {
 type Row = { id: string; name: string; emoji: string | null; color: string | null; columns: ColumnDef[] | null; position: number | null }
 
 export async function pullBoardsFromRemote(): Promise<boolean> {
+  const revision = localRevision
   if (isOnDemoRoute()) return false
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
@@ -175,7 +177,7 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
     .from('boards')
     .select('id, name, emoji, color, columns, position')
     .order('position', { ascending: true })
-  if (error || !data) return false
+  if (error || !data || revision !== localRevision) return false
   if (data.length === 0) return false
   const boards: BoardConfig[] = withCoreBoards((data as Row[]).map(r => ({
     id:      r.id,
@@ -203,7 +205,11 @@ export async function upsertBoard(cfg: BoardConfig, position: number): Promise<b
     position,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'id' })
-  return !error
+  if (error) return false
+  localRevision++
+  const current = readCache()
+  writeCache(current.some(b => b.id === cfg.id) ? current.map(b => b.id === cfg.id ? cfg : b) : [...current, cfg])
+  return true
 }
 
 export async function deleteBoard(id: string): Promise<boolean> {

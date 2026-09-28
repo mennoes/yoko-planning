@@ -218,7 +218,7 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
     .filter(p => !existingRefs.has(`project:${p.board}:${p.itemId}`))
     .filter(p => !removed.has(`${p.board}:${p.itemId}`))
     .map(p => ({
-      id: `auto-${p.board}-${p.itemId}`,
+      id: `auto-${memberId}-${p.board}-${p.itemId}`,
       text: p.name,
       done: false,
       projectRef: p,

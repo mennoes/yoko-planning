@@ -347,15 +347,9 @@ function SectionBlock({
         color,
         columns: defaultColumnsForNewBoard(),
       }
-      // localStorage cache eerst zetten zodat de page direct werkt;
-      // Supabase upsert + refresh van de registry gebeurt async.
-      try {
-        const cur = localStorage.getItem('yoko-boards-registry')
-        const list = cur ? JSON.parse(cur) : []
-        const next = Array.isArray(list) ? [...list.filter((b: { id: string }) => b.id !== cfg.id), cfg] : [cfg]
-        localStorage.setItem('yoko-boards-registry', JSON.stringify(next))
-        window.dispatchEvent(new CustomEvent('yoko-boards-registry-update'))
-      } catch {}
+      if (!slug || BOARD_NAMES.includes(slug)) { alert('Deze agenda bestaat al, of de naam is ongeldig.'); return }
+      const saved = await upsertBoard(cfg, section.items.length).catch(() => false)
+      if (!saved) { alert('De agenda is niet opgeslagen. Controleer je verbinding en probeer opnieuw.'); return }
       // Een lege eerste groep zodat de tabel niet helemaal leeg start.
       saveGroups(slug, [{
         id: `g_${slug}_${Date.now()}`,
@@ -365,7 +359,7 @@ function SectionBlock({
         items: [],
       }])
       // Push naar Supabase + refresh van de registry op de achtergrond.
-      void upsertBoard(cfg, section.items.length).then(() => pullBoardsFromRemote())
+      void pullBoardsFromRemote()
     }
 
     updateItems([...section.items, {

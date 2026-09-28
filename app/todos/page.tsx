@@ -1108,6 +1108,13 @@ export default function TodosPage() {
   const { members: liveTeam } = useTeam()
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
+  const [syncReady, setSyncReady] = useState(false)
+  const [syncError, setSyncError] = useState(false)
+  useEffect(() => {
+    const handler = (e: Event) => setSyncError(!!(e as CustomEvent).detail?.error)
+    window.addEventListener('yoko-todos-sync', handler)
+    return () => window.removeEventListener('yoko-todos-sync', handler)
+  }, [])
   const [editOrder, setEditOrder] = useState(false)
   const [memberVisibility, setMemberVisibility] = useState<Record<string, boolean>>({})
   const [peopleOpen, setPeopleOpen] = useState(false)
@@ -1131,26 +1138,8 @@ export default function TodosPage() {
     setDoneProjectKeys(loadDoneTodoProjectKeys())
     setHydrated(true)
 
-    // Sync met Supabase: pull, en als er nog niks staat seed met de lokale
-    // cache; subscribe op realtime mutaties zodat een vinkje in browser A
-    // direct in browser B verschijnt.
     pullTodos().then(remote => {
-      if (remote) {
-        // Mergen i.p.v. overschrijven: een pull kan een item/sectie
-        // missen die lokaal al bestaat (bv. een net-afgevinkt todo
-        // waarvan de push nog niet was aangekomen). setSections(remote)
-        // zette zo'n item terug op 'open' — en de auto-seed-effecten
-        // hieronder zagen 't project dan als 'nog niet geseed' en
-        // voegden 't opnieuw toe als duplicaat. mergeSections voorkomt
-        // beide.
-        const merged = mergeSections(loadSections(), remote)
-        setSections(merged)
-        saveTodoSections(merged)  // ververst localStorage zonder push-loop
-      } else {
-        // Remote empty → upload de huidige (localStorage) staat
-        const local = loadSections()
-        if (local.length > 0) pushTodos(local).catch(() => {})
-      }
+      if (remote !== null) { setSections(remote); setSyncReady(true) }
     }).catch(() => {})
 
     const offRemote = subscribeRemoteTodos()
@@ -1174,7 +1163,7 @@ export default function TodosPage() {
   // initiële sections-load zodat we de live state aanvullen i.p.v.
   // overschrijven.
   useEffect(() => {
-    if (!hydrated || sections.length === 0) return
+    if (!hydrated || !syncReady || sections.length === 0) return
     if (liveTeam.length === 0) return
     const existing = new Set(sections.map(s => s.id))
     const toAdd: Section[] = []
@@ -1204,62 +1193,9 @@ export default function TodosPage() {
     setSections(next)
     saveTodoSections(next)
     pushTodos(next).catch(() => {})
-  }, [hydrated, liveTeam, sections])
+  }, [hydrated, syncReady, liveTeam, sections])
 
-  // ── Seed Socials/Reminders/Kansen secties + missende items ────────────────
-  // Twee stappen in één migratie:
-  //  1. Bestaat een sectie nog niet? Insert 'm met al z'n initiële items.
-  //  2. Bestaat-ie wel, maar mist 'r items uit de seed? Voeg de ontbrekende
-  //     items achteraan toe, met behoud van wat er al stond (en de
-  //     done-state van bestaande items). Vergelijking case-insensitive op
-  //     tekst zodat we geen duplicates maken als de gebruiker handmatig
-  //     'Flinders' had toegevoegd. Idempotent.
-  useEffect(() => {
-    if (!hydrated || sections.length === 0) return
-    const seedSections = initialData.sections as Section[]
-    const wantedIds = ['socials', 'reminders', 'kansen']
-    let changed = false
-    let next = sections.slice()
-    const removedSeeds = loadRemovedSeedItems()
-
-    for (const wantedId of wantedIds) {
-      const seed = seedSections.find(s => s.id === wantedId)
-      if (!seed) continue
-      const existing = next.find(s => s.id === wantedId)
-      if (!existing) {
-        // Hele sectie ontbreekt → toevoegen, maar alleen items die de
-        // user niet eerder verwijderd heeft. Anders herhaalt 't 'Polarsteps
-        // verschijnt opnieuw' patroon ook bij een complete sectie-reset.
-        const filtered: Section = {
-          ...seed,
-          items: seed.items.filter(i => !removedSeeds.has(`${wantedId}|${normSeedText(i.text)}`)),
-        }
-        const ideeenIdx = next.findIndex(s => s.id === 'ideeen')
-        const insertAt  = ideeenIdx >= 0 ? ideeenIdx + 1 : next.length
-        next = [...next.slice(0, insertAt), filtered, ...next.slice(insertAt)]
-        changed = true
-        continue
-      }
-      // Sectie bestaat — voeg missende items toe (vergelijken op normalisatie
-      // van tekst zodat 'HEY U' en 'hey u' niet allebei verschijnen).
-      // Skip items die de gebruiker expliciet heeft verwijderd zodat ze
-      // niet bij elke render terugkomen.
-      const existingTexts = new Set(existing.items.map(i => normSeedText(i.text)))
-      const missingItems = seed.items.filter(i => {
-        const n = normSeedText(i.text)
-        if (existingTexts.has(n)) return false
-        if (removedSeeds.has(`${wantedId}|${n}`)) return false
-        return true
-      })
-      if (missingItems.length === 0) continue
-      next = next.map(s => s.id === wantedId ? { ...s, items: [...s.items, ...missingItems] } : s)
-      changed = true
-    }
-
-    if (!changed) return
-    setSections(next)
-    saveTodoSections(next)
-  }, [hydrated, sections])
+  // Initial fixtures are not restored after startup: absence can be an intentional deletion.
 
   // ── Auto-seed open Monday-projecten per yoko-crew lid ──────────────────────
   // Voor ELKE yoko-crew sectie rollen automatisch hun toegewezen niet-
@@ -1269,7 +1205,7 @@ export default function TodosPage() {
   // uit jouw weergave; bij anderen blijft 't staan tot ze 't zelf
   // kruisjes).
   useEffect(() => {
-    if (!hydrated || sections.length === 0 || allProjects.length === 0) return
+    if (!hydrated || !syncReady || sections.length === 0 || allProjects.length === 0) return
 
     // Legacy-cache één keer schoonmaken (zie vorige iteratie).
     if (typeof window !== 'undefined') {
@@ -1304,8 +1240,8 @@ export default function TodosPage() {
       })
       if (toAdd.length === 0) continue
 
-      const newItems: TodoItem[] = toAdd.map((p, idx) => ({
-        id: `auto-${section.id}-${Date.now()}-${idx}`,
+      const newItems: TodoItem[] = toAdd.map(p => ({
+        id: `auto-${section.id}-${p.board}-${p.itemId}`,
         text: p.name,
         done: false,
         projectRef: { board: p.board, itemId: p.itemId, name: p.name },
@@ -1317,7 +1253,7 @@ export default function TodosPage() {
     if (!changed) return
     setSections(next)
     saveTodoSections(next)
-  }, [currentProfile?.memberId, hydrated, sections, allProjects, liveTeam])
+  }, [currentProfile?.memberId, hydrated, syncReady, sections, allProjects, liveTeam])
 
   // ── Dedup: duplicate todo's binnen één sectie opruimen ─────────────────────
   // Kan ontstaan door 1) de oude pull/merge-bug (al gefixt, maar bestaande
@@ -1514,6 +1450,19 @@ export default function TodosPage() {
       return orderIdx(a.id) - orderIdx(b.id)
     })
 
+  const peoplePicker = (
+<details open={peopleOpen} onToggle={e => setPeopleOpen(e.currentTarget.open)} style={{ marginBottom: 18 }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Personen tonen / verbergen</summary>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 0' }}>
+          {sections.filter(isPersonalSection).map(s => (
+            <label key={s.id} style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={personal.some(p => p.id === s.id)} onChange={e => toggleMember(s.id, e.target.checked)} />
+              <MemberAvatar memberId={s.id} size={30} /> {liveTeam.find(m => m.id === s.id)?.name ?? s.title}
+            </label>
+          ))}
+        </div>
+      </details>
+  )
   if (!hydrated) return null
 
   return (
@@ -1542,17 +1491,7 @@ export default function TodosPage() {
         </button>
       </div>
 
-      <details open={peopleOpen} onToggle={e => setPeopleOpen(e.currentTarget.open)} style={{ marginBottom: 18 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Personen — zichtbare persoonlijke tabellen</summary>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 0' }}>
-          {sections.filter(isPersonalSection).map(s => (
-            <label key={s.id} style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={personal.some(p => p.id === s.id)} onChange={e => toggleMember(s.id, e.target.checked)} />
-              {liveTeam.find(m => m.id === s.id)?.name ?? s.title}
-            </label>
-          ))}
-        </div>
-      </details>
+      {syncError && <p role="alert">Wijzigingen zijn nog niet online opgeslagen. We proberen het opnieuw zodra verbinding mogelijk is.</p>}
       {isMobile ? (() => {
         // Op mobiel: alle persoonlijke kaarten stacken we volledig onder
         // elkaar (eigen kaart bovenaan). De horizontale scroll-rij die
@@ -1564,6 +1503,8 @@ export default function TodosPage() {
         const others = personal.slice(1)
         return (
           <>
+            <h2 style={{ fontSize: 16 }}>Persoonlijk</h2>
+            {peoplePicker}
             {me && (
               <div style={{ marginBottom: 14 }}>
                 <TodoCard section={me} isMember={true} onUpdate={updateSection}
@@ -1671,6 +1612,7 @@ export default function TodosPage() {
               </div>
             )}
 
+            {peoplePicker}
             <div style={rowStyle}>
               {personal.map((s, i) => (
                 <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
