@@ -1415,17 +1415,6 @@ export default function TodosPage() {
     s.kind === 'personal'
     || (s.kind !== 'general' && (memberIdSet().has(s.id) || liveTeamIds.has(s.id)))
   const general  = sections.filter(s => !isPersonalSection(s))
-  // Persoonlijke todo's: jouw eigen kaart komt altijd vooraan zodat je hem
-  // direct ziet zonder te scrollen. Daarna volgt de vaste team-volgorde
-  // (Odette, Vincent, Menno, Anne-Fleur, …). Kars staat altijd achteraan
-  // — gebruikersvoorkeur, ook nà members zonder vaste positie (Manuel,
-  // freelancers etc).
-  const PERSONAL_ORDER = ['odette', 'vincent', 'menno', 'anne-fleur', 'marcus-driessen', 'take-lijzenga']
-  const BACK_IDS = new Set<string>(['kars'])
-  const orderIdx = (id: string) => {
-    const i = PERSONAL_ORDER.indexOf(id)
-    return i >= 0 ? i : 500
-  }
   // Persoonlijke secties verbergen voor inactieve freelancers: anders
   // staat de hele freelancers-lijst altijd onderaan ook als ze nu geen
   // werk hebben. Yoko-crew (kind 'yoko' of nog niet gezet) tonen we
@@ -1440,16 +1429,6 @@ export default function TodosPage() {
       if (!m) return true
       if (m.kind !== 'freelance') return true
       return loadMyOpenProjects(s.id).length > 0
-    })
-    .sort((a, b) => {
-      const me = currentProfile?.memberId
-      if (a.id === me) return -1
-      if (b.id === me) return 1
-      const aBack = BACK_IDS.has(a.id)
-      const bBack = BACK_IDS.has(b.id)
-      if (aBack && !bBack) return 1
-      if (bBack && !aBack) return -1
-      return orderIdx(a.id) - orderIdx(b.id)
     })
 
   const peoplePicker = (

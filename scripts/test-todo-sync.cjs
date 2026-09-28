@@ -8,7 +8,7 @@ const sections = [{ id: 'a', title: 'A', emoji: '', items: [{ id: 't', text: 'Ta
 let fail = false, block, release
 const client = { from(table) {
   return {
-    update(row) { return { is() { return this }, async eq(_, id) { if (block) await block; calls.push({ table, action: 'update', row, id }); return { error: fail ? new Error('offline') : null } } } },
+    update(row) { return { async eq(_, id) { if (block) await block; calls.push({ table, action: 'update', row, id }); return { error: fail ? new Error('offline') : null } } } },
     upsert(row) { calls.push({ table, action: 'insert', row }); return Promise.resolve({ error: null }) },
     delete() { return { eq(_, id) { calls.push({ table, action: 'delete', id }); return Promise.resolve({ error: null }) } } },
   }
@@ -44,7 +44,7 @@ async function run() {
   api.saveSections(sections)
   release(); block = null
   await api.pushToRemote()
-  assert.deepEqual(calls.filter(c => 'done' in c.row).map(c => c.row.done), [true, false])
+  assert.deepEqual(calls.filter(c => c.row && 'done' in c.row).map(c => c.row.done), [true, false])
   assert.equal(JSON.parse(storage.get('yoko-todos-outbox-v2')).length, 0)
   fail = true; api.saveSections(done); assert.equal(await api.pushToRemote(), false)
   assert.ok(JSON.parse(storage.get('yoko-todos-outbox-v2')).length)

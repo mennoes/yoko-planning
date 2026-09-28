@@ -88,9 +88,13 @@ async function flush(): Promise<boolean> {
       const { error } = op.action === 'delete' ? op.table === 'todo_items'
         ? await table.update({ project_ref: { ...(op.row.project_ref as object ?? {}), _deleted: true } }).eq('id', op.row.id)
         : await table.delete().eq('id', op.row.id)
-        : op.action === 'insert' ? await table.upsert(op.row, { onConflict: 'id', ignoreDuplicates: true })
-        : op.table === 'todo_items' ? await table.update(op.row).is('project_ref->>_deleted', null).eq('id', op.row.id)
-          : await table.update(op.row).eq('id', op.row.id)
+        : op.action === 'insert' ? await table.upsert(op.row, { onConflict: 'id', ignoreDuplicates: false })
+        // Update by the stable item id. The old JSON-path NULL filter did not
+        // match every normal row (notably rows whose project_ref itself is
+        // NULL), so checkmarks and positions could remain local-only and the
+        // stale server value returned after a refresh. A tombstoned row stays
+        // tombstoned because these field patches never clear project_ref.
+        : await table.update(op.row).eq('id', op.row.id)
       if (error) throw error
       localStorage.setItem(QUEUE, JSON.stringify(pending().filter(p => p.token !== op.token)))
     }
