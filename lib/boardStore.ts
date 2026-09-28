@@ -253,20 +253,11 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   if (!await getCurrentUserId()) return false
   // Niet-bevestigde lokale wijzigingen mogen NOOIT worden overschreven door
   // een pull. Push 'em eerst omhoog; faalt dat, dan slaan we de pull over.
-  // Uitzondering: een dirty-flag die ouder is dan 1 uur beschouwen we als
-  // verloren (push faalde permanent door RLS/auth-issue). Anders blijft
-  // die user 'gegijzeld' — geen verse data van anderen meer, alleen z'n
-  // eigen stale localStorage.
+  // Unconfirmed edits never expire: retry them even after a long offline period.
   if (typeof window !== 'undefined') {
     const dirtyRaw = localStorage.getItem(dirtyKey(boardName))
-    const STALE_DIRTY_MS = 60 * 60 * 1000
     if (dirtyRaw) {
-      const dirtyAt = Number(dirtyRaw)
-      if (Number.isFinite(dirtyAt) && Date.now() - dirtyAt > STALE_DIRTY_MS) {
-        // eslint-disable-next-line no-console
-        console.warn(`[boardStore] Stale dirty-flag voor '${boardName}' (>1u oud) — clearen zodat pulls hervatten.`)
-        localStorage.removeItem(dirtyKey(boardName))
-      } else {
+      {
         const localRaw = localStorage.getItem(key(boardName))
         if (localRaw) {
           try {
@@ -282,6 +273,7 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     }
   }
   // Soft-deleted rijen filteren we out — die staan in de papierbak.
+  const localAtReadStart = localStorage.getItem(key(boardName))
   // 'is.null'-syntax werkt via .is('deleted_at', null) in supabase-js.
   const { data: groupRows, error: gErr } = await supabase
     .from('board_groups').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
@@ -365,6 +357,8 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     supabase.from('board_items').delete().in('id', orphanIds).then(() => {}, () => {})
   }
 
+  // A request started before an edit must never replace that edit on arrival.
+  if (localStorage.getItem(dirtyKey(boardName)) || localStorage.getItem(key(boardName)) !== localAtReadStart) return false
   if (groups.length === 0) return false  // remote is empty — keep local fallback
   // Stempel de tijd waarop we de remote-staat hebben gezien. pushBoard-
   // ToRemote gebruikt die als cutoff voor stale-deletes — rijen NA deze
@@ -434,7 +428,23 @@ function writeLastSync(board: string): void {
   try { window.localStorage.setItem(lastSyncKey(board), String(Date.now())) } catch {}
 }
 
-export async function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Promise<boolean> {
+const boardPushQueue = new Map<string, Promise<boolean>>()
+export function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Promise<boolean> {
+  const previous = boardPushQueue.get(boardName) ?? Promise.resolve(true)
+  const task = previous.catch(() => false).then(async () => {
+    // Queued callers may carry an old snapshot. Always send the newest
+    // unconfirmed local state, including when retrying immediately after reload.
+    const raw = localStorage.getItem(dirtyKey(boardName)) ? localStorage.getItem(key(boardName)) : null
+    const latest = raw ? JSON.parse(raw) as BoardGroup[] : groups
+    const ok = await pushBoardSnapshot(boardName, latest)
+    return ok && JSON.stringify(latest) === JSON.stringify(groups)
+  })
+  boardPushQueue.set(boardName, task)
+  void task.finally(() => { if (boardPushQueue.get(boardName) === task) boardPushQueue.delete(boardName) }).catch(() => {})
+  return task
+}
+
+async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promise<boolean> {
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
 

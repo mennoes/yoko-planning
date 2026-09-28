@@ -5526,7 +5526,9 @@ export default function PlanningPage() {
     const parentId   = subMatch ? subMatch[1] : rawIdPart
     const subIdx     = subMatch ? parseInt(subMatch[2], 10) : -1
     const isSubitem  = subIdx >= 0
-    const before = allGroups[boardName] ?? []
+    // A second checkbox click can arrive before React has rendered the first.
+    // Merge into the latest saved snapshot, not the previous render's board.
+    const before = loadGroups(boardName, allGroups[boardName] ?? [])
     const updatedGroups = before.map(g => ({
       ...g,
       items: g.items.map(i => {
