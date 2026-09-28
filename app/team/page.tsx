@@ -8,6 +8,7 @@ import teamData     from '@/data/team.json'
 import { useTeam }  from '@/components/TeamContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
+import { UserAvatar }    from '@/components/UserAvatar'
 import { supabase }      from '@/lib/supabase'
 import {
   loadProfileDaysOff, setProfileDaysOff, onProfileDaysOffChange, pullProfileDaysOff,
@@ -123,11 +124,9 @@ function TeamMemberCard({ member, capacity, daysOff, compact, onDaysOffChange, o
   const DOT    = compact ? 12 : 18
   const NAME_FS = compact ? 11 : 13.5
   const CAP_FS  = compact ? 10 : 11.5
-  const { getPhoto, setPhoto }  = useTeamPhotos()
+  const { setPhoto }            = useTeamPhotos()
   const { profile }             = useProfile()
   const isMe    = profile?.memberId === member.id
-  const photo   = isMe ? (profile?.photo ?? null) : getPhoto(member.id)
-  const fallback = `/team/${member.id}.jpg`
   const [capEdit, setCapEdit] = useState(false)
   const [capDraft, setCapDraft] = useState(String(capacity))
   useEffect(() => { if (!capEdit) setCapDraft(String(capacity)) }, [capacity, capEdit])
@@ -144,8 +143,6 @@ function TeamMemberCard({ member, capacity, daysOff, compact, onDaysOffChange, o
     reader.readAsDataURL(f)
     e.target.value = ''
   }
-
-  const initials = member.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
   return (
     <div style={{
@@ -164,23 +161,7 @@ function TeamMemberCard({ member, capacity, daysOff, compact, onDaysOffChange, o
             <Link href={`/profile/${encodeURIComponent(member.id)}`} aria-label={`Bekijk profiel van ${member.name}`}
               title={`Bekijk profiel van ${member.name}`}
               style={{ display: 'block', width: AV, height: AV, borderRadius: '50%', position: 'relative' }}>
-              {photo ? (
-                <img src={photo} alt=""
-                  style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', border: `${compact ? 2 : 3}px solid ${member.color}`, display: 'block' }} />
-              ) : (
-                <div style={{
-                  width: AV, height: AV, borderRadius: '50%', flexShrink: 0,
-                  background: member.color + '25', border: `${compact ? 2 : 3}px solid ${member.color}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: compact ? 14 : 22, fontWeight: 700, color: member.color,
-                }}>
-                  {/* Try static /team/ photo as fallback */}
-                  <img src={fallback} alt=""
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                    style={{ width: AV, height: AV, borderRadius: '50%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} />
-                  {initials}
-                </div>
-              )}
+              <UserAvatar memberId={member.id} size={AV} />
             </Link>
             {hover && !isMe && (
               <button onClick={() => fileRef.current?.click()} aria-label={`Foto van ${member.name} wijzigen`}

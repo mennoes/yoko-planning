@@ -36,14 +36,18 @@ export function UserAvatar({
   const name          = member?.name ?? '?'
   const initials      = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
+  const sharedPhoto = getPhoto(memberId)
   const photoCandidates = [
     isMe ? profile?.photo : null,
-    getPhoto(memberId),
+    sharedPhoto,
     hasStaticAvatar(memberId) ? `/team/${memberId}.jpg` : null,
   ].filter(Boolean) as string[]
 
   const [idx, setIdx] = useState(0)
-  useEffect(() => { setIdx(0) }, [memberId, profile?.photo])
+  // Probeer opnieuw vanaf de hoogste-prioriteitsfoto wanneer de gedeelde
+  // profiel-foto live wijzigt. Bij een kapotte/verdwenen remote foto valt
+  // onError daarna vanzelf terug op /public/team/{id}.jpg.
+  useEffect(() => { setIdx(0) }, [memberId, profile?.photo, sharedPhoto])
 
   const current = photoCandidates[idx]
   const showInitials = !current || idx >= photoCandidates.length

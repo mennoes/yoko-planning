@@ -4,10 +4,10 @@ import { completeLinkedTask, completionTargetForProject } from '@/lib/personalCo
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile } from '@/components/ProfileContext'
 import { useTeam } from '@/components/TeamContext'
 import { useMemberPopup } from '@/components/MemberPopup'
+import { UserAvatar } from '@/components/UserAvatar'
 import { useUndo } from '@/components/UndoContext'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { isTeamMetadataId } from '@/lib/teamMemberIdentity'
@@ -111,33 +111,13 @@ const saveSections = (s: Section[]) => saveTodoSections(s)
 
 // ─── Member avatar ─────────────────────────────────────────────────────────────
 function MemberAvatar({ memberId, size = 28 }: { memberId: string; size?: number }) {
-  const { getPhoto }  = useTeamPhotos()
-  const { profile }   = useProfile()
-  const { members: liveTeamForAvatar } = useTeam()
   const { showMember } = useMemberPopup()
-  // Eerst kijken in live team_members (Supabase), valt terug op team.json
-  // voor pre-DB / legacy leden. Anders krijgen nieuwe leden zoals Manuel
-  // geen naam/kleur en valt de avatar lelijk uit ('?' met grijs).
-  const member        = liveTeamForAvatar.find(m => m.id === memberId) ?? teamData.members.find(m => m.id === memberId)
-  const isMe          = profile?.memberId === memberId
-  const photo         = isMe ? (profile?.photo ?? getPhoto(memberId)) : getPhoto(memberId)
-  const [staticFailed, setStaticFailed] = useState(false)
-  const staticSrc     = `/team/${memberId}.jpg`
-  const initials      = member?.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() ?? '?'
-  const color         = member?.color ?? '#888'
-  const style: React.CSSProperties = {
-    width: size, height: size, borderRadius: '50%',
-    objectFit: 'cover', flexShrink: 0, cursor: 'pointer',
-  }
-
-  if (photo)          return <img src={photo} alt={member?.name} style={style} onClick={e => showMember(memberId, e)} title="Klik voor profiel" />
-  if (!staticFailed)  return <img src={staticSrc} alt={member?.name} style={style} onError={() => setStaticFailed(true)} onClick={e => showMember(memberId, e)} title="Klik voor profiel" />
   return (
     <span
-      style={{ ...style, border: `1px solid var(--border)`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: color + '22', fontSize: size * 0.36, fontWeight: 700, color }}
+      style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}
       onClick={e => showMember(memberId, e)} title="Klik voor profiel"
     >
-      {initials}
+      <UserAvatar memberId={memberId} size={size} />
     </span>
   )
 }

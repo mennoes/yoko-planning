@@ -12,6 +12,7 @@ import { setBoardColumns, getBoards } from '@/lib/boardsRegistry'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { useTeam }        from './TeamContext'
+import { UserAvatar }     from './UserAvatar'
 import { useUndo }        from './UndoContext'
 import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
@@ -727,46 +728,7 @@ function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[
 
 // ─── Owners cel ───────────────────────────────────────────────────────────────
 function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
-  const { profile }    = useProfile()
-  const { getPhoto }   = useTeamPhotos()
-  const { members: liveTeam } = useTeam()
-  // Eerst kijken in live team_members (Supabase), valt terug op
-  // data/team.json voor pre-migratie / legacy ids. Zonder deze
-  // dual-lookup verscheen 'r geen avatar voor leden die alleen via
-  // /team-admin zijn toegevoegd (zoals Manuel).
-  const liveMember = liveTeam.find(t => t.id === id)
-  const seedMember = teamData.members.find(t => t.id === id)
-  const m = liveMember
-    ? { id: liveMember.id, name: liveMember.name, color: liveMember.color }
-    : seedMember
-  if (!m) return null
-  const isMe    = profile?.memberId === id
-  const photo   = isMe ? (profile?.photo ?? getPhoto(id)) : getPhoto(id)
-  const fallback = `/team/${id}.jpg`
-  const initials = m.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-
-  if (photo) {
-    return (
-      <img src={photo} alt={m.name} title={m.name} style={{
-        width: size, height: size, borderRadius: '50%', flexShrink: 0,
-        border: `2px solid ${m.color}`, objectFit: 'cover',
-      }} />
-    )
-  }
-  return (
-    <span title={m.name} style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: m.color + '30', border: `2px solid ${m.color}`,
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.38, fontWeight: 700, color: m.color,
-      position: 'relative', overflow: 'hidden',
-    }}>
-      <img src={fallback} alt={m.name}
-        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-      {initials}
-    </span>
-  )
+  return <UserAvatar memberId={id} size={size} />
 }
 
 function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {

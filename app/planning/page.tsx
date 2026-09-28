@@ -321,29 +321,10 @@ function fmtIso(iso: string | null) {
 
 // ─── Member avatar ────────────────────────────────────────────────────────────
 function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
-  const { profile }   = useProfile()
-  const { getPhoto }  = useTeamPhotos()
   const { showMember } = useMemberPopup()
-  const isMe     = profile?.memberId === member.id
-  const photo    = isMe ? (profile?.photo ?? getPhoto(member.id)) : getPhoto(member.id)
-  const fallback = `/team/${member.id}.jpg`
-  const initials = member.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-
-  const inner = photo ? (
-    <img src={photo} alt={member.name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />
-  ) : (
-    <span style={{ width: size, height: size, borderRadius: '50%', background: member.color + '22',
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.36, fontWeight: 700, color: member.color, position: 'relative', overflow: 'hidden' }}>
-      <img src={fallback} alt={member.name}
-        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-      {initials}
-    </span>
-  )
   return (
     <span onClick={e => showMember(member.id, e)} title="Klik voor profiel" style={{ cursor: 'pointer', display: 'inline-flex', flexShrink: 0 }}>
-      {inner}
+      <UserAvatar memberId={member.id} size={size} />
     </span>
   )
 }
