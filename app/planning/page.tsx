@@ -6684,16 +6684,16 @@ export default function PlanningPage() {
               // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
 
-            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number }) => (
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; members?: TeamMember[] }) => (
               <div onClick={opts?.onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)',
-                  cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none' }}>
+                  cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: zoom === 'week' && opts?.members?.length ? 38 : undefined }}>
                 {/* Label blijft tegen de linker rand kleven terwijl de balk
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
-                <div style={{ position: 'sticky', left: 0, width: 'max-content',
-                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ position: 'sticky', left: 0, zIndex: 22, width: zoom === 'week' && opts?.members?.length ? nameW + namePad : 'max-content', flexShrink: 0,
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--overlay-faint)' }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
                       // pos 2: iedereen in deze sectie staat individueel
@@ -6712,6 +6712,22 @@ export default function PlanningPage() {
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
                 </div>
+                {zoom === 'week' && opts?.members?.length ? cols.map(col => {
+                  const total = Math.round(opts.members!.reduce((sum, member) => (
+                    sum + contributionsFor(member.id, col).reduce((hours, contribution) => hours + contribution.hours, 0)
+                  ), 0) * 10) / 10
+                  const capacity = Math.round(opts.members!.reduce((sum, member) => sum + colCapacity(member.weeklyCapacity, member.id), 0) * 10) / 10
+                  const pct = capacity > 0 ? total / capacity : 0
+                  const miniSize = viewSize === 'large' ? 20 : 17
+                  const miniRadius = viewSize === 'large' ? 8 : 6.5
+                  return (
+                    <div key={`team-cap-${label}-${col.key}`}
+                      title={`${label}: ${total} van ${capacity} uur (${Math.round(pct * 100)}%)`}
+                      style={{ width: col.widthPx, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border-strong)' }}>
+                      <WorkloadCircleSvg pct={pct} cs={miniSize} or={miniRadius} />
+                    </div>
+                  )
+                }) : null}
               </div>
             )
 
@@ -6843,13 +6859,13 @@ export default function PlanningPage() {
               )
             }
             if (yokoTeam.length > 0) {
-              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos })}</div>)
+              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, members: yokoTeam })}</div>)
               if (yokoTeamPos !== 0) {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }
             }
             groupedVisible.forEach(({ group, members }) => {
-              out.push(<div key={`hdr-group-${group.id}`}>{sectionHeader(group.name, members.length)}</div>)
+              out.push(<div key={`hdr-group-${group.id}`}>{sectionHeader(group.name, members.length, { members })}</div>)
               members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i)))
             })
             if (unassigned.length > 0) {
@@ -6857,7 +6873,7 @@ export default function PlanningPage() {
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
             }
             if (freelancers.length > 0) {
-              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos })}</div>)
+              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos, members: freelancers })}</div>)
               if (freelancersPos !== 0) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
