@@ -4230,6 +4230,7 @@ type BoardTableProps = {
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const [openRequest, setOpenRequest] = useState<OpenItemRequest | null>(null)
+  const omdenkenRepairRunning = useRef(false)
   useEffect(() => {
     const readUrl = () => {
       const params = new URLSearchParams(window.location.search)
@@ -4253,6 +4254,36 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   const { profile } = useProfile()
   const { pushUndo } = useUndo()
   useEffect(() => { setCurrentActor(profile?.memberId ?? null) }, [profile?.memberId])
+
+  // Herstel bestaande verkeerd-geroute Omdenken-items ook direct via de
+  // bewezen cross-board move. Dit is een vangnet naast de servermigratie:
+  // de Supabase-update wordt eerst bevestigd en pas daarna worden bron- en
+  // doelcache samen aangepast, zodat een item nooit op beide borden blijft.
+  useEffect(() => {
+    if (boardId !== 'yoko' || omdenkenRepairRunning.current) return
+    if (typeof window === 'undefined' || window.location.pathname.startsWith('/demo')) return
+    const matches = groups.flatMap(group => group.items)
+      .filter(item => /omdenken/i.test(item.name ?? ''))
+    if (matches.length === 0) return
+
+    omdenkenRepairRunning.current = true
+    void (async () => {
+      let moved = 0
+      for (const item of matches) {
+        const result = await moveItemToBoard(item.id, 'yoko', 'omdenken', { yoko: groups })
+        if (result.ok) moved++
+        else {
+          window.dispatchEvent(new CustomEvent('yoko-push-failed', {
+            detail: { boardName: 'yoko', message: result.message ?? `'${item.name}' kon niet worden verplaatst.` },
+          }))
+        }
+      }
+      if (moved > 0) {
+        await Promise.all([pullBoardFromRemote('yoko'), pullBoardFromRemote('omdenken')])
+      }
+      omdenkenRepairRunning.current = false
+    })()
+  }, [boardId, groups])
 
   // Bij elke board-mount: hard-delete álle 'Nieuw item'-placeholder-rijen
   // in Supabase. Bypassed alle race-conditions tussen push/pull/soft-
