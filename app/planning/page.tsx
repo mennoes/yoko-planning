@@ -87,6 +87,7 @@ type Col = {
   label2:     string
   widthPx:    number
   isCurrent:  boolean
+  isPast:     boolean
 }
 
 // ─── Static layout constants ──────────────────────────────────────────────────
@@ -167,11 +168,13 @@ const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
 function getWeekCols(from: Date, count: number, colW: number): Col[] {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
   return getWeeks(from, count).map(ws => {
     const we  = new Date(ws); we.setDate(ws.getDate() + 6); we.setHours(23,59,59,999)
     const lbl = getWeekLabel(ws)
     return { key: ws.toISOString(), rangeStart: ws, rangeEnd: we,
-      label1: lbl.weekNum, label2: lbl.range, widthPx: colW, isCurrent: lbl.isCurrentWeek }
+      label1: lbl.weekNum, label2: lbl.range, widthPx: colW, isCurrent: lbl.isCurrentWeek,
+      isPast: we.getTime() < today.getTime() }
   })
 }
 
@@ -186,7 +189,8 @@ function getMonthCols(from: Date, count: number, colW: number): Col[] {
       label1: NL_MON[ms.getMonth()].toUpperCase(),
       label2: String(ms.getFullYear()),
       widthPx: colW,
-      isCurrent: now >= ms && now <= me })
+      isCurrent: now >= ms && now <= me,
+      isPast: me.getTime() < now.getTime() })
     d.setMonth(d.getMonth() + 1)
   }
   return cols
@@ -213,7 +217,8 @@ function getDayCols(from: Date, count: number, colW: number): Col[] {
         label1: 'we',
         label2: `${ds.getDate()}/${zo.getDate()}`,
         widthPx: WEEKEND_W,
-        isCurrent })
+        isCurrent,
+        isPast: zo.getTime() < today.getTime() })
       offset += 2
       added++
       continue
@@ -224,7 +229,8 @@ function getDayCols(from: Date, count: number, colW: number): Col[] {
       label1: NL_DAY[ds.getDay()],          // 'ma', 'di', ...
       label2: String(ds.getDate()),         // '6', '7', ...
       widthPx: colW,
-      isCurrent: ds.getTime() === today.getTime() })
+      isCurrent: ds.getTime() === today.getTime(),
+      isPast: de.getTime() < today.getTime() })
     added++
     offset++
   }
@@ -6212,6 +6218,10 @@ export default function PlanningPage() {
         }
         return (
           <Popup title="Mensen & capaciteit" onClose={() => setPeopleOpen(false)}>
+            <div style={{ padding: '10px 12px', marginBottom: 10, borderRadius: 10, background: 'var(--accent-light)', border: '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-primary)' }}>Teams beheren</div>
+              <div style={{ marginTop: 3, fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-muted)' }}>Maak hieronder een team en sleep mensen daarna naar die groep. De indeling wordt overal in TEAM gebruikt.</div>
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {filterMembers.size === 0 ? 'Alleen Studio Yoko zichtbaar (standaard)' : `${filterMembers.size} geselecteerd`} · pas rechts de uren per week aan
@@ -6297,6 +6307,19 @@ export default function PlanningPage() {
         }}
         style={{ height: '100%', overflow: 'auto', minHeight: 0, cursor: isDragScrolling ? 'grabbing' : 'grab', userSelect: isDragScrolling ? 'none' : 'auto' }}>
         <div style={{ minWidth: totalWidth, position: 'relative' }}>
+
+          {/* Voorbije weken blijven zichtbaar, maar staan visueel een stap
+              terug. De overlay raakt alleen het tijddeel; namen en teams
+              links blijven volledig leesbaar en alle interactie blijft vrij. */}
+          {zoom === 'week' && cols.map((col, index) => col.isPast ? (
+            <div key={`past-week-${col.key}`} aria-hidden style={{
+              position: 'absolute',
+              left: nameW + namePad + cols.slice(0, index).reduce((sum, entry) => sum + entry.widthPx, 0),
+              top: 0, bottom: 0, width: col.widthPx,
+              background: 'color-mix(in srgb, var(--bg-base) 25%, transparent)',
+              pointerEvents: 'none', zIndex: 18,
+            }} />
+          ) : null)}
 
           {/* Mobile title-rij — staat IN de scrollable area zodat 'ie
               meescrolt en geen vaste verticale ruimte opslokt boven de
@@ -6431,7 +6454,7 @@ export default function PlanningPage() {
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: zoom === 'week' ? '6px 2px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
-                background: headerBg }}>
+                background: headerBg, opacity: zoom === 'week' && col.isPast ? 0.75 : 1 }}>
                 {zoom === 'week' ? (
                   <>
                     <div style={{ fontSize: 10.5, fontWeight: col.isCurrent ? 700 : 600,
@@ -6688,7 +6711,7 @@ export default function PlanningPage() {
               <div onClick={opts?.onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)',
-                  cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: zoom === 'week' && opts?.members?.length ? 38 : undefined }}>
+                  cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: zoom === 'week' && opts?.members?.length ? 48 : undefined }}>
                 {/* Label blijft tegen de linker rand kleven terwijl de balk
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
@@ -6723,8 +6746,11 @@ export default function PlanningPage() {
                   return (
                     <div key={`team-cap-${label}-${col.key}`}
                       title={`${label}: ${total} van ${capacity} uur (${Math.round(pct * 100)}%)`}
-                      style={{ width: col.widthPx, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border-strong)' }}>
+                      style={{ width: col.widthPx, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderLeft: '1px solid var(--border-strong)', opacity: col.isPast ? 0.75 : 1 }}>
                       <WorkloadCircleSvg pct={pct} cs={miniSize} or={miniRadius} />
+                      <span style={{ fontSize: 9.5, lineHeight: 1.1, color: 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: 650 }}>
+                        {Math.round(pct * 100)}% · {total}u
+                      </span>
                     </div>
                   )
                 }) : null}

@@ -652,7 +652,14 @@ export default function HomePage() {
     if (!memberId) return
     const task = myTodos.find(t => t.id === id)
     if (task?.projectRef) {
-      try { if (await completeLinkedTask(task.projectRef, memberId, !task.done)) return }
+      try {
+        if (await completeLinkedTask(task.projectRef, memberId, !task.done)) {
+          // Meteen dezelfde gedeelde status tonen; de comment-sync houdt
+          // Home, To do's en Planning daarna op alle apparaten gelijk.
+          setMyTodos(items => items.map(item => item.id === id ? { ...item, done: !task.done } : item))
+          return
+        }
+      }
       catch (err) { window.alert(err instanceof Error ? err.message : 'Opslaan mislukt.'); return }
     }
     const fallback: TodoSection[] = todosData.sections as TodoSection[]

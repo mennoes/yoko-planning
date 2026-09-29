@@ -32,7 +32,13 @@ export async function setPersonalCompletion(admin: SupabaseClient, userId: strin
   const subOwners: string[] = (sub?.ownerIds ?? []).filter((id: string) => id && id !== 'unassigned')
   const owners = subOwners.length ? subOwners : parentOwners
   if (!owners.includes(memberId)) throw new CompletionError('Je kunt alleen je eigen toegewezen taak afronden.', 403)
-  if (item.status === 'Done' || sub?.status === 'Done') throw new CompletionError('Het hele item staat al op Done. Heropen eerst de gezamenlijke status.', 409)
+  // Een gezamenlijke Done-status is geen reden om iemands persoonlijke
+  // checkbox te blokkeren. Done zetten is idempotent: zo blijven Home,
+  // To do's en Planning dezelfde persoonlijke voortgang tonen. Alleen
+  // persoonlijk heropenen terwijl het hele item Done is blijft onmogelijk.
+  if (!done && (item.status === 'Done' || sub?.status === 'Done')) {
+    throw new CompletionError('Het hele item staat al op Done. Heropen eerst de gezamenlijke status.', 409)
+  }
 
   const context = completionContext(target)
   const rows: Row[] = []

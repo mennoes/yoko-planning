@@ -90,13 +90,12 @@ test('reopen only your own state; stale opposite action is rejected', async () =
   const doneAgain = await setPersonalCompletion(db, 'u-menno', target, true, open.comment.id)
   assert.notEqual(doneAgain.comment.id, done.comment.id)
 })
-test('unassigned people, missing profiles, deleted items/groups and globally Done are rejected', async () => {
+test('unassigned people, missing profiles and deleted items/groups are rejected', async () => {
   for (const mutate of [
     db => { db.tables.board_items[0].owner_ids = ['odette'] },
     db => { db.tables.profiles = [] },
     db => { db.tables.board_items[0].deleted_at = 'today' },
     db => { db.tables.board_groups[0].deleted_at = 'today' },
-    db => { db.tables.board_items[0].status = 'Done' },
   ]) {
     const db = fakeDb(); mutate(db)
     await assert.rejects(setPersonalCompletion(db, 'u-menno', target, true, null))
@@ -120,6 +119,16 @@ test('subitems inherit empty assignments; notify other task and parent owners on
   assert.equal(db.tables.notifications.length, 1)
   assert.equal(db.tables.notifications[0].recipient_id, 'odette')
 })
+test('personal Done remains possible when the shared board item is already Done', async () => {
+  const db = fakeDb()
+  db.tables.board_items[0].status = 'Done'
+  const result = await setPersonalCompletion(db, 'u-menno', target, true, null)
+  assert.equal(rules.completionState([result.comment], target, 'menno').done, true)
+  await assert.rejects(
+    setPersonalCompletion(db, 'u-menno', target, false, result.comment.id),
+    /hele item staat al op Done/,
+  )
+})
 test('failed status save sends no notification; notification failure is explicit and retryable', async () => {
   const db = fakeDb(); db.fails.set('comments', 1)
   await assert.rejects(setPersonalCompletion(db, 'u-menno', target, true, null))
@@ -140,6 +149,8 @@ test('Home and To do shared selector uses personal Done and supports reopening d
     './boardStore': { loadGroups: board => board === 'yoko' ? groups : [] },
     './workloadCategory': { isVrijTitle: () => false, loadCategoryOverrides: () => ({}) },
     './commentsStore': { loadAllComments: () => comments }, './personalCompletion': rules,
+    './boardsRegistry': { getBoardIds: () => ['yoko', 'pnp', 'nederland', 'vlaanderen', 'dienjaar'] },
+    './todosStore': { loadSections: () => [] },
   }
   for (const board of ['yoko', 'pnp', 'nederland', 'vlaanderen', 'dienjaar']) mocks[`@/data/boards/${board}.json`] = { groups: [] }
   const api = load('../lib/todoProjectSeed.ts', mocks, { window: { localStorage: { getItem: () => null } } })
@@ -150,7 +161,7 @@ test('Home and To do shared selector uses personal Done and supports reopening d
   const stale = [{ id: 'task', text: 'Artwork', done: true, projectRef: { board: 'yoko', itemId: 'project' } }]
   assert.equal(api.mergeMemberTodoItems(stale, 'menno')[0].done, false)
   groups[0].items[0].status = 'Done'
-  assert.equal(api.mergeMemberTodoItems(stale, 'menno').length, 0)
+  assert.equal(api.mergeMemberTodoItems(stale, 'menno')[0].done, true)
   assert.equal(api.mergeMemberTodoItems([], 'odette').length, 0)
 })
 test('API rejects unauthenticated and malformed requests before doing any writes', async () => {

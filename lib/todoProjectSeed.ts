@@ -245,12 +245,18 @@ export function mergeMemberTodoItems(stored: TodoItem[], memberId: string): Todo
         ? { ...current, startDate: relevantChild.startDate, endDate: relevantChild.endDate }
         : current
       const personal = current.completionTarget ? completionState(comments, current.completionTarget, memberId) : undefined
-      return { ...item, ...(personal ? { done: personal.done } : {}), projectRef: { ...item.projectRef, ...datedCurrent } }
+      const globallyDone = doneKeys.has(`${current.board}:${current.itemId}`)
+      return {
+        ...item,
+        // Gezamenlijk Done wint altijd: zo kan een oude persoonlijke
+        // 'open'-event Home/To do's niet terug laten springen naar open.
+        done: globallyDone || (personal ? personal.done : item.done),
+        projectRef: { ...item.projectRef, ...datedCurrent },
+      }
     })
     .filter(item => {
       const ref = item.projectRef
       if (ref) {
-        if (doneKeys.has(`${ref.board}:${ref.itemId}`)) return false
         if (overrides[`${ref.board}__${ref.itemId}`] === 'vrij') return false
         if (isVrijTitle(ref.name ?? '')) return false
         // Een hoofdproject met concrete subitems is alleen nog een taak

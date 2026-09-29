@@ -26,6 +26,7 @@ import {
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
 import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard } from '@/lib/boardStore'
+import { routeOmdenkenNow } from '@/lib/googleClient'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
@@ -4268,6 +4269,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
     omdenkenRepairRunning.current = true
     void (async () => {
+      const routed = await routeOmdenkenNow()
+      if (!routed.ok) {
+        window.dispatchEvent(new CustomEvent('yoko-push-failed', {
+          detail: { boardName: 'yoko', message: `Omdenken-verplaatsing mislukt: ${routed.error ?? 'onbekende fout'}` },
+        }))
+        omdenkenRepairRunning.current = false
+        return
+      }
+
       let moved = 0
       for (const item of matches) {
         const result = await moveItemToBoard(item.id, 'yoko', 'omdenken', { yoko: groups })
