@@ -34,6 +34,10 @@ import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
 import { NotificationBell } from './NotificationBell'
 import { isOnDemoRoute, notifyDemoBlocked } from '@/lib/demoFixtures'
+import {
+  type ThemePreference as Theme,
+  applyThemePreference, getThemePreference, setThemePreference,
+} from '@/lib/theme'
 
 // ─── Main nav defaults ────────────────────────────────────────────────────────
 const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -53,20 +57,17 @@ const PALETTE = [
   '#ff642e','#ff7a00','#ffcb00','#00c875','#037f4c','#ff5ac4','#9aadbd',
 ]
 
-type Theme = 'dark' | 'light'
 const THEMES: { value: Theme; Icon: React.ComponentType<{ size?: number }>; label: string }[] = [
+  { value: 'auto',  Icon: IconAuto, label: 'Automatisch op zon' },
   { value: 'light', Icon: IconSun,  label: 'Licht'  },
   { value: 'dark',  Icon: IconMoon, label: 'Donker' },
 ]
 function applyTheme(t: Theme) {
-  document.documentElement.setAttribute('data-theme', t)
+  applyThemePreference(t)
 }
-/** Initieel thema: gebruik OS-voorkeur als nog niks expliciet gekozen. */
+/** Initieel thema: automatisch op zon als nog niks expliciet gekozen is. */
 function initialTheme(): Theme {
-  if (typeof window === 'undefined') return 'light'
-  const saved = localStorage.getItem('theme')
-  if (saved === 'dark' || saved === 'light') return saved
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return getThemePreference()
 }
 
 // ─── Generic drag-to-reorder ──────────────────────────────────────────────────
@@ -1224,8 +1225,7 @@ export default function Sidebar({
   function cycleTheme() {
     const idx  = THEMES.findIndex(t => t.value === theme)
     const next = THEMES[(idx + 1) % THEMES.length].value
-    setTheme(next); applyTheme(next)
-    localStorage.setItem('theme', next)
+    setTheme(next); setThemePreference(next)
   }
 
   function toggleCollapsed() {
@@ -1308,7 +1308,7 @@ export default function Sidebar({
         </aside>
         {settingsOpen && <SettingsPopup onClose={() => setSettingsOpen(false)} profile={profile}
           openEdit={() => { setSettingsOpen(false); openEdit() }} theme={theme}
-          setTheme={(t) => { setTheme(t); applyTheme(t); localStorage.setItem('theme', t) }} signOut={signOut} />}
+          setTheme={(t) => { setTheme(t); setThemePreference(t) }} signOut={signOut} />}
       </div>
     )
   }
@@ -1569,7 +1569,7 @@ export default function Sidebar({
           profile={profile}
           openEdit={() => { setSettingsOpen(false); openEdit() }}
           theme={theme}
-          setTheme={(t) => { setTheme(t); applyTheme(t); localStorage.setItem('theme', t) }}
+          setTheme={(t) => { setTheme(t); setThemePreference(t) }}
           signOut={signOut}
         />
       )}

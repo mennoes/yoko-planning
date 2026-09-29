@@ -60,6 +60,7 @@ import {
 } from '@/components/Icon'
 import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
+import { useTeamGroups } from '@/components/useTeamGroups'
 import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
 import { completionTargetForProject, completeLinkedTask, loadPersonalCompletion } from '@/lib/personalCompletionClient'
 import { onCommentsUpdate } from '@/lib/commentsStore'
@@ -4495,6 +4496,7 @@ export default function PlanningPage() {
   const { pushUndo, showToast } = useUndo()
   const { profile }    = useProfile()
   const { members: liveTeam } = useTeam()
+  const { groups: teamGroups, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup } = useTeamGroups()
   // Helper: classificeer een memberId als 'yoko' op basis van de live
   // team_members tabel; valt terug op de hardcoded YOKO_IDS voor leden
   // die nog niet in de DB staan (bv. extras of voor migratie 0018 is
@@ -4594,6 +4596,7 @@ export default function PlanningPage() {
     try { localStorage.setItem('planning-hidden-agendas', JSON.stringify(next)) } catch { /* Storage may be unavailable. */ }
   }
   const [peopleOpen,   setPeopleOpen]   = useState(false)
+  const [newTeamGroupName, setNewTeamGroupName] = useState('')
   const [shiftOpen,    setShiftOpen]    = useState(false)
   const [shiftPicked,  setShiftPicked]  = useState<Set<string>>(new Set())
   const [shiftDays,    setShiftDays]    = useState(7)
@@ -6142,10 +6145,11 @@ export default function PlanningPage() {
         // YOKO_IDS-check loopt nu via isYokoCrew (team_members.kind),
         // met fallback op de hardcoded set voor leden die nog geen kind
         // hebben in de DB.
-        const yokoTeam     = team.filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id))
+        const groupedIds   = new Set(teamGroups.flatMap(group => group.memberIds))
+        const yokoTeam     = team.filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id) && !groupedIds.has(m.id))
         const unassigned   = team.filter(m => m.id === 'unassigned')
         const inactiveTeam = team.filter(m => isMemberInactive(m.id))
-        const freelancers  = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id))
+        const freelancers  = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id))
         function toggle(id: string) {
           setFilterMembers(prev => {
             const next = new Set(prev)
@@ -6161,7 +6165,14 @@ export default function PlanningPage() {
         const row = (m: TeamMember) => {
           const checked = filterMembers.size === 0 ? (isYokoCrew(m.id) && !isMemberInactive(m.id)) || m.id === 'unassigned' : filterMembers.has(m.id)
           return (
-            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
+            <div key={m.id} draggable={m.id !== 'unassigned'}
+              onDragStart={e => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('application/x-yoko-team-member', m.id)
+                e.dataTransfer.setData('text/plain', m.id)
+              }}
+              title={m.id === 'unassigned' ? undefined : 'Sleep naar een teamgroep'}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: m.id === 'unassigned' ? 'default' : 'grab' }}>
               <input type="checkbox" checked={checked} onChange={() => toggle(m.id)}
                 style={{ width: 18, height: 18, accentColor: m.color, cursor: 'pointer', flexShrink: 0 }} />
               <MemberAvatar member={m} size={30} />
@@ -6171,6 +6182,31 @@ export default function PlanningPage() {
                 onChange={e => updateCapacity(m.id, Math.max(0, parseInt(e.target.value) || 0))}
                 style={{ width: 58, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 7px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', textAlign: 'right' }} />
               <span style={{ width: 24, fontSize: 11, color: 'var(--text-muted)' }}>u/w</span>
+            </div>
+          )
+        }
+        const groupDrop = (groupId: string | null) => (e: React.DragEvent) => {
+          e.preventDefault()
+          const memberId = e.dataTransfer.getData('application/x-yoko-team-member') || e.dataTransfer.getData('text/plain')
+          if (!memberId || memberId === 'unassigned') return
+          void assignMemberToTeamGroup(memberId, groupId).then(() => {
+            const destination = groupId ? teamGroups.find(group => group.id === groupId)?.name : 'Geen groep'
+            showToast(`Persoon verplaatst naar ${destination ?? 'groep'}.`)
+          })
+        }
+        const groupZone = (group: typeof teamGroups[number]) => {
+          const members = group.memberIds.map(id => team.find(member => member.id === id)).filter((member): member is TeamMember => !!member)
+          return (
+            <div key={group.id} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }} onDrop={groupDrop(group.id)}
+              style={{ marginTop: 12, padding: '8px 10px 4px', border: '1px dashed var(--border-strong)', borderRadius: 10, background: 'var(--overlay-faint)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{group.name}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-muted)' }}>{members.length}</span>
+              </div>
+              {members.length > 0 ? members.map(row) : (
+                <div style={{ padding: '10px 2px', fontSize: 12, color: 'var(--text-muted)' }}>Sleep mensen hierheen</div>
+              )}
             </div>
           )
         }
@@ -6187,10 +6223,14 @@ export default function PlanningPage() {
                 </button>
               )}
             </div>
+            {teamGroups.map(groupZone)}
             <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 10, marginBottom: 2 }}>
               Studio Yoko
             </div>
-            {yokoTeam.map(row)}
+            <div onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }} onDrop={groupDrop(null)}
+              style={{ minHeight: yokoTeam.length === 0 ? 42 : undefined, borderRadius: 8 }}>
+              {yokoTeam.length > 0 ? yokoTeam.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Sleep hierheen om uit een groep te halen</div>}
+            </div>
             {unassigned.length > 0 && (
               <>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 14, marginBottom: 2 }}>
@@ -6220,6 +6260,24 @@ export default function PlanningPage() {
                 {inactiveTeam.map(row)}
               </details>
             )}
+            <form onSubmit={e => {
+              e.preventDefault()
+              const name = newTeamGroupName.trim()
+              if (!name) return
+              void createTeamGroup(name).then(group => {
+                if (group) {
+                  setNewTeamGroupName('')
+                  showToast(`Groep ${group.name} aangemaakt.`)
+                }
+              })
+            }} style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border-light)' }}>
+              <input value={newTeamGroupName} onChange={e => setNewTeamGroupName(e.target.value)} placeholder="Nieuwe groep, bv. Editors"
+                style={{ flex: 1, minWidth: 0, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 7, padding: '7px 9px', color: 'var(--text-primary)', fontSize: 13, outline: 'none' }} />
+              <button type="submit" disabled={!newTeamGroupName.trim()}
+                style={{ border: 'none', borderRadius: 7, padding: '7px 11px', background: 'var(--accent)', color: '#171717', fontWeight: 800, cursor: newTeamGroupName.trim() ? 'pointer' : 'default', opacity: newTeamGroupName.trim() ? 1 : 0.45 }}>
+                + Groep
+              </button>
+            </form>
           </Popup>
         )
       })()}
@@ -6414,12 +6472,19 @@ export default function PlanningPage() {
               filterMembers.size === 0 ? DEFAULT_VIS.has(id) : filterMembers.has(id)
 
             const me = profile?.memberId
+            const groupedIds = new Set(teamGroups.flatMap(group => group.memberIds))
+            const groupedVisible = teamGroups.map(group => ({
+              group,
+              members: group.memberIds
+                .map(id => team.find(member => member.id === id))
+                .filter((member): member is TeamMember => !!member && !isMemberInactive(member.id) && isMemberVisible(member.id)),
+            })).filter(entry => entry.members.length > 0)
             const yokoVisible = team
-              .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id) && isMemberVisible(m.id))
+              .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id) && !groupedIds.has(m.id) && isMemberVisible(m.id))
               .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
             const unassignedVisible = team.filter(m => m.id === 'unassigned' && isMemberVisible(m.id))
             const inactiveVisible = team.filter(m => isMemberInactive(m.id) && isMemberVisible(m.id))
-            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && isMemberVisible(m.id)
+            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id) && isMemberVisible(m.id)
               // Verberg freelancers zonder activiteit in [-2mnd, +3mnd]
               // tenzij de gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
@@ -6564,6 +6629,12 @@ export default function PlanningPage() {
               <>
                 {yokoVisible.length > 0 && sectionLabel('Studio Yoko', yokoVisible.length)}
                 {yokoVisible.map(renderPerson)}
+                {groupedVisible.map(({ group, members }) => (
+                  <div key={`group-day-${group.id}`}>
+                    {sectionLabel(group.name, members.length)}
+                    {members.map(renderPerson)}
+                  </div>
+                ))}
                 {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length)}
                 {unassignedVisible.map(renderPerson)}
                 {freelancersVisible.length > 0 && (
@@ -6589,8 +6660,15 @@ export default function PlanningPage() {
             // ziet zonder te scrollen. Verder respecteren we de bestaande
             // team-volgorde (uit localStorage / team.json).
             const me = profile?.memberId
+            const groupedIds = new Set(teamGroups.flatMap(group => group.memberIds))
+            const groupedVisible = teamGroups.map(group => ({
+              group,
+              members: group.memberIds
+                .map(id => visible.find(member => member.id === id))
+                .filter((member): member is TeamMember => !!member && !isMemberInactive(member.id)),
+            })).filter(entry => entry.members.length > 0)
             const yokoTeam = visible
-              .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id))
+              .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id) && !groupedIds.has(m.id))
               .sort((a, b) => {
                 if (a.id === me) return -1
                 if (b.id === me) return 1
@@ -6601,7 +6679,7 @@ export default function PlanningPage() {
             // activity-heuristiek hieronder — een expliciet gezette vlag,
             // altijd in z'n eigen groep, nooit bij Team Yoko/Freelancers.
             const inactiveTeam  = visible.filter(m => isMemberInactive(m.id))
-            const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id)
+            const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id)
               // Verberg freelancers zonder recente activiteit (geen werk in
               // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
               && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
@@ -6770,6 +6848,10 @@ export default function PlanningPage() {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }
             }
+            groupedVisible.forEach(({ group, members }) => {
+              out.push(<div key={`hdr-group-${group.id}`}>{sectionHeader(group.name, members.length)}</div>)
+              members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i)))
+            })
             if (unassigned.length > 0) {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))

@@ -12,7 +12,7 @@ import { useIsMobile } from '@/lib/useIsMobile'
 import { fmtMinutes, loadEntries } from '@/lib/timerStore'
 import { VacationModal } from '@/components/VacationModal'
 import { upsertTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
-import { setCapacity } from '@/lib/capacitiesStore'
+import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import { isTeamAdmin } from '@/lib/teamAdmin'
 
 type ExtendedProfile = {
@@ -60,6 +60,7 @@ export default function PublicProfilePage() {
   const [data, setData] = useState<ExtendedProfile | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [capacities, setCapacities] = useState<Record<string, number>>(() => loadCapacities())
   const { allMembers: liveTeam, refresh: refreshTeam } = useTeam()
   // Eerst kijken in live team_members (Supabase), valt terug op team.json
   // voor pre-DB / legacy ids. Anders krijgt Manuel (alleen in team_members)
@@ -71,6 +72,13 @@ export default function PublicProfilePage() {
   const isMe = myProfile?.memberId === memberId
   const admin = isTeamAdmin(myProfile?.memberId)
   const canEditProfile = isMe || (admin && !!data)
+
+  useEffect(() => {
+    const refresh = () => setCapacities(loadCapacities())
+    refresh()
+    void pullCapacities().then(refresh)
+    return onCapacitiesChange(refresh)
+  }, [])
 
   useEffect(() => {
     if (!supabase) { setLoaded(true); return }
@@ -119,7 +127,7 @@ export default function PublicProfilePage() {
   const name    = liveMember?.name ?? data?.name ?? baseMember.name
   const color   = data?.color ?? baseMember.color
   const photo   = data?.photo ?? (memberId ? getPhoto(memberId) : null) ?? `/team/${memberId}.jpg`
-  const cap     = data?.weekly_capacity ?? baseMember.weeklyCapacity ?? 40
+  const cap     = capacities[memberId] ?? data?.weekly_capacity ?? baseMember.weeklyCapacity ?? 40
 
   // Time-tracking summary for this member's currently-running entries (only their own
   // entries are accessible; for others we just show capacity)
@@ -199,7 +207,7 @@ export default function PublicProfilePage() {
       </div>
 
       {admin && liveMember && memberId !== 'unassigned' && (
-        <AdminTeamCard member={liveMember} refresh={refreshTeam} onError={setSaveError} />
+        <AdminTeamCard member={liveMember} capacity={cap} refresh={refreshTeam} onError={setSaveError} />
       )}
       {saveError && <p role="alert" style={{ color: 'var(--red, #e2445c)', fontSize: 12, margin: '0 0 16px' }}>Opslaan mislukt: {saveError}</p>}
       {admin && !isMe && !data && (
@@ -279,19 +287,19 @@ export default function PublicProfilePage() {
   )
 }
 
-function AdminTeamCard({ member, refresh, onError }: {
-  member: TeamMember; refresh: () => Promise<void>; onError: (message: string) => void
+function AdminTeamCard({ member, capacity, refresh, onError }: {
+  member: TeamMember; capacity: number; refresh: () => Promise<void>; onError: (message: string) => void
 }) {
   const [draft, setDraft] = useState(() => ({
-    name: member.name, email: member.email, weeklyCapacity: member.weeklyCapacity,
+    name: member.name, email: member.email, weeklyCapacity: capacity,
     startDate: member.startDate ?? '', kind: member.kind,
   }))
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   useEffect(() => {
-    setDraft({ name: member.name, email: member.email, weeklyCapacity: member.weeklyCapacity,
+    setDraft({ name: member.name, email: member.email, weeklyCapacity: capacity,
       startDate: member.startDate ?? '', kind: member.kind })
-  }, [member.id, member.name, member.email, member.weeklyCapacity, member.startDate, member.kind])
+  }, [member.id, member.name, member.email, capacity, member.startDate, member.kind])
 
   async function saveDetails() {
     if (!draft.name.trim() || !Number.isFinite(draft.weeklyCapacity) || draft.weeklyCapacity < 0 || draft.weeklyCapacity > 80) {
@@ -301,7 +309,7 @@ function AdminTeamCard({ member, refresh, onError }: {
     try {
       const result = await upsertTeamMember({ ...member, ...draft, name: draft.name.trim(), email: draft.email.trim(), startDate: draft.startDate || null })
       if (!result.ok || result.error) { onError(result.error ?? 'Opslaan mislukt.'); return }
-      if (draft.weeklyCapacity !== member.weeklyCapacity) setCapacity(member.id, draft.weeklyCapacity)
+      if (draft.weeklyCapacity !== capacity) setCapacity(member.id, draft.weeklyCapacity)
       await refresh()
       setSaved(true)
     } catch { onError('Opslaan mislukt. Probeer opnieuw.') }

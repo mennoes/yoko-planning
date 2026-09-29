@@ -83,6 +83,12 @@ async function pushCapacity(memberId: string, capacity: number): Promise<void> {
     weekly_capacity: capacity,
     updated_at:      new Date().toISOString(),
   }, { onConflict: 'member_id' })
+  // Houd ook het teamprofiel gelijk, zodat oudere schermen of exports die
+  // weekly_capacity lezen nooit een ander getal tonen.
+  await supabase.from('team_members').update({
+    weekly_capacity: capacity,
+    updated_at: new Date().toISOString(),
+  }).eq('id', memberId)
 }
 
 let capacitiesChannel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null

@@ -45,6 +45,7 @@ import {
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
 import { loadProfileDaysOff, lookupDaysOff, onProfileDaysOffChange } from '@/lib/profileDaysOff'
+import { loadCapacities, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import { supabase } from '@/lib/supabase'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 
@@ -387,6 +388,13 @@ export default function HomePage() {
   // op de oude status hangen tot een handmatige refresh.
   const [daysOffTick, setDaysOffTick] = useState(0)
   const [completionTick, setCompletionTick] = useState(0)
+  const [capacityOverrides, setCapacityOverrides] = useState<Record<string, number>>(() => loadCapacities())
+  useEffect(() => {
+    const refresh = () => setCapacityOverrides(loadCapacities())
+    refresh()
+    void pullCapacities().then(refresh)
+    return onCapacitiesChange(refresh)
+  }, [])
   useEffect(() => onCommentsUpdate(() => setCompletionTick(n => n + 1)), [])
   useEffect(() => {
     const bump = () => setDaysOffTick(n => n + 1)
@@ -837,7 +845,7 @@ export default function HomePage() {
   // 32u-cap nóg eens 4/5 maken = 25.6u, wat klopt niet.
   const overloaded = yokoMembers
     .map(m => {
-      const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const cap = capacityOverrides[m.id] ?? profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
       const hrs = memberHoursThisWeek[m.id] ?? 0
       return { member: m, hours: hrs, cap, pct: cap > 0 ? Math.round((hrs / cap) * 100) : 0 }
     })
@@ -850,7 +858,7 @@ export default function HomePage() {
     let totalHours = 0
     let totalCap = 0
     for (const m of yokoMembers) {
-      const cap = profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
+      const cap = capacityOverrides[m.id] ?? profilesById[m.id]?.weekly_capacity ?? m.weeklyCapacity ?? 40
       const hrs = memberHoursThisWeek[m.id] ?? 0
       totalHours += hrs
       totalCap += cap

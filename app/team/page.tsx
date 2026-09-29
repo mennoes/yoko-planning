@@ -9,16 +9,17 @@ import { useTeam }  from '@/components/TeamContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
 import { UserAvatar }    from '@/components/UserAvatar'
+import { useTeamGroups } from '@/components/useTeamGroups'
 import { supabase }      from '@/lib/supabase'
 import {
   loadProfileDaysOff, setProfileDaysOff, onProfileDaysOffChange, pullProfileDaysOff,
 } from '@/lib/profileDaysOff'
 import { IconUsers, IconSearch } from '@/components/Icon'
 import {
-  getCapacities, setCapacity, onCapacitiesChange,
   getContacts, saveContacts, onContactsChange,
   type ContactGroup as StoredGroup,
 } from '@/lib/teamPageStore'
+import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import { addExtra, removeExtra, listExtras, onTeamUpdate } from '@/lib/teamExtras'
 // ─── Contacts types ───────────────────────────────────────────────────────────
 type Contact = { id: string; name: string; role: string; email: string; phone: string; daysOff?: string[]; inactive?: boolean }
@@ -443,6 +444,7 @@ export default function TeamPage() {
   // Live team-leden uit Supabase voor de kind-indeling (yoko/freelance).
   // Bij ontbreken vallen we terug op YOKO_IDS-set; zie de render hieronder.
   const { members: liveMembers } = useTeam()
+  const { groups: teamGroups } = useTeamGroups()
   // Capaciteiten zijn gedeeld met de Planning-pagina via localStorage; we
   // luisteren ook live mee zodat een aanpassing in Planning hier direct
   // doorkomt (en andersom).
@@ -452,10 +454,11 @@ export default function TeamPage() {
   const [caps, setCaps] = useState<Record<string, number>>(initialCaps)
   useEffect(() => {
     const refresh = () => {
-      const ov = getCapacities()
+      const ov = loadCapacities()
       setCaps({ ...initialCaps, ...ov })
     }
     refresh()
+    void pullCapacities().then(refresh)
     return onCapacitiesChange(refresh)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -583,8 +586,15 @@ export default function TeamPage() {
           // (aan/uit) gaat via Team beheren, net als de Yoko/Freelance-
           // indeling zelf.
           const isInactive = (id: string) => !!liveMembers.find(lm => lm.id === id)?.inactive
-          const yokoCards     = all.filter(m => kindOf(m.id) === 'yoko' && !isInactive(m.id))
-          const freeCards     = all.filter(m => kindOf(m.id) === 'freelance' && !isInactive(m.id))
+          const groupedIds    = new Set(teamGroups.flatMap(group => group.memberIds))
+          const groupedCards  = teamGroups.map(group => ({
+            group,
+            cards: group.memberIds
+              .map(id => all.find(member => member.id === id))
+              .filter((member): member is Card => !!member && !isInactive(member.id)),
+          }))
+          const yokoCards     = all.filter(m => kindOf(m.id) === 'yoko' && !isInactive(m.id) && !groupedIds.has(m.id))
+          const freeCards     = all.filter(m => kindOf(m.id) === 'freelance' && !isInactive(m.id) && !groupedIds.has(m.id))
           const inactiveCards = all.filter(m => isInactive(m.id))
 
           const DAY_TO_ISO: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 }
@@ -638,6 +648,21 @@ export default function TeamPage() {
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
                 {yokoCards.map(m => renderCard(m, false))}
               </div>
+              {groupedCards.map(({ group, cards }) => (
+                <div key={group.id} style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
+                    {group.name} · {cards.length}
+                  </div>
+                  {cards.length > 0 ? (
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      {cards.map(m => renderCard(m, false))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Nog geen teamleden in deze groep.</div>
+                  )}
+                </div>
+              ))}
               {freeCards.length > 0 && (
                 <>
                   <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
@@ -662,7 +687,7 @@ export default function TeamPage() {
           )
         })()}
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
-          Klik op een foto of naam om het profiel te openen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · indeling Yoko/Freelance/Inactief wijzig je via <Link href="/team-admin" style={{ color: 'var(--accent)' }}>Team beheren</Link>
+          Klik op een foto of naam om het profiel te openen · klik op de uren/week om de capaciteit aan te passen (gedeeld met Planning) · eigen groepen maak je in Planning bij Mensen &amp; capaciteit en verschijnen hier automatisch.
         </p>
       </div>
 

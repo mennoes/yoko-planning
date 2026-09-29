@@ -15,6 +15,7 @@ import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import { pullAccounts } from '@/lib/accountsStore'
 import type { BoardGroup } from '@/lib/boards'
 import { isOnDemoRoute, buildDemoBoards, demoNavigate } from '@/lib/demoFixtures'
+import { setThemePreference } from '@/lib/theme'
 
 const REAL_BOARD_RAW: Record<string, { groups: unknown[] }> = {
   yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
@@ -84,14 +85,7 @@ export default function SearchPalette({ open, onClose }: { open: boolean; onClos
         id: `cmd-theme-${t}`, title: label, subtitle: 'Actie · 🎨',
         href: '', emoji: t === 'dark' ? '🌙' : t === 'light' ? '☀️' : '⚙️',
         action: () => {
-          try {
-            localStorage.setItem('theme', t)
-            // Direct toepassen op <html> zodat het zonder refresh werkt.
-            const applied = t === 'auto'
-              ? (new Date().getHours() >= 7 && new Date().getHours() < 19 ? 'light' : 'dark')
-              : t
-            document.documentElement.setAttribute('data-theme', applied)
-          } catch {}
+          try { setThemePreference(t) } catch {}
           onClose()
         },
       })

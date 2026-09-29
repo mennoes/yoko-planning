@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { getThemePreference, setThemePreference, type ThemePreference } from '@/lib/theme'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -173,24 +174,15 @@ export default function LoginPage() {
 }
 
 function ThemePicker() {
-  const [theme, setTheme] = useState<'auto' | 'light' | 'dark'>('auto')
+  const [theme, setTheme] = useState<ThemePreference>('auto')
   useEffect(() => {
-    const t = localStorage.getItem('theme')
-    if (t === 'light' || t === 'dark') setTheme(t)
-    else setTheme('auto')
+    setTheme(getThemePreference())
   }, [])
-  function pick(t: 'auto' | 'light' | 'dark') {
+  function pick(t: ThemePreference) {
     setTheme(t)
-    if (t === 'auto') {
-      localStorage.removeItem('theme')
-      const h = new Date().getHours()
-      document.documentElement.setAttribute('data-theme', h >= 7 && h < 19 ? 'light' : 'dark')
-    } else {
-      localStorage.setItem('theme', t)
-      document.documentElement.setAttribute('data-theme', t)
-    }
+    setThemePreference(t)
   }
-  const opts: { v: 'auto' | 'light' | 'dark'; l: string }[] = [
+  const opts: { v: ThemePreference; l: string }[] = [
     { v: 'auto',  l: 'Auto'   },
     { v: 'light', l: 'Licht'  },
     { v: 'dark',  l: 'Donker' },

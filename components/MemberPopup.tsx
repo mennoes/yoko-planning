@@ -6,11 +6,10 @@ import {
 } from 'react'
 import Link from 'next/link'
 import teamData from '@/data/team.json'
-import { useTeamPhotos } from './TeamPhotosContext'
-import { useProfile } from './ProfileContext'
 import { useTeam } from './TeamContext'
-
-type Member = typeof teamData.members[number]
+import { UserAvatar } from './UserAvatar'
+import { loadCapacities, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
+import { useTeamGroups } from './useTeamGroups'
 
 type PopupPos = { top: number; left: number }
 type MemberPopupCtx = {
@@ -19,39 +18,21 @@ type MemberPopupCtx = {
 
 const Ctx = createContext<MemberPopupCtx>({ showMember: () => {} })
 
-// ─── Avatar image helper ───────────────────────────────────────────────────────
-function PopupAvatar({ member, size = 56 }: { member: Member; size?: number }) {
-  const { getPhoto }  = useTeamPhotos()
-  const { profile }   = useProfile()
-  const isMe          = profile?.memberId === member.id
-  const photo         = isMe ? (profile?.photo ?? getPhoto(member.id)) : getPhoto(member.id)
-  const [failed, setFailed] = useState(false)
-  const staticSrc     = `/team/${member.id}.jpg`
-  const initials      = member.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-
-  const style: React.CSSProperties = {
-    width: size, height: size, borderRadius: '50%',
-    objectFit: 'cover', flexShrink: 0,
-  }
-
-  if (photo) return <img src={photo} alt={member.name} style={style} />
-  if (!failed) return <img src={staticSrc} alt={member.name} style={style} onError={() => setFailed(true)} />
-  return (
-    <span style={{
-      ...style, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      background: member.color + '22', fontSize: size * 0.32, fontWeight: 700, color: member.color,
-    }}>
-      {initials}
-    </span>
-  )
-}
-
 // ─── Provider + popup renderer ────────────────────────────────────────────────
 export function MemberPopupProvider({ children }: { children: ReactNode }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [pos,      setPos]      = useState<PopupPos>({ top: 0, left: 0 })
   const popupRef  = useRef<HTMLDivElement>(null)
   const { members: liveTeam } = useTeam()
+  const { groups: teamGroups } = useTeamGroups()
+  const [capacities, setCapacities] = useState<Record<string, number>>(() => loadCapacities())
+
+  useEffect(() => {
+    const refresh = () => setCapacities(loadCapacities())
+    refresh()
+    void pullCapacities().then(refresh)
+    return onCapacitiesChange(refresh)
+  }, [])
 
   function showMember(id: string, e: MouseEvent) {
     e.stopPropagation()
@@ -93,6 +74,10 @@ export function MemberPopupProvider({ children }: { children: ReactNode }) {
     if (live) return { id: live.id, name: live.name, color: live.color, email: live.email, weeklyCapacity: live.weeklyCapacity }
     return teamData.members.find(m => m.id === activeId) ?? null
   })()
+  const capacity = member ? (capacities[member.id] ?? member.weeklyCapacity) : 0
+  const teamName = member
+    ? (teamGroups.find(group => group.memberIds.includes(member.id))?.name ?? 'Studio Yoko')
+    : 'Studio Yoko'
 
   return (
     <Ctx.Provider value={{ showMember }}>
@@ -110,7 +95,7 @@ export function MemberPopupProvider({ children }: { children: ReactNode }) {
         >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-            <PopupAvatar member={member} size={52} />
+            <UserAvatar memberId={member.id} size={52} />
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
                 {member.name}
@@ -126,8 +111,8 @@ export function MemberPopupProvider({ children }: { children: ReactNode }) {
 
           {/* Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Stat label="Capaciteit" value={`${member.weeklyCapacity} u/w`} color={member.color} />
-            <Stat label="Team" value="Studio Yoko" color="var(--text-muted)" />
+            <Stat label="Capaciteit" value={`${capacity} u/w`} color={member.color} />
+            <Stat label="Team" value={teamName} color="var(--text-muted)" />
           </div>
 
           {/* Color swatch */}
