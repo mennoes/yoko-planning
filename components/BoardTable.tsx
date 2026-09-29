@@ -4274,8 +4274,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         window.dispatchEvent(new CustomEvent('yoko-push-failed', {
           detail: { boardName: 'yoko', message: `Omdenken-verplaatsing mislukt: ${routed.error ?? 'onbekende fout'}` },
         }))
-        omdenkenRepairRunning.current = false
-        return
+        // De service-route kan door een ontbrekende serversecret falen,
+        // terwijl de ingelogde gebruiker wél schrijfrechten heeft. Ga dan
+        // door met de bestaande, bevestigde client-move; die verplaatst
+        // dezelfde database-row en kan dus geen kopie achterlaten.
       }
 
       let moved = 0
