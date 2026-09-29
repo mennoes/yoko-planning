@@ -1063,7 +1063,19 @@ export async function moveItemToBoard(
         .update({ board_id: targetBoard, group_id: targetGroup.id, position: targetGroup.items.length - 1 })
         .eq('id', itemId).eq('board_id', sourceBoard).select('id')
       if (error) throw error
-      if (!data?.length) return { ok: false, message: 'Item is niet verplaatst. Vernieuw de agenda en probeer opnieuw.' }
+      if (!data?.length) {
+        // Een servermigratie/realtime-update kan nét vóór deze client-move
+        // dezelfde rij al hebben verplaatst. Dat is geen fout: bevestig de
+        // huidige remote locatie en werk vervolgens de twee lokale caches bij.
+        // Zonder deze check bleef een succesvolle servermove lokaal als
+        // duplicaat in het bronbord staan tot de dirty-cache ooit verdween.
+        const { data: current, error: currentError } = await supabase.from('board_items')
+          .select('board_id').eq('id', itemId).maybeSingle()
+        if (currentError) throw currentError
+        if (current?.board_id !== targetBoard) {
+          return { ok: false, message: 'Item is niet verplaatst. Vernieuw de agenda en probeer opnieuw.' }
+        }
+      }
     } catch (error) {
       const detail = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Onbekende opslagfout'
       return { ok: false, message: `Verplaatsen kon niet worden opgeslagen: ${detail}. Het item blijft in de oorspronkelijke agenda.` }
