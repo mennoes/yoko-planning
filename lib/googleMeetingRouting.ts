@@ -10,6 +10,7 @@ const ORGANIZATIONS: Record<string, string> = {
   'pnpmedia.nl': 'pnp',
 }
 const TITLE_RULES: RoutingRule[] = [
+  { pattern: 'omdenken', board_id: 'omdenken' },
   { pattern: 'universiteit van nederland', board_id: 'nederland' },
   { pattern: 'uvnl', board_id: 'nederland' },
   { pattern: 'universiteit van vlaanderen', board_id: 'vlaanderen' },

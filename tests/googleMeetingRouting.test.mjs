@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { routeGoogleMeeting, findMeetingProject, nestedMeetingId, mergeNestedMeetings, saveNestedMeetings, loadMeetingPlacement } from '../lib/googleMeetingRouting.ts'
 
-const boards = new Set(['yoko', 'nederland', 'vlaanderen', 'pnp'])
+const boards = new Set(['yoko', 'nederland', 'vlaanderen', 'pnp', 'omdenken'])
 const event = (summary = 'Overleg', emails = [], patch = {}) => ({
   id: 'event-1', iCalUID: 'shared-event', summary,
   start: { dateTime: '2026-09-01T10:00:00+02:00' }, end: { dateTime: '2026-09-01T11:00:00+02:00' },
@@ -46,6 +46,8 @@ test('declined/resource attendees and lookalike domains do not route', () => {
 })
 test('title hints and configured rules work; no arbitrary substring or nonexistent board', () => {
   assert.equal(route(event('UvNL productieoverleg')).boardId, 'nederland')
+  assert.equal(route(event('Omdenken weekstart')).boardId, 'omdenken')
+  assert.equal(route(event('Bespreking voor Omdenken')).boardId, 'omdenken')
   assert.equal(routeGoogleMeeting([event('KNRM briefing')], [{ pattern: 'knrm', board_id: 'nederland' }], boards).boardId, 'nederland')
   assert.equal(routeGoogleMeeting([event('bedienjaar')], [{ pattern: 'dienjaar', board_id: 'nederland' }], boards).boardId, 'yoko')
   assert.equal(routeGoogleMeeting([event('Xyz')], [{ pattern: 'xyz', board_id: 'missing' }], boards).boardId, 'yoko')

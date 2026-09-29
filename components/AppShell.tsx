@@ -19,7 +19,7 @@ import { FeedbackBubble } from './FeedbackBubble'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
-import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
+import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups, routeItemsByTitle } from '@/lib/boardStore'
 import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistry'
 import { loadSections as loadNavSections } from '@/lib/navStore'
 import teamData from '@/data/team.json'
@@ -271,6 +271,10 @@ function Inner({ children }: { children: ReactNode }) {
         }
         unsubs.push(subscribeRemoteBoard(b))
       }
+      // Vaste, ondubbelzinnige titelroute: bestaande Omdenken-meetings uit
+      // Yoko eenmalig echt verplaatsen. Nieuwe Google-events worden al door
+      // googleMeetingRouting direct naar dezelfde agenda gestuurd.
+      try { await routeItemsByTitle('omdenken', 'yoko', 'omdenken') } catch {}
       // Eén keer na de initiële pull: items waarvan de timeline zojuist
       // 'live' is geworden krijgen status 'Working on...'. Loopt ook zonder
       // Google-sync (de tweede useEffect-tick) zodat een nieuwe dag direct

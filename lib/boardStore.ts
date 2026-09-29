@@ -925,6 +925,75 @@ async function logRoutingRuleChange(pattern: string, targetBoard: string, action
   })
 }
 
+/**
+ * Verplaatst bestaande items die onmiskenbaar bij een agenda horen.
+ * Dit is bewust een echte remote move (één board_items-rij krijgt een
+ * andere board_id), dus het item kan nooit tegelijk in bron én doel blijven
+ * staan. Idempotent: na de eerste succesvolle run is er niets meer te doen.
+ */
+export async function routeItemsByTitle(
+  pattern: string,
+  sourceBoard: string,
+  targetBoard: string,
+): Promise<number> {
+  if (!supabase || typeof window === 'undefined') return 0
+  if (!await getCurrentUserId()) return 0
+  const clean = pattern.trim()
+  if (!clean) return 0
+
+  const targetConfig = getBoardConfig(targetBoard) ?? {
+    id: targetBoard,
+    name: targetBoard === 'omdenken' ? 'Omdenken' : targetBoard,
+    emoji: '📋',
+    color: targetBoard === 'omdenken' ? '#c73561' : '#9aadbd',
+    columns: defaultColumnsForNewBoard(),
+  }
+  if (!await upsertBoard(targetConfig, Math.max(0, getBoardIds().indexOf(targetBoard)))) return 0
+
+  const { data: existingGroups, error: groupReadError } = await supabase
+    .from('board_groups').select('id, position')
+    .eq('board_id', targetBoard).is('deleted_at', null)
+    .order('position', { ascending: true }).limit(1)
+  if (groupReadError) return 0
+  let targetGroupId = (existingGroups as Array<{ id: string; position: number }> | null)?.[0]?.id
+  if (!targetGroupId) {
+    targetGroupId = `g_google_${targetBoard}_${Date.now()}`
+    const { error } = await supabase.from('board_groups').insert({
+      id: targetGroupId,
+      board_id: targetBoard,
+      name: 'Meetings',
+      color: targetConfig.color,
+      collapsed: false,
+      position: 0,
+    })
+    if (error) return 0
+  }
+
+  const { data: rows, error: readError } = await supabase
+    .from('board_items').select('id, name')
+    .eq('board_id', sourceBoard).is('deleted_at', null)
+    .ilike('name', `%${clean}%`)
+  if (readError || !rows?.length) {
+    await learnBoardRoutingRule(clean, targetBoard)
+    return 0
+  }
+
+  let moved = 0
+  for (const [index, row] of (rows as Array<{ id: string; name: string }>).entries()) {
+    // Houd de bron-check in de update: een gelijktijdige handmatige move wint
+    // en wordt niet nogmaals overschreven door deze automatische opruiming.
+    const { data, error } = await supabase.from('board_items')
+      .update({ board_id: targetBoard, group_id: targetGroupId, position: index })
+      .eq('id', row.id).eq('board_id', sourceBoard).select('id')
+    if (!error && data?.length) moved++
+  }
+  await learnBoardRoutingRule(clean, targetBoard)
+  if (moved > 0) {
+    await Promise.all([pullBoardFromRemote(sourceBoard), pullBoardFromRemote(targetBoard)])
+  }
+  return moved
+}
+
 export async function moveItemToBoard(
   itemId:        string,
   sourceBoard:   string,
