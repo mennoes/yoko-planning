@@ -60,6 +60,13 @@ export function routeGoogleMeeting(events: GoogleEvent[], rules: RoutingRule[], 
     : { boardId: 'yoko', reason: 'fallback' }
 }
 
+/** Bewaar handmatige plaatsingen, behalve wanneer een expliciete titelregel
+ * het event bij een specifieke agenda indeelt. Zo verhuist 'Omdenken' ook
+ * voor bestaande Google-items en blijft de keuze na elke sync hetzelfde. */
+export function resolveMeetingBoard(existingBoard: string | null | undefined, route: MeetingRoute): string {
+  return route.reason === 'title' ? route.boardId : (existingBoard ?? route.boardId)
+}
+
 export type MeetingParent = {
   id: string; name: string; board_id: string; group_id: string
   status: string | null; source: string | null; external_link?: string | null

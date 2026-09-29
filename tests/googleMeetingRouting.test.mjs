@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { routeGoogleMeeting, findMeetingProject, nestedMeetingId, mergeNestedMeetings, saveNestedMeetings, loadMeetingPlacement } from '../lib/googleMeetingRouting.ts'
+import { routeGoogleMeeting, resolveMeetingBoard, findMeetingProject, nestedMeetingId, mergeNestedMeetings, saveNestedMeetings, loadMeetingPlacement } from '../lib/googleMeetingRouting.ts'
 
 const boards = new Set(['yoko', 'nederland', 'vlaanderen', 'pnp', 'omdenken'])
 const event = (summary = 'Overleg', emails = [], patch = {}) => ({
@@ -52,6 +52,11 @@ test('title hints and configured rules work; no arbitrary substring or nonexiste
   assert.equal(routeGoogleMeeting([event('bedienjaar')], [{ pattern: 'dienjaar', board_id: 'nederland' }], boards).boardId, 'yoko')
   assert.equal(routeGoogleMeeting([event('Xyz')], [{ pattern: 'xyz', board_id: 'missing' }], boards).boardId, 'yoko')
   assert.throws(() => routeGoogleMeeting([event()], [], new Set(['pnp'])), /Yoko/)
+})
+test('explicit title routing moves existing events while other routes preserve manual placement', () => {
+  assert.equal(resolveMeetingBoard('yoko', { boardId: 'omdenken', reason: 'title' }), 'omdenken')
+  assert.equal(resolveMeetingBoard('omdenken', { boardId: 'nederland', reason: 'participants' }), 'omdenken')
+  assert.equal(resolveMeetingBoard(undefined, { boardId: 'pnp', reason: 'participants' }), 'pnp')
 })
 test('clear project match; ambiguous and generic names stay in Meetings', () => {
   const r = { boardId: 'vlaanderen', reason: 'participants' }

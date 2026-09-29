@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
-import { loadMeetingPlacement, nestedMeetingId, routeGoogleMeeting } from './googleMeetingRouting'
+import { loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting } from './googleMeetingRouting'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -979,7 +979,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // Bewaar handmatige verplaatsingen — als de gebruiker het item naar
       // een Done-groep of ander bord heeft gesleept, mag Google die niet
       // weer terugsturen naar de target-groep volgens de route-regels.
-      const keepBoard = existingRow?.board_id ?? targetBoard
+      const keepBoard = resolveMeetingBoard(existingRow?.board_id, route)
       const newStatus = resolveStatus(existingRow?.status, end ?? start, existingRow?.end_date, exExtraSingle.statusOverride)
       // Vrij/Vakantie-events bundelen we in een eigen Vrij-groep zodat
       // afwezigheid meteen herkenbaar is in het bord. Done heeft daarna
@@ -1009,7 +1009,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // Bestaande meetings-groep respecteren ongeacht status; als het item
       // in de Meetings-groep zit blijft 't daar. User-verplaatsingen (eigen
       // groep) blijven respected, ook wanneer het item op Done staat.
-      const existingGroupAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
+      const existingGroupAlive = existingRow?.board_id === keepBoard && existingRow?.group_id
+        ? await isGroupAlive(existingRow.group_id)
+        : false
       const meetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
       const inAutoBucket = existingGroupAlive && (
         existingRow!.group_id === meetingsGid
@@ -1242,7 +1244,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // aanmaken bij volgende syncs.
     if (nestedIds.has(id)) continue
     if (existingRow) updated++; else added++
-    const keepBoard = existingRow?.board_id ?? targetBoard
+    const keepBoard = resolveMeetingBoard(existingRow?.board_id, route)
     const newStatus = resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart, exExtraRec.statusOverride)
     // Groep-keuze prioriteit: Done > Vrij > Doorlopend.
     //  - Done items horen in de Done-groep (ook wanneer de gebruiker zelf
@@ -1266,7 +1268,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       : await getMeetingsGroupFor(keepBoard)
     // Bestaande groep respecteren als 't item niet in de auto-Meetings-
     // bucket zit — ook bij Done.
-    const recExistingAlive = existingRow?.group_id ? await isGroupAlive(existingRow.group_id) : false
+    const recExistingAlive = existingRow?.board_id === keepBoard && existingRow?.group_id
+      ? await isGroupAlive(existingRow.group_id)
+      : false
     const recMeetingsGid = !isVrij ? await getMeetingsGroupFor(keepBoard) : null
     const recInAutoBucket = recExistingAlive && (
       existingRow!.group_id === recMeetingsGid
