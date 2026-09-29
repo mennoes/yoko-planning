@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { useTeamPhotos } from './TeamPhotosContext'
 import { useProfile } from './ProfileContext'
 import { useTeam } from './TeamContext'
+import { hasStaticAvatar, pinnedStaticAvatarUrl, staticAvatarUrl } from '@/lib/avatarAssets'
 
-const STATIC_AVATAR_IDS = new Set(['menno', 'vincent', 'odette', 'anne-fleur'])
-export const hasStaticAvatar = (memberId: string): boolean => STATIC_AVATAR_IDS.has(memberId)
+export { hasStaticAvatar }
 
 // Single source of truth for rendering a member avatar.
 // Resolves photo in this order:
@@ -37,11 +37,14 @@ export function UserAvatar({
   const initials      = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
   const sharedPhoto = getPhoto(memberId)
-  const photoCandidates = [
+  const pinnedPhoto = pinnedStaticAvatarUrl(memberId)
+  const staticPhoto = staticAvatarUrl(memberId)
+  const photoCandidates = [...new Set([
+    pinnedPhoto,
     isMe ? profile?.photo : null,
     sharedPhoto,
-    hasStaticAvatar(memberId) ? `/team/${memberId}.jpg` : null,
-  ].filter(Boolean) as string[]
+    staticPhoto,
+  ].filter(Boolean) as string[])]
 
   const [idx, setIdx] = useState(0)
   // Probeer opnieuw vanaf de hoogste-prioriteitsfoto wanneer de gedeelde

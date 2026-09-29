@@ -14,6 +14,7 @@ import { VacationModal } from '@/components/VacationModal'
 import { upsertTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStore'
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import { isTeamAdmin } from '@/lib/teamAdmin'
+import { pinnedStaticAvatarUrl, staticAvatarUrl } from '@/lib/avatarAssets'
 
 type ExtendedProfile = {
   user_id?:           string
@@ -126,7 +127,7 @@ export default function PublicProfilePage() {
 
   const name    = liveMember?.name ?? data?.name ?? baseMember.name
   const color   = data?.color ?? baseMember.color
-  const photo   = data?.photo ?? (memberId ? getPhoto(memberId) : null) ?? `/team/${memberId}.jpg`
+  const photo   = pinnedStaticAvatarUrl(memberId) ?? data?.photo ?? (memberId ? getPhoto(memberId) : null) ?? staticAvatarUrl(memberId) ?? `/team/${memberId}.jpg`
   const cap     = capacities[memberId] ?? data?.weekly_capacity ?? baseMember.weeklyCapacity ?? 40
 
   // Time-tracking summary for this member's currently-running entries (only their own

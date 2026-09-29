@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { getAllTeamPhotos, setTeamPhoto as storeSetPhoto } from '@/lib/teamPhotos'
 import { isDemoPath, DEMO_PHOTOS } from '@/lib/demoFixtures'
 import { supabase } from '@/lib/supabase'
+import { pinnedStaticAvatarUrl } from '@/lib/avatarAssets'
 
 type Ctx = {
   photos:   Record<string, string>
@@ -62,7 +63,7 @@ export function TeamPhotosProvider({ children }: { children: ReactNode }) {
     }
   }, [demo])
 
-  const getPhoto = useCallback((id: string) => photos[id] ?? null, [photos])
+  const getPhoto = useCallback((id: string) => pinnedStaticAvatarUrl(id) ?? photos[id] ?? null, [photos])
 
   const setPhoto = useCallback((id: string, dataUrl: string) => {
     // /demo: alleen lokale state bijwerken, nooit de echte foto-store
