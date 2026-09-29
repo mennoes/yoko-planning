@@ -91,3 +91,14 @@ export async function syncGoogleNow(): Promise<SyncResult[]> {
   const body = await res.json().catch(() => ({})) as { results?: SyncResult[] }
   return body.results ?? []
 }
+
+export type OmdenkenRouteResult = { ok: boolean; moved: number; names: string[]; error?: string }
+
+export async function routeOmdenkenNow(): Promise<OmdenkenRouteResult> {
+  const headers = await authHeaders()
+  if (!headers) return { ok: false, moved: 0, names: [], error: 'niet_ingelogd' }
+  const res = await fetch('/api/maintenance/route-omdenken', { method: 'POST', headers })
+  const body = await res.json().catch(() => ({ ok: false, moved: 0, names: [], error: 'ongeldig_antwoord' })) as OmdenkenRouteResult
+  if (!res.ok) return { ...body, ok: false }
+  return body
+}

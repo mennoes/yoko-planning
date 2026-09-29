@@ -19,7 +19,7 @@ import { FeedbackBubble } from './FeedbackBubble'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
-import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups, routeItemsByTitle } from '@/lib/boardStore'
+import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
 import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistry'
 import { loadSections as loadNavSections } from '@/lib/navStore'
 import teamData from '@/data/team.json'
@@ -31,7 +31,7 @@ import { pullFeedback, subscribeRemoteFeedback } from '@/lib/feedbackStore'
 import { pullCommentsAll, subscribeRemoteComments } from '@/lib/commentsStore'
 // (BOARD_NAMES re-used by the auto-sync tick below)
 import { onAuthChange, isSyncing } from '@/lib/sync'
-import { syncGoogleNow } from '@/lib/googleClient'
+import { routeOmdenkenNow, syncGoogleNow } from '@/lib/googleClient'
 import { applySubitemRules } from '@/lib/subitemRules'
 import { applyAutoStatus, notifyOverdueItems } from '@/lib/autoStatus'
 import { pullExtrasFromRemote, subscribeRemoteExtras } from '@/lib/teamExtras'
@@ -271,10 +271,20 @@ function Inner({ children }: { children: ReactNode }) {
         }
         unsubs.push(subscribeRemoteBoard(b))
       }
-      // Vaste, ondubbelzinnige titelroute: bestaande Omdenken-meetings uit
-      // Yoko eenmalig echt verplaatsen. Nieuwe Google-events worden al door
-      // googleMeetingRouting direct naar dezelfde agenda gestuurd.
-      try { await routeItemsByTitle('omdenken', 'yoko', 'omdenken') } catch {}
+      // Server-side reparatie: bestaande Omdenken-meetings echt uit Yoko
+      // verplaatsen. Niet stil falen — toon dezelfde pushfout als andere
+      // databasewrites zodat een RLS/config-probleem zichtbaar wordt.
+      try {
+        const routed = await routeOmdenkenNow()
+        if (!routed.ok) throw new Error(routed.error ?? 'onbekende fout')
+        if (routed.moved > 0) {
+          await Promise.all([pullBoardFromRemote('yoko'), pullBoardFromRemote('omdenken')])
+        }
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent('yoko-push-failed', {
+          detail: { boardName: 'yoko', message: `Omdenken-verplaatsing mislukt: ${String(error)}` },
+        }))
+      }
       // Eén keer na de initiële pull: items waarvan de timeline zojuist
       // 'live' is geworden krijgen status 'Working on...'. Loopt ook zonder
       // Google-sync (de tweede useEffect-tick) zodat een nieuwe dag direct

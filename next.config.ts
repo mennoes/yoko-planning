@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Dit project staat naast een los package-lock.json in de Windows-home.
+  // Zonder expliciete root kiest Turbopack daardoor C:\Users\menno en kan
+  // de productiebuild onnodig buiten het project proberen te lezen.
+  turbopack: {
+    root: process.cwd(),
+  },
   // Aggressieve cache-headers voor static assets — Vercel's default is
   // max-age=0 voor /public/, wat betekent dat /team/menno.jpg en de
   // fonts bij elke page-load opnieuw via de edge gestreamd worden.

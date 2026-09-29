@@ -73,6 +73,97 @@ const AUTO_DONE_AFTER_DAYS = 3  // events waarvan de end-date > N dagen
                                  //   geleden is, worden auto op 'Done' gezet
                                  //   tenzij de gebruiker 'Stuck' heeft gezet
 
+const OMDENKEN_COLUMNS = [
+  { key: 'ownerIds', label: 'Owner', type: 'owners', width: 90 },
+  { key: 'status', label: 'Status', type: 'status', width: 145 },
+  { key: 'timeline', label: 'Timeline', type: 'daterange', width: 175 },
+  { key: 'deadline', label: 'Deadline', type: 'date', width: 105 },
+  { key: 'estHours', label: 'Est Time', type: 'number', width: 85 },
+  { key: 'notes', label: 'Notes', type: 'text', width: 160 },
+]
+
+/** Verplaats bestaande Omdenken-items daadwerkelijk van Yoko naar Omdenken. */
+export async function routeLegacyOmdenkenItems(
+  admin: SupabaseClient,
+): Promise<{ moved: number; names: string[] }> {
+  const stamp = new Date().toISOString()
+
+  const { data: targetBoard, error: targetBoardError } = await admin
+    .from('boards').select('id').eq('id', 'omdenken').maybeSingle()
+  if (targetBoardError) throw new Error(`Omdenken-agenda lezen mislukt: ${targetBoardError.message}`)
+  if (!targetBoard) {
+    const { data: yokoBoard, error: yokoBoardError } = await admin
+      .from('boards').select('columns').eq('id', 'yoko').maybeSingle()
+    if (yokoBoardError) throw new Error(`Yoko-agenda lezen mislukt: ${yokoBoardError.message}`)
+    const { data: lastBoards, error: positionError } = await admin
+      .from('boards').select('position').order('position', { ascending: false }).limit(1)
+    if (positionError) throw new Error(`Agenda-volgorde lezen mislukt: ${positionError.message}`)
+    const position = Number((lastBoards as Array<{ position: number | null }> | null)?.[0]?.position ?? -1) + 1
+    const columns = (yokoBoard as { columns?: unknown } | null)?.columns ?? OMDENKEN_COLUMNS
+    const { error } = await admin.from('boards').insert({
+      id: 'omdenken', name: 'Omdenken', emoji: '📋', color: '#c73561', columns, position, updated_at: stamp,
+    })
+    if (error) throw new Error(`Omdenken-agenda aanmaken mislukt: ${error.message}`)
+  }
+
+  const { data: existingGroups, error: groupReadError } = await admin
+    .from('board_groups').select('id, position')
+    .eq('board_id', 'omdenken').is('deleted_at', null)
+    .order('position', { ascending: true }).limit(1)
+  if (groupReadError) throw new Error(`Omdenken-groep lezen mislukt: ${groupReadError.message}`)
+
+  let targetGroupId = (existingGroups as Array<{ id: string; position: number }> | null)?.[0]?.id
+  if (!targetGroupId) {
+    targetGroupId = `g_omdenken_meetings_${Date.now()}`
+    const { error } = await admin.from('board_groups').insert({
+      id: targetGroupId,
+      board_id: 'omdenken',
+      name: 'Meetings & doorlopend',
+      color: '#c73561',
+      collapsed: false,
+      position: 0,
+    })
+    if (error) throw new Error(`Omdenken-groep aanmaken mislukt: ${error.message}`)
+  }
+
+  const { data: targetPositions, error: positionReadError } = await admin
+    .from('board_items').select('position')
+    .eq('board_id', 'omdenken').is('deleted_at', null)
+    .order('position', { ascending: false }).limit(1)
+  if (positionReadError) throw new Error(`Omdenken-posities lezen mislukt: ${positionReadError.message}`)
+  const basePosition = Number((targetPositions as Array<{ position: number | null }> | null)?.[0]?.position ?? -1) + 1
+
+  const { data: rows, error: readError } = await admin
+    .from('board_items').select('id, name')
+    .eq('board_id', 'yoko').is('deleted_at', null)
+    .ilike('name', '%omdenken%')
+  if (readError) throw new Error(`Omdenken-items zoeken mislukt: ${readError.message}`)
+
+  const movedNames: string[] = []
+  for (const [index, row] of ((rows as Array<{ id: string; name: string }> | null) ?? []).entries()) {
+    const { data, error } = await admin.from('board_items')
+      .update({ board_id: 'omdenken', group_id: targetGroupId, position: basePosition + index, updated_at: stamp })
+      .eq('id', row.id).eq('board_id', 'yoko').select('id')
+    if (error) throw new Error(`'${row.name}' verplaatsen mislukt: ${error.message}`)
+    if (data?.length) movedNames.push(row.name)
+  }
+
+  const { data: existingRule, error: ruleReadError } = await admin
+    .from('calendar_routing_rules').select('id').eq('pattern', 'omdenken').limit(1).maybeSingle()
+  if (ruleReadError) throw new Error(`Omdenken-route lezen mislukt: ${ruleReadError.message}`)
+  if (existingRule?.id) {
+    const { error } = await admin.from('calendar_routing_rules')
+      .update({ board_id: 'omdenken', enabled: true, position: 0 }).eq('id', existingRule.id)
+    if (error) throw new Error(`Omdenken-route bijwerken mislukt: ${error.message}`)
+  } else {
+    const { error } = await admin.from('calendar_routing_rules')
+      .insert({ pattern: 'omdenken', board_id: 'omdenken', enabled: true, position: 0 })
+    if (error) throw new Error(`Omdenken-route aanmaken mislukt: ${error.message}`)
+  }
+
+  return { moved: movedNames.length, names: movedNames }
+}
+
 function isPastByDays(end: string | null | undefined, days: number): boolean {
   if (!end) return false
   const endTs = Date.parse(end)
@@ -1419,6 +1510,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
 }
 
 export async function syncCalendarsForUser(admin: SupabaseClient, userId: string) {
+  // Eerst bestaande verkeerd-geroute Omdenken-events corrigeren. Daarna ziet
+  // dezelfde sync ze al op hun definitieve bord en kan Yoko ze niet terughalen.
+  await routeLegacyOmdenkenItems(admin)
+
   // Eenmalige opruim: oude auto-geleerde routing-regels met een te-kort
   // pattern (< 8 chars) verwijderen. Die ontstonden vóór de bijgewerkte
   // drempel en sleepten via substring-match onbedoeld events mee naar
