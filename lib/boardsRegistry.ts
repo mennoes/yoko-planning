@@ -224,14 +224,10 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
   // aanvullen is onvoldoende: board_groups heeft een FK naar boards en een
   // verplaatsing naar zo'n lokaal-only agenda faalt dan alsnog.
   const rawRemoteRows = data as Row[]
-  // Eenmalige naam-migratie na de eerdere save-regressie. Menno had deze
-  // agenda al meermaals hernoemd; oude remote data mag niet nóg eens de
-  // legacynaam terugzetten. Latere, andere namen blijven onaangeraakt.
-  const hasLegacyDienjaar = rawRemoteRows.some(row => row.id === 'dienjaar' && row.name === 'Dienjaar')
-  if (hasLegacyDienjaar) {
-    await supabase.from('boards').update({ name: 'Itorium', updated_at: new Date().toISOString() }).eq('id', 'dienjaar').eq('name', 'Dienjaar')
-  }
-  const remoteRows = rawRemoteRows.map(row => row.id === 'dienjaar' && row.name === 'Dienjaar' ? { ...row, name: 'Itorium' } : row)
+  // De database is de bron van waarheid voor ELKE bordnaam. Geen speciale
+  // naam-migraties hier: als iemand een agenda hernoemt, moet precies die
+  // gekozen waarde bij iedere volgende pull en refresh terugkomen.
+  const remoteRows = rawRemoteRows
   const missing = FALLBACK.filter(f => !remoteRows.some(r => r.id === f.id))
   if (missing.length > 0) {
     const { error: seedError } = await supabase.from('boards').upsert(

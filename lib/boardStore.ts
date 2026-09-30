@@ -176,7 +176,19 @@ export function loadGroups(boardName: string, fallback: BoardGroup[]): BoardGrou
 export function saveGroups(boardName: string, groups: BoardGroup[]): void {
   const next = JSON.stringify(groups)
   const prev = localStorage.getItem(key(boardName))
-  if (prev === next) return            // no-op: breaks the realtime ping-pong loop
+  if (prev === next) {
+    // Zelfde UI-state, maar een eerdere databasewrite kan zijn mislukt.
+    // Dan is dit geen echte no-op: probeer de nog dirty wijziging opnieuw.
+    if (localStorage.getItem(dirtyKey(boardName))) {
+      pushBoardToRemote(boardName, groups).then(ok => {
+        if (ok && localStorage.getItem(key(boardName)) === next) {
+          localStorage.setItem(pulledKey(boardName), next)
+          localStorage.removeItem(dirtyKey(boardName))
+        }
+      }).catch(() => {})
+    }
+    return
+  }
   localStorage.setItem(key(boardName), next)
   localStorage.setItem(dirtyKey(boardName), Date.now().toString())
   lastLocalWriteAt[boardName] = Date.now()
@@ -441,7 +453,11 @@ export function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Prom
     const raw = localStorage.getItem(dirtyKey(boardName)) ? localStorage.getItem(key(boardName)) : null
     const latest = raw ? JSON.parse(raw) as BoardGroup[] : groups
     const ok = await pushBoardSnapshot(boardName, latest)
-    return ok && JSON.stringify(latest) === JSON.stringify(groups)
+    // `latest` kan nieuwer zijn dan het snapshot van deze queued caller.
+    // Als juist die nieuwste staat succesvol is opgeslagen, is de write
+    // geslaagd. De saveGroups-caller wist dirty alleen wanneer zijn eigen
+    // snapshot nog steeds de actuele lokale staat is.
+    return ok
   })
   boardPushQueue.set(boardName, task)
   void task.finally(() => { if (boardPushQueue.get(boardName) === task) boardPushQueue.delete(boardName) }).catch(() => {})
@@ -449,8 +465,16 @@ export function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Prom
 }
 
 async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promise<boolean> {
-  if (!supabase) return false
-  if (!await getCurrentUserId()) return false
+  const fail = (message: string): false => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('yoko-push-failed', {
+        detail: { boardName, message },
+      }))
+    }
+    return false
+  }
+  if (!supabase) return fail('Opslaan is niet beschikbaar: databaseverbinding ontbreekt.')
+  if (!await getCurrentUserId()) return fail('Opslaan is niet gelukt: je sessie is verlopen. Log opnieuw in.')
 
   // SAFETY GUARD #1 — als de lokale state verdacht leeg is (geen groepen
   // EN geen items) maar de remote NIET, weigeren we de push. Dat is bijna
@@ -464,7 +488,7 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
     if ((remoteCount ?? 0) > 0) {
       // eslint-disable-next-line no-console
       console.warn(`[boardStore] Push abort: lokale state leeg voor '${boardName}' maar remote heeft ${remoteCount} groepen. Stale cache?`)
-      return false
+      return fail(`Opslaan geblokkeerd: de lokale agenda '${boardName}' is onverwacht leeg.`)
     }
   }
 
@@ -474,7 +498,7 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
     color: g.color ?? '#9aadbd', collapsed: g.collapsed ?? false, position: gi,
   }))
   const { error: gErr } = await supabase.from('board_groups').upsert(groupRows, { onConflict: 'id' })
-  if (gErr) return false
+  if (gErr) return fail(`Groepen opslaan mislukt: ${gErr.message}`)
 
   // Upsert items — maar alleen die we DAADWERKELIJK gewijzigd hebben
   // t.o.v. onze pulled-baseline. Eerder pushten we elke item uit de
@@ -565,7 +589,7 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
     // Cross-board changes belong exclusively to moveItemToBoard.
     const { data: locations, error: locationError } = await supabase.from('board_items')
       .select('id, board_id').in('id', itemRows.map(row => String(row.id)))
-    if (locationError) return false
+    if (locationError) return fail(`Items controleren mislukt: ${locationError.message}`)
     const movedAway = new Set((locations ?? []).filter((row: { id: string; board_id: string }) => row.board_id !== boardName).map((row: { id: string }) => row.id))
     const safeRows = itemRows.filter(row => !movedAway.has(String(row.id)))
     const { error: iErr } = safeRows.length > 0
@@ -576,18 +600,10 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
       console.error(`[boardStore] item upsert FAILED voor '${boardName}':`, iErr.message, iErr.details, iErr.hint)
       // Dispatch een toast-event zodat de UI dit zichtbaar kan maken
       // i.p.v. een silent rollback wanneer de user later een pull doet.
-      if (typeof window !== 'undefined') {
-        const isPermission = /permission|denied|RLS|policy/i.test(iErr.message ?? '')
-        window.dispatchEvent(new CustomEvent('yoko-push-failed', {
-          detail: {
-            boardName,
-            message: isPermission
-              ? 'Geen rechten om dit item te wijzigen. Check Supabase RLS-policy voor board_items.'
-              : `Opslaan mislukt: ${iErr.message}`,
-          },
-        }))
-      }
-      return false
+      const isPermission = /permission|denied|RLS|policy/i.test(iErr.message ?? '')
+      return fail(isPermission
+        ? 'Geen rechten om dit item te wijzigen. De wijziging blijft lokaal bewaard en wordt opnieuw geprobeerd.'
+        : `Opslaan mislukt: ${iErr.message}`)
     }
   }
 
