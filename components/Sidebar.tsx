@@ -22,7 +22,7 @@ import { pullBoardFromRemote, BOARD_NAMES, moveItemToBoard, loadGroups, saveGrou
 import type { BoardGroup } from '@/lib/boards'
 import {
   upsertBoard, defaultColumnsForNewBoard, pullBoardsFromRemote,
-  getBoards, getBoardConfig, onBoardsRegistryUpdate,
+  getBoards, getBoardConfig, renameBoard, onBoardsRegistryUpdate,
 } from '@/lib/boardsRegistry'
 import { VacationButton } from './VacationButton'
 import {
@@ -335,15 +335,16 @@ function SectionBlock({
     saveSections(updated)
   }
   function renameItem(id: string, label: string) {
+    const previousLabel = section.items.find(i => i.id === id)?.label ?? label
     updateItems(section.items.map(i => i.id === id ? { ...i, label } : i))
     if (section.type === 'projects') {
       const item = section.items.find(i => i.id === id)
       const boardId = item?.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : ''
-      const config = boardId ? getBoardConfig(boardId) : null
-      if (config) {
-        const position = Math.max(0, getBoards().findIndex(board => board.id === boardId))
-        void upsertBoard({ ...config, name: label }, position).then(() => pullBoardsFromRemote())
-      }
+      if (boardId) void renameBoard(boardId, label).then(async saved => {
+        if (saved) { await pullBoardsFromRemote(); showToast(`Agenda hernoemd naar '${label}'.`); return }
+        updateItems(section.items.map(i => i.id === id ? { ...i, label: previousLabel } : i))
+        showToast('Naam opslaan is mislukt. De oude naam is hersteld; probeer opnieuw.')
+      })
     }
   }
   function removeItem(id: string) {

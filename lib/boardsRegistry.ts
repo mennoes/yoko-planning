@@ -172,6 +172,35 @@ export function getBoardColor(id: string): string {
   return readCache().find(b => b.id === id)?.color ?? '#888'
 }
 
+export async function renameBoard(boardId: string, name: string): Promise<boolean> {
+  const clean = name.trim()
+  const current = readCache()
+  const existing = current.find(board => board.id === boardId)
+  if (!existing || !clean) return false
+  localRevision++
+  writeCache(current.map(board => board.id === boardId ? { ...board, name: clean } : board))
+  const rollback = () => writeCache(readCache().map(board => board.id === boardId ? existing : board))
+  if (!supabase) { rollback(); return false }
+  const session = await supabase.auth.getSession()
+  const token = session.data.session?.access_token
+  if (!token) { rollback(); return false }
+  try {
+    const response = await fetch('/api/boards/rename', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ boardId, name: clean }),
+    })
+    const result = await response.json() as { ok?: boolean; board?: { id: string; name: string } }
+    if (!response.ok || !result.ok || result.board?.name !== clean) {
+      rollback()
+      return false
+    }
+    return true
+  } catch {
+    rollback()
+    return false
+  }
+}
+
 export function onBoardsRegistryUpdate(handler: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
   window.addEventListener(UPDATE_EVENT, handler)

@@ -1406,7 +1406,11 @@ function Cell({ item, col, onUpdate }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }} title={hint}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <DateRangeCell startDate={item.startDate} endDate={item.endDate}
-            onChange={(s, e) => onUpdate(hasSubsForDates ? { startDate: s, endDate: e, datesOverride: true } : { startDate: s, endDate: e })} />
+            onChange={(s, e) => onUpdate(hasSubsForDates
+              ? (s || e
+                  ? { startDate: s, endDate: e, datesOverride: true }
+                  : { startDate: null, endDate: null, datesOverride: false })
+              : { startDate: s, endDate: e })} />
         </div>
         {overridden && (
           <button onClick={e => { e.stopPropagation(); onUpdate({ datesOverride: false }) }}
