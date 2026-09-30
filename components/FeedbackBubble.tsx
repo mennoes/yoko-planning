@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { usePathname } from 'next/navigation'
 import { useProfile } from './ProfileContext'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconClose, IconComment } from './Icon'
@@ -43,6 +44,7 @@ function fmtRelative(iso: string): string {
 }
 
 export function FeedbackBubble() {
+  const pathname = usePathname()
   const { profile } = useProfile()
   const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
@@ -51,6 +53,11 @@ export function FeedbackBubble() {
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | 'all'>('all')
   const [draftKind, setDraftKind] = useState<FeedbackKind>('idee')
   const [draftBody, setDraftBody] = useState('')
+  const defaultContext = pathname.startsWith('/planning') ? 'Planning'
+    : pathname.startsWith('/todos') ? "To do's"
+    : pathname.startsWith('/projects/') ? `Agenda: ${decodeURIComponent(pathname.split('/')[2] ?? '')}`
+    : pathname === '/' ? 'Home' : pathname.split('/').filter(Boolean).join(' / ') || 'Home'
+  const [draftContext, setDraftContext] = useState<string | null>(defaultContext)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -65,6 +72,8 @@ export function FeedbackBubble() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
+
+  useEffect(() => { if (!open) setDraftContext(defaultContext) }, [defaultContext, open])
 
   const filtered = useMemo(() => {
     const list = items
@@ -85,7 +94,8 @@ export function FeedbackBubble() {
     if (!body || busy) return
     setBusy(true)
     try {
-      await submitFeedback(draftKind, body, profile?.memberId ?? null, profile?.name ?? null)
+      const contextualBody = draftContext ? `Op [${draftContext}] wil ik: ${body}` : body
+      await submitFeedback(draftKind, contextualBody, profile?.memberId ?? null, profile?.name ?? null)
       setDraftBody('')
     } finally {
       setBusy(false)
@@ -186,6 +196,17 @@ export function FeedbackBubble() {
                 {KIND_LABEL[k]}
               </button>
             ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 30 }}>
+            {draftContext ? <>
+              <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Over</span>
+              <select value={draftContext} onChange={e => setDraftContext(e.target.value)}
+                aria-label="Pagina waarop deze feedback betrekking heeft"
+                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: 'none', borderRadius: 999, padding: '5px 9px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+                {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+              <button onClick={() => setDraftContext(null)} title="Paginacontext verwijderen" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>×</button>
+            </> : <button onClick={() => setDraftContext(defaultContext)} style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', borderRadius: 999, padding: '4px 8px', cursor: 'pointer', fontSize: 11.5 }}>+ Pagina koppelen</button>}
           </div>
           <textarea value={draftBody}
             onChange={e => setDraftBody(e.target.value)}

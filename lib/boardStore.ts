@@ -38,15 +38,19 @@ function dedupeSubitems(subs: SubItem[] | undefined): SubItem[] | undefined {
     const name = (s?.name ?? '').trim().toLowerCase()
     const key  = name ? `${name}|${s?.startDate ?? ''}|${s?.endDate ?? ''}` : ''
     if (key && keyToIdx.has(key)) {
-      // Conflict: bestaande sub met dezelfde naam + datums. Behoud
-      // degene met de hoogste status-rank (Done wint van leeg).
       const existingIdx = keyToIdx.get(key)!
       const existing = out[existingIdx]
-      if (statusRank(s?.status) > statusRank(existing?.status)) {
-        out[existingIdx] = s
-        if (id) seenIds.add(id)
+      const preferred = Object.values(s).filter(v => v !== undefined && v !== null && v !== '').length >
+        Object.values(existing).filter(v => v !== undefined && v !== null && v !== '').length ? s : existing
+      const other = preferred === s ? existing : s
+      out[existingIdx] = {
+        ...other, ...preferred,
+        id: existing.id || s.id,
+        status: statusRank(s.status) > statusRank(existing.status) ? s.status : existing.status,
+        estHours: Math.max(Number(existing.estHours) || 0, Number(s.estHours) || 0),
+        ownerIds: Array.from(new Set([...(existing.ownerIds ?? []), ...(s.ownerIds ?? [])])),
       }
-      // anders: nieuwe sub heeft lagere status → niet meenemen.
+      if (id) seenIds.add(id)
       continue
     }
     if (id) seenIds.add(id)

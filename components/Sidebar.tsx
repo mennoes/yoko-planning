@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import { useProfile } from './ProfileContext'
 import {
   loadSections, saveSections, reconcileAgendaSections,
+  setAgendaHidden,
   type NavItem, type SidebarSection,
 } from '@/lib/navStore'
 import { loadRecentPages, savePage, loadDocFolders, saveDocFolders, type PageDoc, type DocFolder } from '@/lib/pagesStore'
@@ -17,11 +18,11 @@ import {
   type GoogleConnection, type GoogleCalAvailable,
 } from '@/lib/googleClient'
 import { BOARD_CONFIGS } from '@/lib/boards'
-import { pullBoardFromRemote, BOARD_NAMES, moveItemToBoard, loadGroups, saveGroups } from '@/lib/boardStore'
+import { pullBoardFromRemote, BOARD_NAMES, moveItemToBoard, loadGroups, saveGroups, loadTrash, restoreTrashItem, type TrashItem } from '@/lib/boardStore'
 import type { BoardGroup } from '@/lib/boards'
 import {
   upsertBoard, defaultColumnsForNewBoard, pullBoardsFromRemote,
-  getBoards, onBoardsRegistryUpdate,
+  getBoards, getBoardConfig, onBoardsRegistryUpdate,
 } from '@/lib/boardsRegistry'
 import { VacationButton } from './VacationButton'
 import {
@@ -333,15 +334,28 @@ function SectionBlock({
     setAllSections(updated)
     saveSections(updated)
   }
-  function renameItem(id: string, label: string) { updateItems(section.items.map(i => i.id === id ? { ...i, label } : i)) }
+  function renameItem(id: string, label: string) {
+    updateItems(section.items.map(i => i.id === id ? { ...i, label } : i))
+    if (section.type === 'projects') {
+      const item = section.items.find(i => i.id === id)
+      const boardId = item?.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : ''
+      const config = boardId ? getBoardConfig(boardId) : null
+      if (config) {
+        const position = Math.max(0, getBoards().findIndex(board => board.id === boardId))
+        void upsertBoard({ ...config, name: label }, position).then(() => pullBoardsFromRemote())
+      }
+    }
+  }
   function removeItem(id: string) {
     const item = section.items.find(i => i.id === id)
     updateItems(section.items.filter(i => i.id !== id))
     if (section.type === 'projects' && item) {
+      setAgendaHidden(item.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : '', true)
       showToast(`'${item.label}' verborgen. Herstel via … naast Agenda's.`)
     }
   }
   function restoreAgenda(board: { id: string; name: string; color: string }) {
+    setAgendaHidden(board.id, false)
     if (section.items.some(item => item.href === `/projects/${board.id}`)) return
     updateItems([...section.items, {
       id: `agenda_${board.id}_${Date.now()}`,
@@ -443,11 +457,16 @@ function SectionBlock({
           </span>
         )}
 
-        {!editOrder && (
+        {!editOrder && section.type !== 'projects' && (
           <button onClick={() => { setOpen(true); setAddingItem(true) }} title="Toevoegen"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>+</button>
+        )}
+
+        {!editOrder && section.type === 'projects' && (
+          <button onClick={() => { setOpen(true); setAddingItem(true) }} title="Agenda toevoegen"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>+</button>
         )}
 
         {!editOrder && section.type === 'projects' && (
@@ -486,7 +505,7 @@ function SectionBlock({
         )}
 
         {/* Toggle affordance — visible on hover */}
-        {!editOrder && (
+        {!editOrder && section.type !== 'projects' && (
           <span className="sec-toggle-hint"
             style={{ width: 18, height: 18, borderRadius: 5,
               background: 'var(--bg-card)', border: '1px solid var(--border-light)',
@@ -646,6 +665,28 @@ function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
   onRestore: (board: { id: string; name: string; color: string }) => void
   onCreate: () => void
 }) {
+  const [tab, setTab] = useState<'agendas' | 'history' | 'trash'>('agendas')
+  const [snapshots, setSnapshots] = useState<Array<{ id: string; board_id: string; snapshot_at: string; trigger: string }>>([])
+  const [trash, setTrash] = useState<TrashItem[]>([])
+  useEffect(() => {
+    if (tab !== 'history' || !supabase) return
+    void supabase.from('board_snapshots').select('id, board_id, snapshot_at, trigger')
+      .order('snapshot_at', { ascending: false }).limit(40)
+      .then(({ data }) => setSnapshots((data ?? []) as typeof snapshots))
+  }, [tab])
+  async function restoreSnapshot(snapshot: { id: string; board_id: string; snapshot_at: string }) {
+    if (!supabase || !window.confirm(`Agenda terugzetten naar ${new Date(snapshot.snapshot_at).toLocaleString('nl-NL')}? De huidige versie wordt eerst bewaard.`)) return
+    const session = await supabase.auth.getSession()
+    const token = session.data.session?.access_token
+    if (!token) return
+    const response = await fetch('/api/snapshots/restore', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshotId: snapshot.id }),
+    })
+    if (!response.ok) { window.alert('Herstellen mislukt. Probeer opnieuw.'); return }
+    await pullBoardFromRemote(snapshot.board_id).catch(() => {})
+    window.alert(`'${getBoardConfig(snapshot.board_id)?.name ?? snapshot.board_id}' is hersteld.`)
+  }
   if (typeof document === 'undefined') return null
   const boards = getBoards()
   const visibleBoardIds = new Set(items
@@ -675,11 +716,13 @@ function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
 
         <div style={{ overflowY: 'auto', padding: '16px 20px 20px' }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-            <button onClick={onCreate} style={agendaActionStyle(true)}>+ Nieuwe agenda</button>
-            <Link href="/geschiedenis" onClick={onClose} style={agendaLinkStyle}>Versiegeschiedenis</Link>
-            <Link href="/geschiedenis?tab=papierbak" onClick={onClose} style={agendaLinkStyle}>Papierbak items</Link>
+            <button onClick={() => setTab('agendas')} style={agendaActionStyle(tab === 'agendas')}>Agenda&apos;s</button>
+            <button onClick={() => setTab('history')} style={agendaActionStyle(tab === 'history')}>Versiegeschiedenis</button>
+            <button onClick={() => { setTab('trash'); void loadTrash().then(setTrash) }} style={agendaActionStyle(tab === 'trash')}>Papierbak</button>
           </div>
 
+          {tab === 'agendas' && <>
+          <button onClick={onCreate} style={{ ...agendaActionStyle(true), marginBottom: 16 }}>+ Nieuwe agenda</button>
           <div style={agendaSectionLabel}>Zichtbaar in menu</div>
           <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
             {items.length === 0 ? (
@@ -706,6 +749,28 @@ function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
               </div>
             ))}
           </div>
+          </>}
+
+          {tab === 'history' && <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            {snapshots.length === 0 ? <div style={{ padding: 14, color: 'var(--text-muted)', fontSize: 13 }}>Geen versies gevonden.</div> : snapshots.map((snap, index) => (
+              <div key={snap.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr auto auto', gap: 10, padding: '10px 12px', borderBottom: index < snapshots.length - 1 ? '1px solid var(--border-light)' : 'none', alignItems: 'center' }}>
+                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{getBoardConfig(snap.board_id)?.name ?? snap.board_id}</strong>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{new Date(snap.snapshot_at).toLocaleString('nl-NL')}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{snap.trigger}</span>
+                <button onClick={() => void restoreSnapshot(snap)} style={agendaActionStyle(false)}>Herstel</button>
+              </div>
+            ))}
+          </div>}
+
+          {tab === 'trash' && <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            {trash.length === 0 ? <div style={{ padding: 14, color: 'var(--text-muted)', fontSize: 13 }}>De papierbak is leeg.</div> : trash.map((entry, index) => (
+              <div key={entry.id} style={{ display: 'flex', gap: 10, padding: '10px 12px', borderBottom: index < trash.length - 1 ? '1px solid var(--border-light)' : 'none', alignItems: 'center' }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{getBoardConfig(entry.boardId)?.name ?? entry.boardId}</span>
+                <button onClick={() => { void restoreTrashItem(entry.id).then(() => loadTrash().then(setTrash)) }} style={agendaActionStyle(true)}>Herstel</button>
+              </div>
+            ))}
+          </div>}
         </div>
       </div>
     </>,

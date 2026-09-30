@@ -84,6 +84,17 @@ export async function assignMemberToTeamGroup(memberId: string, targetGroupId: s
   await push(changed)
 }
 
+export async function moveTeamGroup(groupId: string, direction: -1 | 1): Promise<void> {
+  const groups = read().sort((a, b) => a.position - b.position)
+  const index = groups.findIndex(group => group.id === groupId)
+  const target = index + direction
+  if (index < 0 || target < 0 || target >= groups.length) return
+  ;[groups[index], groups[target]] = [groups[target], groups[index]]
+  const next = groups.map((group, position) => ({ ...group, position }))
+  write(next)
+  await push(next)
+}
+
 export async function pullTeamGroups(): Promise<boolean> {
   if (!supabase || !await getCurrentUserId()) return false
   const { data, error } = await supabase.from('team_members_extra')

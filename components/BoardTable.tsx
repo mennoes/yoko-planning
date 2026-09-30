@@ -1514,6 +1514,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(defaultEditName ? '' : subitem.name)
+  const [commentCount, setCommentCount] = useState(0)
+  useEffect(() => {
+    const refresh = () => setCommentCount(loadCommentsFor('board-item:' + subitem.id).reduce((sum, thread) => sum + thread.thread.length, 0))
+    refresh()
+    return onCommentsUpdate(refresh)
+  }, [subitem.id])
 
   const cellBorder: React.CSSProperties = {
     borderLeft: '1px solid var(--border)', height: '100%', flex: 1, minWidth: 0,
@@ -1736,6 +1742,13 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
                 </span>
               )
             })()}
+            {onOpenDetail && (
+              <button onClick={e => { e.stopPropagation(); onOpenDetail() }}
+                title="Reageren op dit subitem" aria-label="Reacties op subitem"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, border: 0, borderRadius: 999, background: commentCount ? 'var(--accent-light)' : 'transparent', color: commentCount ? 'var(--accent)' : 'var(--text-muted)', cursor: 'pointer', padding: '3px 6px', fontSize: 11, flexShrink: 0 }}>
+                <IconComment size={13} />{commentCount > 0 ? commentCount : ''}
+              </button>
+            )}
             {hover && onOpenDetail && (
               <button onClick={e => { e.stopPropagation(); onOpenDetail() }}
                 title="Details openen"

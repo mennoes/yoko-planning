@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   loadTeamGroups, pullTeamGroups, subscribeRemoteTeamGroups, onTeamGroupsChange,
-  createTeamGroup, assignMemberToTeamGroup, type TeamGroup,
+  createTeamGroup, assignMemberToTeamGroup, moveTeamGroup, type TeamGroup,
 } from '@/lib/teamGroups'
 
 export function useTeamGroups() {
@@ -22,5 +22,6 @@ export function useTeamGroups() {
     groups,
     createGroup: createTeamGroup,
     assignMember: assignMemberToTeamGroup,
+    moveGroup: moveTeamGroup,
   }
 }
