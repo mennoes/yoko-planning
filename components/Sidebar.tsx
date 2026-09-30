@@ -300,6 +300,7 @@ function SectionBlock({
   const [editName,      setEditName]      = useState(false)
   const [nameDraft,     setNameDraft]     = useState(section.name)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [agendaManagerOpen, setAgendaManagerOpen] = useState(false)
   const addInputRef = useRef<HTMLInputElement>(null)
 
   const { onDragStart, onDragOver, onDragEnd } = useReorder(section.items, items => {
@@ -333,7 +334,23 @@ function SectionBlock({
     saveSections(updated)
   }
   function renameItem(id: string, label: string) { updateItems(section.items.map(i => i.id === id ? { ...i, label } : i)) }
-  function removeItem(id: string) { updateItems(section.items.filter(i => i.id !== id)) }
+  function removeItem(id: string) {
+    const item = section.items.find(i => i.id === id)
+    updateItems(section.items.filter(i => i.id !== id))
+    if (section.type === 'projects' && item) {
+      showToast(`'${item.label}' verborgen. Herstel via … naast Agenda's.`)
+    }
+  }
+  function restoreAgenda(board: { id: string; name: string; color: string }) {
+    if (section.items.some(item => item.href === `/projects/${board.id}`)) return
+    updateItems([...section.items, {
+      id: `agenda_${board.id}_${Date.now()}`,
+      label: board.name,
+      href: `/projects/${board.id}`,
+      color: board.color,
+    }])
+    showToast(`'${board.name}' staat weer bij Agenda's.`)
+  }
   async function addItem() {
     const lbl = newLabel.trim()
     if (!lbl) { setAddingItem(false); return }
@@ -400,11 +417,11 @@ function SectionBlock({
           color: 'var(--text-primary)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em' }}
         onMouseEnter={e => {
           e.currentTarget.style.background = 'var(--bg-hover)'
-          e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '1'))
+          e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-more,.sec-toggle-hint').forEach(b => (b.style.opacity = '1'))
         }}
         onMouseLeave={e => {
           e.currentTarget.style.background = 'transparent'
-          e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-toggle-hint').forEach(b => (b.style.opacity = '0'))
+          e.currentTarget.querySelectorAll<HTMLElement>('.sec-del,.sec-more,.sec-toggle-hint').forEach(b => (b.style.opacity = '0'))
         }}>
         <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           {section.type === 'projects'
@@ -431,6 +448,25 @@ function SectionBlock({
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>+</button>
+        )}
+
+        {!editOrder && section.type === 'projects' && (
+          <button
+            className="sec-more"
+            onClick={() => setAgendaManagerOpen(true)}
+            title="Agenda's beheren en herstellen"
+            aria-label="Agenda's beheren en herstellen"
+            style={{
+              width: 24, height: 24, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', fontSize: 19, lineHeight: 1,
+              padding: 0, opacity: 0, flexShrink: 0,
+              transition: 'opacity 0.15s, background 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--control-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
+          >…</button>
         )}
 
         {editOrder && (
@@ -564,7 +600,7 @@ function SectionBlock({
 
                 {!editOrder && !editing && <button className="row-action" onClick={e => { e.stopPropagation(); setEditingItemId(item.id) }} title="Naam wijzigen"
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: '2px 3px', opacity: 0, flexShrink: 0 }}>✎</button>}
-                {!editOrder && !editing && <button className="row-action" onClick={() => removeItem(item.id)} title="Verwijderen"
+                {!editOrder && !editing && <button className="row-action" onClick={() => removeItem(item.id)} title={section.type === 'projects' ? 'Uit menu verbergen' : 'Verwijderen'}
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '2px 4px', opacity: 0, flexShrink: 0 }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--red, #e2445c)')}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>×</button>}
@@ -585,8 +621,118 @@ function SectionBlock({
           )}
         </div>
       )}
+
+      {agendaManagerOpen && section.type === 'projects' && (
+        <AgendaManagerModal
+          items={section.items}
+          onClose={() => setAgendaManagerOpen(false)}
+          onHide={removeItem}
+          onRestore={restoreAgenda}
+          onCreate={() => {
+            setAgendaManagerOpen(false)
+            setOpen(true)
+            setAddingItem(true)
+          }}
+        />
+      )}
     </div>
   )
+}
+
+function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
+  items: NavItem[]
+  onClose: () => void
+  onHide: (id: string) => void
+  onRestore: (board: { id: string; name: string; color: string }) => void
+  onCreate: () => void
+}) {
+  if (typeof document === 'undefined') return null
+  const boards = getBoards()
+  const visibleBoardIds = new Set(items
+    .map(item => item.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : '')
+    .filter(Boolean))
+  const hiddenBoards = boards.filter(board => !visibleBoardIds.has(board.id))
+
+  return createPortal(
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 10020, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }} />
+      <div role="dialog" aria-modal="true" aria-label="Agenda's beheren" style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+        zIndex: 10021, width: 'min(560px, calc(100vw - 28px))', maxHeight: 'min(720px, calc(100vh - 28px))',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
+        boxShadow: '0 24px 70px rgba(0,0,0,0.35)',
+      }}>
+        <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 750, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Agenda&apos;s beheren</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-muted)' }}>
+              Verbergen haalt alleen de snelkoppeling weg. De agenda en projecten blijven bewaard.
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Sluiten" style={{ width: 30, height: 30, border: 0, borderRadius: 7, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 22, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '16px 20px 20px' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+            <button onClick={onCreate} style={agendaActionStyle(true)}>+ Nieuwe agenda</button>
+            <Link href="/geschiedenis" onClick={onClose} style={agendaLinkStyle}>Versiegeschiedenis</Link>
+            <Link href="/geschiedenis?tab=papierbak" onClick={onClose} style={agendaLinkStyle}>Papierbak items</Link>
+          </div>
+
+          <div style={agendaSectionLabel}>Zichtbaar in menu</div>
+          <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+            {items.length === 0 ? (
+              <div style={{ padding: 14, fontSize: 13, color: 'var(--text-muted)' }}>Geen agenda&apos;s zichtbaar.</div>
+            ) : items.map((item, index) => (
+              <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: index < items.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
+                <span style={{ width: 9, height: 9, borderRadius: 3, background: item.color ?? 'var(--accent)', flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', fontSize: 13.5, fontWeight: 600 }}>{item.label}</span>
+                <Link href={item.href} onClick={onClose} style={{ ...agendaLinkStyle, padding: '6px 9px' }}>Open</Link>
+                <button onClick={() => onHide(item.id)} style={agendaActionStyle(false)}>Verberg</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={agendaSectionLabel}>Verborgen agenda&apos;s</div>
+          <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            {hiddenBoards.length === 0 ? (
+              <div style={{ padding: 14, fontSize: 13, color: 'var(--text-muted)' }}>Geen verborgen agenda&apos;s.</div>
+            ) : hiddenBoards.map((board, index) => (
+              <div key={board.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: index < hiddenBoards.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
+                <span style={{ width: 9, height: 9, borderRadius: 3, background: board.color, flexShrink: 0 }} />
+                <span style={{ flex: 1, color: 'var(--text-primary)', fontSize: 13.5, fontWeight: 600 }}>{board.name}</span>
+                <button onClick={() => onRestore(board)} style={agendaActionStyle(true)}>Herstel in menu</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>,
+    document.body,
+  )
+}
+
+const agendaSectionLabel: React.CSSProperties = {
+  marginBottom: 7, color: 'var(--text-muted)', fontSize: 10.5, fontWeight: 750,
+  textTransform: 'uppercase', letterSpacing: '0.07em',
+}
+
+const agendaLinkStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  padding: '8px 11px', borderRadius: 7, border: '1px solid var(--border)',
+  background: 'var(--bg-card)', color: 'var(--text-secondary)',
+  fontSize: 12, fontWeight: 650, textDecoration: 'none', whiteSpace: 'nowrap',
+}
+
+function agendaActionStyle(primary: boolean): React.CSSProperties {
+  return {
+    padding: primary ? '8px 11px' : '6px 9px', borderRadius: 7,
+    border: '1px solid ' + (primary ? 'var(--accent)' : 'var(--border)'),
+    background: primary ? 'var(--accent)' : 'transparent',
+    color: primary ? '#fff' : 'var(--text-secondary)',
+    fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+  }
 }
 
 // ─── Settings popup ───────────────────────────────────────────────────────────
