@@ -98,7 +98,7 @@ const FALLBACK: BoardConfig[] = [
     { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
     { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
   ] },
-  { id: 'dienjaar', name: 'Dienjaar', emoji: '📋', color: '#00c875', columns: [
+  { id: 'dienjaar', name: 'Itorium', emoji: '📋', color: '#00c875', columns: [
     { key: 'ownerIds', label: 'Owner',    type: 'owners',    width: 90  },
     { key: 'timeline', label: 'Tijdlijn', type: 'daterange', width: 175 },
     { key: 'status',   label: 'Status',   type: 'status',    width: 145 },
@@ -223,7 +223,15 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
   // Maak ontbrekende vaste agenda's eerst ook echt remote aan. Alleen lokaal
   // aanvullen is onvoldoende: board_groups heeft een FK naar boards en een
   // verplaatsing naar zo'n lokaal-only agenda faalt dan alsnog.
-  const remoteRows = data as Row[]
+  const rawRemoteRows = data as Row[]
+  // Eenmalige naam-migratie na de eerdere save-regressie. Menno had deze
+  // agenda al meermaals hernoemd; oude remote data mag niet nóg eens de
+  // legacynaam terugzetten. Latere, andere namen blijven onaangeraakt.
+  const hasLegacyDienjaar = rawRemoteRows.some(row => row.id === 'dienjaar' && row.name === 'Dienjaar')
+  if (hasLegacyDienjaar) {
+    await supabase.from('boards').update({ name: 'Itorium', updated_at: new Date().toISOString() }).eq('id', 'dienjaar').eq('name', 'Dienjaar')
+  }
+  const remoteRows = rawRemoteRows.map(row => row.id === 'dienjaar' && row.name === 'Dienjaar' ? { ...row, name: 'Itorium' } : row)
   const missing = FALLBACK.filter(f => !remoteRows.some(r => r.id === f.id))
   if (missing.length > 0) {
     const { error: seedError } = await supabase.from('boards').upsert(
