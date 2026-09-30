@@ -15,6 +15,7 @@ import { upsertTeamMember, type TeamMember, type TeamKind } from '@/lib/teamStor
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import { isTeamAdmin } from '@/lib/teamAdmin'
 import { pinnedStaticAvatarUrl, staticAvatarUrl } from '@/lib/avatarAssets'
+import { useTeamGroups } from '@/components/useTeamGroups'
 
 type ExtendedProfile = {
   user_id?:           string
@@ -63,6 +64,7 @@ export default function PublicProfilePage() {
   const [saveError, setSaveError] = useState('')
   const [capacities, setCapacities] = useState<Record<string, number>>(() => loadCapacities())
   const { allMembers: liveTeam, refresh: refreshTeam } = useTeam()
+  const { groups: teamGroups, assignMember: assignMemberToTeamGroup } = useTeamGroups()
   // Eerst kijken in live team_members (Supabase), valt terug op team.json
   // voor pre-DB / legacy ids. Anders krijgt Manuel (alleen in team_members)
   // 'Onbekend teamlid'-fallback.
@@ -129,6 +131,8 @@ export default function PublicProfilePage() {
   const color   = data?.color ?? baseMember.color
   const photo   = pinnedStaticAvatarUrl(memberId) ?? data?.photo ?? (memberId ? getPhoto(memberId) : null) ?? staticAvatarUrl(memberId) ?? `/team/${memberId}.jpg`
   const cap     = capacities[memberId] ?? data?.weekly_capacity ?? baseMember.weeklyCapacity ?? 40
+  const planningTeam = teamGroups.find(group => group.memberIds.includes(memberId))?.name
+    ?? (liveMember?.inactive ? 'Inactief team' : liveMember?.kind === 'freelance' ? 'Freelancers' : 'Team Yoko')
 
   // Time-tracking summary for this member's currently-running entries (only their own
   // entries are accessible; for others we just show capacity)
@@ -178,13 +182,22 @@ export default function PublicProfilePage() {
             }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-              {liveMember?.kind === 'freelance' ? 'Freelance' : 'Studio Yoko'} · Teamlid
+              {liveMember?.kind === 'freelance' ? 'Freelance' : 'Studio Yoko'} · {planningTeam}
             </div>
             <h1 style={{ fontSize: isMobile ? 28 : 40, fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.035em', lineHeight: 1 }}>
               {name}
             </h1>
             {data?.role && <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>{data.role}{data.office ? ` · ${data.office}` : ''}</div>}
             {liveMember?.inactive && <div style={{ display: 'inline-flex', marginTop: 10, padding: '4px 10px', borderRadius: 999, background: 'rgba(216,182,46,0.16)', color: '#b49724', fontSize: 12, fontWeight: 700 }}>◒ Inactief team</div>}
+            {admin && !liveMember?.inactive && <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 10, marginLeft: 8, fontSize: 11.5, color: 'var(--text-muted)' }}>
+              Planningteam
+              <select value={teamGroups.find(group => group.memberIds.includes(memberId))?.id ?? ''}
+                onChange={e => void assignMemberToTeamGroup(memberId, e.target.value || null)}
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 7, padding: '5px 8px', color: 'var(--text-primary)', fontSize: 12 }}>
+                <option value="">Team Yoko</option>
+                {teamGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select>
+            </label>}
             {onVacationNow && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,123,36,0.18)', color: '#a05400', fontSize: 12, fontWeight: 700 }}>
                 🏝 Op vakantie {data?.vacation_from ? `${fmtDate(data.vacation_from)} – ${fmtDate(data.vacation_until!)}` : `tot ${fmtDate(data.vacation_until!)}`}

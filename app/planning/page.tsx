@@ -4502,7 +4502,7 @@ export default function PlanningPage() {
   const { pushUndo, showToast } = useUndo()
   const { profile }    = useProfile()
   const { members: liveTeam } = useTeam()
-  const { groups: teamGroups, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup } = useTeamGroups()
+  const { groups: teamGroups, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup, moveGroup: moveTeamGroup } = useTeamGroups()
   // Helper: classificeer een memberId als 'yoko' op basis van de live
   // team_members tabel; valt terug op de hardcoded YOKO_IDS voor leden
   // die nog niet in de DB staan (bv. extras of voor migratie 0018 is
@@ -4609,6 +4609,7 @@ export default function PlanningPage() {
   const [shiftFilter,  setShiftFilter]  = useState('')
   const [shareOpen,    setShareOpen]    = useState(false)
   const [copiedBoard,  setCopiedBoard]  = useState<string | null>(null)
+  const [shareGroupSelection, setShareGroupSelection] = useState<Record<string, string[]>>({})
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [filterMembers, setFilterMembers] = useState<Set<string>>(() => {
@@ -5913,6 +5914,7 @@ export default function PlanningPage() {
                   <button onClick={() => { setOverflowOpen(false); setNewItemOpen(true) }} style={{ ...overflowItemStyle, fontWeight: 700 }}><span style={{ width: 14, textAlign: 'center' }}>+</span> Nieuw item</button>
                   <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                   <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true) }} style={overflowItemStyle}><IconUsers size={14} /> Mensen &amp; capaciteit{filterMembers.size > 0 ? ` · ${filterMembers.size}` : ''}</button>
+                  <button onClick={() => { setOverflowOpen(false); setPeopleOpen(true); setNewTeamGroupName('Nieuw team') }} style={overflowItemStyle}><span style={{ width: 14, textAlign: 'center' }}>＋</span> Team toevoegen</button>
                   <button onClick={() => { setOverflowOpen(false); setAgendasOpen(true) }} style={overflowItemStyle}><IconBoard size={14} /> Agenda&apos;s</button>
                   <button onClick={() => { setOverflowOpen(false); setEditOrder(o => !o) }} style={overflowItemStyle}><IconSort size={14} /> {editOrder ? 'Stop met sorteren' : 'Teamleden sorteren'}</button>
                   <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
@@ -6042,10 +6044,14 @@ export default function PlanningPage() {
             Deel een agenda met klanten of partners. Geen login nodig om te bekijken.
           </p>
           {Object.entries(BOARD_COLORS).map(([b, c]) => {
-            const url = typeof window !== 'undefined' ? `${window.location.origin}/share/${b}` : `/share/${b}`
+            const groups = allGroups[b] ?? []
+            const selected = shareGroupSelection[b] ?? groups.map(group => group.id)
+            const groupQuery = selected.length > 0 && selected.length < groups.length ? `?groups=${encodeURIComponent(selected.join(','))}` : ''
+            const url = typeof window !== 'undefined' ? `${window.location.origin}/share/${b}${groupQuery}` : `/share/${b}${groupQuery}`
             const copied = copiedBoard === b
             return (
-              <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
+              <div key={b} style={{ padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 12, height: 12, borderRadius: 3, background: c, flexShrink: 0 }} />
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, textTransform: 'capitalize', minWidth: 80 }}>{b}</span>
                 <input readOnly value={url}
@@ -6066,6 +6072,20 @@ export default function PlanningPage() {
                     fontSize: 11, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>
                   Open
                 </a>
+              </div>
+              {groups.length > 1 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 0 22px' }}>
+                {groups.map(group => {
+                  const checked = selected.includes(group.id)
+                  return <label key={group.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 7px', borderRadius: 999, background: checked ? 'var(--accent-light)' : 'var(--bg-hover)', color: checked ? 'var(--accent)' : 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={checked} onChange={() => setShareGroupSelection(previous => {
+                      const current = previous[b] ?? groups.map(item => item.id)
+                      const next = current.includes(group.id) ? current.filter(id => id !== group.id) : [...current, group.id]
+                      return { ...previous, [b]: next }
+                    })} style={{ accentColor: 'var(--accent)' }} />
+                    {group.name}
+                  </label>
+                })}
+              </div>}
               </div>
             )
           })}
@@ -6183,6 +6203,14 @@ export default function PlanningPage() {
                 style={{ width: 18, height: 18, accentColor: m.color, cursor: 'pointer', flexShrink: 0 }} />
               <MemberAvatar member={m} size={30} />
               <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
+              {m.id !== 'unassigned' && <select
+                value={teamGroups.find(group => group.memberIds.includes(m.id))?.id ?? ''}
+                onChange={e => void assignMemberToTeamGroup(m.id, e.target.value || null)}
+                aria-label={`Team van ${m.name}`}
+                style={{ maxWidth: 112, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px', color: 'var(--text-secondary)', fontSize: 11 }}>
+                <option value="">Studio Yoko</option>
+                {teamGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+              </select>}
               <input type="number" value={m.weeklyCapacity} min={0} step={1}
                 aria-label={`Capaciteit ${m.name} in uren per week`}
                 onChange={e => updateCapacity(m.id, Math.max(0, parseInt(e.target.value) || 0))}
@@ -6209,6 +6237,8 @@ export default function PlanningPage() {
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
                 <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{group.name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-muted)' }}>{members.length}</span>
+                <button onClick={() => void moveTeamGroup(group.id, -1)} title="Team omhoog" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>↑</button>
+                <button onClick={() => void moveTeamGroup(group.id, 1)} title="Team omlaag" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>↓</button>
               </div>
               {members.length > 0 ? members.map(row) : (
                 <div style={{ padding: '10px 2px', fontSize: 12, color: 'var(--text-muted)' }}>Sleep mensen hierheen</div>
@@ -6715,8 +6745,8 @@ export default function PlanningPage() {
                 {/* Label blijft tegen de linker rand kleven terwijl de balk
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
-                <div style={{ position: 'sticky', left: 0, zIndex: 22, width: zoom === 'week' && opts?.members?.length ? nameW + namePad : 'max-content', flexShrink: 0,
-                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--overlay-faint)' }}>
+                <div style={{ position: 'sticky', left: 0, zIndex: 26, width: zoom === 'week' && opts?.members?.length ? nameW + namePad : 'max-content', flexShrink: 0,
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-base)', overflow: 'hidden', borderRight: '1px solid var(--border-strong)' }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
                       // pos 2: iedereen in deze sectie staat individueel
@@ -6734,6 +6764,7 @@ export default function PlanningPage() {
                   )}
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
+                  {!!opts?.members?.length && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· {Math.round(opts.members.reduce((sum, member) => sum + member.weeklyCapacity, 0) * 10) / 10}u/w</span>}
                 </div>
                 {zoom === 'week' && opts?.members?.length ? cols.map(col => {
                   const total = Math.round(opts.members!.reduce((sum, member) => (
@@ -6749,7 +6780,7 @@ export default function PlanningPage() {
                       style={{ width: col.widthPx, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderLeft: '1px solid var(--border-strong)', opacity: col.isPast ? 0.75 : 1 }}>
                       <WorkloadCircleSvg pct={pct} cs={miniSize} or={miniRadius} />
                       <span style={{ fontSize: 9.5, lineHeight: 1.1, color: 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: 650 }}>
-                        {Math.round(pct * 100)}% · {total}u
+                        {Math.round(pct * 100)}% · {total}/{capacity}u
                       </span>
                     </div>
                   )

@@ -107,6 +107,24 @@ export type SidebarSection = {
 }
 
 const SECTIONS_KEY = 'yoko-sidebar-sections-v3'
+const HIDDEN_AGENDAS_KEY = 'yoko-hidden-agendas-v1'
+
+export function loadHiddenAgendaIds(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const value = JSON.parse(localStorage.getItem(HIDDEN_AGENDAS_KEY) ?? '[]') as unknown
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
+  } catch { return [] }
+}
+
+export function setAgendaHidden(boardId: string, hidden: boolean): void {
+  if (typeof window === 'undefined' || !boardId) return
+  const ids = new Set(loadHiddenAgendaIds())
+  if (hidden) ids.add(boardId)
+  else ids.delete(boardId)
+  localStorage.setItem(HIDDEN_AGENDAS_KEY, JSON.stringify([...ids]))
+  window.dispatchEvent(new CustomEvent('yoko-nav-update'))
+}
 
 function defaultSections(): SidebarSection[] {
   return [
@@ -166,17 +184,28 @@ export function reconcileAgendaSections(
   const sectionIndex = sections.findIndex(s => s.type === 'projects')
   if (sectionIndex < 0) return sections
   const agendaSection = sections[sectionIndex]
-  const existingHrefs = new Set(agendaSection.items.map(item => item.href))
+  const hiddenIds = new Set(loadHiddenAgendaIds())
+  const byId = new Map(boards.map(board => [board.id, board]))
+  const visibleItems = agendaSection.items.filter(item => {
+    const id = item.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : ''
+    return !hiddenIds.has(id)
+  }).map(item => {
+    const id = item.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : ''
+    const board = byId.get(id)
+    return board ? { ...item, label: board.name, color: board.color ?? item.color } : item
+  })
+  const existingHrefs = new Set(visibleItems.map(item => item.href))
   const additions: NavItem[] = boards
-    .filter(board => !existingHrefs.has(`/projects/${board.id}`))
+    .filter(board => !hiddenIds.has(board.id) && !existingHrefs.has(`/projects/${board.id}`))
     .map(board => ({
       id: `agenda-${board.id}`,
       label: board.name,
       href: `/projects/${board.id}`,
       color: board.color,
     }))
-  if (additions.length === 0) return sections
+  const metadataChanged = visibleItems.some((item, index) => item.label !== agendaSection.items[index]?.label || item.color !== agendaSection.items[index]?.color)
+  if (visibleItems.length === agendaSection.items.length && additions.length === 0 && !metadataChanged) return sections
   return sections.map((section, index) => index === sectionIndex
-    ? { ...section, items: [...section.items, ...additions] }
+    ? { ...section, items: [...visibleItems, ...additions] }
     : section)
 }

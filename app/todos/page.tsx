@@ -1,5 +1,7 @@
 'use client'
-import { completeLinkedTask, completionTargetForProject } from '@/lib/personalCompletionClient'
+import { completeLinkedTask, completionTargetForProject, loadPersonalCompletion } from '@/lib/personalCompletionClient'
+import { pullBoardFromRemote } from '@/lib/boardStore'
+import { getBoardIds } from '@/lib/boardsRegistry'
 
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -307,7 +309,13 @@ function TodoCard({
   // Gekoppelde todo's waarvan het project op Done staat (of voorbij is)
   // halen we VOLLEDIG uit de lijst — niet in open én niet in 'afgerond',
   // gewoon weg. Handmatig afgevinkte todo-notes blijven wel in 'afgerond'.
-  const isAutoDone = (i: TodoItem) => !!i.projectRef && doneProjectKeys.has(`${i.projectRef.board}:${i.projectRef.itemId}`)
+  const isAutoDone = (i: TodoItem) => {
+    if (!i.projectRef) return false
+    if (doneProjectKeys.has(`${i.projectRef.board}:${i.projectRef.itemId}`)) return true
+    if (!isMember) return false
+    const target = completionTargetForProject(i.projectRef)
+    return !!target && !!loadPersonalCompletion(target, section.id)?.done
+  }
   const visible = section.items.filter(i => !isAutoDone(i))
   const open    = visible.filter(i => !i.done)
   const done    = visible.filter(i =>  i.done)
@@ -1118,6 +1126,14 @@ export default function TodosPage() {
     setAllProjects(loadAllTodoProjects())
     setDoneProjectKeys(loadDoneTodoProjectKeys())
     setHydrated(true)
+
+    // De agenda's zijn de bron van waarheid. Trek ze eerst vers binnen,
+    // zodat een elders afgevinkt item niet door een oude local cache op de
+    // To do-pagina blijft staan.
+    void Promise.all(getBoardIds().map(boardId => pullBoardFromRemote(boardId).catch(() => false))).then(() => {
+      setAllProjects(loadAllTodoProjects())
+      setDoneProjectKeys(loadDoneTodoProjectKeys())
+    })
 
     pullTodos().then(remote => {
       if (remote !== null) { setSections(remote); setSyncReady(true) }
