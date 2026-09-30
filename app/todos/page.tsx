@@ -1,5 +1,6 @@
 'use client'
-import { completeLinkedTask, completionTargetForProject, loadPersonalCompletion } from '@/lib/personalCompletionClient'
+import { completeLinkedTask, completionTargetForProject } from '@/lib/personalCompletionClient'
+import { completionState } from '@/lib/personalCompletion'
 import { pullBoardFromRemote } from '@/lib/boardStore'
 import { getBoardIds } from '@/lib/boardsRegistry'
 
@@ -25,7 +26,7 @@ import {
   mergeMemberTodoItems,
 } from '@/lib/todoProjectSeed'
 import {
-  loadCommentsFor, saveComment, onCommentsUpdate,
+  loadCommentsFor, loadAllComments, saveComment, onCommentsUpdate,
   newCommentId, toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { createNotification } from '@/lib/notificationsStore'
@@ -309,12 +310,13 @@ function TodoCard({
   // Gekoppelde todo's waarvan het project op Done staat (of voorbij is)
   // halen we VOLLEDIG uit de lijst — niet in open én niet in 'afgerond',
   // gewoon weg. Handmatig afgevinkte todo-notes blijven wel in 'afgerond'.
+  const completionComments = isMember ? loadAllComments() : []
   const isAutoDone = (i: TodoItem) => {
     if (!i.projectRef) return false
     if (doneProjectKeys.has(`${i.projectRef.board}:${i.projectRef.itemId}`)) return true
     if (!isMember) return false
     const target = completionTargetForProject(i.projectRef)
-    return !!target && !!loadPersonalCompletion(target, section.id)?.done
+    return !!target && !!completionState(completionComments, target, section.id)?.done
   }
   const visible = section.items.filter(i => !isAutoDone(i))
   const open    = visible.filter(i => !i.done)
