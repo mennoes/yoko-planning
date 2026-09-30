@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { loadSections, saveSections } from './navStore'
+import { pullBoardsFromRemote, renameBoard } from './boardsRegistry'
 
 export function useBoardTitle(key: string, fallback: string) {
   const href = `/projects/${key}`
@@ -28,14 +29,34 @@ export function useBoardTitle(key: string, fallback: string) {
     return () => window.removeEventListener('yoko-nav-update', onUpdate)
   }, [href])
 
-  function renameTitle(label: string) {
-    setTitle(label)
+  async function renameTitle(label: string) {
+    const clean = label.trim()
+    if (!clean || clean === title) return
+    const previous = title
+    setTitle(clean)
     const sections = loadSections()
     const updated = sections.map(s => ({
       ...s,
-      items: s.items.map(i => i.href === href ? { ...i, label } : i),
+      items: s.items.map(i => i.href === href ? { ...i, label: clean } : i),
     }))
     saveSections(updated)
+
+    // Een titelwijziging in de agenda-header moet via exact dezelfde
+    // bevestigde database-route lopen als hernoemen in de sidebar. Voorheen
+    // wijzigde dit pad alleen localStorage en zette een refresh de oude naam
+    // terug. Bij een fout rollen we de optimistische UI-wijziging terug.
+    const saved = await renameBoard(key, clean)
+    if (saved) {
+      await pullBoardsFromRemote()
+      return
+    }
+    setTitle(previous)
+    saveSections(sections)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('yoko-push-failed', {
+        detail: { boardName: key, message: `Naam '${clean}' kon niet worden opgeslagen. De oude naam is hersteld.` },
+      }))
+    }
   }
 
   return { title, renameTitle }
