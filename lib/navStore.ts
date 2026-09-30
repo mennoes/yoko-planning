@@ -37,7 +37,7 @@ const DEFAULT_PROJECTS: NavItem[] = [
   { id: 'nederland',  label: 'Nederland',  href: '/projects/nederland',  color: '#9c7ee8' },
   { id: 'vlaanderen', label: 'Vlaanderen', href: '/projects/vlaanderen', color: '#ff7a00' },
   { id: 'omdenken',   label: 'Omdenken',   href: '/projects/omdenken',   color: '#c73561' },
-  { id: 'dienjaar',   label: 'Dienjaar',  href: '/projects/dienjaar',   color: '#00c875' },
+  { id: 'dienjaar',   label: 'Itorium',   href: '/projects/dienjaar',   color: '#00c875' },
 ]
 
 // /demo mag nooit de echte klantnamen tonen in de 'Agenda's'-sectie —
