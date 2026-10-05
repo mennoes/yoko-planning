@@ -59,7 +59,10 @@ export function FeedbackBubble() {
     : pathname === '/' ? 'Home' : pathname.split('/').filter(Boolean).join(' / ') || 'Home'
   const [draftContext, setDraftContext] = useState<string | null>(defaultContext)
   const [busy, setBusy] = useState(false)
-  const contextPrefix = draftContext ? `Op ${draftContext} pagina… ` : ''
+  const kindInSentence = KIND_LABEL[draftKind].toLocaleLowerCase('nl-NL')
+  const contextPrefix = draftContext
+    ? `Op ${draftContext} pagina heb ik een ${kindInSentence}… `
+    : `Ik heb een ${kindInSentence}… `
 
   useEffect(() => {
     setItems(loadFeedback())
@@ -95,7 +98,7 @@ export function FeedbackBubble() {
     if (!body || busy) return
     setBusy(true)
     try {
-      const contextualBody = draftContext ? `${contextPrefix}${body}` : body
+      const contextualBody = `${contextPrefix}${body}`
       await submitFeedback(draftKind, contextualBody, profile?.memberId ?? null, profile?.name ?? null)
       setDraftBody('')
     } finally {
@@ -183,49 +186,67 @@ export function FeedbackBubble() {
         {/* New submission form */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'inline-flex', background: 'var(--bg-hover)',
-            borderRadius: 8, padding: 2, alignSelf: 'flex-start' }}>
-            {(['idee', 'bug', 'feedback'] as FeedbackKind[]).map(k => (
-              <button key={k} onClick={() => setDraftKind(k)}
-                style={{
-                  padding: '4px 10px', borderRadius: 6, border: 'none',
-                  background: draftKind === k ? 'var(--bg-card)' : 'transparent',
-                  color: draftKind === k ? KIND_COLOR[k] : 'var(--text-muted)',
-                  fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
-                  boxShadow: draftKind === k ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-                }}>
-                {KIND_LABEL[k]}
-              </button>
-            ))}
-          </div>
           <div style={{
             width: '100%', boxSizing: 'border-box', overflow: 'hidden',
             background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px 2px', color: 'var(--text-primary)', fontSize: 13.5 }}>
-              <span>Op</span>
-              <select value={draftContext ?? defaultContext} onChange={e => setDraftContext(e.target.value)}
-                aria-label="Pagina waarop deze feedback betrekking heeft"
+            <div style={{
+              display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5,
+              padding: '8px 9px 0', color: 'var(--text-primary)', fontSize: 13.5,
+            }}>
+              {draftContext ? (
+                <>
+                  <span>Op</span>
+                  <select value={draftContext} onChange={e => setDraftContext(e.target.value)}
+                    aria-label="Pagina in het bericht"
+                    style={{
+                      background: 'var(--bg-card)', color: 'var(--text-primary)',
+                      border: '1px solid var(--border)', borderRadius: 6,
+                      padding: '3px 24px 3px 7px', fontSize: 13, fontWeight: 700,
+                      cursor: 'pointer', colorScheme: 'light dark',
+                    }}>
+                    {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => (
+                      <option key={value} value={value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{value}</option>
+                    ))}
+                  </select>
+                  <span>pagina heb ik een</span>
+                </>
+              ) : <span>Ik heb een</span>}
+              <select value={draftKind} onChange={e => setDraftKind(e.target.value as FeedbackKind)}
+                aria-label="Soort bericht"
                 style={{
-                  background: 'var(--bg-card)', color: 'var(--text-primary)',
+                  background: 'var(--bg-card)', color: KIND_COLOR[draftKind],
                   border: '1px solid var(--border)', borderRadius: 6,
                   padding: '3px 24px 3px 7px', fontSize: 13, fontWeight: 700,
                   cursor: 'pointer', colorScheme: 'light dark',
                 }}>
-                {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => (
-                  <option key={value} value={value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{value}</option>
+                {(['idee', 'bug', 'feedback'] as FeedbackKind[]).map(kind => (
+                  <option key={kind} value={kind} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{KIND_LABEL[kind]}</option>
                 ))}
               </select>
-              <span>pagina…</span>
+              <span>…</span>
+              {draftContext ? (
+                <button type="button" onClick={() => setDraftContext(null)}
+                  aria-label="Paginacontext uit bericht verwijderen" title="Paginacontext verwijderen"
+                  style={{ marginLeft: 'auto', width: 24, height: 24, padding: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    border: 0, borderRadius: 5, background: 'transparent',
+                    color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  <IconClose size={14} />
+                </button>
+              ) : (
+                <button type="button" onClick={() => setDraftContext(defaultContext)}
+                  style={{ marginLeft: 'auto', padding: '3px 7px', border: '1px solid var(--border)',
+                    borderRadius: 6, background: 'var(--bg-card)', color: 'var(--text-muted)',
+                    fontSize: 11.5, cursor: 'pointer' }}>
+                  + pagina
+                </button>
+              )}
             </div>
             <textarea value={draftBody}
               onChange={e => setDraftBody(e.target.value)}
               onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSubmit() }}
-              placeholder={
-                draftKind === 'bug'      ? 'Wat ging er mis? (Cmd+Enter om te versturen)' :
-                draftKind === 'idee'     ? 'Welk idee heb je? (Cmd+Enter om te versturen)' :
-                                            'Schrijf je feedback… (Cmd+Enter om te versturen)'
-              }
+              placeholder="Schrijf je bericht verder… (Cmd+Enter om te versturen)"
               rows={3}
               style={{ width: '100%', boxSizing: 'border-box', display: 'block',
                 background: 'transparent', border: 0, padding: '5px 10px 8px',

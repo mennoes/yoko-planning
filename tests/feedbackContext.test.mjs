@@ -4,17 +4,19 @@ import { readFileSync } from 'node:fs'
 
 const feedback = readFileSync(new URL('../components/FeedbackBubble.tsx', import.meta.url), 'utf8')
 
-test('feedback composer shows and stores the selected page as the message prefix', () => {
-  assert.match(feedback, /`Op \$\{draftContext\} pagina… `/)
+test('feedback composer stores page and feedback type as a sentence in the message', () => {
+  assert.match(feedback, /`Op \$\{draftContext\} pagina heb ik een \$\{kindInSentence\}… `/)
   assert.match(feedback, /<span>Op<\/span>/)
-  assert.match(feedback, /<select value=\{draftContext \?\? defaultContext\}/)
-  assert.match(feedback, /<span>pagina…<\/span>/)
+  assert.match(feedback, /<select value=\{draftContext\}/)
+  assert.match(feedback, /<span>pagina heb ik een<\/span>/)
+  assert.match(feedback, /<select value=\{draftKind\}/)
   assert.match(feedback, /`\$\{contextPrefix\}\$\{body\}`/)
 })
 
-test('feedback page selector is embedded in the message composer, not in a separate Over row', () => {
+test('feedback controls are embedded in the composer and context can be removed', () => {
   assert.doesNotMatch(feedback, />Over<\/span>/)
-  assert.doesNotMatch(feedback, /Paginacontext verwijderen/)
+  assert.match(feedback, /Paginacontext uit bericht verwijderen/)
+  assert.match(feedback, /setDraftContext\(null\)/)
   assert.match(feedback, /<textarea value=\{draftBody\}/)
 })
 
