@@ -20,6 +20,13 @@ test('feedback controls are embedded in the composer and context can be removed'
   assert.match(feedback, /<textarea value=\{draftBody\}/)
 })
 
+test('context close button is attached to the page selector and selects fit their labels', () => {
+  assert.match(feedback, /display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden'/)
+  assert.match(feedback, /width: `\$\{Math\.max\(8, draftContext\.length \+ 3\)\}ch`/)
+  assert.match(feedback, /width: `\$\{Math\.max\(7, KIND_LABEL\[draftKind\]\.length \+ 3\)\}ch`/)
+  assert.match(feedback, /borderLeft: '1px solid var\(--border\)'/)
+})
+
 test('feedback page dropdown uses readable theme colors for options', () => {
   assert.match(feedback, /background: 'var\(--bg-card\)', color: 'var\(--text-primary\)'/)
   assert.match(feedback, /<option[^>]+style=\{\{ background: 'var\(--bg-card\)', color: 'var\(--text-primary\)' \}\}/)

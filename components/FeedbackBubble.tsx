@@ -197,27 +197,42 @@ export function FeedbackBubble() {
               {draftContext ? (
                 <>
                   <span>Op</span>
-                  <select value={draftContext} onChange={e => setDraftContext(e.target.value)}
-                    aria-label="Pagina in het bericht"
-                    style={{
-                      background: 'var(--bg-card)', color: 'var(--text-primary)',
-                      border: '1px solid var(--border)', borderRadius: 6,
-                      padding: '3px 24px 3px 7px', fontSize: 13, fontWeight: 700,
-                      cursor: 'pointer', colorScheme: 'light dark',
-                    }}>
-                    {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => (
-                      <option key={value} value={value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{value}</option>
-                    ))}
-                  </select>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden',
+                    background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
+                  }}>
+                    <select value={draftContext} onChange={e => setDraftContext(e.target.value)}
+                      aria-label="Pagina in het bericht"
+                      style={{
+                        width: `${Math.max(8, draftContext.length + 3)}ch`,
+                        background: 'transparent', color: 'var(--text-primary)',
+                        border: 0, borderRadius: 0,
+                        padding: '3px 20px 3px 7px', fontSize: 13, fontWeight: 700,
+                        cursor: 'pointer', colorScheme: 'light dark', outline: 'none',
+                      }}>
+                      {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => (
+                        <option key={value} value={value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{value}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setDraftContext(null)}
+                      aria-label="Paginacontext uit bericht verwijderen" title="Paginacontext verwijderen"
+                      style={{ width: 24, minWidth: 24, padding: 0,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        border: 0, borderLeft: '1px solid var(--border)', background: 'transparent',
+                        color: 'var(--text-muted)', cursor: 'pointer' }}>
+                      <IconClose size={12} />
+                    </button>
+                  </span>
                   <span>pagina heb ik een</span>
                 </>
               ) : <span>Ik heb een</span>}
               <select value={draftKind} onChange={e => setDraftKind(e.target.value as FeedbackKind)}
                 aria-label="Soort bericht"
                 style={{
+                  width: `${Math.max(7, KIND_LABEL[draftKind].length + 3)}ch`,
                   background: 'var(--bg-card)', color: KIND_COLOR[draftKind],
                   border: '1px solid var(--border)', borderRadius: 6,
-                  padding: '3px 24px 3px 7px', fontSize: 13, fontWeight: 700,
+                  padding: '3px 20px 3px 7px', fontSize: 13, fontWeight: 700,
                   cursor: 'pointer', colorScheme: 'light dark',
                 }}>
                 {(['idee', 'bug', 'feedback'] as FeedbackKind[]).map(kind => (
@@ -225,16 +240,7 @@ export function FeedbackBubble() {
                 ))}
               </select>
               <span>…</span>
-              {draftContext ? (
-                <button type="button" onClick={() => setDraftContext(null)}
-                  aria-label="Paginacontext uit bericht verwijderen" title="Paginacontext verwijderen"
-                  style={{ marginLeft: 'auto', width: 24, height: 24, padding: 0,
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    border: 0, borderRadius: 5, background: 'transparent',
-                    color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <IconClose size={14} />
-                </button>
-              ) : (
+              {!draftContext && (
                 <button type="button" onClick={() => setDraftContext(defaultContext)}
                   style={{ marginLeft: 'auto', padding: '3px 7px', border: '1px solid var(--border)',
                     borderRadius: 6, background: 'var(--bg-card)', color: 'var(--text-muted)',
