@@ -4602,6 +4602,7 @@ export default function PlanningPage() {
     try { localStorage.setItem('planning-hidden-agendas', JSON.stringify(next)) } catch { /* Storage may be unavailable. */ }
   }
   const [peopleOpen,   setPeopleOpen]   = useState(false)
+  const [capacityEditor, setCapacityEditor] = useState<{ memberId: string; value: string } | null>(null)
   const [newTeamGroupName, setNewTeamGroupName] = useState('')
   const [shiftOpen,    setShiftOpen]    = useState(false)
   const [shiftPicked,  setShiftPicked]  = useState<Set<string>>(new Set())
@@ -5339,6 +5340,47 @@ export default function PlanningPage() {
     setTeam(prev => prev.map(m => m.id === memberId ? { ...m, weeklyCapacity: capacity } : m))
     // Cache lokaal én pushen naar Supabase zodat andere devices het oppikken.
     setCapacity(memberId, capacity)
+  }
+  function commitCapacityEdit(memberId: string, rawValue: string) {
+    const parsed = Number(rawValue.replace(',', '.'))
+    if (Number.isFinite(parsed)) updateCapacity(memberId, Math.max(0, Math.round(parsed * 10) / 10))
+    setCapacityEditor(null)
+  }
+  function capacityControl(member: TeamMember) {
+    if (member.id === 'unassigned') return null
+    const editing = capacityEditor?.memberId === member.id
+    if (editing) {
+      return (
+        <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <input autoFocus type="number" min={0} step={0.5}
+            aria-label={`Weekcapaciteit van ${member.name}`}
+            value={capacityEditor.value}
+            onChange={e => setCapacityEditor({ memberId: member.id, value: e.target.value })}
+            onBlur={() => commitCapacityEdit(member.id, capacityEditor.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+              if (e.key === 'Escape') setCapacityEditor(null)
+            }}
+            style={{ width: 48, height: 25, boxSizing: 'border-box', padding: '2px 4px', borderRadius: 5,
+              border: '1px solid var(--accent)', background: 'var(--bg-card)', color: 'var(--text-primary)',
+              font: 'inherit', fontSize: 11, fontWeight: 700, textAlign: 'right', outline: 'none' }} />
+          <span style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>u/w</span>
+        </span>
+      )
+    }
+    return (
+      <button type="button"
+        onClick={e => {
+          e.stopPropagation()
+          setCapacityEditor({ memberId: member.id, value: String(member.weeklyCapacity) })
+        }}
+        title={`Weekcapaciteit aanpassen (${member.weeklyCapacity} uur)`}
+        style={{ flexShrink: 0, border: 0, background: 'transparent', padding: '3px 4px', borderRadius: 5,
+          fontSize: 9.5, fontWeight: 650, color: 'var(--text-muted)', whiteSpace: 'nowrap', opacity: 0.82,
+          cursor: 'text', fontFamily: 'inherit' }}>
+        {member.weeklyCapacity}u/w
+      </button>
+    )
   }
   function handleDragMove(project: Project, s: string | null, e: string | null) {
     cancelPendingDragMove()
@@ -6578,13 +6620,8 @@ export default function PlanningPage() {
                       maxWidth: '100%', textAlign: isMobile ? 'center' : 'left' }}>
                       {isMobile ? m.name.split(' ')[0] : m.name}
                     </span>
-                    {!isMobile && (
-                      <span title={`Weekcapaciteit: ${m.weeklyCapacity} uur`}
-                        style={{ fontSize: 9.5, fontWeight: 550, color: 'var(--text-muted)', whiteSpace: 'nowrap', opacity: 0.78 }}>
-                        {m.weeklyCapacity}u/w
-                      </span>
-                    )}
                   </button>
+                  {!isMobile && capacityControl(m)}
                   {editOrder && (
                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
                       <button onClick={() => moveTeamMember(realIdx, -1)} disabled={isFirst} title="Omhoog"
@@ -6836,10 +6873,6 @@ export default function PlanningPage() {
                         <MemberAvatar member={member} size={av} />
                         <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.015em' }}>{member.name}</span>
-                          <span title={`Weekcapaciteit: ${member.weeklyCapacity} uur`}
-                            style={{ fontSize: 9.5, fontWeight: 550, color: 'var(--text-muted)', whiteSpace: 'nowrap', opacity: 0.78 }}>
-                            {member.weeklyCapacity}u/w
-                          </span>
                           {(() => {
                             const v = vacations[member.id]
                             if (!v?.until) return null
@@ -6854,6 +6887,7 @@ export default function PlanningPage() {
                           })()}
                         </div>
                       </button>
+                      {capacityControl(member)}
                       {editOrder && (() => {
                         const realIdx  = team.findIndex(t => t.id === member.id)
                         const isFirst  = realIdx === 0

@@ -21,8 +21,13 @@ test('past columns are dimmed in all zoom levels', () => {
   assert.match(planning, /opacity: col\.isPast \? 0\.75 : 1/)
 })
 
-test('each person shows a subtle weekly capacity label', () => {
-  assert.match(planning, /Weekcapaciteit:/)
+test('each person has an inline editable weekly capacity label', () => {
+  assert.match(planning, /function capacityControl\(member: TeamMember\)/)
+  assert.match(planning, /Weekcapaciteit aanpassen/)
+  assert.match(planning, /aria-label=\{`Weekcapaciteit van \$\{member\.name\}`\}/)
+  assert.match(planning, /commitCapacityEdit\(member\.id, capacityEditor\.value\)/)
+  assert.match(planning, /setCapacity\(memberId, capacity\)/)
   assert.match(planning, /\{member\.weeklyCapacity\}u\/w/)
-  assert.match(planning, /\{m\.weeklyCapacity\}u\/w/)
+  assert.match(planning, /capacityControl\(m\)/)
+  assert.match(planning, /capacityControl\(member\)/)
 })
