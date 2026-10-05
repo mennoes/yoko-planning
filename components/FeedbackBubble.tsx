@@ -60,7 +60,6 @@ export function FeedbackBubble() {
   const [draftContext, setDraftContext] = useState<string | null>(defaultContext)
   const [busy, setBusy] = useState(false)
   const contextPrefix = draftContext ? `Op ${draftContext} pagina… ` : ''
-  const visibleDraftBody = `${contextPrefix}${draftBody}`
 
   useEffect(() => {
     setItems(loadFeedback())
@@ -199,36 +198,40 @@ export function FeedbackBubble() {
               </button>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 30 }}>
-            {draftContext ? <>
-              <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Over</span>
-              <select value={draftContext} onChange={e => setDraftContext(e.target.value)}
+          <div style={{
+            width: '100%', boxSizing: 'border-box', overflow: 'hidden',
+            background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 8,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px 2px', color: 'var(--text-primary)', fontSize: 13.5 }}>
+              <span>Op</span>
+              <select value={draftContext ?? defaultContext} onChange={e => setDraftContext(e.target.value)}
                 aria-label="Pagina waarop deze feedback betrekking heeft"
-                style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 999, padding: '5px 9px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', colorScheme: 'light dark' }}>
+                style={{
+                  background: 'var(--bg-card)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border)', borderRadius: 6,
+                  padding: '3px 24px 3px 7px', fontSize: 13, fontWeight: 700,
+                  cursor: 'pointer', colorScheme: 'light dark',
+                }}>
                 {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => (
                   <option key={value} value={value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{value}</option>
                 ))}
               </select>
-              <button onClick={() => setDraftContext(null)} title="Paginacontext verwijderen" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>×</button>
-            </> : <button onClick={() => setDraftContext(defaultContext)} style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', borderRadius: 999, padding: '4px 8px', cursor: 'pointer', fontSize: 11.5 }}>+ Pagina koppelen</button>}
+              <span>pagina…</span>
+            </div>
+            <textarea value={draftBody}
+              onChange={e => setDraftBody(e.target.value)}
+              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSubmit() }}
+              placeholder={
+                draftKind === 'bug'      ? 'Wat ging er mis? (Cmd+Enter om te versturen)' :
+                draftKind === 'idee'     ? 'Welk idee heb je? (Cmd+Enter om te versturen)' :
+                                            'Schrijf je feedback… (Cmd+Enter om te versturen)'
+              }
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', display: 'block',
+                background: 'transparent', border: 0, padding: '5px 10px 8px',
+                color: 'var(--text-primary)', fontSize: 13.5, lineHeight: 1.45,
+                outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
           </div>
-          <textarea value={visibleDraftBody}
-            onChange={e => {
-              const value = e.target.value
-              setDraftBody(draftContext && value.startsWith(contextPrefix) ? value.slice(contextPrefix.length) : value)
-            }}
-            onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSubmit() }}
-            placeholder={
-              draftKind === 'bug'      ? 'Wat ging er mis? (Cmd+Enter om te versturen)' :
-              draftKind === 'idee'     ? 'Welk idee heb je? (Cmd+Enter om te versturen)' :
-                                          'Schrijf je feedback… (Cmd+Enter om te versturen)'
-            }
-            rows={3}
-            style={{ width: '100%', boxSizing: 'border-box',
-              background: 'var(--bg-base)', border: '1px solid var(--border)',
-              borderRadius: 8, padding: '8px 10px',
-              color: 'var(--text-primary)', fontSize: 13.5, lineHeight: 1.45,
-              outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button onClick={onSubmit} disabled={!draftBody.trim() || busy}
               style={{ padding: '6px 14px', borderRadius: 7, border: 'none',
