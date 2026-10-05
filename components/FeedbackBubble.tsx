@@ -59,6 +59,8 @@ export function FeedbackBubble() {
     : pathname === '/' ? 'Home' : pathname.split('/').filter(Boolean).join(' / ') || 'Home'
   const [draftContext, setDraftContext] = useState<string | null>(defaultContext)
   const [busy, setBusy] = useState(false)
+  const contextPrefix = draftContext ? `Op ${draftContext} pagina… ` : ''
+  const visibleDraftBody = `${contextPrefix}${draftBody}`
 
   useEffect(() => {
     setItems(loadFeedback())
@@ -94,7 +96,7 @@ export function FeedbackBubble() {
     if (!body || busy) return
     setBusy(true)
     try {
-      const contextualBody = draftContext ? `Op [${draftContext}] wil ik: ${body}` : body
+      const contextualBody = draftContext ? `${contextPrefix}${body}` : body
       await submitFeedback(draftKind, contextualBody, profile?.memberId ?? null, profile?.name ?? null)
       setDraftBody('')
     } finally {
@@ -202,14 +204,19 @@ export function FeedbackBubble() {
               <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Over</span>
               <select value={draftContext} onChange={e => setDraftContext(e.target.value)}
                 aria-label="Pagina waarop deze feedback betrekking heeft"
-                style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: 'none', borderRadius: 999, padding: '5px 9px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
-                {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => <option key={value} value={value}>{value}</option>)}
+                style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 999, padding: '5px 9px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', colorScheme: 'light dark' }}>
+                {[defaultContext, 'Planning', "To do\'s", 'Home', "Agenda's", 'Team'].filter((v, i, a) => a.indexOf(v) === i).map(value => (
+                  <option key={value} value={value} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{value}</option>
+                ))}
               </select>
               <button onClick={() => setDraftContext(null)} title="Paginacontext verwijderen" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>×</button>
             </> : <button onClick={() => setDraftContext(defaultContext)} style={{ border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', borderRadius: 999, padding: '4px 8px', cursor: 'pointer', fontSize: 11.5 }}>+ Pagina koppelen</button>}
           </div>
-          <textarea value={draftBody}
-            onChange={e => setDraftBody(e.target.value)}
+          <textarea value={visibleDraftBody}
+            onChange={e => {
+              const value = e.target.value
+              setDraftBody(draftContext && value.startsWith(contextPrefix) ? value.slice(contextPrefix.length) : value)
+            }}
             onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSubmit() }}
             placeholder={
               draftKind === 'bug'      ? 'Wat ging er mis? (Cmd+Enter om te versturen)' :

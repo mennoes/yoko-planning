@@ -6341,7 +6341,7 @@ export default function PlanningPage() {
           {/* Voorbije weken blijven zichtbaar, maar staan visueel een stap
               terug. De overlay raakt alleen het tijddeel; namen en teams
               links blijven volledig leesbaar en alle interactie blijft vrij. */}
-          {zoom === 'week' && cols.map((col, index) => col.isPast ? (
+          {cols.map((col, index) => col.isPast ? (
             <div key={`past-week-${col.key}`} aria-hidden style={{
               position: 'absolute',
               left: nameW + namePad + cols.slice(0, index).reduce((sum, entry) => sum + entry.widthPx, 0),
@@ -6484,7 +6484,7 @@ export default function PlanningPage() {
               return (
               <div key={col.key} style={{ width: col.widthPx, flexShrink: 0, padding: zoom === 'week' ? '6px 2px' : '8px 2px', textAlign: 'center',
                 borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
-                background: headerBg, opacity: zoom === 'week' && col.isPast ? 0.75 : 1 }}>
+                background: headerBg, opacity: col.isPast ? 0.75 : 1 }}>
                 {zoom === 'week' ? (
                   <>
                     <div style={{ fontSize: 10.5, fontWeight: col.isCurrent ? 700 : 600,
@@ -6578,6 +6578,12 @@ export default function PlanningPage() {
                       maxWidth: '100%', textAlign: isMobile ? 'center' : 'left' }}>
                       {isMobile ? m.name.split(' ')[0] : m.name}
                     </span>
+                    {!isMobile && (
+                      <span title={`Weekcapaciteit: ${m.weeklyCapacity} uur`}
+                        style={{ fontSize: 9.5, fontWeight: 550, color: 'var(--text-muted)', whiteSpace: 'nowrap', opacity: 0.78 }}>
+                        {m.weeklyCapacity}u/w
+                      </span>
+                    )}
                   </button>
                   {editOrder && (
                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
@@ -6662,12 +6668,12 @@ export default function PlanningPage() {
               )
             }
 
-            const sectionLabel = (label: string, count: number, onClick?: () => void, isOpen?: boolean) => (
+            const sectionLabel = (label: string, count: number, members: TeamMember[], onClick?: () => void, isOpen?: boolean) => (
               <div onClick={onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
-                  background: 'var(--overlay-faint)', cursor: onClick ? 'pointer' : 'default', userSelect: 'none' }}>
-                <div style={{ position: 'sticky', left: 0, width: 'max-content',
-                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  background: 'var(--overlay-faint)', cursor: onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: 44 }}>
+                <div style={{ position: 'sticky', left: 0, zIndex: 22, width: nameW + namePad, flexShrink: 0,
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--overlay-faint)' }}>
                   {onClick && (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'inline-block',
                       transform: isOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>▶</span>
@@ -6675,30 +6681,47 @@ export default function PlanningPage() {
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
                 </div>
+                {members.length > 0 && cols.map(col => {
+                  const total = Math.round(members.reduce((sum, member) => (
+                    sum + contributionsFor(member.id, col).reduce((hours, contribution) => hours + contribution.hours, 0)
+                  ), 0) * 10) / 10
+                  const capacity = Math.round(members.reduce((sum, member) => sum + colCapacity(member.weeklyCapacity, member.id), 0) * 10) / 10
+                  const pct = capacity > 0 ? total / capacity : 0
+                  return (
+                    <div key={`team-cap-day-${label}-${col.key}`}
+                      title={`${label}: ${total} van ${capacity} uur (${Math.round(pct * 100)}%)`}
+                      style={{ width: col.widthPx, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderLeft: '1px solid var(--border-strong)', opacity: col.isPast ? 0.75 : 1 }}>
+                      <WorkloadCircleSvg pct={pct} cs={15} or={5.8} />
+                      <span style={{ fontSize: 9, lineHeight: 1.1, color: 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: 650 }}>
+                        {Math.round(pct * 100)}% · {total}/{capacity}u
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             )
 
             return (
               <>
-                {yokoVisible.length > 0 && sectionLabel('Studio Yoko', yokoVisible.length)}
+                {yokoVisible.length > 0 && sectionLabel('Studio Yoko', yokoVisible.length, yokoVisible)}
                 {yokoVisible.map(renderPerson)}
                 {groupedVisible.map(({ group, members }) => (
                   <div key={`group-day-${group.id}`}>
-                    {sectionLabel(group.name, members.length)}
+                    {sectionLabel(group.name, members.length, members)}
                     {members.map(renderPerson)}
                   </div>
                 ))}
-                {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length)}
+                {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length, unassignedVisible)}
                 {unassignedVisible.map(renderPerson)}
                 {freelancersVisible.length > 0 && (
                   <>
-                    {sectionLabel('Freelancers', freelancersVisible.length, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0)}
+                    {sectionLabel('Freelancers', freelancersVisible.length, freelancersVisible, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0)}
                     {freelancersPos !== 0 && freelancersVisible.map(renderPerson)}
                   </>
                 )}
                 {inactiveVisible.length > 0 && (
                   <>
-                    {sectionLabel('Inactief team', inactiveVisible.length, () => setInactiveTeamPos(o => o !== 0 ? 0 : 1), inactiveTeamPos !== 0)}
+                    {sectionLabel('Inactief team', inactiveVisible.length, inactiveVisible, () => setInactiveTeamPos(o => o !== 0 ? 0 : 1), inactiveTeamPos !== 0)}
                     {inactiveTeamPos !== 0 && inactiveVisible.map(renderPerson)}
                   </>
                 )}
@@ -6741,11 +6764,11 @@ export default function PlanningPage() {
               <div onClick={opts?.onClick}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: 'var(--overlay-faint)',
-                  cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: zoom === 'week' && opts?.members?.length ? 48 : undefined }}>
+                  cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: opts?.members?.length ? 48 : undefined }}>
                 {/* Label blijft tegen de linker rand kleven terwijl de balk
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
-                <div style={{ position: 'sticky', left: 0, zIndex: 26, width: zoom === 'week' && opts?.members?.length ? nameW + namePad : 'max-content', flexShrink: 0,
+                <div style={{ position: 'sticky', left: 0, zIndex: 26, width: opts?.members?.length ? nameW + namePad : 'max-content', flexShrink: 0,
                   padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-base)', overflow: 'hidden', borderRight: '1px solid var(--border-strong)' }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
@@ -6766,7 +6789,7 @@ export default function PlanningPage() {
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
                   {!!opts?.members?.length && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· {Math.round(opts.members.reduce((sum, member) => sum + member.weeklyCapacity, 0) * 10) / 10}u/w</span>}
                 </div>
-                {zoom === 'week' && opts?.members?.length ? cols.map(col => {
+                {opts?.members?.length ? cols.map(col => {
                   const total = Math.round(opts.members!.reduce((sum, member) => (
                     sum + contributionsFor(member.id, col).reduce((hours, contribution) => hours + contribution.hours, 0)
                   ), 0) * 10) / 10
@@ -6813,6 +6836,10 @@ export default function PlanningPage() {
                         <MemberAvatar member={member} size={av} />
                         <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: viewSize === 'large' ? 14 : 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.015em' }}>{member.name}</span>
+                          <span title={`Weekcapaciteit: ${member.weeklyCapacity} uur`}
+                            style={{ fontSize: 9.5, fontWeight: 550, color: 'var(--text-muted)', whiteSpace: 'nowrap', opacity: 0.78 }}>
+                            {member.weeklyCapacity}u/w
+                          </span>
                           {(() => {
                             const v = vacations[member.id]
                             if (!v?.until) return null
