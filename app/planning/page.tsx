@@ -4561,17 +4561,19 @@ export default function PlanningPage() {
     if (typeof window === 'undefined') return
     try { window.localStorage.setItem('planning-col-offset', String(colOffset)) } catch {}
   }, [colOffset])
-  const [expanded,     setExpanded]     = useState<Set<string>>(new Set())
-  // Standaard staat de eigen rij open zodra je ingelogd bent — dan zie je
-  // bij binnenkomst meteen je eigen timeline-bars zonder eerst te moeten
-  // uitvouwen. Een keer handmatig dichtklikken houdt 'm daarna gewoon dicht.
-  const ownExpandedRef = useRef(false)
+  // Persoonsrijen zijn bij een nieuwe browser-/app-sessie allemaal dicht.
+  // Binnen dezelfde tab-sessie bewaren we de handmatige keuze wel, zodat
+  // heen-en-weer navigeren tussen pagina's niet telkens de context verliest.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const saved: unknown = JSON.parse(window.sessionStorage.getItem('planning-expanded-members') ?? '[]')
+      return new Set(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : [])
+    } catch { return new Set() }
+  })
   useEffect(() => {
-    if (ownExpandedRef.current) return
-    if (!profile?.memberId) return
-    ownExpandedRef.current = true
-    setExpanded(prev => prev.has(profile.memberId!) ? prev : new Set([...prev, profile.memberId!]))
-  }, [profile?.memberId])
+    try { window.sessionStorage.setItem('planning-expanded-members', JSON.stringify([...expanded])) } catch {}
+  }, [expanded])
   const [detailProject, setDetailProject] = useState<Project | null>(null)
   // Sync detail-open flag naar window zodat de poll-loop pulls kan
   // skippen tijdens een actieve detail-edit (anders zou een refetch
