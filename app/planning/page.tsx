@@ -644,9 +644,9 @@ function useScrollLeftOf(ref: { current: HTMLElement | null }): number {
 }
 
 // Losse VANDAAG-pill + rand-indicator, buiten PlanningPage's eigen
-// render-cyclus. Leest scrollLeft via z'n eigen (RAF-throttled)
-// useScrollLeftOf-hook i.p.v. via top-level state op de pagina — zie de
-// toelichting bij de aanroep verderop voor waarom dat nodig is.
+// render-cyclus. De positie wordt rechtstreeks op de DOM-nodes gezet;
+// zo hoeft React tijdens scrollen niet te renderen en blijft de lijn
+// exact aan de tijdlijn vastzitten.
 function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }: {
   gridRef: { current: HTMLDivElement | null }
   nowOffset: number | null
@@ -656,31 +656,56 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
   cols: Col[]
   goToday: () => void
 }) {
-  const scrollLeft = useScrollLeftOf(gridRef)
-  const [clientWidth, setClientWidth] = useState(0)
+  const lineRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     const el = gridRef.current
     if (!el) return
-    const update = () => setClientWidth(el.clientWidth)
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [gridRef])
+    let raf: number | null = null
+    const updateNow = () => {
+      raf = null
+      const line = lineRef.current
+      const button = buttonRef.current
+      if (!line || !button) return
 
-  const todayEdge: 'left' | 'right' | null = (() => {
-    if (nowOffset === null) {
-      const nowMs = Date.now()
-      const first = cols[0]?.rangeStart.getTime()
-      const last = cols[cols.length - 1]?.rangeEnd.getTime()
-      return first != null && nowMs < first ? 'left' : last != null && nowMs > last ? 'right' : null
+      let edge: 'left' | 'right' | null = null
+      if (nowOffset === null) {
+        const nowMs = Date.now()
+        const first = cols[0]?.rangeStart.getTime()
+        const last = cols[cols.length - 1]?.rangeEnd.getTime()
+        edge = first != null && nowMs < first ? 'left' : last != null && nowMs > last ? 'right' : null
+      } else {
+        const screenX = nowOffset - el.scrollLeft
+        if (screenX < nameW + namePad) edge = 'left'
+        else if (screenX > el.clientWidth) edge = 'right'
+      }
+
+      const hidden = !edge && nowOffset === null
+      line.style.display = hidden ? 'none' : 'block'
+      button.style.display = hidden ? 'none' : 'block'
+      if (hidden) return
+
+      line.style.left = edge === 'left' ? `${nameW + namePad}px` : edge === 'right' ? 'auto' : `${nowOffset! - el.scrollLeft}px`
+      line.style.right = edge === 'right' ? '0px' : 'auto'
+      button.style.left = edge === 'left' ? `${nameW + namePad + 6}px` : edge === 'right' ? 'auto' : `${nowOffset! - el.scrollLeft - 32}px`
+      button.style.right = edge === 'right' ? '6px' : 'auto'
+      button.style.width = edge ? 'auto' : '64px'
+      button.style.padding = edge ? '2px 9px' : '2px 0'
+      button.textContent = `VANDAAG ${edge === 'left' ? '←' : edge === 'right' ? '→' : ''}`
     }
-    const screenX = nowOffset - scrollLeft
-    if (screenX < nameW + namePad) return 'left'
-    if (screenX > clientWidth) return 'right'
-    return null
-  })()
-
-  if (!todayEdge && nowOffset === null) return null
+    const update = () => {
+      if (raf !== null) return
+      raf = requestAnimationFrame(updateNow)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      el.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+      if (raf !== null) cancelAnimationFrame(raf)
+    }
+  }, [gridRef, nowOffset, nameW, namePad, cols])
 
   return (
     <>
@@ -688,37 +713,29 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
           De scroll-content heeft alleen een onzichtbaar geometrie-anker;
           anders verschijnt bij de linkergrens een tweede lijn in de
           sticky naamkolom. */}
-      <div aria-hidden style={{
+      <div ref={lineRef} aria-hidden style={{
         position: 'absolute', top: 0, bottom: 0,
-        ...(todayEdge === 'left'
-          ? { left: nameW + namePad }
-          : todayEdge === 'right'
-            ? { right: 0 }
-            : { left: (nowOffset ?? 0) - scrollLeft }),
+        left: nowOffset ?? 0,
         width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
         pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
       }} />
       {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
           verandert bij horizontaal scrollen alleen de x-positie/tekst en
           nooit de verticale layout van de sticky headers eronder. */}
-      <button onClick={goToday} title="Klik om naar vandaag te gaan" style={{
+      <button ref={buttonRef} onClick={goToday} title="Klik om naar vandaag te gaan" style={{
         // Vandaag staat bovenaan, ter hoogte van de datum in de kolomkop
         // (bv. 'aug. 24 - 30'). Dagweergave heeft daarnaast nog een
         // maandgroeprij erboven, dus krijgt een grotere offset. Beide
         // edge-varianten gebruiken exact dezelfde top en verspringen niet.
         position: 'absolute', top: zoom === 'dag' ? 82 : 4,
-        ...(todayEdge === 'left'
-          ? { left: nameW + namePad + 6 }
-          : todayEdge === 'right'
-            ? { right: 6 }
-            : { left: (nowOffset ?? 0) - scrollLeft - 32, width: 64 }),
-        zIndex: 80, padding: todayEdge ? '2px 9px' : '2px 0', borderRadius: 999, border: 'none',
+        left: (nowOffset ?? 0) - 32, width: 64,
+        zIndex: 80, padding: '2px 0', borderRadius: 999, border: 'none',
         background: 'var(--yellow)', color: '#1a1a1a',
         boxShadow: '0 2px 6px rgba(216,182,46,0.4)',
         fontSize: 9.5, fontWeight: 800, lineHeight: 1.2, letterSpacing: '0.08em', cursor: 'pointer',
         whiteSpace: 'nowrap', textAlign: 'center',
       }}>
-        VANDAAG {todayEdge === 'left' ? '←' : todayEdge === 'right' ? '→' : ''}
+        VANDAAG
       </button>
     </>
   )
@@ -4746,6 +4763,8 @@ export default function PlanningPage() {
   })
   const gridRef = useRef<HTMLDivElement>(null)
   const dragScrollRef = useRef<{ startX: number; scrollLeft: number } | null>(null)
+  const dragScrollRafRef = useRef<number | null>(null)
+  const dragScrollClientXRef = useRef(0)
   const [isDragScrolling, setIsDragScrolling] = useState(false)
   const [visibleGridRange, setVisibleGridRange] = useState({ start: 0, end: 0 })
   const initialScrollDoneRef = useRef(false)
@@ -5057,13 +5076,24 @@ export default function PlanningPage() {
     const el = gridRef.current
     if (!el) return
     dragScrollRef.current = { startX: e.clientX, scrollLeft: el.scrollLeft }
+    dragScrollClientXRef.current = e.clientX
     setIsDragScrolling(true)
     function onMove(ev: MouseEvent) {
       if (!dragScrollRef.current || !el) return
-      const dx = ev.clientX - dragScrollRef.current.startX
-      el.scrollLeft = dragScrollRef.current.scrollLeft - dx
+      dragScrollClientXRef.current = ev.clientX
+      if (dragScrollRafRef.current !== null) return
+      dragScrollRafRef.current = requestAnimationFrame(() => {
+        dragScrollRafRef.current = null
+        if (!dragScrollRef.current) return
+        const dx = dragScrollClientXRef.current - dragScrollRef.current.startX
+        el.scrollLeft = dragScrollRef.current.scrollLeft - dx
+      })
     }
     function onUp() {
+      if (dragScrollRafRef.current !== null) {
+        cancelAnimationFrame(dragScrollRafRef.current)
+        dragScrollRafRef.current = null
+      }
       dragScrollRef.current = null
       setIsDragScrolling(false)
       window.removeEventListener('mousemove', onMove)

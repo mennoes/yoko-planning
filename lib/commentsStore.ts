@@ -37,6 +37,12 @@ export function toggleReaction(reply: CommentReply, emoji: string, memberId: str
 const KEY        = 'yoko-comments'
 const EVENT_NAME = 'yoko-comments-update'
 
+/** Laat alle open schermen hun afgeleide comment-/taakstatus opnieuw lezen. */
+export function notifyCommentsUpdate(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(EVENT_NAME))
+}
+
 export function loadAllComments(): CommentThread[] {
   if (typeof window === 'undefined') return []
   try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : [] } catch { return [] }
@@ -53,7 +59,7 @@ export function loadComment(id: string): CommentThread | undefined {
 function writeCache(all: CommentThread[]) {
   if (typeof window === 'undefined') return
   try { localStorage.setItem(KEY, JSON.stringify(all)) } catch {}
-  window.dispatchEvent(new CustomEvent(EVENT_NAME))
+  notifyCommentsUpdate()
 }
 
 function inferKind(contextId: string): string {

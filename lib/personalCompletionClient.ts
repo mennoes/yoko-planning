@@ -1,12 +1,21 @@
 'use client'
 
 import { supabase } from './supabase'
-import { cacheComment, loadAllComments, pullCommentsAll, type CommentThread } from './commentsStore'
-import { completionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
+import { cacheComment, loadAllComments, notifyCommentsUpdate, pullCommentsAll, type CommentThread } from './commentsStore'
+import { completionState, type CompletionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
 import { loadGroups } from './boardStore'
 
+function completionKey(target: CompletionTarget, memberId: string) {
+  return JSON.stringify([target.parentItemId, target.subitemId, memberId])
+}
+
+// Serverdata blijft leidend, maar een klik wordt lokaal meteen zichtbaar.
+// Deze tijdelijke laag bestaat alleen zolang de opslagrequest onderweg is.
+const optimisticCompletions = new Map<string, CompletionState>()
+
 export function loadPersonalCompletion(target: CompletionTarget, memberId: string) {
-  return completionState(loadAllComments(), target, memberId)
+  return optimisticCompletions.get(completionKey(target, memberId))
+    ?? completionState(loadAllComments(), target, memberId)
 }
 
 /** Resolve index-based legacy task references to the actual stable subitem ID. */
@@ -27,26 +36,39 @@ export function completionTargetForProject(ref: { board: string; itemId: string 
 
 const pending = new Map<string, Promise<{ notificationError: boolean }>>()
 export function updatePersonalCompletion(target: CompletionTarget, memberId: string, done: boolean, status?: PersonalTaskStatus): Promise<{ notificationError: boolean }> {
-  const key = JSON.stringify([target.parentItemId, target.subitemId, memberId])
+  const key = completionKey(target, memberId)
   const existing = pending.get(key)
   if (existing) return existing
+  const previous = completionState(loadAllComments(), target, memberId)
+  optimisticCompletions.set(key, {
+    version: 1, ...target, memberId, done,
+    ...(status !== undefined ? { status } : {}),
+    mentions: [], eventId: `optimistic:${Date.now()}`, createdAt: new Date().toISOString(),
+  })
+  notifyCommentsUpdate()
   const request = (async () => {
-    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')) throw new Error('Niet beschikbaar in de demo.')
-    if (!supabase) throw new Error('Log eerst in om je voortgang op te slaan.')
-    const { data } = await supabase.auth.getSession()
-    if (!data.session) throw new Error('Log opnieuw in om je voortgang op te slaan.')
-    const previous = loadPersonalCompletion(target, memberId)
-    const res = await fetch('/api/items/personal-completion', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
-      body: JSON.stringify({ parentItemId: target.parentItemId, subitemId: target.subitemId, done, status, expectedEventId: previous?.eventId ?? null }),
-    })
-    const result = await res.json() as { error?: string; comment?: CommentThread; notificationError?: boolean }
-    if (!res.ok || !result.comment) {
-      if (res.status === 409) await pullCommentsAll()
-      throw new Error(result.error ?? 'Opslaan mislukt. Probeer opnieuw.')
+    try {
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')) throw new Error('Niet beschikbaar in de demo.')
+      if (!supabase) throw new Error('Log eerst in om je voortgang op te slaan.')
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) throw new Error('Log opnieuw in om je voortgang op te slaan.')
+      const res = await fetch('/api/items/personal-completion', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
+        body: JSON.stringify({ parentItemId: target.parentItemId, subitemId: target.subitemId, done, status, expectedEventId: previous?.eventId ?? null }),
+      })
+      const result = await res.json() as { error?: string; comment?: CommentThread; notificationError?: boolean }
+      if (!res.ok || !result.comment) {
+        if (res.status === 409) await pullCommentsAll()
+        throw new Error(result.error ?? 'Opslaan mislukt. Probeer opnieuw.')
+      }
+      optimisticCompletions.delete(key)
+      cacheComment(result.comment)
+      return { notificationError: !!result.notificationError }
+    } catch (error) {
+      optimisticCompletions.delete(key)
+      notifyCommentsUpdate()
+      throw error
     }
-    cacheComment(result.comment)
-    return { notificationError: !!result.notificationError }
   })().finally(() => pending.delete(key))
   pending.set(key, request)
   return request
