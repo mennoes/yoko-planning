@@ -65,7 +65,7 @@ import { PersonalCompletionSection } from '@/components/PersonalCompletionSectio
 import { completionTargetForProject, completeLinkedTask, loadPersonalCompletion } from '@/lib/personalCompletionClient'
 import { onCommentsUpdate } from '@/lib/commentsStore'
 import { useCompletedOwners } from '@/components/useCompletedOwners'
-import type { CompletionTarget } from '@/lib/personalCompletion'
+import { completionContext, type CompletionTarget } from '@/lib/personalCompletion'
 import type { BoardGroup } from '@/lib/boards'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -2025,7 +2025,16 @@ function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: 
 }) {
   const [hovered, setHovered] = useState(false)
   const [, refreshCompletion] = useState(0)
-  useEffect(() => onCommentsUpdate(() => refreshCompletion(n => n + 1)), [])
+  useEffect(() => {
+    const meetingContexts = new Set(meetings.flatMap(meeting => {
+      const target = completionTargetForProject({ board: meeting.board, itemId: meeting.id.slice(meeting.board.length + 2) })
+      return target ? [completionContext(target)] : []
+    }))
+    return onCommentsUpdate(event => {
+      const contextId = (event as CustomEvent<{ contextId?: string }>).detail?.contextId
+      if (!contextId || meetingContexts.has(contextId)) refreshCompletion(n => n + 1)
+    })
+  }, [meetings])
   function isMeetingDone(meeting: Project) {
     const target = completionTargetForProject({ board: meeting.board, itemId: meeting.id.slice(meeting.board.length + 2) })
     return (target ? loadPersonalCompletion(target, memberId)?.done : undefined) ?? meeting.status === 'done'

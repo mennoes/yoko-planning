@@ -38,9 +38,9 @@ const KEY        = 'yoko-comments'
 const EVENT_NAME = 'yoko-comments-update'
 
 /** Laat alle open schermen hun afgeleide comment-/taakstatus opnieuw lezen. */
-export function notifyCommentsUpdate(): void {
+export function notifyCommentsUpdate(contextId?: string): void {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent(EVENT_NAME))
+  window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: contextId ? { contextId } : undefined }))
 }
 
 export function loadAllComments(): CommentThread[] {
@@ -56,10 +56,10 @@ export function loadComment(id: string): CommentThread | undefined {
   return loadAllComments().find(c => c.id === id)
 }
 
-function writeCache(all: CommentThread[]) {
+function writeCache(all: CommentThread[], contextId?: string) {
   if (typeof window === 'undefined') return
   try { localStorage.setItem(KEY, JSON.stringify(all)) } catch {}
-  notifyCommentsUpdate()
+  notifyCommentsUpdate(contextId)
 }
 
 function inferKind(contextId: string): string {
@@ -80,16 +80,17 @@ export function cacheComment(c: CommentThread): void {
   const idx = all.findIndex(x => x.id === c.id)
   if (idx >= 0) all[idx] = c
   else all.unshift(c)
-  writeCache(all)
+  writeCache(all, c.contextId)
 }
 
 export function deleteComment(id: string): void {
+  const previous = loadComment(id)
   const all = loadAllComments().filter(c => c.id !== id)
-  writeCache(all)
+  writeCache(all, previous?.contextId)
   deleteCommentRemote(id).catch(() => {})
 }
 
-export function onCommentsUpdate(handler: () => void): () => void {
+export function onCommentsUpdate(handler: (event: Event) => void): () => void {
   if (typeof window === 'undefined') return () => {}
   window.addEventListener(EVENT_NAME, handler)
   window.addEventListener('storage', handler)

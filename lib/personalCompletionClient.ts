@@ -2,7 +2,7 @@
 
 import { supabase } from './supabase'
 import { cacheComment, loadAllComments, notifyCommentsUpdate, pullCommentsAll, type CommentThread } from './commentsStore'
-import { completionState, type CompletionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
+import { completionContext, completionState, type CompletionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
 import { loadGroups } from './boardStore'
 
 function completionKey(target: CompletionTarget, memberId: string) {
@@ -45,7 +45,7 @@ export function updatePersonalCompletion(target: CompletionTarget, memberId: str
     ...(status !== undefined ? { status } : {}),
     mentions: [], eventId: `optimistic:${Date.now()}`, createdAt: new Date().toISOString(),
   })
-  notifyCommentsUpdate()
+  notifyCommentsUpdate(completionContext(target))
   const request = (async () => {
     try {
       if (typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')) throw new Error('Niet beschikbaar in de demo.')
@@ -66,7 +66,7 @@ export function updatePersonalCompletion(target: CompletionTarget, memberId: str
       return { notificationError: !!result.notificationError }
     } catch (error) {
       optimisticCompletions.delete(key)
-      notifyCommentsUpdate()
+      notifyCommentsUpdate(completionContext(target))
       throw error
     }
   })().finally(() => pending.delete(key))
