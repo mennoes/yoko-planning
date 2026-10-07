@@ -16,6 +16,7 @@ import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
 import { blockedHoursForWorkdays } from '@/lib/freeCapacity'
+import { planningBarHeightRatio } from '@/lib/planningBarHeight'
 import { loadOwnerExcludes, excludeOwner, onOwnerExcludesChange } from '@/lib/ownerOverrides'
 
 // Helper voor synchrone off-day-check binnen render. Leest dezelfde
@@ -110,13 +111,6 @@ const HANDLE_W = 8
 // 2u/dag=29%, 4u=53%, 6u=76%, 8u=100%. De renderers houden een
 // minimale klikbare hoogte aan; skyline-packing volgt de echte hoogte.
 function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
-  const FULL_DAY_HOURS = 8
-  const projectDays = (() => {
-    if (!project.startDate || !project.endDate) return 1
-    const s = new Date(project.startDate).getTime()
-    const e = new Date(project.endDate).getTime()
-    return Math.max(1, Math.round((e - s) / 86400000) + 1)
-  })()
   // Vrij (vakantie, hemelvaart, …) is altijd 'de hele dag vrij' (8u),
   // ongeacht wat estHours toevallig zegt (soms 0 in de data) — dus 100%,
   // exact zoals een echte 8u/dag-werkdag.
@@ -125,24 +119,11 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
   const memberHours = memberId && project.ownerHours && memberId in project.ownerHours
     ? Number(project.ownerHours[memberId]) || 0
     : (project.estHours || 0) / owners
-  const hoursPerDay = memberHours / projectDays
-  const dayIntensity = Math.min(1, Math.max(0, hoursPerDay / FULL_DAY_HOURS))
-  const dayHeight = 0.05 + 0.95 * dayIntensity
-  // Dag-intensiteit alleen is niet genoeg: een project van 32u verspreid
-  // over 10 dagen (3,2u/dag) en een project van 16u verspreid over 5
-  // dagen (ook 3,2u/dag) kregen zo EXACT dezelfde hoogte, terwijl de een
-  // dubbel zoveel werk is. TOTAL_REF = 40u (± 1 werkweek) → volle hoogte.
-  // LINEAIR i.p.v. sqrt — sqrt drukt juist de verschillen tussen grotere
-  // totalen samen (0.4 en 0.8 werden na sqrt+baseline maar 67% vs 90%,
-  // een te klein verschil voor 2x zoveel werk). Lineair houdt 16u vs 32u
-  // duidelijk uit elkaar (46% vs 82%).
-  const TOTAL_REF_HOURS = 40
-  const totalIntensity = Math.min(1, Math.max(0, memberHours / TOTAL_REF_HOURS))
-  const totalHeight = 0.05 + 0.95 * totalIntensity
-  // MAX van beide zodat een korte felle meeting (hoge dag-intensiteit,
-  // laag totaal) én een lang groot project (laag tempo, hoog totaal)
-  // allebei goed opvallen.
-  return Math.max(dayHeight, totalHeight)
+  return planningBarHeightRatio({
+    hours: memberHours,
+    startDate: project.startDate,
+    endDate: project.endDate,
+  })
 }
 
 // ─── View-size presets ────────────────────────────────────────────────────────
