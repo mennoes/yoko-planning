@@ -25,7 +25,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard, persistItemNesting } from '@/lib/boardStore'
 import { routeOmdenkenNow } from '@/lib/googleClient'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
@@ -41,6 +41,7 @@ import type { CompletionTarget } from '@/lib/personalCompletion'
 import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
 import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem'
 import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
+import { boardItemToNestedSubitem } from '@/lib/nestBoardItem'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -4669,8 +4670,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       startDate:  sub.startDate ?? null,
       endDate:    sub.endDate ?? null,
       deadline:   null,
-      estHours:   Number(sub.estHours) || 0,
+      estHours:   sub.nestedSource?.estHours ?? (Number(sub.estHours) || 0),
       dagen:      0,
+      subitems:   sub.nestedSource?.subitems?.map(child => ({ ...child })),
       startTime:  (sub as { startTime?: string | null }).startTime ?? null,
       endTime:    (sub as { endTime?:   string | null }).endTime   ?? null,
     } as BoardItem
@@ -4739,34 +4741,24 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // Nest source-item ALS subitem van target-item. Source verdwijnt uit z'n
   // groep, target krijgt 'm onderaan z'n subitems-lijst. Alleen relevante
   // velden gaan mee (subitem-schema is een subset van item-schema).
-  function nestItemUnder(sourceId: string, fromGroupId: string, targetId: string) {
+  async function nestItemUnder(sourceId: string, fromGroupId: string, targetId: string) {
     if (sourceId === targetId) return
     const fromGroup = groups.find(g => g.id === fromGroupId)
     const source    = fromGroup?.items.find(i => i.id === sourceId)
     if (!source) return
-    const sub: SubItem = {
-      id:        source.id,
-      name:      source.name,
-      ownerIds:  source.ownerIds ?? [],
-      status:    source.status ?? '',
-      startDate: source.startDate ?? null,
-      endDate:   source.endDate ?? null,
-      // Tijden meenemen — anders vallen Google-events zonder reden in het
-      // 'De hele dag'-blok van de Week-view zodra ze als subitem genest zijn.
-      startTime: (source as { startTime?: string | null }).startTime ?? null,
-      endTime:   (source as { endTime?:   string | null }).endTime   ?? null,
-      // Bron-link + Meet-link bewaren zodat 'Open in Google ↗' en de Meet-pill
-      // op de subitem-rij ook blijven werken na nesting.
-      externalLink: (source as { externalLink?: string | null }).externalLink ?? null,
-      meetLink:     (source as { meetLink?:     string | null }).meetLink     ?? null,
-      source:       source.source,
-      estHours:  Number(source.estHours) || 0,
-    }
+    const sub = boardItemToNestedSubitem(source)
     // Onthoud de nesting-keuze voor Google-items: een volgende episode met
     // vergelijkbare naam plaatsen we dan automatisch onder dezelfde parent.
     if (source.source === 'google') {
       const target = groups.flatMap(g => g.items).find(i => i.id === targetId)
       if (target) addSubitemRule(source.name, boardId, targetId, target.name)
+    }
+    // Eerst remote bevestigen. Pas daarna verdwijnt de bron uit de UI. Zo kan
+    // een realtime pull nooit tussen 'bron weg' en 'sub opgeslagen' vallen.
+    const persisted = await persistItemNesting(boardId, sourceId, targetId, sub)
+    if (!persisted) {
+      window.alert('Verplaatsen naar subitem is niet opgeslagen. Er is niets verwijderd; probeer het opnieuw.')
+      return
     }
     onChange(groups.map(g => {
       let items = g.items
@@ -4779,12 +4771,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       })
       return { ...g, items }
     }))
-    // Top-level row ook in Supabase wegzetten. pushBoardToRemote upsert
-    // alleen items die in de lokale staat staan; zonder expliciete soft-
-    // delete blijft de oude top-level rij in DB en komt 'ie bij de
-    // volgende pull terug, dus duplicaat (parent met subitem + losse
-    // top-level item).
-    softDeleteItem(sourceId).catch(() => {})
   }
 
   function handleUpdateGroup(updatedGroup: BoardGroup) {

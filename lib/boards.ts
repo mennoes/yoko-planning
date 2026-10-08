@@ -2,6 +2,10 @@ export type ColumnType = 'text' | 'number' | 'date' | 'daterange' | 'owners' | '
 
 export type SubItem = {
   id:           string
+  // Bij item→subitem-nesting krijgt de sub een nieuw eigen id. De bron-id
+  // blijft alleen als herkomst bewaard, zodat verwijderen van de oude
+  // hoofditemrij nooit dit subitem kan raken.
+  sourceItemId?: string
   name:         string
   ownerIds:     string[]
   status:       string
@@ -24,6 +28,9 @@ export type SubItem = {
   statusOverride?: 'active' | 'done'
   estHours:     number
   echtGewerkt?: number
+  // Als een hoofditem zelf al subs had, bewaren we die reversibel. De zichtbare
+  // sub toont het totaal; bij unnest worden de oorspronkelijke subs hersteld.
+  nestedSource?: { estHours: number; subitems: SubItem[] }
 }
 
 export type ColumnDef = {

@@ -844,6 +844,58 @@ export async function softDeleteItem(itemId: string): Promise<boolean> {
   return !error
 }
 
+// Sla item→subitem-nesting in de veilige volgorde op: eerst de target-parent
+// met de nieuwe sub bevestigen, daarna pas de oude top-level rij soft-deleten.
+// Bij een fout blijft hooguit tijdelijk een duplicaat staan; data kan hierdoor
+// nooit meer aan beide kanten verdwijnen.
+export async function persistItemNesting(
+  boardName: string,
+  sourceItemId: string,
+  targetItemId: string,
+  subitem: SubItem,
+): Promise<boolean> {
+  if (!supabase || sourceItemId === targetItemId) return false
+  const uid = await getCurrentUserId()
+  if (!uid) return false
+  lastLocalWriteAt[boardName] = Date.now()
+
+  // Safety snapshot vóór een structurele verplaatsing.
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      await fetch('/api/snapshots/create', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId: boardName, trigger: 'manual' }),
+      }).catch(() => {})
+    }
+  } catch {}
+
+  const { data: target, error: readError } = await supabase
+    .from('board_items')
+    .select('id, subitems')
+    .eq('id', targetItemId)
+    .eq('board_id', boardName)
+    .is('deleted_at', null)
+    .single()
+  if (readError || !target) return false
+
+  const existing = Array.isArray(target.subitems) ? target.subitems as SubItem[] : []
+  const alreadyNested = existing.some(candidate =>
+    candidate.id === subitem.id || candidate.sourceItemId === sourceItemId,
+  )
+  const nextSubitems = alreadyNested ? existing : [...existing, subitem]
+  const { error: parentError } = await supabase
+    .from('board_items')
+    .update({ subitems: nextSubitems })
+    .eq('id', targetItemId)
+    .eq('board_id', boardName)
+    .is('deleted_at', null)
+  if (parentError) return false
+
+  return softDeleteItem(sourceItemId)
+}
+
 const channelByBoard: Record<string, ReturnType<NonNullable<typeof supabase>['channel']>> = {}
 
 // Debounce realtime-triggered pulls. 150ms is genoeg om een batch
