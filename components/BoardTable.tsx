@@ -40,6 +40,7 @@ import { useCompletedOwners } from './useCompletedOwners'
 import type { CompletionTarget } from '@/lib/personalCompletion'
 import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
 import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem'
+import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -4527,9 +4528,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           // Subitems tellen ook mee — een parent zonder eigen datum maar met
           // subitems in maart hoort óók in het maart-filter te verschijnen.
           if (from !== null || until !== null) {
-            const parentOver = overlapsRange(item.startDate, item.endDate)
-            const subOver    = (item.subitems ?? []).some(s => overlapsRange(s.startDate, s.endDate))
-            if (!parentOver && !subOver) return false
+            if (!boardItemMatchesPeriod(item, { from, until })) return false
           }
           return true
         })
