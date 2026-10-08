@@ -4653,6 +4653,28 @@ export default function PlanningPage() {
   useEffect(() => { localStorage.setItem('planning-freelancers-open', freelancersPos !== 0 ? '1' : '0') }, [freelancersPos])
   const [yokoTeamPos, setYokoTeamPos] = useState<number>(() => initCyclePos('planning-yokoteam-open', true))
   useEffect(() => { localStorage.setItem('planning-yokoteam-open', yokoTeamPos !== 0 ? '1' : '0') }, [yokoTeamPos])
+  // Zelfgemaakte teams (bv. Producers / Editors) kunnen onafhankelijk
+  // ingeklapt worden. Dit is een persoonlijke weergavevoorkeur en hoort
+  // daarom in localStorage: de teams en hun leden blijven zelf gedeeld,
+  // alleen de open/dicht-stand verschilt per browser.
+  const [collapsedTeamGroups, setCollapsedTeamGroups] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('planning-collapsed-team-groups') ?? '[]')
+      return new Set(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : [])
+    } catch { return new Set() }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('planning-collapsed-team-groups', JSON.stringify([...collapsedTeamGroups])) } catch {}
+  }, [collapsedTeamGroups])
+  function toggleTeamGroup(groupId: string) {
+    setCollapsedTeamGroups(previous => {
+      const next = new Set(previous)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+  }
   // Bij een nieuw bezoek altijd ingeklapt, ook wanneer een eerdere sessie
   // deze historische groep ooit open had gezet.
   const [inactiveTeamPos, setInactiveTeamPos] = useState<number>(0)
@@ -6762,12 +6784,24 @@ export default function PlanningPage() {
 
             return (
               <>
-                {yokoVisible.length > 0 && sectionLabel('Studio Yoko', yokoVisible.length, yokoVisible)}
-                {yokoVisible.map(renderPerson)}
+                {yokoVisible.length > 0 && sectionLabel(
+                  'Studio Yoko',
+                  yokoVisible.length,
+                  yokoVisible,
+                  () => setYokoTeamPos(current => current === 0 ? 1 : 0),
+                  yokoTeamPos !== 0,
+                )}
+                {yokoTeamPos !== 0 && yokoVisible.map(renderPerson)}
                 {groupedVisible.map(({ group, members }) => (
                   <div key={`group-day-${group.id}`}>
-                    {sectionLabel(group.name, members.length, members)}
-                    {members.map(renderPerson)}
+                    {sectionLabel(
+                      group.name,
+                      members.length,
+                      members,
+                      () => toggleTeamGroup(group.id),
+                      !collapsedTeamGroups.has(group.id),
+                    )}
+                    {!collapsedTeamGroups.has(group.id) && members.map(renderPerson)}
                   </div>
                 ))}
                 {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length, unassignedVisible)}
@@ -7005,8 +7039,13 @@ export default function PlanningPage() {
               }
             }
             groupedVisible.forEach(({ group, members }) => {
-              out.push(<div key={`hdr-group-${group.id}`}>{sectionHeader(group.name, members.length, { members })}</div>)
-              members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i)))
+              const isOpen = !collapsedTeamGroups.has(group.id)
+              out.push(<div key={`hdr-group-${group.id}`}>{sectionHeader(group.name, members.length, {
+                members,
+                onClick: () => toggleTeamGroup(group.id),
+                arrowPos: isOpen ? 1 : 0,
+              })}</div>)
+              if (isOpen) members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i)))
             })
             if (unassigned.length > 0) {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
