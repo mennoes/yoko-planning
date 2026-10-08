@@ -28,6 +28,7 @@ export type SubItem = {
   statusOverride?: 'active' | 'done'
   estHours:     number
   echtGewerkt?: number
+  ownerHours?: Record<string, number>
   // Als een hoofditem zelf al subs had, bewaren we die reversibel. De zichtbare
   // sub toont het totaal; bij unnest worden de oorspronkelijke subs hersteld.
   nestedSource?: { estHours: number; subitems: SubItem[] }

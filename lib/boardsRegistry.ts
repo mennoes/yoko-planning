@@ -96,6 +96,7 @@ const FALLBACK: BoardConfig[] = [
     { key: 'timeline',  label: 'Timeline', type: 'daterange', width: 175 },
     { key: 'deadline',  label: 'Deadline', type: 'date',      width: 105 },
     { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
+    { key: 'dagen',     label: 'Dagen',    type: 'number',    width: 70  },
     { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
   ] },
   { id: 'dienjaar', name: 'Itorium', emoji: '📋', color: '#00c875', columns: [
@@ -227,7 +228,16 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
   // De database is de bron van waarheid voor ELKE bordnaam. Geen speciale
   // naam-migraties hier: als iemand een agenda hernoemt, moet precies die
   // gekozen waarde bij iedere volgende pull en refresh terugkomen.
-  const remoteRows = rawRemoteRows
+  let remoteRows = rawRemoteRows
+  // Een vroege Omdenken-config is zonder Dagen aangemaakt. Migreer die
+  // bestaande gedeelde agenda één keer; nieuwe agenda's krijgen Dagen via
+  // defaultColumnsForNewBoard hieronder.
+  const oldOmdenken = remoteRows.find(row => row.id === 'omdenken')
+  if (oldOmdenken && !(oldOmdenken.columns ?? []).some(col => col.key === 'dagen')) {
+    const columns = [...(oldOmdenken.columns ?? []), { key: 'dagen', label: 'Dagen', type: 'number' as const, width: 70 }]
+    const { error: migrationError } = await supabase.from('boards').update({ columns, updated_at: new Date().toISOString() }).eq('id', 'omdenken')
+    if (!migrationError) remoteRows = remoteRows.map(row => row.id === 'omdenken' ? { ...row, columns } : row)
+  }
   const missing = FALLBACK.filter(f => !remoteRows.some(r => r.id === f.id))
   if (missing.length > 0) {
     const { error: seedError } = await supabase.from('boards').upsert(
@@ -320,6 +330,7 @@ export function defaultColumnsForNewBoard(): ColumnDef[] {
     { key: 'timeline', label: 'Timeline', type: 'daterange', width: 175 },
     { key: 'deadline', label: 'Deadline', type: 'date',      width: 105 },
     { key: 'estHours', label: 'Est Time', type: 'number',    width: 85  },
+    { key: 'dagen',    label: 'Dagen',    type: 'number',    width: 70  },
     { key: 'notes',    label: 'Notes',    type: 'text',      width: 160 },
   ]
 }

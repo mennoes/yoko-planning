@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom'
 // /projects/[slug] route. We zijn 'use client', dus window.location is
 // veilig.
 import teamData from '@/data/team.json'
-import type { BoardItem, BoardGroup, ColumnDef, SubItem } from '@/lib/boards'
+import type { BoardItem, BoardGroup, ColumnDef, ColumnType, SubItem } from '@/lib/boards'
 import { setBoardColumns, getBoards } from '@/lib/boardsRegistry'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
@@ -42,6 +42,9 @@ import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
 import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem'
 import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
 import { boardItemToNestedSubitem } from '@/lib/nestBoardItem'
+import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
+
+const OwnerUsageCtx = createContext<Record<string, number>>({})
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -735,26 +738,33 @@ function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
   return <UserAvatar memberId={id} size={size} />
 }
 
-function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+function OwnersCell({ value, onChange, relevantIds, historicalIds }: {
+  value: string[]
+  onChange: (v: string[]) => void
+  relevantIds?: string[]
+  historicalIds?: string[]
+}) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const trigRef = useRef<HTMLDivElement>(null)
   const { profile } = useProfile()
   const { members: liveTeam } = useTeam()
+  const usage = useContext(OwnerUsageCtx)
   // Bron-lijst: live team_members uit Supabase aangevuld met data/team.json
   // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
   // via /team-admin toegevoegde leden direct als owner-optie zonder dat
   // de hardcoded teamData.json hoeft te worden bijgewerkt.
   const team = (() => {
     const seen = new Set<string>()
+    const knownLive = new Set(liveTeam.map(m => m.id))
     const out: Array<{ id: string; name: string; color?: string }> = []
     for (const m of liveTeam) {
-      if (m.hidden) continue
+      if (m.hidden || m.inactive) continue
       seen.add(m.id)
       out.push({ id: m.id, name: m.name, color: m.color })
     }
     for (const m of teamData.members) {
-      if (seen.has(m.id)) continue
+      if (seen.has(m.id) || knownLive.has(m.id)) continue
       seen.add(m.id)
       out.push({ id: m.id, name: m.name, color: m.color })
     }
@@ -774,30 +784,37 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
     onChange(next)
   }
 
-  // Yoko-collega's altijd bovenaan met grotere foto's zodat aanwijzen makkelijk
-  // is. Freelancers / externe contactpersonen verschijnen pas wanneer je
-  // begint te typen in het zoekveld eronder. Yoko-classificatie loopt nu
-  // via team_members.kind (met fallback op de hardcoded set).
-  const HARDCODED_YOKO = new Set(['menno','vincent','odette','anne-fleur','kars'])
-  function isYokoCrew(id: string): boolean {
-    const fromDb = liveTeam.find(m => m.id === id)?.kind
-    if (fromDb) return fromDb === 'yoko'
-    return HARDCODED_YOKO.has(id)
-  }
-  const yokoMembers   = team.filter(m => isYokoCrew(m.id))
-  const otherMembers  = team.filter(m => !isYokoCrew(m.id))
+  // Zes meest gebruikte of reeds geselecteerde actieve leden staan direct
+  // in beeld. Alle overige actieve leden zijn via de zevende zoekregel te
+  // vinden; inactieve leden worden nergens opnieuw aangeboden.
+  const sortedTeam = [...team].sort((a, b) => {
+    const selectedDelta = Number(value.includes(b.id)) - Number(value.includes(a.id))
+    return selectedDelta || (usage[b.id] ?? 0) - (usage[a.id] ?? 0) || a.name.localeCompare(b.name, 'nl')
+  })
+  const quickMembers = sortedTeam.slice(0, 6)
   const q             = query.trim().toLowerCase()
   const matchedOthers = q
-    ? otherMembers.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
+    ? sortedTeam.filter(m => !quickMembers.some(top => top.id === m.id) && (m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)))
     : []
+  const activeIds = new Set(team.map(member => member.id))
+  const activeVisible = (relevantIds ?? value).filter(id => activeIds.has(id))
+  const historicalVisible = (historicalIds ?? []).filter(id => activeIds.has(id) && !activeVisible.includes(id))
 
   return (
     <div>
       <div ref={trigRef} onClick={() => { setOpen(o => !o); setQuery('') }}
         style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: 'nowrap', minWidth: 24 }}>
-        {value.length === 0
+        {activeVisible.length === 0 && historicalVisible.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
-          : value.map(id => <MemberAvatar key={id} id={id} size={34} />)
+          : <>
+              {activeVisible.map(id => <MemberAvatar key={id} id={id} size={34} />)}
+              {historicalVisible.slice(0, 3).map(id => (
+                <span key={id} title="Eerder betrokken; niet relevant binnen de komende 5 weken"
+                  style={{ opacity: 0.2, transform: 'scale(0.62)', transformOrigin: 'center', margin: '0 -5px' }}>
+                  <MemberAvatar id={id} size={30} />
+                </span>
+              ))}
+            </>
         }
       </div>
 
@@ -808,7 +825,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
             borderRadius: 10, padding: 6, minWidth: 240,
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
           }}>
-            {yokoMembers.map(m => {
+            {quickMembers.map(m => {
               const active = value.includes(m.id)
               const isMe   = profile?.memberId === m.id
               return (
@@ -832,7 +849,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
 
             <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 4px 6px' }} />
             <input value={query} onChange={e => setQuery(e.target.value)}
-              placeholder="Zoek freelancer of contact…"
+              placeholder="Zoek iemand…"
               style={{ width: '100%', boxSizing: 'border-box',
                 padding: '7px 10px', borderRadius: 6,
                 border: '1px solid var(--border-light)', background: 'var(--bg-base)',
@@ -841,8 +858,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
             {/* Externe leden: alleen tonen bij actieve match, of toon
                 geselecteerde externen altijd zodat je 'm kunt deselecteren. */}
             {(() => {
-              const showSelected = otherMembers.filter(m => value.includes(m.id) && !matchedOthers.find(o => o.id === m.id))
-              const list = [...matchedOthers, ...showSelected]
+              const list = matchedOthers
               if (list.length === 0) {
                 if (q) return <div style={{ padding: '8px 8px 4px', fontSize: 12, color: 'var(--text-muted)' }}>Geen match.</div>
                 return null
@@ -876,7 +892,7 @@ function OwnersCell({ value, onChange }: { value: string[]; onChange: (v: string
                 de gebruiker ze kan verwijderen. Anders 'plakken' ze in de
                 cel zonder dat 'r een uncheck-mogelijkheid is. */}
             {(() => {
-              const known = new Set(team.map(m => m.id))
+              const known = new Set([...team.map(m => m.id), ...liveTeam.map(m => m.id)])
               const orphans = value.filter(id => id && id !== 'unassigned' && !known.has(id))
               if (orphans.length === 0) return null
               return (
@@ -1370,7 +1386,10 @@ function overlapDays(
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
-  if (col.type === 'owners')    return <OwnersCell    value={item.ownerIds} onChange={v => {
+  if (col.type === 'owners')    return <OwnersCell value={item.ownerIds}
+    relevantIds={item.__relevantOwnerIds as string[] | undefined}
+    historicalIds={item.__historicalOwnerIds as string[] | undefined}
+    onChange={v => {
     // ownerIds én ownerHours samen consistent houden: verwijderde owner
     // mag geen stale uren-entry achterlaten (anders telt ie zomaar weer
     // mee zodra je 'm later opnieuw toevoegt of bij periode-pro-rate).
@@ -1488,6 +1507,7 @@ function subitemAsItem(s: SubItem): BoardItem {
     source:       s.source,
     externalLink: s.externalLink ?? null,
     echtGewerkt:  s.echtGewerkt,
+    ownerHours:   s.ownerHours,
   } as BoardItem
 }
 
@@ -2227,6 +2247,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   defaultEditName?: boolean
 }) {
   const isMobile = useIsMobile()
+  const { members: liveTeam } = useTeam()
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(item.name)
@@ -2350,28 +2371,19 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     // die aan bv. instances van een Google recurring-meeting waren
     // toegevoegd. Display-only: een klik op de owner-cel schrijft alleen
     // naar de parent's ownerIds, subitem-owners blijven onaangeraakt.
-    const ownerSet = new Set<string>()
-    for (const oid of (item.ownerIds ?? [])) if (oid && oid !== 'unassigned') ownerSet.add(oid)
-    for (const s of subitems) for (const oid of (s.ownerIds ?? [])) if (oid && oid !== 'unassigned') ownerSet.add(oid)
-    if (ownerSet.size > 0) updates.ownerIds = [...ownerSet]
+    const activeMemberIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
+    const ownerRollup = relevantOwnerRollup(item, activeMemberIds, new Date(), 35)
+    const displayedOwners = [...ownerRollup.relevantOwnerIds, ...ownerRollup.historicalOwnerIds]
+    if (displayedOwners.length > 0) updates.ownerIds = displayedOwners
+    updates.__relevantOwnerIds = ownerRollup.relevantOwnerIds
+    updates.__historicalOwnerIds = ownerRollup.historicalOwnerIds
     // Owner-hours rollup: wanneer de parent zelf geen verdeling heeft
     // (item.ownerHours leeg) leiden we 'm af uit de subitems. Elke
     // subitem-uren worden gelijk verdeeld over zijn eigen owners; die
     // shares sommeren we per persoon. Display-only — wanneer de
     // gebruiker zelf een verdeling instelt overruled die deze rollup.
     if (!item.ownerHours || Object.keys(item.ownerHours).length === 0) {
-      const rolled: Record<string, number> = {}
-      for (const s of subitems) {
-        const subOwners = (s.ownerIds ?? []).filter(o => o && o !== 'unassigned')
-        const hrs = Number(s.estHours) || 0
-        if (subOwners.length === 0 || hrs <= 0) continue
-        const share = hrs / subOwners.length
-        for (const oid of subOwners) {
-          rolled[oid] = (rolled[oid] ?? 0) + share
-        }
-      }
-      // Rond af op 0.1u zodat de pie geen 7.34782u toont.
-      for (const k of Object.keys(rolled)) rolled[k] = Math.round(rolled[k] * 10) / 10
+      const rolled = relevantOwnerHours(ownerRollup.relevantSubitems)
       if (Object.keys(rolled).length > 0) updates.ownerHours = rolled
     }
     // Status NIET auto-rollen. Done subitems blijven gewoon in het
@@ -2611,7 +2623,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
           onUpdate={(updated, patch) => onUpdate({ subitems: updated, ...(patch ?? {}) })} />
       )}
       {showDetail && (
-        <ItemDetailDrawer item={item} cols={cols} accentColor={accentColor}
+        <ItemDetailDrawer item={effectiveItem} cols={cols} accentColor={accentColor}
           onUpdate={onUpdate} onClose={() => { setShowDetail(false); if (openRequest?.id === item.id) onCloseRequest?.() }} />
       )}
       {openSub && (
@@ -2632,6 +2644,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
             if ('endDate'     in u) subFields.endDate     = u.endDate as string | null
             if ('estHours'    in u) subFields.estHours    = u.estHours as number
             if ('echtGewerkt' in u) subFields.echtGewerkt = u.echtGewerkt as number | undefined
+            if ('ownerHours'  in u) subFields.ownerHours  = u.ownerHours as Record<string, number> | undefined
             const nextSubs = (item.subitems ?? []).map(s => s.id === openSub.id ? { ...s, ...subFields } : s)
             onUpdate({ subitems: nextSubs })
             setOpenSub(prev => prev ? { ...prev, ...subFields } : prev)
@@ -2783,6 +2796,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
   completionTarget: CompletionTarget
 }) {
   const { getPhoto } = useTeamPhotos()
+  const { members: liveTeam } = useTeam()
   const completedOwners = useCompletedOwners(completionTarget, owners)
   const defaultPer = owners.length > 0 ? total / owners.length : 0
   const ownersKey  = owners.join(',')
@@ -2801,7 +2815,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
   const round1 = (n: number) => Math.round(n * 10) / 10
 
   const segments = owners.map(oid => {
-    const m = teamData.members.find(x => x.id === oid)
+    const m = liveTeam.find(x => x.id === oid) ?? teamData.members.find(x => x.id === oid)
     return {
       id:        oid,
       value:     live[oid] ?? 0,
@@ -2835,12 +2849,17 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
             for (const [oid, hrs] of Object.entries(next)) {
               if (active.has(oid)) cleaned[oid] = hrs
             }
-            onUpdate({ ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined })
+            setLive(cleaned)
+            onUpdate({
+              ownerIds: owners,
+              ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined,
+              ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
+            })
           }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
           {owners.map(oid => {
-            const m = teamData.members.find(x => x.id === oid)
+            const m = liveTeam.find(x => x.id === oid) ?? teamData.members.find(x => x.id === oid)
             if (!m) return null
             const val = live[oid] ?? 0
             const pct = total > 0 ? Math.round((val / total) * 100) : 0
@@ -2879,6 +2898,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
   const itemId   = item.id
   const itemText = item.name
   const { profile } = useProfile()
+  const { members: liveTeam } = useTeam()
   const [threads, setThreads] = useState<CommentThread[]>([])
   const [newReply, setNewReply] = useState('')
   const [mentionIds, setMentionIds] = useState<string[]>([])
@@ -3015,8 +3035,13 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
           {/* Verdeling-pie — alleen wanneer meerdere eigenaren EN er uren zijn,
               dan heeft 't visueel iets te zeggen. Anders skip 'm. */}
           {(() => {
-            const owners = item.ownerIds.filter(id => id && id !== 'unassigned')
-            const total  = effectiveHours(item)
+            const activeIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
+            const relevant = item.__relevantOwnerIds as string[] | undefined
+            const owners = (relevant ?? item.ownerIds).filter(id => id && id !== 'unassigned' && activeIds.has(id))
+            const relevantTotal = relevant
+              ? owners.reduce((sum, id) => sum + (Number(item.ownerHours?.[id]) || 0), 0)
+              : 0
+            const total = relevantTotal > 0 ? relevantTotal : effectiveHours(item)
             if (owners.length < 2 || total <= 0) return null
             return <OwnerDistributionSection
               item={item}
@@ -3193,7 +3218,13 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     const sourceItem = group.items.find(i => i.id === itemId)
     if (sourceItem?.source === 'google') {
       const keys = Object.keys(updates)
-      const allowed = keys.every(k => k === 'subitems' || k === 'status' || k === 'statusOverride')
+      // Planningmetadata (owners + urenverdeling) is van YOKO en wordt door
+      // googleSync expliciet uit extra behouden. Die velden mogen dus wél
+      // lokaal aangepast worden; titel/tijdlijn blijven Google-owned.
+      const allowed = keys.every(k =>
+        k === 'subitems' || k === 'status' || k === 'statusOverride'
+        || k === 'ownerIds' || k === 'ownerHours' || k === 'ownerIdsLocked'
+      )
       if (!allowed) {
         showToast('Bewerk dit item in Google Calendar — wijzigingen hier worden bij de volgende sync overschreven')
         return
@@ -3245,7 +3276,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
         // ownerIds veranderd → cleanup stale ownerHours-entries (zelfde
         // safeguard als in OwnersCell, voor bulk-updates die rechtstreeks
         // updateItem aanroepen zonder het Cell-pad).
-        if ('ownerIds' in updates && i.ownerHours && Object.keys(i.ownerHours).length > 0) {
+        if ('ownerIds' in updates && !('ownerHours' in updates) && i.ownerHours && Object.keys(i.ownerHours).length > 0) {
           const active = new Set(updates.ownerIds ?? [])
           const cleaned: Record<string, number> = {}
           for (const [oid, hrs] of Object.entries(i.ownerHours)) {
@@ -4100,6 +4131,8 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   menu?:   boolean
 }) {
   const [open, setOpen] = useState(false)
+  const [customLabel, setCustomLabel] = useState('')
+  const [customType, setCustomType] = useState<ColumnType>('text')
   const btnRef = useRef<HTMLButtonElement>(null)
   // Lokale werk-set, gesynchroniseerd met de prop. Mutaties commit'ten
   // direct naar setBoardColumns zodat de tabel meteen meebeweegt en de
@@ -4115,6 +4148,18 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   function moveUp(idx: number)   { if (idx <= 0) return; const n = [...list]; [n[idx-1], n[idx]] = [n[idx], n[idx-1]]; commit(n) }
   function moveDown(idx: number) { if (idx >= list.length - 1) return; const n = [...list]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; commit(n) }
   function add(col: ColumnDef)   { commit([...list, col]) }
+  function addCustom() {
+    const label = customLabel.trim()
+    if (!label) return
+    const slug = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'kolom'
+    let key = `custom_${slug}`
+    let suffix = 2
+    while (list.some(col => col.key === key)) key = `custom_${slug}_${suffix++}`
+    const width = customType === 'date' ? 110 : customType === 'number' || customType === 'currency' ? 90 : customType === 'url' ? 130 : 160
+    add({ key, label, type: customType, width })
+    setCustomLabel('')
+    setCustomType('text')
+  }
 
   const usedKeys = new Set(list.map(c => c.key))
   const addable  = AVAILABLE_COLUMNS.filter(c => !usedKeys.has(c.key))
@@ -4181,6 +4226,24 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
                 </div>
               </>
             )}
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '14px 0 5px' }}>
+              Eigen kolom
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 92px auto', gap: 5 }}>
+              <input value={customLabel} onChange={event => setCustomLabel(event.target.value)}
+                onKeyDown={event => { if (event.key === 'Enter') addCustom() }} placeholder="Naam…"
+                style={{ minWidth: 0, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-light)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }} />
+              <select value={customType} onChange={event => setCustomType(event.target.value as ColumnType)}
+                style={{ padding: '6px 7px', borderRadius: 6, border: '1px solid var(--border-light)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 11 }}>
+                <option value="text">Tekst</option>
+                <option value="number">Getal</option>
+                <option value="date">Datum</option>
+                <option value="url">Link</option>
+                <option value="currency">Bedrag</option>
+              </select>
+              <button onClick={addCustom} disabled={!customLabel.trim()} title="Eigen kolom toevoegen"
+                style={{ padding: '5px 9px', borderRadius: 6, border: 'none', background: color, color: '#fff', fontSize: 15, fontWeight: 800, cursor: customLabel.trim() ? 'pointer' : 'not-allowed', opacity: customLabel.trim() ? 1 : 0.45 }}>+</button>
+            </div>
           </div>
         </PortalDropdown>
       )}
@@ -4612,6 +4675,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     }
     return counts
   }, [groups])
+  const ownerUsage = useMemo(() => Object.fromEntries(ownerItemCounts), [ownerItemCounts])
 
   // Quick-filter chips & dropdown tonen iedereen die in team.json zit —
   // niet alleen @studioyoko.nl-medewerkers. Freelancers (Fokke, Marcus,
@@ -5017,6 +5081,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }
 
   return (
+    <OwnerUsageCtx.Provider value={ownerUsage}>
     <div style={{ padding: isMobile ? '14px 14px 48px' : '32px 32px 64px' }}>
 
       {/* Header */}
@@ -5523,6 +5588,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         />
       )}
     </div>
+    </OwnerUsageCtx.Provider>
   )
 }
 
