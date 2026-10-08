@@ -39,6 +39,7 @@ import { PersonalCompletionSection } from './PersonalCompletionSection'
 import { useCompletedOwners } from './useCompletedOwners'
 import type { CompletionTarget } from '@/lib/personalCompletion'
 import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
+import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem'
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -1260,16 +1261,17 @@ function DateRangeCell({
               {showDuration ? dur : fmtRange(startDate, endDate)}
             </span>
             {showDuration && (
-              <span onClick={ev => { ev.stopPropagation(); onChange(null, null) }}
-                title="Datums wissen"
+              <button type="button" onClick={ev => { ev.stopPropagation(); onChange(null, null); setOpen(false) }}
+                title="Alleen datums wissen — uren blijven behouden"
                 style={{ position: 'relative', zIndex: 2,
                   width: 18, height: 18, borderRadius: '50%',
+                  border: 0, padding: 0,
                   background: 'rgba(0,0,0,0.35)', color: '#fff',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
                   marginLeft: 2 }}>
                 ×
-              </span>
+              </button>
             )}
           </>
         ) : (
@@ -1281,7 +1283,7 @@ function DateRangeCell({
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <RangeCalendar
             startDate={startDate} endDate={endDate} color={color}
-            onChange={(s, e) => onChange(s, e)}
+            onChange={(s, e) => { onChange(s, e); if (!s && !e) setOpen(false) }}
           />
         </PortalDropdown>
       )}
@@ -4794,12 +4796,18 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     onChange(groups.map(orig => {
       if (orig.id !== updatedGroup.id) return orig
       const filteredItems = filteredGroups.find(fg => fg.id === orig.id)?.items ?? []
+      const originalById  = new Map(orig.items.map(item => [item.id, item]))
+      const filteredById  = new Map(filteredItems.map(item => [item.id, item]))
       const updatedById   = new Map(updatedGroup.items.map(i => [i.id, i]))
       const removedIds    = new Set(filteredItems.filter(i => !updatedById.has(i.id)).map(i => i.id))
       return {
         ...updatedGroup,
         items: [
-          ...orig.items.filter(i => !removedIds.has(i.id)).map(i => updatedById.get(i.id) ?? i),
+          ...orig.items.filter(i => !removedIds.has(i.id)).map(i => {
+            const updated = updatedById.get(i.id)
+            if (!updated) return i
+            return materializeFilteredBoardItem(originalById.get(i.id) ?? i, filteredById.get(i.id), updated)
+          }),
           ...updatedGroup.items.filter(i => !orig.items.find(o => o.id === i.id)),
         ],
       }
@@ -5335,6 +5343,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       <BoardRecoveryDrawer
         boardId={boardId}
         boardTitle={title}
+        groups={groups}
         open={recoveryOpen}
         onClose={() => setRecoveryOpen(false)} />
 

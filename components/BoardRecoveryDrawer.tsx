@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { pullBoardFromRemote } from '@/lib/boardStore'
+import type { BoardGroup, BoardItem } from '@/lib/boards'
 
 type Snapshot = {
   id:          string
@@ -38,9 +39,10 @@ function relativeAge(iso: string): string {
   return `${Math.floor(min / 1440)}d geleden`
 }
 
-export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
+export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose }: {
   boardId:    string
   boardTitle: string
+  groups:     BoardGroup[]
   open:       boolean
   onClose:    () => void
 }) {
@@ -48,6 +50,11 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
   const [loading, setLoading]     = useState(true)
   const [busy, setBusy]           = useState<string | null>(null)
   const [msg, setMsg]             = useState<string | null>(null)
+  const zeroHourItems = groups.flatMap(group => group.items).filter(item => {
+    if (!item.subitems?.length) return false
+    const total = (Number(item.estHours) || 0) + item.subitems.reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+    return total === 0
+  })
 
   useEffect(() => {
     if (!open) return
@@ -146,6 +153,34 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
     }
   }
 
+  async function herstelItemUren(item: BoardItem) {
+    if (!supabase) return
+    const sess = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token
+    if (!token) { window.alert('Niet ingelogd.'); return }
+    setBusy(`item:${item.id}`); setMsg(null)
+    try {
+      const res = await fetch('/api/snapshots/restore-item-est', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId, itemId: item.id }),
+      })
+      const json = await res.json() as {
+        ok: boolean; error?: string; restoredTotal?: number; previousTotal?: number; usedSnapshot?: string
+      }
+      if (!json.ok) {
+        setMsg(json.error === 'no_earlier_hours_found'
+          ? `Geen eerdere versie met uren gevonden voor '${item.name}'.`
+          : `Uren herstellen mislukt: ${json.error ?? 'onbekend'}`)
+        return
+      }
+      await pullBoardFromRemote(boardId).catch(() => {})
+      setMsg(`✓ '${item.name}' hersteld: ${json.previousTotal ?? 0}u → ${json.restoredTotal ?? 0}u uit ${fmtDate(json.usedSnapshot ?? '')}.`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function herstelItems(snap: Snapshot) {
     if (!supabase) return
     if (!window.confirm(
@@ -208,6 +243,24 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, open, onClose }: {
       )}
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
+        {zeroHourItems.length > 0 && (
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', background: 'rgba(226,68,92,0.07)' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>
+              Mogelijk onbedoeld gewiste uren
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.45, marginBottom: 10 }}>
+              Alleen dit item wordt hersteld uit de nieuwste eerdere versie waarin het wél uren had. Andere items en velden blijven exact staan.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {zeroHourItems.map(item => (
+                <button key={item.id} onClick={() => void herstelItemUren(item)} disabled={busy !== null}
+                  style={{ padding: '7px 11px', borderRadius: 7, border: '1px solid var(--red)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 750, cursor: busy ? 'wait' : 'pointer' }}>
+                  {busy === `item:${item.id}` ? 'Herstellen…' : `↩ Herstel uren · ${item.name}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {loading ? (
           <p style={{ padding: 20, color: 'var(--text-muted)', fontSize: 13 }}>Laden…</p>
         ) : snapshots.length === 0 ? (
