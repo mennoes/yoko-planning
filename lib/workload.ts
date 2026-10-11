@@ -35,6 +35,8 @@ export type Project = {
   /** Alleen in Planning: de rij waarvoor de persoonlijke tijdlijn wordt
    * getoond. Niet opgeslagen in board_items. */
   __personalMemberId?: string
+  completionParentItemId?: string
+  completionSubitemId?: string
 }
 
 import { getBoardColor } from './boardsRegistry'
@@ -83,16 +85,18 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
             // voor de parent-owner in de werkdruk, terwijl de parent zelf
             // wel iemand als verantwoordelijke heeft staan. Bug die zorgde
             // dat items met onbenoemde subitems uit Home/Werkdruk vielen.
-            const subOwners = (si.ownerIds ?? []).filter(o => o && o !== 'unassigned')
-            const parentOwners = (Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : [])
-              .filter(o => o && o !== 'unassigned')
+            const subOwners = [...new Set((si.ownerIds ?? []).filter(o => o && o !== 'unassigned'))]
+            const parentOwners = [...new Set((Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : [])
+              .filter(o => o && o !== 'unassigned'))]
             const owners = subOwners.length > 0
-              ? (si.ownerIds as string[])
+              ? subOwners
               : parentOwners.length > 0
-                ? (i.ownerIds as string[])
+                ? parentOwners
                 : ['unassigned']  // valt door naar de Unassigned-rij in /planning
             return {
               id:        `${boardName}__${i.id}__si${origIdx}`,
+              completionParentItemId: i.id as string,
+              ...(si.id ? { completionSubitemId: si.id } : {}),
               // Subitem-bar toont alleen de subitem-naam — niet "Parent ·
               // Subitem". User vond 't dubbel: "het hoofditem staat er nu
               // ook". Subitem-naam is meestal duidelijk genoeg op zichzelf
@@ -136,10 +140,11 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         // Owners zonder eigenaar landen op 'unassigned' zodat ze in de
         // planning onder de Unassigned-rij verschijnen i.p.v. uit beeld
         // te verdwijnen.
-        const rawOwners = (Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : []).filter(o => o && o !== 'unassigned')
-        const ownerIds = rawOwners.length > 0 ? (i.ownerIds as string[]) : ['unassigned']
+        const rawOwners = [...new Set((Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : []).filter(o => o && o !== 'unassigned'))]
+        const ownerIds = rawOwners.length > 0 ? rawOwners : ['unassigned']
         return [{
           id: `${boardName}__${i.id}`,
+          completionParentItemId: i.id as string,
           name: i.name as string,
           board: boardName,
           group: g.name,

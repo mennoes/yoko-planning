@@ -2110,7 +2110,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
               }} />}
           </div>
           {cols.map(c => (
-            <div key={c.key} style={{ ...hdrCell, position: 'relative', ...(isPersonalColumn(c.key) ? { borderLeft: '3px double var(--border-strong)', background: 'var(--bg-base)' } : {}) }}>
+            <div key={c.key} style={{ ...hdrCell, position: 'relative', whiteSpace: 'nowrap', ...(isPersonalColumn(c.key) ? { borderLeft: '3px double var(--border-strong)', background: 'var(--bg-base)' } : {}) }}>
               <button disabled={isPersonalColumn(c.key)} onClick={() => toggleSort(c.key)} style={{ border: 0, padding: 0, background: 'none', cursor: isPersonalColumn(c.key) ? 'default' : 'pointer', color: sortBy?.key === c.key ? 'var(--text-primary)' : 'inherit', font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}>
                 {headerLabelFor(c.key, c.label)} {sortBy?.key === c.key ? (sortBy.dir === 'asc' ? '▲' : '▼') : ''}
               </button>
@@ -3969,7 +3969,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }} />
               </div>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isPersonalColumn(col.key) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 5, backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined }}
+                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isPersonalColumn(col.key) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined }}
                   onClick={() => { if (!isPersonalColumn(col.key)) onToggleSort(col.key) }}>
                   {col.label}
                   {sortBy?.key === col.key && (
@@ -5245,16 +5245,27 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
   const selectionW = isMobile ? 40 : 48
   const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 196) : (colWidths['name'] ?? 200)
-  const tableColumns: ColumnDef[] = columns.flatMap(column => {
-    const projectColumn = column.key === 'status'
+  const tableColumns: ColumnDef[] = (() => {
+    const base = columns.map(column => column.key === 'status'
       ? { ...column, label: 'Status project' }
       : column.key === 'timeline'
         ? { ...column, label: 'Timeline project' }
-        : column
-    if (column.key === 'status') return [projectColumn, { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 }]
-    if (column.key === 'timeline') return [projectColumn, { key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange', width: 180 }]
-    return [projectColumn]
-  })
+        : column)
+    const statusIndex = base.findIndex(column => column.key === 'status')
+    const timelineIndex = base.findIndex(column => column.key === 'timeline')
+    if (statusIndex < 0 && timelineIndex < 0) return base
+    const insertAt = Math.min(...[statusIndex, timelineIndex].filter(index => index >= 0))
+    const status = base.find(column => column.key === 'status')
+    const timeline = base.find(column => column.key === 'timeline')
+    const ordered = base.filter(column => column.key !== 'status' && column.key !== 'timeline')
+    ordered.splice(insertAt, 0,
+      ...(status ? [status] : []),
+      ...(timeline ? [timeline] : []),
+      ...(status ? [{ key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status' as const, width: 145 }] : []),
+      ...(timeline ? [{ key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange' as const, width: 180 }] : []),
+    )
+    return ordered
+  })()
   const subNameW = isMobile ? Math.min(subColWidths.name ?? nameW, 196) : (subColWidths.name ?? nameW)
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.

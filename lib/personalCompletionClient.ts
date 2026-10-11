@@ -1,7 +1,7 @@
 'use client'
 
 import { supabase } from './supabase'
-import { cacheComment, loadAllComments, notifyCommentsUpdate, pullCommentsAll, type CommentThread } from './commentsStore'
+import { cacheComment, loadAllComments, notifyCommentsUpdate, onCommentsUpdate, pullCommentsAll, type CommentThread } from './commentsStore'
 import { completionContext, completionState, type CompletionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
 import { loadGroups } from './boardStore'
 
@@ -12,10 +12,17 @@ function completionKey(target: CompletionTarget, memberId: string) {
 // Serverdata blijft leidend, maar een klik wordt lokaal meteen zichtbaar.
 // Deze tijdelijke laag bestaat alleen zolang de opslagrequest onderweg is.
 const optimisticCompletions = new Map<string, CompletionState>()
+const resolvedCompletions = new Map<string, CompletionState | null>()
+if (typeof window !== 'undefined') onCommentsUpdate(() => resolvedCompletions.clear())
 
 export function loadPersonalCompletion(target: CompletionTarget, memberId: string) {
-  return optimisticCompletions.get(completionKey(target, memberId))
-    ?? completionState(loadAllComments(), target, memberId)
+  const key = completionKey(target, memberId)
+  const optimistic = optimisticCompletions.get(key)
+  if (optimistic) return optimistic
+  if (resolvedCompletions.has(key)) return resolvedCompletions.get(key) ?? undefined
+  const resolved = completionState(loadAllComments(), target, memberId)
+  resolvedCompletions.set(key, resolved ?? null)
+  return resolved
 }
 
 /** Resolve index-based legacy task references to the actual stable subitem ID. */
