@@ -169,7 +169,7 @@ function PortalDropdown({ anchor, onClose, children }: {
 
   if (typeof window === 'undefined') return null
   return createPortal(
-    <div ref={dropRef} style={{
+    <div ref={dropRef} onMouseDown={event => event.stopPropagation()} style={{
       position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999,
       visibility: ready ? 'visible' : 'hidden',
       maxHeight: `calc(100vh - 16px)`, overflowY: 'auto',
@@ -863,14 +863,14 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
     return (
       <span key={id} title={`${member?.name ?? id} · ${Math.round(hours * 10) / 10}u · ${Math.round(pct)}%`}
         style={{
-          width: 38, height: 38, padding: 3, boxSizing: 'border-box', borderRadius: '50%', flexShrink: 0,
+          width: 38, height: 38, padding: 4, boxSizing: 'border-box', borderRadius: '50%', flexShrink: 0,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           background: `conic-gradient(${color} ${pct * 3.6}deg, var(--border) 0deg)`,
           boxShadow: '0 0 0 2px var(--bg-card)',
           marginLeft: index > 0 ? -6 : 0,
           position: 'relative', zIndex: visibleOwners.length - index,
         }}>
-        <UserAvatar memberId={id} size={32} borderless style={{ boxShadow: '0 0 0 2px var(--bg-card)' }} />
+        <UserAvatar memberId={id} size={30} borderless style={{ boxShadow: '0 0 0 2px var(--bg-card)' }} />
       </span>
     )
   }
@@ -4408,6 +4408,144 @@ function PeriodFilterButton({ from, until, color, onChange, menu = false }: {
   )
 }
 
+type AgendaFilter = {
+  id: string
+  key: string
+  type: ColumnType | 'item'
+  value: string
+  value2?: string
+}
+
+function filterFieldLabel(filter: AgendaFilter, columns: ColumnDef[]): string {
+  if (filter.key === '__item') return 'Item'
+  return columns.find(column => column.key === filter.key)?.label ?? filter.key
+}
+
+function filterValueLabel(filter: AgendaFilter): string {
+  if (filter.type === 'owners') {
+    return teamData.members.find(member => member.id === filter.value)?.name ?? filter.value
+  }
+  if (filter.type === 'daterange' || filter.type === 'date') {
+    if (filter.value && filter.value2) return fmtRange(filter.value, filter.value2)
+    if (filter.value) return `vanaf ${fmtDate(filter.value)}`
+    return `tot ${fmtDate(filter.value2)}`
+  }
+  if (filter.type === 'number' || filter.type === 'currency') {
+    return filter.value2 ? `${filter.value} – ${filter.value2}` : `min. ${filter.value}`
+  }
+  return filter.value
+}
+
+function AgendaFilterButton({ columns, owners, filters, onChange, color, menu = false }: {
+  columns: ColumnDef[]
+  owners: string[]
+  filters: AgendaFilter[]
+  onChange: (filters: AgendaFilter[]) => void
+  color: string
+  menu?: boolean
+}) {
+  const fields = useMemo(() => [
+    { key: '__item', label: 'Item', type: 'item' as const },
+    ...columns.map(column => ({ key: column.key, label: column.label, type: column.type })),
+  ], [columns])
+  const [open, setOpen] = useState(false)
+  const [fieldKey, setFieldKey] = useState(fields[0]?.key ?? '__item')
+  const [value, setValue] = useState('')
+  const [value2, setValue2] = useState('')
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const field = fields.find(candidate => candidate.key === fieldKey) ?? fields[0]
+
+  useEffect(() => {
+    if (!fields.some(candidate => candidate.key === fieldKey)) setFieldKey(fields[0]?.key ?? '__item')
+  }, [fieldKey, fields])
+
+  function resetForField(nextKey: string) {
+    setFieldKey(nextKey)
+    setValue('')
+    setValue2('')
+  }
+
+  function addFilter() {
+    if (!field || (!value && !value2)) return
+    onChange([...filters, {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      key: field.key,
+      type: field.type,
+      value,
+      ...(value2 ? { value2 } : {}),
+    }])
+    setValue('')
+    setValue2('')
+    setOpen(false)
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', border: '1px solid var(--border)', borderRadius: 7,
+    background: 'var(--bg-base)', color: 'var(--text-primary)', padding: '9px 10px', fontSize: 13,
+  }
+
+  return (
+    <>
+      <button ref={btnRef} type="button" onClick={() => setOpen(current => !current)}
+        className={open ? 'yoko-primary-button' : 'yoko-control-button'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, width: menu ? '100%' : undefined,
+          padding: menu ? '9px 12px' : '9px 14px', borderRadius: menu ? 6 : 8,
+          border: menu ? 'none' : '1px solid var(--border)', background: menu ? 'none' : 'var(--bg-card)',
+          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, fontWeight: menu ? 500 : 600,
+          textAlign: 'left',
+        }}>
+        <span aria-hidden style={{ fontSize: 17, lineHeight: 1 }}>＋</span> Filter
+      </button>
+      {open && (
+        <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
+          <div style={{ width: 300, padding: 12, borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', boxShadow: '0 12px 34px rgba(0,0,0,.28)' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+              Nieuw filter
+            </div>
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 5 }}>Kolom</label>
+            <select value={fieldKey} onChange={event => resetForField(event.target.value)} style={{ ...inputStyle, marginBottom: 10 }}>
+              {fields.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+            </select>
+
+            {field?.type === 'owners' ? (
+              <select value={value} onChange={event => setValue(event.target.value)} style={inputStyle}>
+                <option value="">Kies persoon…</option>
+                {owners.map(id => {
+                  const member = teamData.members.find(candidate => candidate.id === id)
+                  return member ? <option key={id} value={id}>{member.name}</option> : null
+                })}
+              </select>
+            ) : field?.type === 'status' ? (
+              <select value={value} onChange={event => setValue(event.target.value)} style={inputStyle}>
+                <option value="">Kies status…</option>
+                {STATUS_OPTIONS.filter(option => option.label).map(option => <option key={option.label} value={option.label}>{option.label}</option>)}
+              </select>
+            ) : field?.type === 'date' || field?.type === 'daterange' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Vanaf</label><input type="date" value={value} onChange={event => setValue(event.target.value)} style={inputStyle} /></div>
+                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Tot</label><input type="date" value={value2} onChange={event => setValue2(event.target.value)} style={inputStyle} /></div>
+              </div>
+            ) : field?.type === 'number' || field?.type === 'currency' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Minimaal</label><input type="number" value={value} onChange={event => setValue(event.target.value)} style={inputStyle} /></div>
+                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Maximaal</label><input type="number" value={value2} onChange={event => setValue2(event.target.value)} style={inputStyle} /></div>
+              </div>
+            ) : (
+              <input autoFocus value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') addFilter() }} placeholder="Bevat…" style={inputStyle} />
+            )}
+
+            <button type="button" disabled={!value && !value2} onClick={addFilter}
+              style={{ width: '100%', marginTop: 12, padding: '9px 12px', border: 0, borderRadius: 7, background: color, color: '#fff', fontSize: 13, fontWeight: 800, cursor: value || value2 ? 'pointer' : 'default', opacity: value || value2 ? 1 : .45 }}>
+              Filter toevoegen
+            </button>
+          </div>
+        </PortalDropdown>
+      )}
+    </>
+  )
+}
+
 // ─── BoardTable (hoofd component) ─────────────────────────────────────────────
 type BoardTableProps = {
   boardId: string
@@ -4561,8 +4699,21 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     try { localStorage.setItem(subStorageKey, JSON.stringify(subColWidths)) } catch {}
   }, [subStorageKey, subColWidths])
   const [search,        setSearch]       = useState('')
-  const [filterOwner,   setFilterOwner]  = useState('')
-  const [filterStatus,  setFilterStatus] = useState('')
+  const agendaFiltersKey = `yoko:agendaFilters:${boardId}`
+  const [agendaFilters, setAgendaFilters] = useState<AgendaFilter[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = window.localStorage.getItem(`yoko:agendaFilters:${boardId}`)
+      return raw ? JSON.parse(raw) as AgendaFilter[] : []
+    } catch { return [] }
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      if (agendaFilters.length > 0) window.localStorage.setItem(agendaFiltersKey, JSON.stringify(agendaFilters))
+      else window.localStorage.removeItem(agendaFiltersKey)
+    } catch {}
+  }, [agendaFilters, agendaFiltersKey])
   // Periode-filter blijft persistent per bord in localStorage zodat
   // de gebruiker bij terugkeer niet opnieuw datums hoeft te tikken.
   const periodKey = `yoko:periodFilter:${boardId}`
@@ -4652,7 +4803,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     setMobileBoardCreateOpen(false)
   }
 
-  const hasFilter = !!(search || filterOwner || filterStatus || filterFrom || filterUntil)
+  const hasFilter = !!(search || agendaFilters.length || filterFrom || filterUntil)
 
   const filteredGroups = useMemo(() => {
     if (!hasFilter) return groups
@@ -4689,9 +4840,41 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         .filter(item => {
           if (item.id === openRequest?.id) return true
           if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
-          if (filterOwner && !item.ownerIds.includes(filterOwner)
-            && !(item.subitems ?? []).some(sub => sub.ownerIds.includes(filterOwner))) return false
-          if (filterStatus && item.status !== filterStatus) return false
+          for (const filter of agendaFilters) {
+            if (filter.type === 'owners') {
+              const owners = new Set([...(item.ownerIds ?? []), ...(item.subitems ?? []).flatMap(sub => sub.ownerIds ?? [])])
+              if (!owners.has(filter.value)) return false
+              continue
+            }
+            if (filter.type === 'status') {
+              const statuses = [item.status, ...(item.subitems ?? []).map(sub => sub.status)]
+              if (!statuses.includes(filter.value)) return false
+              continue
+            }
+            if (filter.type === 'daterange' || filter.type === 'date') {
+              const rangeFrom = filter.value ? new Date(filter.value).getTime() : null
+              const rangeUntil = filter.value2 ? new Date(filter.value2).getTime() + 86400000 - 1 : null
+              if (filter.key === 'timeline') {
+                if (!boardItemMatchesPeriod(item, { from: rangeFrom, until: rangeUntil })) return false
+              } else {
+                const rawDate = item[filter.key]
+                if (typeof rawDate !== 'string' || !rawDate) return false
+                const timestamp = new Date(rawDate).getTime()
+                if ((rangeFrom !== null && timestamp < rangeFrom) || (rangeUntil !== null && timestamp > rangeUntil)) return false
+              }
+              continue
+            }
+            if (filter.type === 'number' || filter.type === 'currency') {
+              const numberValue = Number(item[filter.key])
+              if (!Number.isFinite(numberValue)) return false
+              if (filter.value && numberValue < Number(filter.value)) return false
+              if (filter.value2 && numberValue > Number(filter.value2)) return false
+              continue
+            }
+            const rawValue = filter.key === '__item' ? item.name : item[filter.key]
+            const needle = filter.value.trim().toLocaleLowerCase('nl')
+            if (!String(rawValue ?? '').toLocaleLowerCase('nl').includes(needle)) return false
+          }
           // Periode-filter: item moet OVERLAPPEN met de gekozen range.
           // Subitems tellen ook mee — een parent zonder eigen datum maar met
           // subitems in maart hoort óók in het maart-filter te verschijnen.
@@ -4761,7 +4944,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         || name === 'meetings'
         || name === 'doorlopend'
     })
-  }, [groups, search, filterOwner, filterStatus, filterFrom, filterUntil, hasFilter, openRequest])
+  }, [groups, search, agendaFilters, filterFrom, filterUntil, hasFilter, openRequest])
 
   const ownerItemCounts = useMemo(() => {
     const counts = new Map<string, number>()
@@ -5294,6 +5477,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                 <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                 <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
                   onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} menu />
+                <AgendaFilterButton columns={columns} owners={yokoOwners} filters={agendaFilters}
+                  onChange={setAgendaFilters} color={color} menu />
                 <ColumnManagerButton boardId={boardId} columns={columns} color={color} menu />
                 <button onClick={() => { setTrashOpen(true); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
@@ -5329,92 +5514,11 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
                   ↓ Exporteer CSV
                 </button>
-                {yokoOwners.length > 0 && (
-                  <>
-                    <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 4px' }} />
-                    <div style={{ padding: '4px 12px 6px', fontSize: 11, fontWeight: 600,
-                      color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Filter op persoon
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '0 8px 8px' }}>
-                      {filterOwner && (
-                        <button onClick={() => { setFilterOwner(''); setMoreOpen(false) }}
-                          style={{ padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)',
-                            background: 'var(--bg-hover)', cursor: 'pointer', fontSize: 12,
-                            color: 'var(--text-muted)' }}>
-                          × wis
-                        </button>
-                      )}
-                      {yokoOwners.map(id => {
-                        const m = teamData.members.find(t => t.id === id)
-                        if (!m) return null
-                        const active = filterOwner === id
-                        return (
-                          <button key={id} aria-pressed={active}
-                            onClick={() => { setFilterOwner(active ? '' : id); setMoreOpen(false) }}
-                            style={{ padding: '4px 10px', borderRadius: 999,
-                              border: `1.5px solid ${active ? m.color : 'var(--border-light)'}`,
-                              background: active ? m.color + '22' : 'var(--bg-card)',
-                              cursor: 'pointer', fontSize: 12,
-                              fontWeight: active ? 700 : 500,
-                              color: active ? m.color : 'var(--text-secondary)' }}>
-                            {active ? '✓ ' : ''}{m.name.split(' ')[0]} · {ownerItemCounts.get(id) ?? 0}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </>
-                )}
               </div>
             </PortalDropdown>
           )}
         </div>
       </div>
-
-      {/* Owner avatar strip — quick filter on people in this board.
-          Op mobiel zit deze in het ⋯-menu hierboven, dus alleen op desktop tonen. */}
-      {!isMobile && yokoOwners.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
-            Filter op persoon
-          </span>
-          {yokoOwners.map(id => {
-            const m = teamData.members.find(t => t.id === id)
-            if (!m) return null
-            const active = filterOwner === id
-            return (
-              <button key={id} aria-pressed={active}
-                onClick={() => setFilterOwner(active ? '' : id)}
-                title={`${m.name}: ${ownerItemCounts.get(id) ?? 0} items · klik om te filteren`}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '3px 9px 3px 3px', borderRadius: 999,
-                  border: `2px solid ${active ? m.color : 'var(--border-light)'}`,
-                  background: active ? m.color + '30' : 'var(--bg-card)',
-                  cursor: 'pointer', transition: 'all 0.12s',
-                }}>
-                <MemberAvatar id={id} size={24} />
-                <span style={{
-                  fontSize: 12.5, fontWeight: active ? 700 : 500,
-                  color: active ? m.color : 'var(--text-secondary)',
-                }}>
-                  {m.name.split(' ')[0]}
-                </span>
-                <span style={{ fontSize: 11, color: active ? m.color : 'var(--text-muted)', fontWeight: 700 }}>
-                  {ownerItemCounts.get(id) ?? 0}
-                </span>
-                {active && <span aria-hidden style={{ color: m.color, fontSize: 13, fontWeight: 800 }}>✓</span>}
-              </button>
-            )
-          })}
-          {filterOwner && (
-            <button onClick={() => setFilterOwner('')}
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, fontWeight: 500, padding: '4px 8px' }}>
-              × wis filter
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Filter bar */}
       <div style={{ display: isMobile && !hasFilter ? 'none' : 'flex', gap: isMobile ? 6 : 10, marginBottom: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -5426,8 +5530,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             style={{ padding: isMobile ? '6px 10px 6px 28px' : '9px 12px 9px 32px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: isMobile ? 13 : 14, outline: 'none', width: isMobile ? '100%' : 220, boxSizing: 'border-box' }} />
         </div>
 
-        {/* Status- en persoon-dropdowns weggehaald — filteren kan via de
-            owner-chips boven de tabel + status-pills in de rijen. */}
+        {/* Filters zijn kolomgestuurd: geen vaste personenrij meer. */}
 
         {/* Periode-filter: items waarvan de timeline OVERLAPT met
             [van, tot]. Leeg laten = geen ondergrens / bovengrens. */}
@@ -5435,13 +5538,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           <>
             <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
               onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
+            <AgendaFilterButton columns={columns} owners={yokoOwners} filters={agendaFilters}
+              onChange={setAgendaFilters} color={color} />
             <ColumnManagerButton boardId={boardId} columns={columns} color={color} />
           </>
         )}
 
         {hasFilter && (
           <>
-            <button onClick={() => { setSearch(''); setFilterOwner(''); setFilterStatus(''); setFilterFrom(''); setFilterUntil('') }}
+            <button onClick={() => { setSearch(''); setAgendaFilters([]); setFilterFrom(''); setFilterUntil('') }}
               style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--overlay-medium)', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}>
               × Wissen
             </button>
@@ -5458,6 +5563,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             })()}
           </>
         )}
+
+        {agendaFilters.map(filter => (
+          <button key={filter.id} type="button" onClick={() => setAgendaFilters(current => current.filter(candidate => candidate.id !== filter.id))}
+            title="Verwijder dit filter"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 999,
+              border: `1px solid ${color}66`, background: color + '16', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12.5 }}>
+            <span style={{ color: 'var(--text-muted)' }}>{filterFieldLabel(filter, columns)}</span>
+            <strong>{filterValueLabel(filter)}</strong>
+            <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1 }}>×</span>
+          </button>
+        ))}
 
       </div>
 
