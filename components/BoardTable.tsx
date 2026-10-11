@@ -4046,7 +4046,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     } catch {}
                   }
                 }}
-                onDragEnd={() => { dragRowRef.current = null }}>
+                onDragEnd={() => {
+                  dragRowRef.current = null
+                  window.dispatchEvent(new CustomEvent('yoko-board-item-drag-end'))
+                }}>
                 {/* Eén vaste drag-handle bij de hoofdregel. `top: 50%` van de
                     volledige wrapper liet de greep bij uitklappen halverwege
                     het subitemblok springen. */}
@@ -4062,6 +4065,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     }))
                     const row = e.currentTarget.parentElement
                     if (row) e.dataTransfer.setDragImage(row, 20, 12)
+                    window.dispatchEvent(new CustomEvent('yoko-board-item-drag-start', {
+                      detail: { itemId: item.id, name: item.name, fromBoard: boardId, isGoogle: item.source === 'google' },
+                    }))
                   }
                   const gripBase: React.CSSProperties = {
                     position: 'absolute', top: 10,
@@ -4072,7 +4078,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     // tegen de lichte bg-hover-achtergrond was het ⠿-icoon in
                     // text-secondary nauwelijks te onderscheiden.
                     color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, lineHeight: 1,
-                    opacity: 0, transition: 'opacity 0.12s, background 0.12s',
+                    opacity: item.source === 'google' ? 0.7 : 0,
+                    transition: 'opacity 0.12s, background 0.12s',
                     zIndex: 5, borderRadius: 4,
                     background: 'var(--bg-hover)',
                     border: '1px solid var(--border-strong)',
@@ -4081,7 +4088,9 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   return (
                     <span draggable
                       className="row-grip"
-                      title="Sleep om te verplaatsen tussen groepen"
+                      title={item.source === 'google'
+                        ? 'Sleep deze Google-meeting naar een andere agenda links'
+                        : 'Sleep om te verplaatsen tussen groepen of agenda’s'}
                       onDragStart={startDrag}
                       style={{ ...gripBase, left: 4 }}>⠿</span>
                   )

@@ -1088,22 +1088,46 @@ export async function moveItemToBoard(
   }))
 
   const tgtGroups = loadGroups(targetBoard, fallbackGroups[targetBoard] ?? [])
-  // Land het item in de bovenste groep van het doel-bord, ongeacht source.
-  // Alleen als het bord leeg is maken we alsnog een groep aan.
+  const isMeetingsGroup = (group: BoardGroup) => {
+    const name = group.name.toLowerCase().trim()
+    return name === 'meetings' || name === 'meetings & doorlopend' || name === 'meetings en doorlopend'
+  }
+  // Google-meetings landen in de Meetings-groep van de doelagenda. Als die
+  // nog niet bestaat maken we hem aan; zo verdwijnt een versleepte afspraak
+  // niet tussen gewone projecten. Handmatige items behouden het bestaande
+  // gedrag en landen in de bovenste groep.
   let updatedTarget: BoardGroup[]
+  let targetGroupId: string
   if (tgtGroups.length > 0) {
-    updatedTarget = tgtGroups.map((g, idx) =>
-      ({ ...g, items: [...g.items.filter(i => i.id !== itemId), ...(idx === 0 ? [movedItem] : [])] })
-    )
+    let targetIndex = movedItem.source === 'google' ? tgtGroups.findIndex(isMeetingsGroup) : 0
+    if (targetIndex < 0 && movedItem.source === 'google') {
+      const meetingsGroup: BoardGroup = {
+        id: `g_${targetBoard}_meetings_${Date.now()}`,
+        name: 'Meetings',
+        color: '#ffcb00',
+        collapsed: false,
+        items: [],
+      }
+      updatedTarget = [...tgtGroups, meetingsGroup]
+      targetIndex = updatedTarget.length - 1
+    } else {
+      updatedTarget = tgtGroups
+    }
+    targetGroupId = updatedTarget[targetIndex].id
+    updatedTarget = updatedTarget.map((g, idx) => ({
+      ...g,
+      items: [...g.items.filter(i => i.id !== itemId), ...(idx === targetIndex ? [movedItem] : [])],
+    }))
   } else {
     const newGroup: BoardGroup = {
       id:        `g_${targetBoard}_${Date.now()}`,
-      name:      'Lopende projecten',
-      color:     '#9aadbd',
+      name:      movedItem.source === 'google' ? 'Meetings' : 'Lopende projecten',
+      color:     movedItem.source === 'google' ? '#ffcb00' : '#9aadbd',
       collapsed: false,
       items:     [movedItem],
     }
     updatedTarget = [newGroup]
+    targetGroupId = newGroup.id
   }
 
   if (supabase) {
@@ -1124,10 +1148,11 @@ export async function moveItemToBoard(
       if (!await upsertBoard(targetConfig, targetPosition)) {
         return { ok: false, message: 'De doel-agenda kon niet gedeeld worden. Het item blijft in de oorspronkelijke agenda.' }
       }
-      const targetGroup = updatedTarget[0]
+      const targetGroup = updatedTarget.find(group => group.id === targetGroupId) ?? updatedTarget[0]
+      const targetGroupPosition = Math.max(0, updatedTarget.findIndex(group => group.id === targetGroup.id))
       const { error: groupError } = await supabase.from('board_groups').upsert({
         id: targetGroup.id, board_id: targetBoard, name: targetGroup.name,
-        color: targetGroup.color, collapsed: targetGroup.collapsed, position: 0,
+        color: targetGroup.color, collapsed: targetGroup.collapsed, position: targetGroupPosition,
       }, { onConflict: 'id' })
       if (groupError) throw groupError
       // Move the existing row, never copy or rewrite its contents.
