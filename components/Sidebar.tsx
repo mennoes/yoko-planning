@@ -296,6 +296,26 @@ function SectionBlock({
       return v
     })
   }
+  const [boardItemDragging, setBoardItemDragging] = useState(false)
+  useEffect(() => {
+    if (section.type !== 'projects') return
+    const onStart = () => {
+      setBoardItemDragging(true)
+      // Een ingeklapte agendalijst toont geen drop-targets. Zodra een
+      // bord-item wordt opgepakt, klappen we daarom Agenda's open.
+      setOpen(true)
+    }
+    const onEnd = () => setBoardItemDragging(false)
+    window.addEventListener('yoko-board-item-drag-start', onStart)
+    window.addEventListener('yoko-board-item-drag-end', onEnd)
+    return () => {
+      window.removeEventListener('yoko-board-item-drag-start', onStart)
+      window.removeEventListener('yoko-board-item-drag-end', onEnd)
+    }
+  // setOpen is bewust lokaal; listeners hoeven alleen bij een ander
+  // sectietype opnieuw geregistreerd te worden.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section.type])
   const [addingItem,    setAddingItem]    = useState(false)
   const [newLabel,      setNewLabel]      = useState('')
   const [editName,      setEditName]      = useState(false)
@@ -577,11 +597,20 @@ function SectionBlock({
                     for (const b of BOARD_NAMES) fallback[b] = loadGroups(b, [])
                     const res = await moveItemToBoard(data.itemId, data.fromBoard, targetBoardId, fallback)
                     if (!res.ok) alert(res.message ?? 'Verplaatsen mislukt')
-                    else showToast(`Verplaatst: ${data.fromBoard} → ${targetBoardId}`)
+                    else showToast(`Verplaatst naar ${item.label}`)
                   } catch {}
+                  finally {
+                    setBoardItemDragging(false)
+                    window.dispatchEvent(new CustomEvent('yoko-board-item-drag-end'))
+                  }
                 }}
                 onDragEnd={onDragEnd}
-                style={{ position: 'relative', display: 'flex', alignItems: 'center', cursor: 'grab', borderRadius: 6, transition: 'background 0.12s' }}
+                style={{
+                  position: 'relative', display: 'flex', alignItems: 'center', cursor: 'grab', borderRadius: 6,
+                  transition: 'background 0.12s, outline-color 0.12s',
+                  outline: boardItemDragging && targetBoardId && !active ? '1px dashed var(--border-strong)' : '1px solid transparent',
+                  outlineOffset: '-2px',
+                }}
                 onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '1')) }}
                 onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '0')) }}
               >
@@ -606,6 +635,12 @@ function SectionBlock({
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                    {boardItemDragging && targetBoardId && !active && (
+                      <span aria-hidden style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800,
+                        color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                        hierheen
+                      </span>
+                    )}
                   </Link>
                 )}
 
