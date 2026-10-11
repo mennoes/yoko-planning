@@ -11,7 +11,7 @@ import { createNotification } from '@/lib/notificationsStore'
 import { handoffCommentBody } from '@/lib/handoff'
 
 export function PersonalCompletionSection({ target, ownerIds, status, renderStatus, showMessages = false, layout = 'field' }: {
-  target: CompletionTarget; ownerIds: string[]; status: string; showMessages?: boolean; layout?: 'field' | 'row'
+  target: CompletionTarget; ownerIds: string[]; status: string; showMessages?: boolean; layout?: 'field' | 'row' | 'cell'
   renderStatus: (value: string, onChange: (value: string) => void, disabled: boolean) => ReactNode
 }) {
   const { profile } = useProfile()
@@ -84,12 +84,15 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
     setHandoffNote('')
     setNextOwnerId('')
   }
+  if (layout === 'cell') return <div title={error || ownerSummary} style={{ width: '100%', minWidth: 0 }} aria-busy={pending}>
+    {renderStatus(personalTaskStatus(mine), change, pending || allDone)}
+  </div>
   return <section aria-label="Persoonlijke voortgang" style={layout === 'row'
     ? { display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: 8, alignItems: 'start', marginBottom: 14 }
     : { display: 'flex', flexDirection: 'column', gap: 6 }}>
     <span style={layout === 'row'
       ? { fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, paddingTop: 3 }
-      : { fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status mijn taak</span>
+      : { fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Jouw status</span>
     <div style={{ minWidth: 0 }}>
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, minHeight: 28 }}>
     <div style={{ minHeight: 28, ...(layout === 'field' ? { width: '100%', height: 28 } : {}) }} aria-busy={pending}>
@@ -135,5 +138,57 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
       {messages.slice(0, 5).map(r => <p key={r.id} style={{ fontSize: 12, whiteSpace: 'pre-wrap', margin: '10px 0 0' }}>{r.body}</p>)}
     </details>}
     </div>
+  </section>
+}
+
+/** De persoonlijke planning gebruikt dezelfde eventketen als de persoonlijke
+ * status. Daardoor kunnen status en datums elkaar nooit met een oude save
+ * overschrijven. */
+export function PersonalTimelineSection({ target, ownerIds, projectStart, projectEnd, renderTimeline, layout = 'field' }: {
+  target: CompletionTarget
+  ownerIds: string[]
+  projectStart: string | null
+  projectEnd: string | null
+  layout?: 'field' | 'row' | 'cell'
+  renderTimeline: (start: string | null, end: string | null, onChange: (start: string | null, end: string | null) => void, disabled: boolean) => ReactNode
+}) {
+  const { profile } = useProfile()
+  const demo = usePathname()?.startsWith('/demo')
+  const [threads, setThreads] = useState<CommentThread[]>([])
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  const context = completionContext(target)
+  useEffect(() => {
+    if (demo) return
+    const refresh = () => setThreads(loadCommentsFor(context))
+    refresh()
+    return onCommentsUpdate(refresh)
+  }, [context, demo])
+  const owners = [...new Set(ownerIds.filter(id => id && id !== 'unassigned'))]
+  const canChange = !!profile?.memberId && owners.includes(profile.memberId)
+  const mine = profile?.memberId ? completionState(threads, target, profile.memberId) : undefined
+  if (demo || owners.length < 2 || !canChange) return null
+  const start = mine?.timelineStart ?? projectStart
+  const end = mine?.timelineEnd ?? projectEnd
+  async function change(nextStart: string | null, nextEnd: string | null) {
+    if (!profile?.memberId || pending) return
+    setPending(true); setError('')
+    try {
+      await updatePersonalCompletion(target, profile.memberId, !!mine?.done, mine?.status, { start: nextStart, end: nextEnd })
+    } catch (err) { setError(err instanceof Error ? err.message : 'Opslaan mislukt.') }
+    finally { setPending(false) }
+  }
+  const field = <div title={error || 'Jouw eigen planning; de projecttijdlijn omvat alle persoonlijke planningen.'}
+    style={{ width: '100%', minWidth: 0 }} aria-busy={pending}>
+    {renderTimeline(start, end, change, pending)}
+  </div>
+  if (layout === 'cell') return field
+  return <section aria-label="Jouw timeline" style={layout === 'row'
+    ? { display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: 8, alignItems: 'start', marginBottom: 14 }
+    : { display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <span style={layout === 'row'
+      ? { fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, paddingTop: 3 }
+      : { fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Jouw timeline</span>
+    <div>{field}{error && <p role="alert" style={{ color: 'var(--red, #e2445c)', fontSize: 12, marginBottom: 0 }}>{error}</p>}</div>
   </section>
 }

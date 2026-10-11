@@ -21,7 +21,7 @@ import { BoardTrashDrawer } from './BoardTrashDrawer'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity }    from '@/lib/itemActivity'
 import {
-  loadCommentsFor, saveComment, newCommentId, onCommentsUpdate,
+  loadCommentsFor, loadAllComments, saveComment, newCommentId, onCommentsUpdate,
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
@@ -35,9 +35,9 @@ import { DistributionPie } from './DistributionPie'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
-import { PersonalCompletionSection } from './PersonalCompletionSection'
+import { PersonalCompletionSection, PersonalTimelineSection } from './PersonalCompletionSection'
 import { useCompletedOwners } from './useCompletedOwners'
-import type { CompletionTarget } from '@/lib/personalCompletion'
+import { personalTimelineEnvelope, type CompletionTarget } from '@/lib/personalCompletion'
 import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
 import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem'
 import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
@@ -45,6 +45,9 @@ import { boardItemToNestedSubitem } from '@/lib/nestBoardItem'
 import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
 
 const OwnerUsageCtx = createContext<Record<string, number>>({})
+const PERSONAL_STATUS_KEY = '__personalStatus'
+const PERSONAL_TIMELINE_KEY = '__personalTimeline'
+const isPersonalColumn = (key: string) => key === PERSONAL_STATUS_KEY || key === PERSONAL_TIMELINE_KEY
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -1659,6 +1662,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   // the row stays visually aligned with the parent grid.
   function renderCol(c: ColumnDef) {
     switch (c.key) {
+      case PERSONAL_STATUS_KEY:
+      case PERSONAL_TIMELINE_KEY:
+        return <div aria-hidden style={{ flex: 1, alignSelf: 'stretch', background: 'var(--bg-base)', borderLeft: '3px double var(--border-strong)', opacity: 0.72 }} />
       case 'owner':
       case 'ownerIds':
         return <div style={cellBorder}><OwnersCell value={subitem.ownerIds}
@@ -1850,30 +1856,22 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             style={{ ...editInput, flex: 1 }} />
         ) : (
           <>
-            {/* Monday-stijl: klik op de naam start direct rename voor
-                handmatige subitems. Google-subitems openen in Google
-                Calendar via dezelfde klik (de instance-link). Detail-
-                drawer blijft bereikbaar via de ↗-knop die op hover
-                rechts verschijnt. */}
-            {(() => {
-              const isGoogleSub = !!subitem.externalLink || subitem.id?.startsWith('si_g_')
-              return (
-                <span
-                  onClick={() => {
-                    if (isGoogleSub) {
-                      if (subitem.externalLink) window.open(subitem.externalLink, '_blank', 'noopener,noreferrer')
-                      return
-                    }
-                    setNameDraft(subitem.name); setEditName(true)
-                  }}
-                  title={isGoogleSub ? 'Open in Google Calendar' : 'Klik om naam aan te passen'}
+            {/* Naam opent details; hernoemen zit in een kleine, expliciete
+                potloodactie. Zo is het grootste klikvlak voor de popup en
+                beland je niet meer per ongeluk in tekstbewerking. */}
+            <span
+                  onClick={() => onOpenDetail?.()}
+                  title="Details openen"
                   style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500,
-                    cursor: isGoogleSub ? 'pointer' : 'text',
+                    cursor: onOpenDetail ? 'pointer' : 'default',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                   {subitem.name}
-                </span>
-              )
-            })()}
+            </span>
+            {hover && !(subitem.source === 'google' || subitem.externalLink || subitem.id?.startsWith('si_g_')) && (
+              <button onClick={e => { e.stopPropagation(); setNameDraft(subitem.name); setEditName(true) }}
+                title="Naam aanpassen" aria-label="Naam aanpassen"
+                style={{ border: 0, borderRadius: 4, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 5px', flexShrink: 0 }}>✎</button>
+            )}
             {onOpenDetail && (
               <button onClick={e => { e.stopPropagation(); onOpenDetail() }}
                 title="Reageren op dit subitem" aria-label="Reacties op subitem"
@@ -1986,6 +1984,28 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
 }) {
   const isMobile = useIsMobile()
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
+  const [sortBy, setSortBy] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+  function toggleSort(key: string) {
+    setSortBy(previous => previous?.key === key
+      ? previous.dir === 'asc' ? { key, dir: 'desc' } : null
+      : { key, dir: 'asc' })
+  }
+  const sortedSubitems = useMemo(() => {
+    if (!sortBy) return subitems
+    const value = (subitem: SubItem): string | number => {
+      if (sortBy.key === 'name') return subitem.name.toLowerCase()
+      if (sortBy.key === 'owner' || sortBy.key === 'ownerIds') return subitem.ownerIds[0] ?? '~'
+      if (sortBy.key === 'status') return STATUS_OPTIONS.findIndex(option => option.label === subitem.status)
+      if (sortBy.key === 'timeline') return subitem.startDate ?? subitem.endDate ?? '9999-99-99'
+      const raw = (subitem as unknown as Record<string, unknown>)[sortBy.key]
+      return typeof raw === 'number' ? raw : String(raw ?? '').toLowerCase()
+    }
+    const direction = sortBy.dir === 'asc' ? 1 : -1
+    return [...subitems].sort((a, b) => {
+      const av = value(a); const bv = value(b)
+      return (typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv), 'nl')) * direction
+    })
+  }, [sortBy, subitems])
   function updateOne(id: string, u: Partial<SubItem>) {
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
     // wijziging op alle geselecteerde subitems binnen dit item toe. Zo kun
@@ -2055,8 +2075,8 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   // parent column label so custom columns get something sensible.
   const headerLabelFor = (key: string, fallback: string) => {
     if (key === 'owner')       return 'Owner'
-    if (key === 'status')      return 'Status'
-    if (key === 'timeline')    return 'Timeline'
+    if (key === 'status')      return 'Status project'
+    if (key === 'timeline')    return 'Timeline project'
     if (key === 'estHours')    return 'Est.'
     if (key === 'echtGewerkt') return 'Echt gewerkt'
     return fallback
@@ -2076,10 +2096,24 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
       }}>
         <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'transparent', borderBottom: '1px solid var(--border)' }}>
           <div />
-          <div style={{ padding: '8px 12px', fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subitem</div>
+          <div style={{ position: 'relative', display: 'flex' }}>
+            <button onClick={() => toggleSort('name')} style={{ flex: 1, border: 0, background: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', fontSize: 11.5, fontWeight: 600, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Subitem {sortBy?.key === 'name' ? (sortBy.dir === 'asc' ? '▲' : '▼') : ''}
+            </button>
+            {onResizeCol && <div title="Subitemnaam breder/smaller slepen" style={{ position: 'absolute', top: 0, right: -3, width: 6, height: '100%', cursor: 'col-resize', zIndex: 3 }}
+              onMouseDown={e => {
+                e.preventDefault(); e.stopPropagation()
+                const startX = e.clientX; const startW = colWidths?.name ?? 200
+                const onMove = (event: MouseEvent) => onResizeCol('name', startW + event.clientX - startX)
+                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
+              }} />}
+          </div>
           {cols.map(c => (
-            <div key={c.key} style={{ ...hdrCell, position: 'relative' }}>
-              {headerLabelFor(c.key, c.label)}
+            <div key={c.key} style={{ ...hdrCell, position: 'relative', ...(isPersonalColumn(c.key) ? { borderLeft: '3px double var(--border-strong)', background: 'var(--bg-base)' } : {}) }}>
+              <button disabled={isPersonalColumn(c.key)} onClick={() => toggleSort(c.key)} style={{ border: 0, padding: 0, background: 'none', cursor: isPersonalColumn(c.key) ? 'default' : 'pointer', color: sortBy?.key === c.key ? 'var(--text-primary)' : 'inherit', font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}>
+                {headerLabelFor(c.key, c.label)} {sortBy?.key === c.key ? (sortBy.dir === 'asc' ? '▲' : '▼') : ''}
+              </button>
               {onResizeCol && (
                 <div
                   title="Kolom breder/smaller slepen"
@@ -2103,7 +2137,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
           ))}
           <div style={{ borderLeft: '1px solid var(--border)' }} />
         </div>
-        <SubitemRows subitems={subitems} cols={cols} gridTemplate={gridTemplate}
+        <SubitemRows subitems={sortedSubitems} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
           selectedIds={selectedIds} onToggleSelect={onToggleSelect}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
@@ -2497,6 +2531,16 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     if (Object.keys(updates).length > 0) effectiveItem = { ...item, ...updates }
   }
 
+  // Bij gedeeld werk is de projecttijdlijn de buitenste grens van alle
+  // persoonlijke tijdlijnen. Zolang niemand een eigen bereik instelt,
+  // blijft de bestaande (eventueel uit subitems afgeleide) tijdlijn staan.
+  const personalTarget: CompletionTarget = { parentItemId: item.id }
+  const effectiveOwners = [...new Set(effectiveItem.ownerIds.filter(id => id && id !== 'unassigned'))]
+  if (effectiveOwners.length > 1) {
+    const envelope = personalTimelineEnvelope(loadAllComments(), personalTarget, effectiveOwners, effectiveItem.startDate, effectiveItem.endDate)
+    effectiveItem = { ...effectiveItem, ...envelope }
+  }
+
   const rowBg = selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'var(--bg-card)')
   const stickyBg = isMobile ? 'var(--bg-card)' : rowBg
 
@@ -2590,34 +2634,19 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               <span
                 onClick={e => {
                   e.stopPropagation()
-                  // Monday-stijl: klik op de naam start rename direct voor
-                  // handmatige items. Voor Google-items openen we de eerst-
-                  // volgende instance rechtstreeks in Google Calendar —
-                  // recurring meetings hebben dan vaak verborgen subitems
-                  // die je anders niet snel kon openen. Detail-drawer
-                  // blijft bereikbaar via de ↗-knop of de comments-pill.
-                  if (item.source === 'google') {
-                    if (googleHref) window.open(googleHref, '_blank', 'noopener,noreferrer')
-                    return
-                  }
-                  setNameDraft(item.name); setEditName(true)
+                  setShowDetail(true)
                 }}
-                onDoubleClick={e => {
-                  if (item.source === 'google') return
-                  e.stopPropagation()
-                  setNameDraft(item.name); setEditName(true)
-                }}
-                title={item.source === 'google'
-                  ? (googleHref ? 'Open eerstvolgende in Google Calendar' : 'Google Calendar item')
-                  : 'Klik om naam te bewerken'}
-                // I-beam cursor voor handmatige items zodat 'rename-baar'
-                // visueel duidelijk is — net als in Monday. Google-items
-                // krijgen een gewone pointer omdat ze read-only zijn qua naam.
+                title="Details openen"
                 style={{ fontSize: 14.5, color: 'var(--text-primary)', fontWeight: 500,
-                  cursor: item.source === 'google' ? 'pointer' : 'text',
+                  cursor: 'pointer',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {item.name}
               </span>
+              {hover && item.source !== 'google' && (
+                <button onClick={e => { e.stopPropagation(); setNameDraft(item.name); setEditName(true) }}
+                  title="Naam aanpassen" aria-label="Naam aanpassen"
+                  style={{ border: 0, borderRadius: 4, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 5px', flexShrink: 0 }}>✎</button>
+              )}
               {hover && (
                 <button
                   onClick={e => { e.stopPropagation(); setShowDetail(true) }}
@@ -2685,9 +2714,26 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
           </button>
         </div>
 
-        {cols.map(col => (
-          <div key={col.key} style={{ padding: '4px 8px', borderLeft: '1px solid var(--border-strong)', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
-            {col.key === 'notes' ? (
+        {cols.map(col => {
+          const personal = isPersonalColumn(col.key)
+          const shared = effectiveOwners.length > 1
+          return <div key={col.key} style={{
+            padding: personal ? 0 : '4px 8px',
+            borderLeft: personal ? '3px double var(--border-strong)' : '1px solid var(--border-strong)',
+            height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden',
+            background: personal && !shared ? 'var(--bg-base)' : undefined,
+            backgroundImage: personal && shared ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined,
+          }}>
+            {col.key === PERSONAL_STATUS_KEY ? (shared ? <PersonalCompletionSection
+              target={personalTarget} ownerIds={effectiveOwners} status={effectiveItem.status}
+              layout="cell"
+              renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : null)
+            : col.key === PERSONAL_TIMELINE_KEY ? (shared ? <PersonalTimelineSection
+              target={personalTarget} ownerIds={effectiveOwners}
+              projectStart={effectiveItem.startDate} projectEnd={effectiveItem.endDate}
+              layout="cell"
+              renderTimeline={(start, end, onChange) => <DateRangeCell startDate={start} endDate={end} onChange={onChange} />} /> : null)
+            : col.key === 'notes' ? (
               // Notes is een vrije-tekst-veld. Inline-editable via klik op
               // de tekst; '↗' opent het detail-drawer met een groot
               // textarea + eventuele opmerkingen ernaast voor lange teksten.
@@ -2698,7 +2744,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               <Cell item={effectiveItem} col={col} onUpdate={onUpdate} />
             )}
           </div>
-        ))}
+        })}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border-strong)', height: '100%', gap: 2 }}>
           {reorderMode ? (
@@ -3119,19 +3165,25 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 22px' }}>
           {/* Properties grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px 18px', marginBottom: 24 }}>
-            {cols.map(col => (
+            {cols.filter(col => !isPersonalColumn(col.key)).map(col => (
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {col.type === 'status' ? 'Status project' : col.label}
+                  {col.key === 'status' ? 'Status project' : col.key === 'timeline' ? 'Timeline project' : col.label}
                 </span>
                 <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
                   <Cell item={item} col={col} onUpdate={onUpdate} />
                 </div>
-                {col.type === 'status' && <PersonalCompletionSection
+                {col.key === 'status' && <PersonalCompletionSection
                   key={item.id}
                   target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
                   ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status}
-                  renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Status mijn taak" />} />}
+                  renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} />}
+                {col.key === 'timeline' && <PersonalTimelineSection
+                  key={`timeline-${item.id}`}
+                  target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
+                  ownerIds={item.ownerIds}
+                  projectStart={item.startDate} projectEnd={item.endDate}
+                  renderTimeline={(start, end, onChange) => <DateRangeCell startDate={start} endDate={end} onChange={onChange} />} />}
               </div>
             ))}
           </div>
@@ -3917,8 +3969,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }} />
               </div>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: '1px solid var(--border-strong)', userSelect: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-                  onClick={() => onToggleSort(col.key)}>
+                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isPersonalColumn(col.key) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 5, backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined }}
+                  onClick={() => { if (!isPersonalColumn(col.key)) onToggleSort(col.key) }}>
                   {col.label}
                   {sortBy?.key === col.key && (
                     <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
@@ -5193,20 +5245,31 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
   const selectionW = isMobile ? 40 : 48
   const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 196) : (colWidths['name'] ?? 200)
+  const tableColumns: ColumnDef[] = columns.flatMap(column => {
+    const projectColumn = column.key === 'status'
+      ? { ...column, label: 'Status project' }
+      : column.key === 'timeline'
+        ? { ...column, label: 'Timeline project' }
+        : column
+    if (column.key === 'status') return [projectColumn, { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 }]
+    if (column.key === 'timeline') return [projectColumn, { key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange', width: 180 }]
+    return [projectColumn]
+  })
+  const subNameW = isMobile ? Math.min(subColWidths.name ?? nameW, 196) : (subColWidths.name ?? nameW)
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.
-  const gridTemplate = `${selectionW}px ${nameW}px ${columns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const gridTemplate = `${selectionW}px ${nameW}px ${tableColumns.map(c => `${colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
   // Subitem-tabel mag eigen breedtes hebben. Fallback per kolom op de
   // parent-breedte zodat ongetoete kolommen 'meeschalen' totdat de
   // gebruiker ze expliciet apart resized.
-  const subGridTemplate = `${selectionW}px ${nameW}px ${columns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
+  const subGridTemplate = `${selectionW}px ${subNameW}px ${tableColumns.map(c => `${subColWidths[c.key] ?? colWidths[c.key] ?? c.width}px`).join(' ')} 36px`
   // De grid-tracks zijn vaste pixels. Zonder minimaal deze breedte blijft
   // de groep op viewportbreedte staan en knipt overflow:hidden de laatste
   // kolommen af. Op desktop scrolt <main> horizontaal; mobiel behoudt de
   // eigen tabel-scroller.
   const tableMinWidth = Math.max(
-    selectionW + nameW + columns.reduce((sum, c) => sum + (colWidths[c.key] ?? c.width), 0) + 36,
-    selectionW + nameW + columns.reduce((sum, c) => sum + (subColWidths[c.key] ?? colWidths[c.key] ?? c.width), 0) + 36,
+    selectionW + nameW + tableColumns.reduce((sum, c) => sum + (colWidths[c.key] ?? c.width), 0) + 36,
+    selectionW + subNameW + tableColumns.reduce((sum, c) => sum + (subColWidths[c.key] ?? colWidths[c.key] ?? c.width), 0) + 36,
   ) + 6
 
   const resultCount = filteredGroups.reduce((s, g) => s + g.items.length, 0)
@@ -5723,12 +5786,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                 pointerEvents: 'none',
               }} />
             )}
-            <BoardGroupSection boardId={boardId} group={group} cols={columns}
+            <BoardGroupSection boardId={boardId} group={group} cols={tableColumns}
               openRequest={openRequest} onCloseRequest={() => setOpenRequest(null)}
               colWidths={colWidths} gridTemplate={gridTemplate}
               subGridTemplate={subGridTemplate}
               subColWidths={subColWidths}
-              onResizeSubCol={(key, width) => setSubColWidths(prev => ({ ...prev, [key]: Math.max(40, width) }))}
+              onResizeSubCol={(key, width) => setSubColWidths(prev => ({ ...prev, [key]: Math.max(key === 'name' ? 120 : 40, width) }))}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
               onSelectGroup={selectGroup}
@@ -5773,7 +5836,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                 <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: 'var(--text-secondary)' }}>Totaal</span>
                 <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>· {totalItems} items</span>
               </div>
-              {columns.map(col => (
+              {tableColumns.map(col => (
                 <div key={col.key} style={{
                   padding: '12px 8px', borderLeft: '1px solid var(--border)',
                   display: 'flex', alignItems: 'center',

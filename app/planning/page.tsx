@@ -63,7 +63,7 @@ import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useTeamGroups } from '@/components/useTeamGroups'
 import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
-import { completionTargetForProject, completeLinkedTask, loadPersonalCompletion } from '@/lib/personalCompletionClient'
+import { completionTargetForProject, completeLinkedTask, loadPersonalCompletion, updatePersonalCompletion } from '@/lib/personalCompletionClient'
 import { onCommentsUpdate } from '@/lib/commentsStore'
 import { useCompletedOwners } from '@/components/useCompletedOwners'
 import { completionContext, type CompletionTarget } from '@/lib/personalCompletion'
@@ -292,8 +292,22 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
 
 function memberHoursInCol(projects: Project[], memberId: string, col: Col, overrides = loadCategoryOverrides()) {
   return projects
+    .map(p => projectForMember(p, memberId))
     .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd, overrides[p.id]) }))
     .filter(c => c.hours > 0)
+}
+
+function projectForMember(project: Project, memberId: string): Project {
+  const owners = project.ownerIds.filter(id => id && id !== 'unassigned')
+  if (owners.length < 2 || !owners.includes(memberId)) return project
+  const target = completionTargetForProject({ board: project.board, itemId: project.id.slice(project.board.length + 2) })
+  const personal = target ? loadPersonalCompletion(target, memberId) : undefined
+  return {
+    ...project,
+    startDate: personal?.timelineStart ?? project.startDate,
+    endDate: personal?.timelineEnd ?? project.endDate,
+    __personalMemberId: memberId,
+  }
 }
 
 // groupsToProjects is gedeeld met de home-werkdruk via lib/workload.ts —
@@ -1277,7 +1291,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
       if (!p.ownerIds.some(id => isMemberVisible(id))) return false
     }
     return true
-  })
+  }).map(p => memberId ? projectForMember(p, memberId) : p)
   const allDay: Project[] = []
   const timed:  Project[] = []
   // Vrij-events (vakantie, feestdag, Pinksterdag, etc.) tonen we als full-
@@ -2185,7 +2199,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   // Each occurrence renders as its own bar — recurring meetings stay as
   // small individual dots/bars rather than one stretched merge.
-  const owned = projects.filter(p => p.ownerIds.includes(memberId) && (p.startDate || p.endDate))
+  const owned = projects.filter(p => p.ownerIds.includes(memberId)).map(p => projectForMember(p, memberId)).filter(p => p.startDate || p.endDate)
 
   // Google-meetings worden in Overzicht niet langer als balken gestapeld.
   // Eén subtiele teller per dag houdt de agenda-informatie beschikbaar,
@@ -4528,6 +4542,8 @@ export default function PlanningPage() {
     return !!liveTeam.find(m => m.id === id)?.inactive
   }
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
+  const [personalTimelineRevision, setPersonalTimelineRevision] = useState(0)
+  useEffect(() => onCommentsUpdate(() => setPersonalTimelineRevision(value => value + 1)), [])
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
   const [vacations,    setVacations]    = useState<Record<string, { from: string | null; until: string | null }>>({})
   // Persisted in localStorage zodat een refresh op dezelfde positie in
@@ -5354,7 +5370,7 @@ export default function PlanningPage() {
       }
     }
     return result
-  }, [effectiveProjects, team, cols, categoryRevision])
+  }, [effectiveProjects, team, cols, categoryRevision, personalTimelineRevision])
   const contributionsFor = (memberId: string, col: Col) =>
     contributionsByCell.get(`${memberId}\u0000${col.key}`) ?? []
 
@@ -5449,9 +5465,26 @@ export default function PlanningPage() {
     return workdays * 8
   }
 
-  function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
+  async function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
     cancelPendingDragMove()
     setShadowDrag(null)
+    if (project.__personalMemberId) {
+      if (profile?.memberId !== project.__personalMemberId) {
+        showToast('Alleen dit teamlid kan de eigen tijdlijn aanpassen.', 5000)
+        return
+      }
+      const target = completionTargetForProject({ board: project.board, itemId: project.id.slice(project.board.length + 2) })
+      if (!target) { showToast('Persoonlijke tijdlijn kon niet worden gevonden.', 5000); return }
+      const current = loadPersonalCompletion(target, project.__personalMemberId)
+      try {
+        await updatePersonalCompletion(target, project.__personalMemberId, !!current?.done, current?.status,
+          { start: newStart, end: newEnd })
+        logActivity('Jouw timeline bijgewerkt', project.name, `${project.startDate ?? '—'} → ${newStart ?? '—'} / ${project.endDate ?? '—'} → ${newEnd ?? '—'}`)
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Opslaan mislukt. Probeer opnieuw.', 8000)
+      }
+      return
+    }
     const boardName  = project.board
     let rawId        = project.id.slice(boardName.length + 2)
     // Vrij-items worden per-dag gesynthetiseerd met __vrij_YYYY-MM-DD-
@@ -5499,6 +5532,10 @@ export default function PlanningPage() {
   // hun eigen pad — voor v1 alleen top-level items draggen).
   function handleTimedDragEnd(project: Project, newStart: string, newEnd: string, newStartTime: string, newEndTime: string) {
     setShadowDrag(null)
+    if (project.__personalMemberId) {
+      void handleDragEnd(project, newStart, newEnd)
+      return
+    }
     if (project.source === 'google') return  // Google items zijn read-only
     const boardName  = project.board
     const rawId      = project.id.slice(boardName.length + 2)

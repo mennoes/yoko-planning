@@ -14,7 +14,8 @@ function notificationId(event: string, recipient: string): string {
 type Row = { id: string; context_id: string; quote: string; thread: CommentThread['thread']; created_at: string; resolved: boolean }
 const fromRow = (r: Row): CommentThread => ({ id: r.id, contextId: r.context_id, quote: r.quote, thread: r.thread, createdAt: r.created_at, resolved: r.resolved })
 
-export async function setPersonalCompletion(admin: SupabaseClient, userId: string, target: CompletionTarget, done: boolean, expectedEventId: string | null, status?: PersonalTaskStatus) {
+export async function setPersonalCompletion(admin: SupabaseClient, userId: string, target: CompletionTarget, done: boolean, expectedEventId: string | null,
+  status?: PersonalTaskStatus, timelineStart?: string | null, timelineEnd?: string | null) {
   if (status !== undefined && (!isPersonalTaskStatus(status) || (status === 'Done') !== done)) throw new CompletionError('Ongeldige taakstatus.', 400)
   const nextStatus = status ?? (done ? 'Done' : 'Not started')
   const { data: profile, error: profileError } = await admin.from('profiles').select('member_id,name').eq('user_id', userId).single()
@@ -49,10 +50,14 @@ export async function setPersonalCompletion(admin: SupabaseClient, userId: strin
     if ((page.data?.length ?? 0) < 500) break
   }
   const previous = completionState(rows.map(fromRow), target, memberId)
-  let saved = previous && personalTaskStatus(previous) === nextStatus ? rows.find(r => r.id === previous.eventId) : undefined
+  const nextTimelineStart = timelineStart !== undefined ? timelineStart : previous?.timelineStart
+  const nextTimelineEnd = timelineEnd !== undefined ? timelineEnd : previous?.timelineEnd
+  let saved = previous && personalTaskStatus(previous) === nextStatus
+    && previous.timelineStart === nextTimelineStart && previous.timelineEnd === nextTimelineEnd
+    ? rows.find(r => r.id === previous.eventId) : undefined
   if (!saved) {
     if ((previous?.eventId ?? null) !== expectedEventId) throw new CompletionError('Je voortgang is intussen gewijzigd. Ververs het item en probeer opnieuw.', 409)
-    const id = 'pc-' + hash([target.parentItemId, target.subitemId ?? null, memberId, previous?.eventId ?? null, done, nextStatus])
+    const id = 'pc-' + hash([target.parentItemId, target.subitemId ?? null, memberId, previous?.eventId ?? null, done, nextStatus, nextTimelineStart, nextTimelineEnd])
     const recipientIds = [...new Set([...owners, ...(sub ? parentOwners : [])])].filter(id => id !== memberId)
     const names = recipientIds.length
       ? await admin.from('team_members').select('id,name').in('id', recipientIds)
@@ -61,7 +66,9 @@ export async function setPersonalCompletion(admin: SupabaseClient, userId: strin
     const recipients = recipientIds.map(id => ({ id, name: names.data?.find(p => p.id === id)?.name ?? id }))
     const time = new Date(Math.max(Date.now(), Date.parse(previous?.createdAt ?? '') + 1 || 0)).toISOString()
     const taskName = sub ? `${sub.name} (bij ${item.name})` : item.name
-    const reply = completionReply(id, { memberId, name: profile.name || memberId }, target, done, taskName, recipients, time, nextStatus, !!previous?.done)
+    const timelineChanged = previous?.timelineStart !== nextTimelineStart || previous?.timelineEnd !== nextTimelineEnd
+    const reply = completionReply(id, { memberId, name: profile.name || memberId }, target, done, taskName, recipients, time,
+      nextStatus, !!previous?.done, nextTimelineStart, nextTimelineEnd, timelineChanged)
     const row = { id, context_kind: 'board_item', context_id: context, quote: taskName, thread: [reply], resolved: false, author_id: userId, created_at: time }
     const insert = await admin.from('comments').upsert(row, { onConflict: 'id', ignoreDuplicates: true })
     if (insert.error) throw new CompletionError('Je persoonlijke voortgang kon niet worden opgeslagen.')

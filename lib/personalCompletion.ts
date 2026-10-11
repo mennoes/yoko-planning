@@ -20,6 +20,8 @@ export type PersonalCompletion = {
   subitemId?: string
   done: boolean
   status?: PersonalTaskStatus
+  timelineStart?: string | null
+  timelineEnd?: string | null
   mentions: string[]
 }
 export type CompletionTarget = { parentItemId: string; subitemId?: string }
@@ -47,12 +49,40 @@ export function completionState(threads: CommentThread[], target: CompletionTarg
 
 export function completionReply(eventId: string, actor: { memberId: string; name: string }, target: CompletionTarget,
   done: boolean, taskName: string, recipients: Array<{ id: string; name: string }>, createdAt: string,
-  status?: PersonalTaskStatus, reopened = !done): CommentReply {
+  status?: PersonalTaskStatus, reopened = !done, timelineStart?: string | null, timelineEnd?: string | null,
+  timelineChanged = false): CommentReply {
   const others = [...new Map(recipients.filter(p => p.id !== actor.memberId && p.id !== 'unassigned').map(p => [p.id, p])).values()]
   return {
     id: eventId, author: actor.name, authorId: actor.memberId, createdAt,
-    body: `${actor.name} heeft ${done ? 'de eigen taak afgerond' : reopened ? 'de eigen taak heropend' : `de eigen taakstatus gewijzigd naar “${status || 'geen status'}”`}: “${taskName}”. De status voor de anderen blijft ongewijzigd.` +
+    body: `${actor.name} heeft ${timelineChanged ? 'de eigen tijdlijn aangepast' : done ? 'de eigen taak afgerond' : reopened ? 'de eigen taak heropend' : `de eigen taakstatus gewijzigd naar “${status || 'geen status'}”`}: “${taskName}”. ${timelineChanged ? 'De projecttijdlijn wordt automatisch uit alle persoonlijke tijdlijnen opgebouwd.' : 'De status voor de anderen blijft ongewijzigd.'}` +
       (others.length ? '\n' + others.map(p => '@' + p.name).join(' ') : ''),
-    personalCompletion: { version: 1, ...target, memberId: actor.memberId, done, ...(status !== undefined ? { status } : {}), mentions: others.map(p => p.id) },
+    personalCompletion: {
+      version: 1, ...target, memberId: actor.memberId, done,
+      ...(status !== undefined ? { status } : {}),
+      ...(timelineStart !== undefined ? { timelineStart } : {}),
+      ...(timelineEnd !== undefined ? { timelineEnd } : {}),
+      mentions: others.map(p => p.id),
+    },
+  }
+}
+
+/** Buitenste grens van alle persoonlijke planningen. Zonder persoonlijke
+ * datums blijft de bestaande projecttijdlijn leidend. */
+export function personalTimelineEnvelope(
+  threads: CommentThread[], target: CompletionTarget, ownerIds: string[],
+  fallbackStart: string | null | undefined, fallbackEnd: string | null | undefined,
+): { startDate: string | null; endDate: string | null } {
+  const states = [...new Set(ownerIds.filter(Boolean))].map(id => completionState(threads, target, id))
+  if (!states.some(state => state?.timelineStart || state?.timelineEnd)) {
+    return { startDate: fallbackStart ?? null, endDate: fallbackEnd ?? null }
+  }
+  // Een eigenaar zonder eigen invoer gebruikt nog de projecttijdlijn. Die
+  // fallback telt dus ook mee in de envelope; anders zou één persoon het
+  // gezamenlijke project per ongeluk voor alle anderen kunnen inkorten.
+  const starts = states.map(state => state?.timelineStart || state?.timelineEnd || fallbackStart || fallbackEnd).filter((value): value is string => !!value)
+  const ends = states.map(state => state?.timelineEnd || state?.timelineStart || fallbackEnd || fallbackStart).filter((value): value is string => !!value)
+  return {
+    startDate: starts.length ? starts.sort()[0] : fallbackStart ?? null,
+    endDate: ends.length ? ends.sort().at(-1)! : fallbackEnd ?? null,
   }
 }

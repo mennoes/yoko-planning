@@ -3,6 +3,7 @@ import { CompletionError, setPersonalCompletion } from '@/lib/personalCompletion
 import { isPersonalTaskStatus } from '@/lib/personalCompletion'
 
 export const runtime = 'nodejs'
+const isIsoDateOrNull = (value: unknown) => value === null || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value))
 export async function POST(req: Request) {
   if (!supabaseAdmin) return Response.json({ error: 'Niet geconfigureerd.' }, { status: 503 })
   const auth = req.headers.get('authorization')
@@ -14,12 +15,15 @@ export async function POST(req: Request) {
   if (!body || typeof body.parentItemId !== 'string' || !body.parentItemId || body.parentItemId.length > 500 ||
     (body.subitemId !== undefined && (typeof body.subitemId !== 'string' || !body.subitemId || body.subitemId.length > 500)) ||
     typeof body.done !== 'boolean' || !(body.expectedEventId === null || typeof body.expectedEventId === 'string') ||
-    (body.status !== undefined && (!isPersonalTaskStatus(body.status) || (body.status === 'Done') !== body.done))) {
+    (body.status !== undefined && (!isPersonalTaskStatus(body.status) || (body.status === 'Done') !== body.done)) ||
+    (body.timelineStart !== undefined && !isIsoDateOrNull(body.timelineStart)) ||
+    (body.timelineEnd !== undefined && !isIsoDateOrNull(body.timelineEnd))) {
     return Response.json({ error: 'Ongeldige invoer.' }, { status: 400 })
   }
   try {
     return Response.json(await setPersonalCompletion(supabaseAdmin, data.user.id,
-      { parentItemId: body.parentItemId, ...(body.subitemId ? { subitemId: body.subitemId } : {}) }, body.done, body.expectedEventId, body.status))
+      { parentItemId: body.parentItemId, ...(body.subitemId ? { subitemId: body.subitemId } : {}) }, body.done, body.expectedEventId,
+      body.status, body.timelineStart, body.timelineEnd))
   } catch (err) {
     console.error('[personal-completion]', err)
     return Response.json({ error: err instanceof CompletionError ? err.message : 'Opslaan mislukt. Probeer opnieuw.' },
