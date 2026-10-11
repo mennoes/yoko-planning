@@ -20,8 +20,11 @@ test('personal timelines use stable project targets instead of scanning every ag
 })
 
 test('completion reads are memoized until the shared comment store changes', () => {
-  assert.match(client, /const resolvedCompletions = new Map/)
-  assert.match(client, /onCommentsUpdate\(\(\) => resolvedCompletions\.clear\(\)\)/)
+  assert.match(client, /let completionIndex: Map<string, CompletionState> \| null = null/)
+  assert.match(client, /function loadCompletionIndex\(\)/)
+  assert.match(client, /for \(const thread of loadAllComments\(\)\)/)
+  assert.match(client, /onCommentsUpdate\(\(\) => \{ completionIndex = null \}\)/)
+  assert.doesNotMatch(client, /completionState\(loadAllComments\(\)/)
 })
 
 test('agenda orders project fields before the equally shaped personal fields', () => {
