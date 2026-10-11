@@ -292,7 +292,6 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
 
 function memberHoursInCol(projects: Project[], memberId: string, col: Col, overrides = loadCategoryOverrides()) {
   return projects
-    .map(p => projectForMember(p, memberId))
     .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd, overrides[p.id]) }))
     .filter(c => c.hours > 0)
 }
@@ -300,8 +299,12 @@ function memberHoursInCol(projects: Project[], memberId: string, col: Col, overr
 function projectForMember(project: Project, memberId: string): Project {
   const owners = project.ownerIds.filter(id => id && id !== 'unassigned')
   if (owners.length < 2 || !owners.includes(memberId)) return project
-  const target = completionTargetForProject({ board: project.board, itemId: project.id.slice(project.board.length + 2) })
-  const personal = target ? loadPersonalCompletion(target, memberId) : undefined
+  if (!project.completionParentItemId) return project
+  const target: CompletionTarget = {
+    parentItemId: project.completionParentItemId,
+    ...(project.completionSubitemId ? { subitemId: project.completionSubitemId } : {}),
+  }
+  const personal = loadPersonalCompletion(target, memberId)
   return {
     ...project,
     startDate: personal?.timelineStart ?? project.startDate,
@@ -5365,8 +5368,9 @@ export default function PlanningPage() {
     const overrides = loadCategoryOverrides()
     const result = new Map<string, ReturnType<typeof memberHoursInCol>>()
     for (const member of team) {
+      const memberProjects = effectiveProjects.map(project => projectForMember(project, member.id))
       for (const col of cols) {
-        result.set(`${member.id}\u0000${col.key}`, memberHoursInCol(effectiveProjects, member.id, col, overrides))
+        result.set(`${member.id}\u0000${col.key}`, memberHoursInCol(memberProjects, member.id, col, overrides))
       }
     }
     return result

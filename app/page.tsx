@@ -583,7 +583,12 @@ export default function HomePage() {
         source: c.project.source, externalLink: c.project.externalLink,
         meetLink: c.project.meetLink,
         done: c.project.status === 'done' || (() => {
-          const target = completionTargetForProject({ board: c.project.board, itemId: rawItemId })
+          const target = c.project.completionParentItemId
+            ? {
+                parentItemId: c.project.completionParentItemId,
+                ...(c.project.completionSubitemId ? { subitemId: c.project.completionSubitemId } : {}),
+              }
+            : completionTargetForProject({ board: c.project.board, itemId: rawItemId })
           return (target ? loadPersonalCompletion(target, memberId)?.done : undefined) ?? werkdrukDone.has(`${c.project.board}:${rawItemId}`)
         })(),
         parentName: c.project.parentName,
