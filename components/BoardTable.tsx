@@ -735,14 +735,16 @@ function ShareButton({ boardId, groups }: { boardId: string; groups: BoardGroup[
 
 // ─── Owners cel ───────────────────────────────────────────────────────────────
 function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
-  return <UserAvatar memberId={id} size={size} />
+  return <UserAvatar memberId={id} size={size} borderless={false} style={{
+    opacity: 1,
+    filter: 'none',
+    boxShadow: '0 0 0 2px var(--bg-card)',
+  }} />
 }
 
-function OwnersCell({ value, onChange, relevantIds, historicalIds }: {
+function OwnersCell({ value, onChange }: {
   value: string[]
   onChange: (v: string[]) => void
-  relevantIds?: string[]
-  historicalIds?: string[]
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -797,24 +799,21 @@ function OwnersCell({ value, onChange, relevantIds, historicalIds }: {
     ? sortedTeam.filter(m => !quickMembers.some(top => top.id === m.id) && (m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)))
     : []
   const activeIds = new Set(team.map(member => member.id))
-  const activeVisible = (relevantIds ?? value).filter(id => activeIds.has(id))
-  const historicalVisible = (historicalIds ?? []).filter(id => activeIds.has(id) && !activeVisible.includes(id))
+  // Een expliciet toegewezen owner is altijd een volwaardige contributor.
+  // De eerdere 5-wekenheuristiek maakte owners buiten een subitem-window
+  // bijna onzichtbaar (20% opacity), zelfs bij een project dat nog moest
+  // beginnen. Dat suggereerde ten onrechte dat zij niet meededen. Alleen
+  // verborgen/inactieve accounts filteren we nog uit; planning/timeline
+  // verandert nooit meer de visuele status van een toegewezen owner.
+  const visibleOwners = value.filter(id => activeIds.has(id))
 
   return (
     <div>
       <div ref={trigRef} onClick={() => { setOpen(o => !o); setQuery('') }}
         style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: 'nowrap', minWidth: 24 }}>
-        {activeVisible.length === 0 && historicalVisible.length === 0
+        {visibleOwners.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
-          : <>
-              {activeVisible.map(id => <MemberAvatar key={id} id={id} size={34} />)}
-              {historicalVisible.slice(0, 3).map(id => (
-                <span key={id} title="Eerder betrokken; niet relevant binnen de komende 5 weken"
-                  style={{ opacity: 0.2, transform: 'scale(0.62)', transformOrigin: 'center', margin: '0 -5px' }}>
-                  <MemberAvatar id={id} size={30} />
-                </span>
-              ))}
-            </>
+          : visibleOwners.map(id => <MemberAvatar key={id} id={id} size={34} />)
         }
       </div>
 
@@ -1386,10 +1385,7 @@ function overlapDays(
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
-  if (col.type === 'owners')    return <OwnersCell value={item.ownerIds}
-    relevantIds={item.__relevantOwnerIds as string[] | undefined}
-    historicalIds={item.__historicalOwnerIds as string[] | undefined}
-    onChange={v => {
+  if (col.type === 'owners')    return <OwnersCell value={item.ownerIds} onChange={v => {
     // ownerIds én ownerHours samen consistent houden: verwijderde owner
     // mag geen stale uren-entry achterlaten (anders telt ie zomaar weer
     // mee zodra je 'm later opnieuw toevoegt of bij periode-pro-rate).
