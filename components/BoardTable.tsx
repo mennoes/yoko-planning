@@ -742,16 +742,45 @@ function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
   }} />
 }
 
-function OwnersCell({ value, onChange }: {
+function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<string, number>): Record<string, number> {
+  const ids = ownerIds.filter(id => id && id !== 'unassigned')
+  if (ids.length === 0) return {}
+  const safeTotal = Math.max(0, Number(total) || 0)
+  const raw = Object.fromEntries(ids.map(id => [id, Math.max(0, Number(stored?.[id]) || 0)]))
+  const rawSum = Object.values(raw).reduce((sum, hours) => sum + hours, 0)
+  if (safeTotal <= 0) return raw
+  if (rawSum <= 0) {
+    const equal = safeTotal / ids.length
+    return Object.fromEntries(ids.map(id => [id, Math.round(equal * 10) / 10]))
+  }
+  const factor = safeTotal / rawSum
+  const scaled = Object.fromEntries(ids.map(id => [id, Math.round(raw[id] * factor * 10) / 10]))
+  const scaledSum = Object.values(scaled).reduce((sum, hours) => sum + hours, 0)
+  const remainder = Math.round((safeTotal - scaledSum) * 10) / 10
+  if (Math.abs(remainder) >= 0.1) scaled[ids[0]] = Math.max(0, Math.round((scaled[ids[0]] + remainder) * 10) / 10)
+  return scaled
+}
+
+function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange }: {
   value: string[]
   onChange: (v: string[]) => void
+  ownerHours?: Record<string, number>
+  totalHours?: number
+  onDistributionChange?: (v: Record<string, number>) => void
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const trigRef = useRef<HTMLDivElement>(null)
   const { profile } = useProfile()
   const { members: liveTeam } = useTeam()
+  const { getPhoto } = useTeamPhotos()
   const usage = useContext(OwnerUsageCtx)
+  const ownersKey = value.join(',')
+  const hoursKey = JSON.stringify(ownerHours ?? {})
+  const [liveHours, setLiveHours] = useState<Record<string, number>>(() => resolveOwnerHours(value, totalHours, ownerHours))
+  useEffect(() => {
+    setLiveHours(resolveOwnerHours(value, totalHours, ownerHours))
+  }, [ownersKey, totalHours, hoursKey])
   // Bron-lijst: live team_members uit Supabase aangevuld met data/team.json
   // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
   // via /team-admin toegevoegde leden direct als owner-optie zonder dat
@@ -806,6 +835,45 @@ function OwnersCell({ value, onChange }: {
   // verborgen/inactieve accounts filteren we nog uit; planning/timeline
   // verandert nooit meer de visuele status van een toegewezen owner.
   const visibleOwners = value.filter(id => activeIds.has(id))
+  const hasDistribution = visibleOwners.length > 1 && totalHours > 0
+  const memberFor = (id: string) => liveTeam.find(member => member.id === id) ?? teamData.members.find(member => member.id === id)
+  const segments = visibleOwners.map(id => {
+    const member = memberFor(id)
+    return {
+      id,
+      value: liveHours[id] ?? 0,
+      color: member?.color ?? '#9aa3ad',
+      label: member?.name ?? id,
+      avatarUrl: getPhoto(id),
+      initials: member?.name?.split(' ').map(part => part[0]).slice(0, 2).join('').toUpperCase() ?? '?',
+    }
+  })
+  const commitDistribution = (next: Record<string, number>) => {
+    const cleaned = Object.fromEntries(visibleOwners.map(id => [id, Math.max(0, Number(next[id]) || 0)]))
+    setLiveHours(cleaned)
+    onDistributionChange?.(cleaned)
+  }
+
+  function allocatedAvatar(id: string, index: number) {
+    if (!hasDistribution) return <MemberAvatar key={id} id={id} size={34} />
+    const member = memberFor(id)
+    const hours = liveHours[id] ?? 0
+    const pct = totalHours > 0 ? Math.max(0, Math.min(100, hours / totalHours * 100)) : 0
+    const color = member?.color ?? '#9aa3ad'
+    return (
+      <span key={id} title={`${member?.name ?? id} · ${Math.round(hours * 10) / 10}u · ${Math.round(pct)}%`}
+        style={{
+          width: 38, height: 38, padding: 3, boxSizing: 'border-box', borderRadius: '50%', flexShrink: 0,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          background: `conic-gradient(${color} ${pct * 3.6}deg, var(--border) 0deg)`,
+          boxShadow: '0 0 0 2px var(--bg-card)',
+          marginLeft: index > 0 ? -6 : 0,
+          position: 'relative', zIndex: visibleOwners.length - index,
+        }}>
+        <UserAvatar memberId={id} size={32} borderless style={{ boxShadow: '0 0 0 2px var(--bg-card)' }} />
+      </span>
+    )
+  }
 
   return (
     <div>
@@ -813,7 +881,7 @@ function OwnersCell({ value, onChange }: {
         style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: 'nowrap', minWidth: 24 }}>
         {visibleOwners.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
-          : visibleOwners.map(id => <MemberAvatar key={id} id={id} size={34} />)
+          : visibleOwners.map(allocatedAvatar)
         }
       </div>
 
@@ -821,9 +889,38 @@ function OwnersCell({ value, onChange }: {
         <PortalDropdown anchor={trigRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: 6, minWidth: 240,
+            borderRadius: 10, padding: 6, minWidth: hasDistribution ? 330 : 240,
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
           }}>
+            {hasDistribution && (
+              <div style={{ padding: '10px 10px 12px', marginBottom: 6, borderRadius: 8, background: 'var(--bg-base)', border: '1px solid var(--border-light)' }}>
+                <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+                  Verdeling
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <DistributionPie segments={segments} total={totalHours} size={94} interactive showAvatars
+                    innerLabel={`${Math.round(totalHours * 10) / 10}u`}
+                    onChange={setLiveHours} onCommit={commitDistribution} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
+                    {segments.map(segment => {
+                      const pct = totalHours > 0 ? Math.round(segment.value / totalHours * 100) : 0
+                      return (
+                        <div key={segment.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: segment.color, flexShrink: 0 }} />
+                          <span style={{ flex: 1, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{segment.label}</span>
+                          <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                            {Math.round(segment.value * 10) / 10}u · {pct}%
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div style={{ marginTop: 7, fontSize: 10.5, color: 'var(--text-muted)' }}>
+                  Sleep de witte bolletjes om uren te verdelen.
+                </div>
+              </div>
+            )}
             {quickMembers.map(m => {
               const active = value.includes(m.id)
               const isMe   = profile?.memberId === m.id
@@ -1385,7 +1482,14 @@ function overlapDays(
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
-  if (col.type === 'owners')    return <OwnersCell value={item.ownerIds} onChange={v => {
+  if (col.type === 'owners')    return <OwnersCell value={item.ownerIds}
+    ownerHours={item.ownerHours}
+    totalHours={effectiveHours(item)}
+    onDistributionChange={hours => onUpdate({
+      ownerHours: hours,
+      ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
+    })}
+    onChange={v => {
     // ownerIds én ownerHours samen consistent houden: verwijderde owner
     // mag geen stale uren-entry achterlaten (anders telt ie zomaar weer
     // mee zodra je 'm later opnieuw toevoegt of bij periode-pro-rate).
@@ -1557,7 +1661,11 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
     switch (c.key) {
       case 'owner':
       case 'ownerIds':
-        return <div style={cellBorder}><OwnersCell value={subitem.ownerIds} onChange={v => onUpdate({ ownerIds: v })} /></div>
+        return <div style={cellBorder}><OwnersCell value={subitem.ownerIds}
+          ownerHours={subitem.ownerHours}
+          totalHours={Number(subitem.estHours) || 0}
+          onDistributionChange={hours => onUpdate({ ownerHours: hours })}
+          onChange={v => onUpdate({ ownerIds: v })} /></div>
       case 'status':
         // Status: cell-border zonder padding/center zodat de status-tag
         // de volledige rij-hoogte van het subitem vult (visueel hetzelfde
