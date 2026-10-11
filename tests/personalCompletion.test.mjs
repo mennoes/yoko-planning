@@ -177,6 +177,7 @@ test('API rejects unauthenticated and malformed requests before doing any writes
   assert.equal((await POST(request(null))).status, 400)
   assert.equal((await POST(request({ parentItemId: 'project', done: false, status: 'Done', expectedEventId: null }))).status, 400)
   assert.equal((await POST(request({ parentItemId: 'project', done: false, status: 'unknown', expectedEventId: null }))).status, 400)
+  assert.equal((await POST(request({ parentItemId: 'project', done: false, timelineStart: 'morgen', expectedEventId: null }))).status, 400)
   assert.equal(calls, 0)
 })
 
@@ -208,4 +209,24 @@ test('legacy completion records and To do boolean toggles remain compatible', as
   const reopened = await setPersonalCompletion(db, 'u-menno', target, false, done.comment.id)
   assert.equal(rules.personalTaskStatus(reopened.comment.thread[0].personalCompletion), 'Not started')
   assert.match(done.comment.thread[0].body, /afgerond/)
+})
+
+test('personal timelines persist independently and form the project envelope', async () => {
+  const db = fakeDb(); const before = structuredClone(db.tables.board_items)
+  const menno = await setPersonalCompletion(db, 'u-menno', target, false, null, 'Working on...', '2026-10-12', '2026-10-16')
+  const mennoState = rules.completionState([menno.comment], target, 'menno')
+  assert.equal(mennoState.timelineStart, '2026-10-12')
+  assert.equal(mennoState.timelineEnd, '2026-10-16')
+  assert.match(menno.comment.thread[0].body, /eigen tijdlijn aangepast/)
+  assert.deepEqual(db.tables.board_items, before)
+
+  // Odette heeft nog niets ingevuld en gebruikt daarom de projectfallback;
+  // Menno mag het gezamenlijke bereik niet eenzijdig kleiner maken.
+  assert.equal(JSON.stringify(rules.personalTimelineEnvelope(
+    [menno.comment], target, ['menno', 'odette'], '2026-10-01', '2026-10-31')),
+  JSON.stringify({ startDate: '2026-10-01', endDate: '2026-10-31' }))
+  const odette = await setPersonalCompletion(db, 'u-odette', target, false, null, 'Not started', '2026-10-08', '2026-10-22')
+  assert.equal(JSON.stringify(rules.personalTimelineEnvelope(
+    [menno.comment, odette.comment], target, ['menno', 'odette'], '2026-10-01', '2026-10-31')),
+  JSON.stringify({ startDate: '2026-10-08', endDate: '2026-10-22' }))
 })
