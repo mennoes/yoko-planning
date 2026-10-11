@@ -2,7 +2,7 @@
 
 import { supabase } from './supabase'
 import { cacheComment, loadAllComments, notifyCommentsUpdate, onCommentsUpdate, pullCommentsAll, type CommentThread } from './commentsStore'
-import { completionContext, completionState, type CompletionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
+import { completionContext, type CompletionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
 import { loadGroups } from './boardStore'
 
 function completionKey(target: CompletionTarget, memberId: string) {
@@ -12,17 +12,37 @@ function completionKey(target: CompletionTarget, memberId: string) {
 // Serverdata blijft leidend, maar een klik wordt lokaal meteen zichtbaar.
 // Deze tijdelijke laag bestaat alleen zolang de opslagrequest onderweg is.
 const optimisticCompletions = new Map<string, CompletionState>()
-const resolvedCompletions = new Map<string, CompletionState | null>()
-if (typeof window !== 'undefined') onCommentsUpdate(() => resolvedCompletions.clear())
+let completionIndex: Map<string, CompletionState> | null = null
+
+/** Build the latest personal state for every item/member in one pass.
+ * Planning asks for hundreds of combinations at once; parsing and scanning the
+ * complete comment history for every cell made the authenticated app freeze. */
+function loadCompletionIndex() {
+  if (completionIndex) return completionIndex
+  const next = new Map<string, CompletionState>()
+  for (const thread of loadAllComments()) {
+    for (const reply of thread.thread) {
+      const state = reply.personalCompletion
+      if (state?.version !== 1) continue
+      const key = completionKey(state, state.memberId)
+      const current = next.get(key)
+      if (!current || reply.createdAt > current.createdAt ||
+        (reply.createdAt === current.createdAt && thread.id > current.eventId)) {
+        next.set(key, { ...state, eventId: thread.id, createdAt: reply.createdAt })
+      }
+    }
+  }
+  completionIndex = next
+  return next
+}
+
+if (typeof window !== 'undefined') onCommentsUpdate(() => { completionIndex = null })
 
 export function loadPersonalCompletion(target: CompletionTarget, memberId: string) {
   const key = completionKey(target, memberId)
   const optimistic = optimisticCompletions.get(key)
   if (optimistic) return optimistic
-  if (resolvedCompletions.has(key)) return resolvedCompletions.get(key) ?? undefined
-  const resolved = completionState(loadAllComments(), target, memberId)
-  resolvedCompletions.set(key, resolved ?? null)
-  return resolved
+  return loadCompletionIndex().get(key)
 }
 
 /** Resolve index-based legacy task references to the actual stable subitem ID. */
@@ -47,7 +67,7 @@ export function updatePersonalCompletion(target: CompletionTarget, memberId: str
   const key = completionKey(target, memberId)
   const existing = pending.get(key)
   if (existing) return existing
-  const previous = completionState(loadAllComments(), target, memberId)
+  const previous = loadPersonalCompletion(target, memberId)
   optimisticCompletions.set(key, {
     version: 1, ...target, memberId, done,
     ...(status !== undefined ? { status } : previous?.status !== undefined ? { status: previous.status } : {}),
