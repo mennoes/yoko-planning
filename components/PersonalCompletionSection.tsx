@@ -84,7 +84,7 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
     setHandoffNote('')
     setNextOwnerId('')
   }
-  if (layout === 'cell') return <div title={error || ownerSummary} style={{ width: '100%', minWidth: 0 }} aria-busy={pending}>
+  if (layout === 'cell') return <div title={error || ownerSummary} style={{ width: '100%', height: '100%', minWidth: 0 }} aria-busy={pending}>
     {renderStatus(personalTaskStatus(mine), change, pending || allDone)}
   </div>
   return <section aria-label="Persoonlijke voortgang" style={layout === 'row'

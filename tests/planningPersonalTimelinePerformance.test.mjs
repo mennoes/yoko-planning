@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
 const client = readFileSync(new URL('../lib/personalCompletionClient.ts', import.meta.url), 'utf8')
 const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
+const personalSection = readFileSync(new URL('../components/PersonalCompletionSection.tsx', import.meta.url), 'utf8')
 
 test('personal timelines use stable project targets instead of scanning every agenda per workload cell', () => {
   const helperStart = planning.indexOf('function projectForMember')
@@ -35,4 +36,5 @@ test('agenda orders project fields before the equally shaped personal fields', (
   assert.ok(order.indexOf('...(timeline ? [timeline]') < order.indexOf('PERSONAL_STATUS_KEY'))
   assert.ok(order.indexOf('PERSONAL_STATUS_KEY') < order.indexOf('PERSONAL_TIMELINE_KEY'))
   assert.match(board, /whiteSpace: 'nowrap'/)
+  assert.match(personalSection, /layout === 'cell'\) return <div[^>]+height: '100%'/)
 })
