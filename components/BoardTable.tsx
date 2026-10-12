@@ -4279,6 +4279,8 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
   { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
   { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
+  { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 },
+  { key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange', width: 180 },
   { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
   { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
   { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
@@ -4288,6 +4290,32 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'uitzenddag',     label: 'Uitzenddag',     type: 'date',      width: 105 },
   { key: 'nummers',        label: 'Nummers',        type: 'currency',  width: 110 },
 ]
+
+/** Existing boards did not store the two personal columns. Add them once to
+ * the visual layout; after the first edit the complete order (including
+ * hidden columns) is persisted in the board's columns JSON. */
+function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
+  const base = columns.map(column => column.key === 'status'
+    ? { ...column, label: 'Status project' }
+    : column.key === 'timeline'
+      ? { ...column, label: 'Timeline project' }
+      : column)
+  if (base.some(column => isPersonalColumn(column.key))) return base
+  const statusIndex = base.findIndex(column => column.key === 'status')
+  const timelineIndex = base.findIndex(column => column.key === 'timeline')
+  if (statusIndex < 0 && timelineIndex < 0) return base
+  const insertAt = Math.min(...[statusIndex, timelineIndex].filter(index => index >= 0))
+  const status = base.find(column => column.key === 'status')
+  const timeline = base.find(column => column.key === 'timeline')
+  const ordered = base.filter(column => column.key !== 'status' && column.key !== 'timeline')
+  ordered.splice(insertAt, 0,
+    ...(status ? [status] : []),
+    ...(timeline ? [timeline] : []),
+    { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 },
+    { key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange', width: 180 },
+  )
+  return ordered
+}
 
 function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   boardId: string
@@ -4302,16 +4330,24 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   // Lokale werk-set, gesynchroniseerd met de prop. Mutaties commit'ten
   // direct naar setBoardColumns zodat de tabel meteen meebeweegt en de
   // wijziging via Supabase rondgaat.
-  const [list, setList] = useState<ColumnDef[]>(columns)
-  useEffect(() => { setList(columns) }, [columns])
+  const [list, setList] = useState<ColumnDef[]>(() => completeColumnLayout(columns))
+  const dragIndex = useRef<number | null>(null)
+  useEffect(() => { setList(completeColumnLayout(columns)) }, [columns])
 
   function commit(next: ColumnDef[]) {
     setList(next)
     setBoardColumns(boardId, next)
   }
-  function remove(key: string)   { commit(list.filter(c => c.key !== key)) }
+  function toggleVisible(key: string) { commit(list.map(c => c.key === key ? { ...c, hidden: !c.hidden } : c)) }
   function moveUp(idx: number)   { if (idx <= 0) return; const n = [...list]; [n[idx-1], n[idx]] = [n[idx], n[idx-1]]; commit(n) }
   function moveDown(idx: number) { if (idx >= list.length - 1) return; const n = [...list]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; commit(n) }
+  function moveTo(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return
+    const next = [...list]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    commit(next)
+  }
   function add(col: ColumnDef)   { commit([...list, col]) }
   function addCustom() {
     const label = customLabel.trim()
@@ -4360,17 +4396,25 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {list.map((c, idx) => (
-                <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 7px', borderRadius: 6, background: 'var(--overlay-faint)' }}>
+                <div key={c.key} draggable
+                  onDragStart={event => { dragIndex.current = idx; event.dataTransfer.effectAllowed = 'move' }}
+                  onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}
+                  onDrop={event => { event.preventDefault(); if (dragIndex.current !== null) moveTo(dragIndex.current, idx); dragIndex.current = null }}
+                  onDragEnd={() => { dragIndex.current = null }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 7px', borderRadius: 6, background: 'var(--overlay-faint)', opacity: c.hidden ? 0.52 : 1, cursor: 'grab' }}>
+                  <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 13, letterSpacing: -2, paddingRight: 3 }}>⠿</span>
                   <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-secondary)' }}>{c.label}</span>
+                  <button onClick={() => toggleVisible(c.key)}
+                    title={c.hidden ? 'Kolom tonen' : 'Kolom verbergen'} aria-label={c.hidden ? `${c.label} tonen` : `${c.label} verbergen`}
+                    style={{ background: c.hidden ? 'transparent' : color, border: c.hidden ? '1px solid var(--border-light)' : '1px solid transparent', cursor: 'pointer', color: c.hidden ? 'var(--text-muted)' : '#fff', padding: '2px 7px', borderRadius: 999, fontSize: 10.5, minWidth: 48 }}>
+                    {c.hidden ? 'Uit' : 'Aan'}
+                  </button>
                   <button onClick={() => moveUp(idx)}   disabled={idx === 0}
                     title="Naar links"
                     style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'not-allowed' : 'pointer', color: idx === 0 ? 'var(--text-muted)' : color, padding: '2px 5px', fontSize: 13 }}>◀</button>
                   <button onClick={() => moveDown(idx)} disabled={idx === list.length - 1}
                     title="Naar rechts"
                     style={{ background: 'none', border: 'none', cursor: idx === list.length - 1 ? 'not-allowed' : 'pointer', color: idx === list.length - 1 ? 'var(--text-muted)' : color, padding: '2px 5px', fontSize: 13 }}>▶</button>
-                  <button onClick={() => { if (window.confirm(`Kolom '${c.label}' verbergen?`)) remove(c.key) }}
-                    title="Verwijderen"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e2445c', padding: '2px 5px', fontSize: 13 }}>×</button>
                 </div>
               ))}
             </div>
@@ -4617,6 +4661,8 @@ type BoardTableProps = {
 }
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
+  const completeColumns = completeColumnLayout(columns)
+  const dataColumns = completeColumns.filter(column => !isPersonalColumn(column.key) && !column.hidden)
   const [openRequest, setOpenRequest] = useState<OpenItemRequest | null>(null)
   const omdenkenRepairRunning = useRef(false)
   useEffect(() => {
@@ -4740,7 +4786,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       const saved = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
       if (saved) return JSON.parse(saved)
     } catch { /* ignore */ }
-    return Object.fromEntries(columns.map(c => [c.key, c.width]))
+    return Object.fromEntries(completeColumns.map(c => [c.key, c.width]))
   }
 
   const [colWidths,     setColWidths]    = useState<Record<string, number>>(initWidths)
@@ -5220,13 +5266,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   }
 
   function exportCSV() {
-    const rows: string[][] = [['Item', ...columns.map(c => c.label)]]
+    const rows: string[][] = [['Item', ...dataColumns.map(c => c.label)]]
     groups.forEach(g => {
-      rows.push([`--- ${g.name} ---`, ...columns.map(() => '')])
+      rows.push([`--- ${g.name} ---`, ...dataColumns.map(() => '')])
       g.items.forEach(i => {
         rows.push([
           i.name,
-          ...columns.map(c => {
+          ...dataColumns.map(c => {
             if (c.type === 'owners')    return (i.ownerIds as string[]).join(', ')
             if (c.type === 'daterange') return `${i.startDate ?? ''} → ${i.endDate ?? ''}`
             return String(i[c.key] ?? '')
@@ -5245,27 +5291,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 
   const selectionW = isMobile ? 40 : 48
   const nameW = isMobile ? Math.min(colWidths['name'] ?? 200, 196) : (colWidths['name'] ?? 200)
-  const tableColumns: ColumnDef[] = (() => {
-    const base = columns.map(column => column.key === 'status'
-      ? { ...column, label: 'Status project' }
-      : column.key === 'timeline'
-        ? { ...column, label: 'Timeline project' }
-        : column)
-    const statusIndex = base.findIndex(column => column.key === 'status')
-    const timelineIndex = base.findIndex(column => column.key === 'timeline')
-    if (statusIndex < 0 && timelineIndex < 0) return base
-    const insertAt = Math.min(...[statusIndex, timelineIndex].filter(index => index >= 0))
-    const status = base.find(column => column.key === 'status')
-    const timeline = base.find(column => column.key === 'timeline')
-    const ordered = base.filter(column => column.key !== 'status' && column.key !== 'timeline')
-    ordered.splice(insertAt, 0,
-      ...(status ? [status] : []),
-      ...(timeline ? [timeline] : []),
-      ...(status ? [{ key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status' as const, width: 145 }] : []),
-      ...(timeline ? [{ key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange' as const, width: 180 }] : []),
-    )
-    return ordered
-  })()
+  const tableColumns = completeColumns.filter(column => !column.hidden)
   const subNameW = isMobile ? Math.min(subColWidths.name ?? nameW, 196) : (subColWidths.name ?? nameW)
   // Eerste kolom huisvest drag-handle + checkbox; smaller maakt de
   // afstand tussen die controls en de itemnaam korter.
@@ -5560,7 +5586,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                 <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                 <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
                   onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} menu />
-                <AgendaFilterButton columns={columns} owners={yokoOwners} filters={agendaFilters}
+                <AgendaFilterButton columns={dataColumns} owners={yokoOwners} filters={agendaFilters}
                   onChange={setAgendaFilters} color={color} menu />
                 <ColumnManagerButton boardId={boardId} columns={columns} color={color} menu />
                 <button onClick={() => { setTrashOpen(true); setMoreOpen(false) }}
@@ -5621,7 +5647,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           <>
             <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
               onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
-            <AgendaFilterButton columns={columns} owners={yokoOwners} filters={agendaFilters}
+            <AgendaFilterButton columns={dataColumns} owners={yokoOwners} filters={agendaFilters}
               onChange={setAgendaFilters} color={color} />
             <ColumnManagerButton boardId={boardId} columns={columns} color={color} />
           </>
@@ -5652,7 +5678,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             title="Verwijder dit filter"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 999,
               border: `1px solid ${color}66`, background: color + '16', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12.5 }}>
-            <span style={{ color: 'var(--text-muted)' }}>{filterFieldLabel(filter, columns)}</span>
+            <span style={{ color: 'var(--text-muted)' }}>{filterFieldLabel(filter, dataColumns)}</span>
             <strong>{filterValueLabel(filter)}</strong>
             <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1 }}>×</span>
           </button>

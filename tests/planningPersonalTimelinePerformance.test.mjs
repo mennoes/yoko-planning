@@ -40,6 +40,17 @@ test('agenda orders project fields before the equally shaped personal fields', (
   assert.doesNotMatch(board, /padding: personal \? 0 : '4px 8px'/)
 })
 
+test('agenda column manager persists order and visibility for regular and personal columns', () => {
+  assert.match(board, /function completeColumnLayout\(columns: ColumnDef\[\]\)/)
+  assert.match(board, /setBoardColumns\(boardId, next\)/)
+  assert.match(board, /function toggleVisible\(key: string\)/)
+  assert.match(board, /hidden: !c\.hidden/)
+  assert.match(board, /draggable/)
+  assert.match(board, /function moveTo\(from: number, to: number\)/)
+  assert.match(board, /const tableColumns = completeColumns\.filter\(column => !column\.hidden\)/)
+  assert.match(board, /const dataColumns = completeColumns\.filter\(column => !isPersonalColumn\(column\.key\) && !column\.hidden\)/)
+})
+
 test('planning lets teammates drag assigned personal timelines', () => {
   assert.doesNotMatch(planning, /Alleen dit teamlid kan de eigen tijdlijn aanpassen/)
   assert.match(planning, /updatePersonalCompletion\(target, project\.__personalMemberId/)
