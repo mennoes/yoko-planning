@@ -50,14 +50,18 @@ export function completionState(threads: CommentThread[], target: CompletionTarg
 export function completionReply(eventId: string, actor: { memberId: string; name: string }, target: CompletionTarget,
   done: boolean, taskName: string, recipients: Array<{ id: string; name: string }>, createdAt: string,
   status?: PersonalTaskStatus, reopened = !done, timelineStart?: string | null, timelineEnd?: string | null,
-  timelineChanged = false): CommentReply {
+  timelineChanged = false, subject?: { memberId: string; name: string }): CommentReply {
   const others = [...new Map(recipients.filter(p => p.id !== actor.memberId && p.id !== 'unassigned').map(p => [p.id, p])).values()]
+  const stateMemberId = subject?.memberId ?? actor.memberId
+  const timelineActor = subject && subject.memberId !== actor.memberId
+    ? `${actor.name} heeft de tijdlijn van ${subject.name} aangepast`
+    : `${actor.name} heeft de eigen tijdlijn aangepast`
   return {
     id: eventId, author: actor.name, authorId: actor.memberId, createdAt,
-    body: `${actor.name} heeft ${timelineChanged ? 'de eigen tijdlijn aangepast' : done ? 'de eigen taak afgerond' : reopened ? 'de eigen taak heropend' : `de eigen taakstatus gewijzigd naar “${status || 'geen status'}”`}: “${taskName}”. ${timelineChanged ? 'De projecttijdlijn wordt automatisch uit alle persoonlijke tijdlijnen opgebouwd.' : 'De status voor de anderen blijft ongewijzigd.'}` +
+    body: `${timelineChanged ? timelineActor : `${actor.name} heeft ${done ? 'de eigen taak afgerond' : reopened ? 'de eigen taak heropend' : `de eigen taakstatus gewijzigd naar “${status || 'geen status'}”`}`}: “${taskName}”. ${timelineChanged ? 'De projecttijdlijn wordt automatisch uit alle persoonlijke tijdlijnen opgebouwd.' : 'De status voor de anderen blijft ongewijzigd.'}` +
       (others.length ? '\n' + others.map(p => '@' + p.name).join(' ') : ''),
     personalCompletion: {
-      version: 1, ...target, memberId: actor.memberId, done,
+      version: 1, ...target, memberId: stateMemberId, done,
       ...(status !== undefined ? { status } : {}),
       ...(timelineStart !== undefined ? { timelineStart } : {}),
       ...(timelineEnd !== undefined ? { timelineEnd } : {}),

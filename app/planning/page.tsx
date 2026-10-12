@@ -5473,10 +5473,6 @@ export default function PlanningPage() {
     cancelPendingDragMove()
     setShadowDrag(null)
     if (project.__personalMemberId) {
-      if (profile?.memberId !== project.__personalMemberId) {
-        showToast('Alleen dit teamlid kan de eigen tijdlijn aanpassen.', 5000)
-        return
-      }
       const target = completionTargetForProject({ board: project.board, itemId: project.id.slice(project.board.length + 2) })
       if (!target) { showToast('Persoonlijke tijdlijn kon niet worden gevonden.', 5000); return }
       const current = loadPersonalCompletion(target, project.__personalMemberId)

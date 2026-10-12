@@ -85,7 +85,7 @@ export function updatePersonalCompletion(target: CompletionTarget, memberId: str
       const res = await fetch('/api/items/personal-completion', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
         body: JSON.stringify({
-          parentItemId: target.parentItemId, subitemId: target.subitemId, done, status,
+          parentItemId: target.parentItemId, subitemId: target.subitemId, memberId, done, status,
           ...(timeline ? { timelineStart: timeline.start, timelineEnd: timeline.end } : {}),
           expectedEventId: previous?.eventId ?? null,
         }),

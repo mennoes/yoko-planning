@@ -39,3 +39,9 @@ test('agenda orders project fields before the equally shaped personal fields', (
   assert.match(personalSection, /layout === 'cell'\) return <div[^>]+height: '100%'/)
   assert.doesNotMatch(board, /padding: personal \? 0 : '4px 8px'/)
 })
+
+test('planning lets teammates drag assigned personal timelines', () => {
+  assert.doesNotMatch(planning, /Alleen dit teamlid kan de eigen tijdlijn aanpassen/)
+  assert.match(planning, /updatePersonalCompletion\(target, project\.__personalMemberId/)
+  assert.match(client, /parentItemId: target\.parentItemId, subitemId: target\.subitemId, memberId/)
+})
