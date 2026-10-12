@@ -14,6 +14,7 @@ export async function POST(req: Request) {
   try { body = await req.json() } catch { return Response.json({ error: 'Ongeldige invoer.' }, { status: 400 }) }
   if (!body || typeof body.parentItemId !== 'string' || !body.parentItemId || body.parentItemId.length > 500 ||
     (body.subitemId !== undefined && (typeof body.subitemId !== 'string' || !body.subitemId || body.subitemId.length > 500)) ||
+    (body.memberId !== undefined && (typeof body.memberId !== 'string' || !body.memberId || body.memberId.length > 200)) ||
     typeof body.done !== 'boolean' || !(body.expectedEventId === null || typeof body.expectedEventId === 'string') ||
     (body.status !== undefined && (!isPersonalTaskStatus(body.status) || (body.status === 'Done') !== body.done)) ||
     (body.timelineStart !== undefined && !isIsoDateOrNull(body.timelineStart)) ||
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
   try {
     return Response.json(await setPersonalCompletion(supabaseAdmin, data.user.id,
       { parentItemId: body.parentItemId, ...(body.subitemId ? { subitemId: body.subitemId } : {}) }, body.done, body.expectedEventId,
-      body.status, body.timelineStart, body.timelineEnd))
+      body.status, body.timelineStart, body.timelineEnd, body.memberId))
   } catch (err) {
     console.error('[personal-completion]', err)
     return Response.json({ error: err instanceof CompletionError ? err.message : 'Opslaan mislukt. Probeer opnieuw.' },

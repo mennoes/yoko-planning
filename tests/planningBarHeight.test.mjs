@@ -23,3 +23,14 @@ test('height follows average daily load rather than total project hours', () => 
   const sameDensity = exports.planningBarHeightRatio({ hours: 80, startDate: '2026-10-05', endDate: '2026-10-30' })
   assert.equal(sameDensity, tenDays)
 })
+
+test('low personal workloads keep visibly different bar heights', () => {
+  const low = exports.planningBarHeightRatio({ hours: 20, startDate: '2026-10-01', endDate: '2026-12-31' })
+  const high = exports.planningBarHeightRatio({ hours: 40, startDate: '2026-10-01', endDate: '2026-12-31' })
+  const lowPx = exports.planningBarPixelHeight(89, low)
+  const highPx = exports.planningBarPixelHeight(89, high)
+
+  assert.ok(highPx > lowPx, `${highPx}px should be taller than ${lowPx}px`)
+  assert.ok(lowPx >= 10)
+  assert.ok(highPx <= 89)
+})

@@ -50,3 +50,9 @@ test('agenda column manager persists order and visibility for regular and person
   assert.match(board, /const tableColumns = completeColumns\.filter\(column => !column\.hidden\)/)
   assert.match(board, /const dataColumns = completeColumns\.filter\(column => !isPersonalColumn\(column\.key\) && !column\.hidden\)/)
 })
+
+test('planning lets teammates drag assigned personal timelines', () => {
+  assert.doesNotMatch(planning, /Alleen dit teamlid kan de eigen tijdlijn aanpassen/)
+  assert.match(planning, /updatePersonalCompletion\(target, project\.__personalMemberId/)
+  assert.match(client, /parentItemId: target\.parentItemId, subitemId: target\.subitemId, memberId/)
+})

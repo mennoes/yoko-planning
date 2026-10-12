@@ -16,7 +16,7 @@ import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
 import { blockedHoursForWorkdays } from '@/lib/freeCapacity'
-import { planningBarHeightRatio } from '@/lib/planningBarHeight'
+import { planningBarHeightRatio, planningBarPixelHeight } from '@/lib/planningBarHeight'
 import { loadOwnerExcludes, excludeOwner, onOwnerExcludesChange } from '@/lib/ownerOverrides'
 
 // Helper voor synchrone off-day-check binnen render. Leest dezelfde
@@ -739,7 +739,7 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
   )
 }
 
-function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
+function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   team?: TeamMember[]
   left: number; width: number; colW: number
@@ -766,7 +766,6 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // hieronder, zodat de sqrt-curve niet dubbel wordt toegepast.
   barHeightOverride?: number
   topOverride?: number
-  onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick:    () => void
   onReassign?: (project: Project, fromMemberId: string, toMemberId: string) => void
@@ -789,7 +788,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // Een 20u project dat 2.5 maanden loopt is ~16 minuten/dag, niet een
   // volle werkdag.
   const scaledH = scaleByHours
-    ? Math.max(18, Math.round(availH * hoursScaleRatio(project, memberId)))
+    ? planningBarPixelHeight(availH, hoursScaleRatio(project, memberId))
     : baseH
   const barH   = barHeightOverride ?? (scaleByHours ? scaledH : baseH)
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -861,7 +860,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   const multiOwnerBorder = multiOwnerGradient ? `1px solid ${color}` : undefined
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<DragGhost | null>(null)
+  const ghostRafRef = useRef<number | null>(null)
+  const pendingGhostRef = useRef<DragGhost | null>(null)
   const reassignRef = useRef<string | null>(null)
+  const highlightedMemberRef = useRef<string | null>(null)
   const didDrag = useRef(false)
   const dpx = 7 / colW
 
@@ -896,8 +898,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
       el.style.outlineOffset = ''
       el.removeAttribute('data-reassign-target')
     }
+    highlightedMemberRef.current = null
   }
   function highlightRow(id: string | null) {
+    if (highlightedMemberRef.current === id) return
     clearRowHighlight()
     if (!id) return
     const el = document.querySelector<HTMLElement>(`[data-member-id="${id}"]`)
@@ -906,7 +910,23 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     el.style.background = 'rgba(88,150,255,0.18)'
     el.style.outline = '2px solid rgba(88,150,255,0.85)'
     el.style.outlineOffset = '-2px'
+    highlightedMemberRef.current = id
   }
+  function scheduleGhost(next: DragGhost) {
+    pendingGhostRef.current = next
+    if (ghostRafRef.current !== null) return
+    ghostRafRef.current = requestAnimationFrame(() => {
+      ghostRafRef.current = null
+      if (pendingGhostRef.current) setGhost(pendingGhostRef.current)
+    })
+  }
+  function cancelGhostFrame() {
+    if (ghostRafRef.current !== null) cancelAnimationFrame(ghostRafRef.current)
+    ghostRafRef.current = null
+    pendingGhostRef.current = null
+  }
+
+  useEffect(() => cancelGhostFrame, [])
 
   function startDrag(e: React.MouseEvent, mode: DragInfo['mode']) {
     if (isReadOnly) return
@@ -961,8 +981,9 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
       if (m === 'move')       { ss = origStart ? addDays(origStart, ddays) : null; se = origEnd ? addDays(origEnd, ddays) : null }
       else if (m === 'start') { ss = origStart ? addDays(origStart, ddays) : null; if (ss && se && ss > se) ss = se }
       else                    { se = origEnd ? addDays(origEnd, ddays) : null; if (ss && se && se < ss) se = ss }
-      setGhost({ left: newL, width: newW, startDate: ss, endDate: se })
-      onDragMove(ss, se)
+      // Alleen deze balk bijwerken; de volledige planning opnieuw opbouwen
+      // tijdens iedere mousemove maakte slepen en resizen onnodig zwaar.
+      scheduleGhost({ left: newL, width: newW, startDate: ss, endDate: se })
     }
 
     function onUp(ev: MouseEvent) {
@@ -971,13 +992,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
       if (typeof window !== 'undefined') {
         (window as unknown as { __yokoDragActive?: boolean }).__yokoDragActive = false
       }
-      onDragMove(project.startDate, project.endDate)
       if (!dragRef.current) return
       const targetId = reassignRef.current
       const dx = ev.clientX - dragRef.current.startX
       const ddays = Math.round(dx * dpx)
       const { mode: m, origStart, origEnd } = dragRef.current
-      dragRef.current = null; setGhost(null); reassignRef.current = null
+      dragRef.current = null; cancelGhostFrame(); setGhost(null); reassignRef.current = null
       clearRowHighlight()
       if (targetId && onReassign) {
         onReassign(project, memberId, targetId)
@@ -1702,7 +1722,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             // de balken in Week/Overzicht-zoom) — top-anchored binnen de
             // vaste lane-hoogte hierboven, zodat de lane-packing (en dus het
             // niet-overlappen van andere pills) ongewijzigd blijft.
-            const pillH = Math.max(16, Math.round(allDayLaneH * hoursScaleRatio(b.p, memberId)))
+            const pillH = planningBarPixelHeight(allDayLaneH, hoursScaleRatio(b.p, memberId))
             const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
             const titleShift = titleOffsetFor(b.left + 2, b.width, 9)
             const isGoogle = b.p.source === 'google'
@@ -2487,7 +2507,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const barZIndex = (id: string, days: number): number =>
     hoveredBarId === id ? 2002 : activeBarId === id ? 2001 : durationZIndex(days)
   const naturalHeights = new Map<string, number>(
-    bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
+    bars.map(b => [b.p.id, planningBarPixelHeight(BASELINE_AVAIL_H, hoursScaleRatio(b.p, memberId))]),
   )
   const barTops = new Map<string, number>()
   const placed: { start: number; end: number; visualStart: number; visualEnd: number; top: number; bottom: number }[] = []
@@ -2793,7 +2813,6 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
               scaleByHours={zoom === 'week' || zoom === 'maand'}
               barHeightOverride={barH}
                topOverride={(barTops.get(b.p.id) ?? 0) + meetingSummaryHeight}
-              onDragMove={(s, e) => onDragMove(b.p, s, e)}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
               onReassign={onReassign} />
@@ -2813,7 +2832,7 @@ const MEETING_BAR_H = 18
 // Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
 // gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
 // met naam, tijd, uren en link naar Google Calendar.
-function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragMove, onDragEnd, onClick, onReassign }: {
+function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragEnd, onClick, onReassign }: {
   project: Project
   memberId: string
   team?: TeamMember[]
@@ -2826,7 +2845,6 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
   scaleByHours?: boolean
   barHeightOverride?: number
   topOverride?: number
-  onDragMove: (s: string | null, e: string | null) => void
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick: () => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
@@ -2942,7 +2960,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
       <DraggableBar project={project} memberId={memberId} team={team} left={left} width={width} colW={colW} small={false}
         laneH={laneH} stackH={stackH} laneIdx={laneIdx} scaleByHours={scaleByHours ?? false}
         barHeightOverride={barHeightOverride} topOverride={topOverride}
-        onDragMove={onDragMove} onDragEnd={onDragEnd} onClick={toggleMobilePopover} onReassign={onReassign} />
+        onDragEnd={onDragEnd} onClick={toggleMobilePopover} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
         // pointer-events: none op de buitenkant zodat de muis door 't
         // kaartje heen kan om de balk eronder te bereiken. Eventuele
@@ -4600,20 +4618,6 @@ export default function PlanningPage() {
     setDetailAnchor(lastClickRef.current ? { ...lastClickRef.current } : null)
     setDetailProject(p)
   }
-  const [shadowDrag,   setShadowDrag]   = useState<{ projectId: string; start: string | null; end: string | null } | null>(null)
-  // Elke setShadowDrag triggert effectiveProjects' volledige her-berekening
-  // (map/filter over ALLE projecten op ALLE borden + een localStorage-read
-  // voor owner-excludes) — prima op zichzelf, maar rauwe mousemove-events
-  // vuren makkelijk sneller dan het scherm ververst (soms 100+/s), waardoor
-  // die zware herberekening een sleepbeweging niet meer bijhoudt en vooral
-  // tekst zichtbaar achter de muis aan bleef 'schuiven'. RAF-throttle capt
-  // 'm op maximaal één keer per animatieframe — de balk zelf blijft
-  // instant volgen (die leest lokale ghost-state, niet shadowDrag).
-  const dragRafRef = useRef<number | null>(null)
-  function cancelPendingDragMove() {
-    if (dragRafRef.current != null) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = null }
-  }
-  useEffect(() => cancelPendingDragMove, [])
   const [agendasOpen,  setAgendasOpen]  = useState(false)
   const [hiddenAgendas, setHiddenAgendas] = useState<string[]>([])
   useEffect(() => {
@@ -5179,9 +5183,6 @@ export default function PlanningPage() {
 
   const effectiveProjects = useMemo(() => {
     let next = projects.filter(p => !hiddenAgendas.includes(p.board))
-    if (shadowDrag) {
-      next = next.map(p => p.id === shadowDrag.projectId ? { ...p, startDate: shadowDrag.start, endDate: shadowDrag.end } : p)
-    }
     // Per-item filter: het project ZELF (via z'n volledige id) of de PARENT
     // (via baseId zonder __siN-suffix) mag niet in de hidden-set zitten.
     // Verbergen geldt strikt per ID: een verborgen parent verbergt niet
@@ -5211,7 +5212,7 @@ export default function PlanningPage() {
       })
     }
     return next
-  }, [projects, shadowDrag, zoom, hiddenIds, ownerExcludesTick, hiddenAgendas])
+  }, [projects, zoom, hiddenIds, ownerExcludesTick, hiddenAgendas])
 
   // Inactieve freelancers: freelancers zonder activiteit in de afgelopen
   // 2 maanden EN zonder activiteit in de komende 3 maanden zijn waar-
@@ -5446,13 +5447,10 @@ export default function PlanningPage() {
       </button>
     )
   }
-  function handleDragMove(project: Project, s: string | null, e: string | null) {
-    cancelPendingDragMove()
-    dragRafRef.current = requestAnimationFrame(() => {
-      dragRafRef.current = null
-      setShadowDrag({ projectId: project.id, start: s, end: e })
-    })
-  }
+  // De balk rendert tijdens slepen zijn eigen lokale ghost. Bewust géén
+  // globale state-update hier: die zou alle personen, workloadcirkels en
+  // lanes bij iedere muisbeweging opnieuw laten berekenen.
+  function handleDragMove(_project: Project, _s: string | null, _e: string | null) {}
   // Hercalc estHours = werkdagen × 8 voor de gegeven datum-range. Gebruikt
   // dezelfde regel als de detail-drawer's autofillEstFromDates: na elke
   // drag/resize krijgt 't item de uren-suggestie. Gebruiker kan handmatig
@@ -5470,13 +5468,7 @@ export default function PlanningPage() {
   }
 
   async function handleDragEnd(project: Project, newStart: string | null, newEnd: string | null) {
-    cancelPendingDragMove()
-    setShadowDrag(null)
     if (project.__personalMemberId) {
-      if (profile?.memberId !== project.__personalMemberId) {
-        showToast('Alleen dit teamlid kan de eigen tijdlijn aanpassen.', 5000)
-        return
-      }
       const target = completionTargetForProject({ board: project.board, itemId: project.id.slice(project.board.length + 2) })
       if (!target) { showToast('Persoonlijke tijdlijn kon niet worden gevonden.', 5000); return }
       const current = loadPersonalCompletion(target, project.__personalMemberId)
@@ -5535,7 +5527,6 @@ export default function PlanningPage() {
   // als HH:MM-tijden weg. Werkt op het top-level item (subitems hebben hier
   // hun eigen pad — voor v1 alleen top-level items draggen).
   function handleTimedDragEnd(project: Project, newStart: string, newEnd: string, newStartTime: string, newEndTime: string) {
-    setShadowDrag(null)
     if (project.__personalMemberId) {
       void handleDragEnd(project, newStart, newEnd)
       return
@@ -5575,7 +5566,6 @@ export default function PlanningPage() {
     pushUndo(() => apply(prev.start ?? newStart, prev.end ?? newEnd, prev.startTime, prev.endTime), `Tijd terug op '${project.name}'`)
   }
   function handleReassignOwner(project: Project, fromMemberId: string, toMemberId: string) {
-    setShadowDrag(null)
     if (project.source === 'google') return  // Google items zijn read-only
     if (fromMemberId === toMemberId) return
     const boardName  = project.board
