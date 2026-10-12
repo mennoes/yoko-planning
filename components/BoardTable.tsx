@@ -2718,7 +2718,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
           const personal = isPersonalColumn(col.key)
           const shared = effectiveOwners.length > 1
           return <div key={col.key} style={{
-            padding: personal ? 0 : '4px 8px',
+            padding: '4px 8px',
             borderLeft: personal ? '3px double var(--border-strong)' : '1px solid var(--border-strong)',
             height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden',
             background: personal && !shared ? 'var(--bg-base)' : undefined,

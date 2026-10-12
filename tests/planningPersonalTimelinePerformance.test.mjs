@@ -37,4 +37,5 @@ test('agenda orders project fields before the equally shaped personal fields', (
   assert.ok(order.indexOf('PERSONAL_STATUS_KEY') < order.indexOf('PERSONAL_TIMELINE_KEY'))
   assert.match(board, /whiteSpace: 'nowrap'/)
   assert.match(personalSection, /layout === 'cell'\) return <div[^>]+height: '100%'/)
+  assert.doesNotMatch(board, /padding: personal \? 0 : '4px 8px'/)
 })
