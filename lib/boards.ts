@@ -39,6 +39,8 @@ export type ColumnDef = {
   label: string
   type:  ColumnType
   width: number
+  /** Hidden columns keep their data and position, and can be shown again. */
+  hidden?: boolean
 }
 
 export type JournalEntry = {
