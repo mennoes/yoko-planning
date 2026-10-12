@@ -27,3 +27,19 @@ export function planningBarHeightRatio({ hours, startDate, endDate }: PlanningBa
   const intensity = Math.min(1, hoursPerWorkday / 8)
   return 0.05 + 0.95 * intensity
 }
+
+/**
+ * Zet de belasting om naar pixels zonder verschillende lage belastingen op
+ * dezelfde vaste minimumhoogte af te kappen. Het minimum blijft klikbaar,
+ * terwijl ieder extra uur ook bij langlopende items zichtbaar hoogte toevoegt.
+ */
+export function planningBarPixelHeight(
+  availableHeight: number,
+  ratio: number,
+  minimumHeight = 10,
+): number {
+  const available = Math.max(1, Number(availableHeight) || 1)
+  const minimum = Math.min(available, Math.max(1, Number(minimumHeight) || 1))
+  const normalizedRatio = Math.min(1, Math.max(0, Number(ratio) || 0))
+  return Math.round(minimum + (available - minimum) * normalizedRatio)
+}

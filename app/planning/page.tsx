@@ -16,7 +16,7 @@ import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
 import { blockedHoursForWorkdays } from '@/lib/freeCapacity'
-import { planningBarHeightRatio } from '@/lib/planningBarHeight'
+import { planningBarHeightRatio, planningBarPixelHeight } from '@/lib/planningBarHeight'
 import { loadOwnerExcludes, excludeOwner, onOwnerExcludesChange } from '@/lib/ownerOverrides'
 
 // Helper voor synchrone off-day-check binnen render. Leest dezelfde
@@ -789,7 +789,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // Een 20u project dat 2.5 maanden loopt is ~16 minuten/dag, niet een
   // volle werkdag.
   const scaledH = scaleByHours
-    ? Math.max(18, Math.round(availH * hoursScaleRatio(project, memberId)))
+    ? planningBarPixelHeight(availH, hoursScaleRatio(project, memberId))
     : baseH
   const barH   = barHeightOverride ?? (scaleByHours ? scaledH : baseH)
   // Categorie 'vrij' (vakantie, hemelvaart, verlof, …) krijgt een aparte
@@ -1702,7 +1702,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
             // de balken in Week/Overzicht-zoom) — top-anchored binnen de
             // vaste lane-hoogte hierboven, zodat de lane-packing (en dus het
             // niet-overlappen van andere pills) ongewijzigd blijft.
-            const pillH = Math.max(16, Math.round(allDayLaneH * hoursScaleRatio(b.p, memberId)))
+            const pillH = planningBarPixelHeight(allDayLaneH, hoursScaleRatio(b.p, memberId))
             const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
             const titleShift = titleOffsetFor(b.left + 2, b.width, 9)
             const isGoogle = b.p.source === 'google'
@@ -2487,7 +2487,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
   const barZIndex = (id: string, days: number): number =>
     hoveredBarId === id ? 2002 : activeBarId === id ? 2001 : durationZIndex(days)
   const naturalHeights = new Map<string, number>(
-    bars.map(b => [b.p.id, Math.max(18, Math.round(BASELINE_AVAIL_H * hoursScaleRatio(b.p, memberId)))]),
+    bars.map(b => [b.p.id, planningBarPixelHeight(BASELINE_AVAIL_H, hoursScaleRatio(b.p, memberId))]),
   )
   const barTops = new Map<string, number>()
   const placed: { start: number; end: number; visualStart: number; visualEnd: number; top: number; bottom: number }[] = []
