@@ -64,7 +64,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; meetLink?: string; externalLink?: string | null }> | undefined) ?? []
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
         // erbij maar krijgt status='done' zodat 'ie in de planning faded
         // wordt i.p.v. te verdwijnen (anders 'verdwijnen items zomaar' bij
@@ -78,7 +78,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           .map((si, origIdx) => ({ si, origIdx }))
           .filter(({ si }) => si.startDate || si.endDate)
         if (subsWithDates.length > 0) {
-          return subsWithDates.map(({ si, origIdx }): Project => {
+          const datedProjects = subsWithDates.map(({ si, origIdx }): Project => {
             // Subitem-ownerIds gebruiken we alleen als 't ECHT toegewezen is
             // (niet leeg en niet alleen 'unassigned'). Anders valt-ie terug
             // op de parent-owners — anders telt een 'unassigned'-subitem 0u
@@ -125,18 +125,69 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               status:    ((si.status ?? '') === 'Done' ||
                            ((i.source as string) !== 'google' && (i.status as string) === 'Done'))
                            ? 'done' : 'active',
-              source:    (i.source as 'manual' | 'google' | undefined),
+              source:    si.source ?? (i.source as 'manual' | 'google' | undefined),
               externalLink: si.externalLink ?? (i.externalLink as string | undefined),
-              externalSyncedAt: (i.externalSyncedAt as string | undefined),
+              externalSyncedAt: si.externalSyncedAt ?? (i.externalSyncedAt as string | undefined),
               meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
               parentName: i.name as string,
             }
           })
+
+          // Een hoofditem kan eigen uren hebben naast gedateerde subitems.
+          // De Agenda toont daarom `item.estHours + som(subitems)`, maar de
+          // Planning liet hier voorheen uitsluitend de gedateerde subitems
+          // door. Daardoor verscheen bijvoorbeeld een item met 16 eigen uren
+          // als 0u zodra er ook maar één subitem met een datum onder hing.
+          //
+          // Ongedateerde subitems kunnen niet zelfstandig op de tijdlijn
+          // worden geplaatst. Hun actieve uren horen daarom bij het
+          // hoofditem en gebruiken diens datumrange. Gedateerde subitems
+          // blijven hun eigen project, zodat hun timing intact blijft.
+          const undatedActiveHours = subs
+            .filter(si => !si.startDate && !si.endDate && (si.status ?? '') !== 'Done')
+            .reduce((sum, si) => sum + (Number(si.estHours) || 0), 0)
+          const parentHours = (Number(i.estHours) || 0) + undatedActiveHours
+          if (parentHours <= 0 || (!i.startDate && !i.endDate)) return datedProjects
+
+          const parentOwners = [...new Set((Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : [])
+            .filter(o => o && o !== 'unassigned'))]
+          const ownerIds = parentOwners.length > 0 ? parentOwners : ['unassigned']
+          const storedOwnerHours = i.ownerHours as Record<string, number> | undefined
+          const storedTotal = storedOwnerHours
+            ? Object.values(storedOwnerHours).reduce((sum, value) => sum + (Number(value) || 0), 0)
+            : 0
+          const ownerHours = storedTotal > 0 && Math.abs(storedTotal - parentHours) > 0.01
+            ? Object.fromEntries(Object.entries(storedOwnerHours!).map(([ownerId, value]) => [
+                ownerId,
+                Math.round(((Number(value) || 0) * parentHours / storedTotal) * 10) / 10,
+              ]))
+            : storedOwnerHours
+
+          return [{
+            id: `${boardName}__${i.id}`,
+            completionParentItemId: i.id as string,
+            name: i.name as string,
+            board: boardName,
+            group: g.name,
+            ownerIds,
+            startDate: (i.startDate as string | null) ?? (i.endDate as string | null) ?? null,
+            endDate: (i.endDate as string | null) ?? (i.startDate as string | null) ?? null,
+            startTime: (i.startTime as string | null | undefined) ?? null,
+            endTime: (i.endTime as string | null | undefined) ?? null,
+            estHours: parentHours,
+            ownerHours,
+            status: (i.status as string) === 'Done' ? 'done' : 'active',
+            source: (i.source as 'manual' | 'google' | undefined),
+            externalLink: (i.externalLink as string | undefined),
+            externalSyncedAt: (i.externalSyncedAt as string | undefined),
+            meetLink: (i.meetLink as string | undefined),
+          }, ...datedProjects]
         }
         const activeSubs = subs.filter(si => (si.status ?? '') !== 'Done')
-        const hours = activeSubs.length > 0
-          ? activeSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
-          : (Number(i.estHours) || 0)
+        // Zelfde totaal als in de Agenda: eigen uren plus actieve subitems.
+        // Voorheen vervingen subitem-uren de eigen uren van het hoofditem.
+        const hours = (Number(i.estHours) || 0) +
+          activeSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
         // Owners zonder eigenaar landen op 'unassigned' zodat ze in de
         // planning onder de Unassigned-rij verschijnen i.p.v. uit beeld
         // te verdwijnen.

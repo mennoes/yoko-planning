@@ -19,6 +19,7 @@ function loadModule(file, mocks, globals = {}) {
 const category = { isVrijTitle: () => false, loadCategoryOverrides: () => ({}) }
 const { groupsToProjects } = loadModule('../lib/workload.ts', {
   './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
+  './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
 })
 const meeting = {
   id: 'meeting', name: 'Project overleg', ownerIds: ['menno'], status: '',
@@ -41,7 +42,7 @@ test('auto-nested meeting adds hours without replacing the original project', ()
 test('existing dated subitems and indices stay intact when meetings are attached', () => {
   const manual = { ...meeting, id: 'work', source: 'manual', googleSeriesId: undefined, estHours: 8, name: 'Artwork' }
   const output = groupsToProjects('vlaanderen', groups([manual, meeting]))
-  assert.equal(output.reduce((sum, p) => sum + p.estHours, 0), 9)
+  assert.equal(output.reduce((sum, p) => sum + p.estHours, 0), 49)
   assert.equal(output.find(p => p.id.endsWith('__si0')).source, 'manual')
   assert.equal(output.find(p => p.id.endsWith('__si1')).source, 'google')
 })
@@ -51,11 +52,19 @@ test('existing undated subtasks retain their previous workload', () => {
   const after = groupsToProjects('vlaanderen', groups([manual, meeting]))
   assert.equal(after.reduce((sum, p) => sum + p.estHours, 0), before[0].estHours + 1)
 })
+test('agenda and planning use the same own plus subitem hour total', () => {
+  const undated = { ...meeting, id: 'undated', source: 'manual', startDate: null, endDate: null, estHours: 8 }
+  const output = groupsToProjects('omdenken', groups([undated]))
+  assert.equal(output.length, 1)
+  assert.equal(output[0].estHours, 48)
+})
 test('a completed attached meeting does not hide the parent task or change its dates', () => {
   const mockGroups = groups([{ ...meeting, status: 'Done', startDate: '2000-01-01', endDate: '2000-01-01' }])
   const mocks = {
     './boardStore': { loadGroups: board => board === 'vlaanderen' ? mockGroups : [] },
+    './boardsRegistry': { getBoardIds: () => ['vlaanderen'] },
     './workloadCategory': category,
+    './todosStore': { loadSections: () => [] },
     './commentsStore': { loadAllComments: () => [] },
     './personalCompletion': { completionState: () => undefined },
   }
