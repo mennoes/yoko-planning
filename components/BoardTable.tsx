@@ -32,6 +32,7 @@ import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
+import { rebalanceOwnerHours } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
@@ -763,6 +764,9 @@ function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<st
   return scaled
 }
 
+const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
+  Object.fromEntries(ids.map(id => [id, String(Math.round((hours[id] ?? 0) * 10) / 10)]))
+
 function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange }: {
   value: string[]
   onChange: (v: string[]) => void
@@ -780,8 +784,11 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   const ownersKey = value.join(',')
   const hoursKey = JSON.stringify(ownerHours ?? {})
   const [liveHours, setLiveHours] = useState<Record<string, number>>(() => resolveOwnerHours(value, totalHours, ownerHours))
+  const [hourDrafts, setHourDrafts] = useState<Record<string, string>>(() => ownerHoursDrafts(value, resolveOwnerHours(value, totalHours, ownerHours)))
   useEffect(() => {
-    setLiveHours(resolveOwnerHours(value, totalHours, ownerHours))
+    const resolved = resolveOwnerHours(value, totalHours, ownerHours)
+    setLiveHours(resolved)
+    setHourDrafts(ownerHoursDrafts(value, resolved))
   }, [ownersKey, totalHours, hoursKey])
   // Bron-lijst: live team_members uit Supabase aangevuld met data/team.json
   // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
@@ -853,7 +860,25 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   const commitDistribution = (next: Record<string, number>) => {
     const cleaned = Object.fromEntries(visibleOwners.map(id => [id, Math.max(0, Number(next[id]) || 0)]))
     setLiveHours(cleaned)
+    setHourDrafts(ownerHoursDrafts(visibleOwners, cleaned))
     onDistributionChange?.(cleaned)
+  }
+  const previewTypedHours = (id: string, raw: string) => {
+    setHourDrafts(prev => ({ ...prev, [id]: raw }))
+    if (raw.trim() === '') return
+    const parsed = Number(raw.replace(',', '.'))
+    if (!Number.isFinite(parsed)) return
+    const next = rebalanceOwnerHours(visibleOwners, liveHours, totalHours, id, parsed)
+    setLiveHours(next)
+    setHourDrafts({ ...ownerHoursDrafts(visibleOwners, next), [id]: raw })
+  }
+  const commitTypedHours = (id: string) => {
+    const parsed = Number((hourDrafts[id] ?? '').replace(',', '.'))
+    if (!Number.isFinite(parsed)) {
+      setHourDrafts(ownerHoursDrafts(visibleOwners, liveHours))
+      return
+    }
+    commitDistribution(rebalanceOwnerHours(visibleOwners, liveHours, totalHours, id, parsed))
   }
 
   function allocatedAvatar(id: string, index: number) {
@@ -902,7 +927,8 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <DistributionPie segments={segments} total={totalHours} size={94} interactive showAvatars
                     innerLabel={`${Math.round(totalHours * 10) / 10}u`}
-                    onChange={setLiveHours} onCommit={commitDistribution} />
+                    onChange={next => { setLiveHours(next); setHourDrafts(ownerHoursDrafts(visibleOwners, next)) }}
+                    onCommit={commitDistribution} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
                     {segments.map(segment => {
                       const pct = totalHours > 0 ? Math.round(segment.value / totalHours * 100) : 0
@@ -910,16 +936,32 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                         <div key={segment.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
                           <span style={{ width: 8, height: 8, borderRadius: 2, background: segment.color, flexShrink: 0 }} />
                           <span style={{ flex: 1, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{segment.label}</span>
-                          <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                            {Math.round(segment.value * 10) / 10}u · {pct}%
-                          </span>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                            <input type="text" inputMode="decimal" aria-label={`Uren voor ${segment.label}`}
+                              value={hourDrafts[segment.id] ?? String(Math.round(segment.value * 10) / 10)}
+                              onClick={event => event.stopPropagation()}
+                              onFocus={event => event.currentTarget.select()}
+                              onChange={event => previewTypedHours(segment.id, event.target.value)}
+                              onBlur={() => commitTypedHours(segment.id)}
+                              onKeyDown={event => {
+                                if (event.key === 'Enter') event.currentTarget.blur()
+                                if (event.key === 'Escape') {
+                                  setHourDrafts(ownerHoursDrafts(visibleOwners, liveHours))
+                                  event.currentTarget.blur()
+                                }
+                              }}
+                              style={{ width: 43, height: 25, boxSizing: 'border-box', padding: '2px 5px', borderRadius: 5,
+                                border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)',
+                                font: 'inherit', fontVariantNumeric: 'tabular-nums', textAlign: 'right', outline: 'none' }} />
+                            <span style={{ color: 'var(--text-muted)' }}>u · {pct}%</span>
+                          </label>
                         </div>
                       )
                     })}
                   </div>
                 </div>
                 <div style={{ marginTop: 7, fontSize: 10.5, color: 'var(--text-muted)' }}>
-                  Sleep de witte bolletjes om uren te verdelen.
+                  Sleep de witte bolletjes of vul de uren per persoon in.
                 </div>
               </div>
             )}
@@ -2942,10 +2984,12 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
     for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
     return next
   })
+  const [hourDrafts, setHourDrafts] = useState<Record<string, string>>(() => ownerHoursDrafts(owners, live))
   useEffect(() => {
     const next: Record<string, number> = {}
     for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
     setLive(next)
+    setHourDrafts(ownerHoursDrafts(owners, next))
   }, [item.id, ownersKey, total, valuesKey, defaultPer])
 
   const round1 = (n: number) => Math.round(n * 10) / 10
@@ -2962,6 +3006,38 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
     }
   })
 
+  const commitOwnerHours = (next: Record<string, number>) => {
+    const active = new Set(owners)
+    const cleaned: Record<string, number> = {}
+    for (const [oid, hrs] of Object.entries(next)) {
+      if (active.has(oid)) cleaned[oid] = hrs
+    }
+    setLive(cleaned)
+    setHourDrafts(ownerHoursDrafts(owners, cleaned))
+    onUpdate({
+      ownerIds: owners,
+      ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined,
+      ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
+    })
+  }
+  const previewTypedHours = (ownerId: string, raw: string) => {
+    setHourDrafts(prev => ({ ...prev, [ownerId]: raw }))
+    if (raw.trim() === '') return
+    const parsed = Number(raw.replace(',', '.'))
+    if (!Number.isFinite(parsed)) return
+    const next = rebalanceOwnerHours(owners, live, total, ownerId, parsed)
+    setLive(next)
+    setHourDrafts({ ...ownerHoursDrafts(owners, next), [ownerId]: raw })
+  }
+  const commitTypedHours = (ownerId: string) => {
+    const parsed = Number((hourDrafts[ownerId] ?? '').replace(',', '.'))
+    if (!Number.isFinite(parsed)) {
+      setHourDrafts(ownerHoursDrafts(owners, live))
+      return
+    }
+    commitOwnerHours(rebalanceOwnerHours(owners, live, total, ownerId, parsed))
+  }
+
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
@@ -2975,23 +3051,8 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
           interactive
           showAvatars
           innerLabel={`${round1(total)}u`}
-          onChange={setLive}
-          onCommit={(next) => {
-            // Filter: alleen huidige owners. De pie kan in een
-            // raceconditie nog een stale owner-key meeleveren als de
-            // ownerIds-prop net wisselde — die mag NIET naar de DB.
-            const active = new Set(owners)
-            const cleaned: Record<string, number> = {}
-            for (const [oid, hrs] of Object.entries(next)) {
-              if (active.has(oid)) cleaned[oid] = hrs
-            }
-            setLive(cleaned)
-            onUpdate({
-              ownerIds: owners,
-              ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined,
-              ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
-            })
-          }}
+          onChange={next => { setLive(next); setHourDrafts(ownerHoursDrafts(owners, next)) }}
+          onCommit={commitOwnerHours}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
           {owners.map(oid => {
@@ -3012,14 +3073,31 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
                     </span>
                   )}
                 </span>
-                <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{round1(val)}u · {pct}%</span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <input type="text" inputMode="decimal" aria-label={`Uren voor ${m.name}`}
+                    value={hourDrafts[oid] ?? String(round1(val))}
+                    onFocus={event => event.currentTarget.select()}
+                    onChange={event => previewTypedHours(oid, event.target.value)}
+                    onBlur={() => commitTypedHours(oid)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') event.currentTarget.blur()
+                      if (event.key === 'Escape') {
+                        setHourDrafts(ownerHoursDrafts(owners, live))
+                        event.currentTarget.blur()
+                      }
+                    }}
+                    style={{ width: 54, height: 30, boxSizing: 'border-box', padding: '3px 6px', borderRadius: 6,
+                      border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)',
+                      font: 'inherit', fontVariantNumeric: 'tabular-nums', textAlign: 'right', outline: 'none' }} />
+                  <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>u · {pct}%</span>
+                </label>
               </div>
             )
           })}
         </div>
       </div>
       <p style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-        Sleep de witte bolletjes op de taart om uren tussen mensen te verdelen.
+        Sleep de witte bolletjes of vul de uren per persoon rechtstreeks in.
       </p>
     </div>
   )
