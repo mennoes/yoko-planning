@@ -3301,7 +3301,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, onSelectGroup, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onToggleReorder, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
@@ -3310,10 +3310,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   onResizeSubCol?:  (key: string, width: number) => void
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
-  onSelectGroup: (groupId: string, allSelected: boolean) => void
   sortBy: { key: string; dir: 'asc' | 'desc' } | null
   onToggleSort: (key: string) => void
   reorderMode: boolean
+  onToggleReorder: () => void
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
   onMoveItemsHere: (itemIds: string[]) => void
@@ -3869,26 +3869,23 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             {group.items.length} items
           </span>
 
-          {/* Group-level select-all + verwijder. Selectie-checkbox vinkt
-              alle items in de groep aan/uit (handig voor bulk-acties of
-              bulk-slepen). Verwijder-knop is altijd zichtbaar met label
-              zodat 't niet meer raden is. */}
+          {/* Volgorde staat direct in de groepsbalk: dit is de plek waar
+              rijen geordend worden. De weinig gebruikte groepsselectie is
+              bewust verwijderd; losse rijselectie en bulk-acties blijven. */}
           {!editName && (
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label title="Alle items in deze groep selecteren"
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, cursor: 'pointer' }}>
-                <input type="checkbox"
-                  checked={group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))}
-                  ref={el => { if (el) {
-                    const some = group.items.some(i => selectedIds.has(i.id))
-                    const all  = group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))
-                    el.indeterminate = some && !all
-                  }}}
-                  onChange={e => onSelectGroup(group.id, e.target.checked)}
-                  onClick={e => e.stopPropagation()}
-                  style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                {!isMobile && 'selecteer alles'}
-              </label>
+              <button onClick={e => { e.stopPropagation(); onToggleReorder() }}
+                aria-pressed={reorderMode}
+                title={reorderMode ? 'Klaar met volgorde wijzigen' : 'Wijzig de volgorde van items'}
+                style={{
+                  background: reorderMode ? 'var(--accent)' : 'var(--bg-hover)',
+                  border: 'none', color: reorderMode ? 'var(--accent-contrast, #fff)' : 'var(--text-secondary)',
+                  cursor: 'pointer', fontSize: isMobile ? 13 : 12, fontWeight: 650,
+                  padding: isMobile ? '4px 8px' : '5px 10px', borderRadius: 6,
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                }}>
+                ↕ {!isMobile && (reorderMode ? 'Klaar' : 'Volgorde')}
+              </button>
               <button onClick={e => {
                   e.stopPropagation()
                   const count = group.items.length
@@ -3931,17 +3928,11 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             <div style={{ display: 'grid', gridTemplateColumns: gridTemplate,
               background: 'var(--bg-card)', borderBottom: '1px solid var(--border)',
               position: 'sticky', top: 0, zIndex: 5 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+              <div aria-hidden style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
                 position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
                 zIndex: isMobile ? 8 : undefined, background: 'var(--bg-card)',
                 borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
-                boxSizing: 'border-box' }}>
-                <input type="checkbox"
-                  checked={group.items.length > 0 && group.items.every(i => selectedIds.has(i.id))}
-                  ref={el => { if (el) el.indeterminate = group.items.some(i => selectedIds.has(i.id)) && !group.items.every(i => selectedIds.has(i.id)) }}
-                  onChange={e => onSelectGroup(group.id, e.target.checked)}
-                  style={{ accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15 }} />
-              </div>
+                boxSizing: 'border-box' }} />
               <div style={{ position: isMobile ? 'sticky' : 'relative', left: isMobile ? 24 : undefined,
                 zIndex: isMobile ? 7 : undefined, display: 'flex', background: 'var(--bg-card)',
                 boxShadow: isMobile ? '3px 0 7px rgba(0,0,0,0.08)' : undefined }}>
@@ -5314,17 +5305,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   function toggleSelect(id: string) {
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
-  function selectGroup(groupId: string, allSelected: boolean) {
-    const group = filteredGroups.find(g => g.id === groupId)
-    if (!group) return
-    setSelectedIds(prev => {
-      const n = new Set(prev)
-      for (const i of group.items) {
-        if (allSelected) n.add(i.id); else n.delete(i.id)
-      }
-      return n
-    })
-  }
   function clearSelection() { setSelectedIds(new Set()) }
 
   function bulkUpdate(patch: Partial<BoardItem>) {
@@ -5831,9 +5811,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onResizeSubCol={(key, width) => setSubColWidths(prev => ({ ...prev, [key]: Math.max(key === 'name' ? 120 : 40, width) }))}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
-              onSelectGroup={selectGroup}
               sortBy={sortBy} onToggleSort={toggleSort}
               reorderMode={reorderMode}
+              onToggleReorder={() => setReorderMode(value => !value)}
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
               onMoveItemsHere={(itemIds) => moveItemsBetweenGroups(itemIds, group.id)}
