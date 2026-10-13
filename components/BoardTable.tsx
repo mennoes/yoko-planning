@@ -21,7 +21,7 @@ import { BoardTrashDrawer } from './BoardTrashDrawer'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity }    from '@/lib/itemActivity'
 import {
-  loadCommentsFor, loadAllComments, saveComment, newCommentId, onCommentsUpdate,
+  loadCommentsFor, saveComment, newCommentId, onCommentsUpdate,
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
@@ -35,9 +35,9 @@ import { DistributionPie } from './DistributionPie'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
-import { PersonalCompletionSection, PersonalTimelineSection } from './PersonalCompletionSection'
+import { PersonalCompletionSection } from './PersonalCompletionSection'
 import { useCompletedOwners } from './useCompletedOwners'
-import { personalTimelineEnvelope, type CompletionTarget } from '@/lib/personalCompletion'
+import type { CompletionTarget } from '@/lib/personalCompletion'
 import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
 import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem'
 import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
@@ -46,8 +46,7 @@ import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
 
 const OwnerUsageCtx = createContext<Record<string, number>>({})
 const PERSONAL_STATUS_KEY = '__personalStatus'
-const PERSONAL_TIMELINE_KEY = '__personalTimeline'
-const isPersonalColumn = (key: string) => key === PERSONAL_STATUS_KEY || key === PERSONAL_TIMELINE_KEY
+const isPersonalColumn = (key: string) => key === PERSONAL_STATUS_KEY
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -1663,7 +1662,6 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   function renderCol(c: ColumnDef) {
     switch (c.key) {
       case PERSONAL_STATUS_KEY:
-      case PERSONAL_TIMELINE_KEY:
         return <div aria-hidden style={{ flex: 1, alignSelf: 'stretch', background: 'var(--bg-base)', borderLeft: '3px double var(--border-strong)', opacity: 0.72 }} />
       case 'owner':
       case 'ownerIds':
@@ -2531,15 +2529,8 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     if (Object.keys(updates).length > 0) effectiveItem = { ...item, ...updates }
   }
 
-  // Bij gedeeld werk is de projecttijdlijn de buitenste grens van alle
-  // persoonlijke tijdlijnen. Zolang niemand een eigen bereik instelt,
-  // blijft de bestaande (eventueel uit subitems afgeleide) tijdlijn staan.
   const personalTarget: CompletionTarget = { parentItemId: item.id }
   const effectiveOwners = [...new Set(effectiveItem.ownerIds.filter(id => id && id !== 'unassigned'))]
-  if (effectiveOwners.length > 1) {
-    const envelope = personalTimelineEnvelope(loadAllComments(), personalTarget, effectiveOwners, effectiveItem.startDate, effectiveItem.endDate)
-    effectiveItem = { ...effectiveItem, ...envelope }
-  }
 
   const rowBg = selected ? 'var(--accent-light)' : (hover ? 'var(--overlay-hover)' : 'var(--bg-card)')
   const stickyBg = isMobile ? 'var(--bg-card)' : rowBg
@@ -2728,11 +2719,6 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               target={personalTarget} ownerIds={effectiveOwners} status={effectiveItem.status}
               layout="cell"
               renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : null)
-            : col.key === PERSONAL_TIMELINE_KEY ? (shared ? <PersonalTimelineSection
-              target={personalTarget} ownerIds={effectiveOwners}
-              projectStart={effectiveItem.startDate} projectEnd={effectiveItem.endDate}
-              layout="cell"
-              renderTimeline={(start, end, onChange) => <DateRangeCell startDate={start} endDate={end} onChange={onChange} />} /> : null)
             : col.key === 'notes' ? (
               // Notes is een vrije-tekst-veld. Inline-editable via klik op
               // de tekst; '↗' opent het detail-drawer met een groot
@@ -3178,12 +3164,6 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                   target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
                   ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status}
                   renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} />}
-                {col.key === 'timeline' && <PersonalTimelineSection
-                  key={`timeline-${item.id}`}
-                  target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
-                  ownerIds={item.ownerIds}
-                  projectStart={item.startDate} projectEnd={item.endDate}
-                  renderTimeline={(start, end, onChange) => <DateRangeCell startDate={start} endDate={end} onChange={onChange} />} />}
               </div>
             ))}
           </div>
@@ -4271,7 +4251,6 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
   { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
   { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 },
-  { key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange', width: 180 },
   { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
   { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
   { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
@@ -4282,15 +4261,17 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'nummers',        label: 'Nummers',        type: 'currency',  width: 110 },
 ]
 
-/** Existing boards did not store the two personal columns. Add them once to
- * the visual layout; after the first edit the complete order (including
- * hidden columns) is persisted in the board's columns JSON. */
+/** Existing boards did not store the personal status column. Add it once to
+ * the visual layout. The retired __personalTimeline column is stripped from
+ * older saved layouts without touching project or subitem timeline data. */
 function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
-  const base = columns.map(column => column.key === 'status'
-    ? { ...column, label: 'Status project' }
-    : column.key === 'timeline'
-      ? { ...column, label: 'Timeline project' }
-      : column)
+  const base = columns
+    .filter(column => column.key !== '__personalTimeline')
+    .map(column => column.key === 'status'
+      ? { ...column, label: 'Status project' }
+      : column.key === 'timeline'
+        ? { ...column, label: 'Timeline project' }
+        : column)
   if (base.some(column => isPersonalColumn(column.key))) return base
   const statusIndex = base.findIndex(column => column.key === 'status')
   const timelineIndex = base.findIndex(column => column.key === 'timeline')
@@ -4303,7 +4284,6 @@ function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
     ...(status ? [status] : []),
     ...(timeline ? [timeline] : []),
     { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 },
-    { key: PERSONAL_TIMELINE_KEY, label: 'Jouw timeline', type: 'daterange', width: 180 },
   )
   return ordered
 }

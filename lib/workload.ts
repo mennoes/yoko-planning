@@ -32,9 +32,6 @@ export type Project = {
   // de naam van de parent. Gebruikt door planning-popovers zodat duidelijk
   // is bij welke parent de subitem hoort.
   parentName?: string
-  /** Alleen in Planning: de rij waarvoor de persoonlijke tijdlijn wordt
-   * getoond. Niet opgeslagen in board_items. */
-  __personalMemberId?: string
   completionParentItemId?: string
   completionSubitemId?: string
 }

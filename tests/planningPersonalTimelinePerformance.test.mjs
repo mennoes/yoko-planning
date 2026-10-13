@@ -7,17 +7,13 @@ const client = readFileSync(new URL('../lib/personalCompletionClient.ts', import
 const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
 const personalSection = readFileSync(new URL('../components/PersonalCompletionSection.tsx', import.meta.url), 'utf8')
 
-test('personal timelines use stable project targets instead of scanning every agenda per workload cell', () => {
-  const helperStart = planning.indexOf('function projectForMember')
-  const helperEnd = planning.indexOf('// groupsToProjects', helperStart)
-  const helper = planning.slice(helperStart, helperEnd)
-  assert.match(helper, /completionParentItemId/)
-  assert.doesNotMatch(helper, /completionTargetForProject/)
-
-  const hoursStart = planning.indexOf('function memberHoursInCol')
-  const hoursEnd = planning.indexOf('function projectForMember', hoursStart)
-  assert.doesNotMatch(planning.slice(hoursStart, hoursEnd), /projectForMember/)
-  assert.match(planning, /const memberProjects = effectiveProjects\.map\(project => projectForMember\(project, member\.id\)\)/)
+test('retired personal timelines no longer affect Agenda or Planning', () => {
+  assert.doesNotMatch(planning, /function projectForMember/)
+  assert.doesNotMatch(planning, /__personalMemberId/)
+  assert.doesNotMatch(planning, /Jouw timeline/)
+  assert.doesNotMatch(personalSection, /PersonalTimelineSection/)
+  assert.doesNotMatch(board, /label: 'Jouw timeline'/)
+  assert.match(board, /column\.key !== '__personalTimeline'/)
 })
 
 test('completion reads are memoized until the shared comment store changes', () => {
@@ -28,19 +24,19 @@ test('completion reads are memoized until the shared comment store changes', () 
   assert.doesNotMatch(client, /completionState\(loadAllComments\(\)/)
 })
 
-test('agenda orders project fields before the equally shaped personal fields', () => {
+test('agenda orders project fields before the personal status field', () => {
   const start = board.indexOf('ordered.splice(insertAt, 0,')
   const end = board.indexOf('return ordered', start)
   const order = board.slice(start, end)
   assert.ok(order.indexOf('...(status ? [status]') < order.indexOf('...(timeline ? [timeline]'))
   assert.ok(order.indexOf('...(timeline ? [timeline]') < order.indexOf('PERSONAL_STATUS_KEY'))
-  assert.ok(order.indexOf('PERSONAL_STATUS_KEY') < order.indexOf('PERSONAL_TIMELINE_KEY'))
+  assert.doesNotMatch(order, /PERSONAL_TIMELINE_KEY/)
   assert.match(board, /whiteSpace: 'nowrap'/)
   assert.match(personalSection, /layout === 'cell'\) return <div[^>]+height: '100%'/)
   assert.doesNotMatch(board, /padding: personal \? 0 : '4px 8px'/)
 })
 
-test('agenda column manager persists order and visibility for regular and personal columns', () => {
+test('agenda column manager persists order and visibility for regular and personal status columns', () => {
   assert.match(board, /function completeColumnLayout\(columns: ColumnDef\[\]\)/)
   assert.match(board, /setBoardColumns\(boardId, next\)/)
   assert.match(board, /function toggleVisible\(key: string\)/)
@@ -51,8 +47,7 @@ test('agenda column manager persists order and visibility for regular and person
   assert.match(board, /const dataColumns = completeColumns\.filter\(column => !isPersonalColumn\(column\.key\) && !column\.hidden\)/)
 })
 
-test('planning lets teammates drag assigned personal timelines', () => {
-  assert.doesNotMatch(planning, /Alleen dit teamlid kan de eigen tijdlijn aanpassen/)
-  assert.match(planning, /updatePersonalCompletion\(target, project\.__personalMemberId/)
-  assert.match(client, /parentItemId: target\.parentItemId, subitemId: target\.subitemId, memberId/)
+test('personal completion client only persists personal status', () => {
+  assert.doesNotMatch(client, /timelineStart|timelineEnd/)
+  assert.match(client, /parentItemId: target\.parentItemId, subitemId: target\.subitemId, memberId, done, status/)
 })
