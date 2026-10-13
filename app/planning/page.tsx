@@ -68,6 +68,7 @@ import { onCommentsUpdate } from '@/lib/commentsStore'
 import { useCompletedOwners } from '@/components/useCompletedOwners'
 import { completionContext, type CompletionTarget } from '@/lib/personalCompletion'
 import type { BoardGroup } from '@/lib/boards'
+import { planningDetailHours } from '@/lib/planningDetailHours'
 
 const RAW: Record<string, { groups: unknown[] }> = {
   yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
@@ -3235,8 +3236,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     setCategoryOverride(project.id, c)
   }
   const hasSubitems = ((rawItem?.subitems as { estHours?: number }[] | undefined)?.length ?? 0) > 0
-  const subitemsTotal = ((rawItem?.subitems as { estHours?: number }[] | undefined) ?? [])
-    .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  const effectiveDetailHours = planningDetailHours(
+    parseFloat(estHours) || 0,
+    (rawItem?.subitems as import('@/lib/boards').SubItem[] | undefined) ?? [],
+    ownerHours,
+  )
   const [timerTick, setTimerTick] = useState(0)
   useEffect(() => onTimerUpdate(() => setTimerTick(t => t + 1)), [])
   const activeTimer = getActiveTimer()
@@ -3807,8 +3811,10 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {hasSubitems ? (
               <>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{subitemsTotal} uur</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(som van subitems)</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{effectiveDetailHours.total} uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {effectiveDetailHours.source === 'subitems' ? '(som van subitems)' : '(uren van hoofditem; subitems hebben nog 0u)'}
+                </span>
               </>
             ) : (
               <>
@@ -3829,7 +3835,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           <Row label="Verdeling">
             <DistributionEditor
               owners={ownerIds.filter(id => id !== 'unassigned')}
-              total={hasSubitems ? subitemsTotal : (parseFloat(estHours) || 0)}
+              total={effectiveDetailHours.total}
               values={ownerHours}
               onLive={next => setOwnerHours(next)}
               onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
@@ -3856,7 +3862,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Gewerkt: <strong style={{ color: 'var(--text-secondary)' }}>{fmtMinutes(workedMin)}</strong>
-              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{estHours}u</strong>
+              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{effectiveDetailHours.total}u</strong>
             </span>
           </div>
         </Row>
