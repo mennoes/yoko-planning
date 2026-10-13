@@ -3608,7 +3608,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
           </div>
         </Row>
-        <Row label="Status project">
+        <Row label="Status">
           <StatusPicker
             value={(rawItem?.status as string) ?? project.status ?? ''}
             onChange={v => commit({ status: v })}
