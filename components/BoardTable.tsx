@@ -1710,8 +1710,18 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         return <div style={cellBorder}><OwnersCell value={subitem.ownerIds}
           ownerHours={subitem.ownerHours}
           totalHours={Number(subitem.estHours) || 0}
-          onDistributionChange={hours => onUpdate({ ownerHours: hours })}
-          onChange={v => onUpdate({ ownerIds: v })} /></div>
+          onDistributionChange={hours => onUpdate({
+            ownerHours: hours,
+            ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
+              ? { ownerIdsLocked: true }
+              : {}),
+          })}
+          onChange={v => onUpdate({
+            ownerIds: v,
+            ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
+              ? { ownerIdsLocked: true }
+              : {}),
+          })} /></div>
       case 'status':
         // Status: cell-border zonder padding/center zodat de status-tag
         // de volledige rij-hoogte van het subitem vult (visueel hetzelfde

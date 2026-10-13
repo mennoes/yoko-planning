@@ -8,6 +8,10 @@ export type SubItem = {
   sourceItemId?: string
   name:         string
   ownerIds:     string[]
+  // Alleen expliciet handmatig aangepaste Google-owners blijven staan.
+  // Zonder deze vlag vervangt de volgende sync de lijst met de actuele
+  // deelnemers van precies dit afspraakmoment.
+  ownerIdsLocked?: boolean
   status:       string
   startDate:    string | null
   endDate:      string | null

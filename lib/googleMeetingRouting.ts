@@ -109,6 +109,12 @@ export function nestedMeetingId(seriesId: string, event: GoogleEvent): string {
   return `si_g_${seriesId}_${encodeURIComponent(date ?? event.id)}`
 }
 
+/** Google blijft leidend voor deelnemers, behalve wanneer de gebruiker de
+ * owners van dit specifieke afspraakmoment bewust heeft aangepast. */
+export function syncedOccurrenceOwners(previous: Pick<SubItem, 'ownerIds' | 'ownerIdsLocked'> | undefined, freshOwners: string[]): string[] {
+  return previous?.ownerIdsLocked ? [...previous.ownerIds] : [...freshOwners]
+}
+
 export function mergeNestedMeetings(parent: MeetingParent, incoming: SubItem[], seriesId: string): { subitems: SubItem[]; extra: Record<string, unknown> } {
   const extra = parent.extra ?? {}
   const dismissed = new Set(strings(extra.dismissedInstanceIds))
@@ -125,6 +131,7 @@ export function mergeNestedMeetings(parent: MeetingParent, incoming: SubItem[], 
       startDate: fresh.startDate, endDate: fresh.endDate,
       startTime: fresh.startTime, endTime: fresh.endTime,
       externalLink: fresh.externalLink, meetLink: fresh.meetLink,
+      ownerIds: syncedOccurrenceOwners(previous, fresh.ownerIds),
       source: 'google', googleSeriesId: seriesId,
       status: previous?.statusOverride === 'active' ? (previous.status === 'Done' ? '' : previous.status)
         : previous?.statusOverride === 'done' || previous?.status === 'Done' ? 'Done'

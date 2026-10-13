@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { routeGoogleMeeting, resolveMeetingBoard, findMeetingProject, nestedMeetingId, mergeNestedMeetings, saveNestedMeetings, loadMeetingPlacement } from '../lib/googleMeetingRouting.ts'
+import { routeGoogleMeeting, resolveMeetingBoard, findMeetingProject, nestedMeetingId, mergeNestedMeetings, saveNestedMeetings, loadMeetingPlacement, syncedOccurrenceOwners } from '../lib/googleMeetingRouting.ts'
 
 const boards = new Set(['yoko', 'nederland', 'vlaanderen', 'pnp', 'omdenken'])
 const event = (summary = 'Overleg', emails = [], patch = {}) => ({
@@ -83,8 +83,8 @@ test('recurring identities survive rescheduling and calendar-specific event IDs'
   assert.notEqual(nestedMeetingId('shared-series', first), nestedMeetingId('shared-series', event('Two', [], { recurringEventId: 'master1' , originalStartTime: { date: '2026-09-08' } })))
   assert.equal(nestedMeetingId('single', event()), 'single')
 })
-test('merge preserves unrelated subitems, manual hours/owners, Done overrides and project fields', () => {
-  const previous = sub({ estHours: 0, ownerIds: ['odette'], status: '', statusOverride: 'active' })
+test('merge preserves unrelated subitems, explicitly locked owners, Done overrides and project fields', () => {
+  const previous = sub({ estHours: 0, ownerIds: ['odette'], ownerIdsLocked: true, status: '', statusOverride: 'active' })
   const p = parent({ subitems: [sub({ id: 'manual', source: 'manual' }), previous] })
   const result = mergeNestedMeetings(p, [sub({ startTime: '12:00', estHours: 5, status: 'Done' })], 'series')
   assert.equal(result.subitems.length, 2)
@@ -95,6 +95,14 @@ test('merge preserves unrelated subitems, manual hours/owners, Done overrides an
   assert.deepEqual(result.extra.ownerHours, { menno: 12 })
   assert.deepEqual(result.extra.googleMeetingSeriesIds, ['series'])
   assert.equal(p.subitems[1].startTime, '10:00')
+})
+test('Google replaces stale occurrence owners unless that occurrence was explicitly locked', () => {
+  assert.deepEqual(syncedOccurrenceOwners({ ownerIds: ['job', 'ilse'] }, ['menno']), ['menno'])
+  assert.deepEqual(syncedOccurrenceOwners({ ownerIds: ['job'], ownerIdsLocked: true }, ['menno']), ['job'])
+
+  const p = parent({ subitems: [sub({ ownerIds: ['job', 'ilse'] })] })
+  const result = mergeNestedMeetings(p, [sub({ ownerIds: ['menno'] })], 'series')
+  assert.deepEqual(result.subitems[0].ownerIds, ['menno'])
 })
 test('deleted occurrences are not recreated, including after deleting the last subitem', () => {
   const p = parent({ extra: { dismissedInstanceIds: ['shared-event'], googleMeetingSeriesIds: ['series'] } })

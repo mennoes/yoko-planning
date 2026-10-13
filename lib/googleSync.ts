@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
-import { loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting } from './googleMeetingRouting'
+import { loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -227,7 +227,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
+type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
 type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 type Rule     = { pattern: string; board_id: string }
 
@@ -1127,9 +1127,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // nieuwe rijen (zie keepGroup hieronder).
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
-    // Voor recurring nemen we de owners van de meeste recente instantie —
-    // attendee-lijsten zijn meestal hetzelfde over alle herhalingen.
-    const groupOwners = ownersForEvent(sorted[sorted.length - 1])
+    // Deelnemers kunnen per afspraakmoment wijzigen. Bouw de parent uit de
+    // actuele unie, maar houd de precieze lijst straks ook per subitem bij.
+    const ownersByEvent = new Map(sorted.map(ev => [ev.id, ownersForEvent(ev)]))
     const icalUid     = iCalKeyForGroup(sorted)
     const lookup      = findExistingFor(icalUid, groupKey, baseName, minStart)
     const existingRow = lookup.row
@@ -1149,14 +1149,23 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (ownersLocked && Array.isArray(existingRow?.owner_ids)) {
       for (const o of (existingRow!.owner_ids as string[])) ownerSet.add(o)
     } else {
-      for (const o of (existingRow?.owner_ids ?? [])) ownerSet.add(o)
-      for (const o of groupOwners.owners) ownerSet.add(o)
+      for (const eventOwners of ownersByEvent.values()) {
+        for (const o of eventOwners.owners) ownerSet.add(o)
+      }
     }
     const finalOwners = [...ownerSet]
-    const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0) * finalOwners.length
+    const totalHours = sorted.reduce((sum, ev) => {
+      const current = ownersByEvent.get(ev.id)
+      return sum + (current?.total ?? 0)
+    }, 0)
     const ownerHoursMap: Record<string, number> = {}
-    const perPersonTotal = sorted.reduce((s, ev) => s + eventHours(ev), 0)
-    for (const oid of finalOwners) ownerHoursMap[oid] = perPersonTotal
+    for (const ev of sorted) {
+      const current = ownersByEvent.get(ev.id)
+      if (!current) continue
+      for (const oid of current.owners) {
+        ownerHoursMap[oid] = (ownerHoursMap[oid] ?? 0) + current.perPerson
+      }
+    }
     // Bouw een lookup van bestaande subitems zodat user-edits (status Done,
     // hernoemen, owner-aanpassingen) bij elke sync behouden blijven.
     const priorSubs = Array.isArray(existingRow?.subitems) ? existingRow!.subitems! : []
@@ -1167,6 +1176,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const dateLabel = start ? new Date(start).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
       const sid  = `si_g_${ev.id}`
       const prev = priorById.get(sid)
+      const currentOwners = ownersByEvent.get(ev.id) ?? ownersForEvent(ev)
+      const occurrenceOwners = syncedOccurrenceOwners(
+        prev?.ownerIds ? { ownerIds: prev.ownerIds, ownerIdsLocked: prev.ownerIdsLocked } : undefined,
+        currentOwners.owners,
+      )
       // Naam-bepaling voor recurring instances, prioriteit:
       //   1. Heeft de gebruiker dit specifieke event in Google een eigen
       //      titel gegeven (anders dan de master)? → die Google-titel
@@ -1189,7 +1203,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       return {
         id:        sid,
         name:      subitemName,
-        ownerIds:  prev?.ownerIds && prev.ownerIds.length > 0 ? prev.ownerIds : finalOwners,
+        ownerIds:  occurrenceOwners,
+        ...(prev?.ownerIdsLocked ? { ownerIdsLocked: true } : {}),
+        ...(prev?.ownerHours && prev.ownerIdsLocked ? { ownerHours: prev.ownerHours } : {}),
         status:    resolveStatus(prev?.status, end ?? start, undefined, prev?.statusOverride),
         ...(prev?.statusOverride ? { statusOverride: prev.statusOverride } : {}),
         startDate: start,
@@ -1202,7 +1218,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         // berekenen als er nog niks stond.
         estHours:  (typeof prev?.estHours === 'number' && prev.estHours > 0)
                      ? prev.estHours
-                     : eventHours(ev) * finalOwners.length,
+                     : eventHours(ev) * occurrenceOwners.length,
         // Per-instance Meet-link — sommige reeksen verschillen per moment.
         meetLink:  ev.hangoutLink ?? prev?.meetLink ?? null,
         // Per-instance Google-Calendar-link — zo kan de UI naar de juiste
