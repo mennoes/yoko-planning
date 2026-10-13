@@ -66,9 +66,9 @@ test('shared personal tasks can still reopen and respect global Done', () => {
   assert.match(render({ status: 'Working on...' }), />Not started<\/button>/)
 })
 
-test('Planning places personal status directly below project status and reuses the same picker', () => {
+test('Planning places personal status directly below status and reuses the same picker', () => {
   const source = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
-  const start = source.indexOf('<Row label="Status project">')
+  const start = source.indexOf('<Row label="Status">')
   const end = source.indexOf('<Row label="Bord">', start)
   const statuses = source.slice(start, end)
   assert.match(statuses, /<PersonalCompletionSection/)

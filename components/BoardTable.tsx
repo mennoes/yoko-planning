@@ -2073,8 +2073,8 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   // parent column label so custom columns get something sensible.
   const headerLabelFor = (key: string, fallback: string) => {
     if (key === 'owner')       return 'Owner'
-    if (key === 'status')      return 'Status project'
-    if (key === 'timeline')    return 'Timeline project'
+    if (key === 'status')      return 'Status'
+    if (key === 'timeline')    return 'Timeline'
     if (key === 'estHours')    return 'Est.'
     if (key === 'echtGewerkt') return 'Echt gewerkt'
     return fallback
@@ -3154,7 +3154,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
             {cols.filter(col => !isPersonalColumn(col.key)).map(col => (
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {col.key === 'status' ? 'Status project' : col.key === 'timeline' ? 'Timeline project' : col.label}
+                  {col.key === 'status' ? 'Status' : col.key === 'timeline' ? 'Timeline' : col.label}
                 </span>
                 <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
                   <Cell item={item} col={col} onUpdate={onUpdate} />
@@ -4268,9 +4268,9 @@ function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
   const base = columns
     .filter(column => column.key !== '__personalTimeline')
     .map(column => column.key === 'status'
-      ? { ...column, label: 'Status project' }
+      ? { ...column, label: 'Status' }
       : column.key === 'timeline'
-        ? { ...column, label: 'Timeline project' }
+        ? { ...column, label: 'Timeline' }
         : column)
   if (base.some(column => isPersonalColumn(column.key))) return base
   const statusIndex = base.findIndex(column => column.key === 'status')
