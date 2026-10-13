@@ -32,7 +32,7 @@ import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
-import { rebalanceOwnerHours } from '@/lib/ownerHours'
+import { normalizeOwnerHours, rebalanceOwnerHours } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
@@ -746,22 +746,7 @@ function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
 }
 
 function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<string, number>): Record<string, number> {
-  const ids = ownerIds.filter(id => id && id !== 'unassigned')
-  if (ids.length === 0) return {}
-  const safeTotal = Math.max(0, Number(total) || 0)
-  const raw = Object.fromEntries(ids.map(id => [id, Math.max(0, Number(stored?.[id]) || 0)]))
-  const rawSum = Object.values(raw).reduce((sum, hours) => sum + hours, 0)
-  if (safeTotal <= 0) return raw
-  if (rawSum <= 0) {
-    const equal = safeTotal / ids.length
-    return Object.fromEntries(ids.map(id => [id, Math.round(equal * 10) / 10]))
-  }
-  const factor = safeTotal / rawSum
-  const scaled = Object.fromEntries(ids.map(id => [id, Math.round(raw[id] * factor * 10) / 10]))
-  const scaledSum = Object.values(scaled).reduce((sum, hours) => sum + hours, 0)
-  const remainder = Math.round((safeTotal - scaledSum) * 10) / 10
-  if (Math.abs(remainder) >= 0.1) scaled[ids[0]] = Math.max(0, Math.round((scaled[ids[0]] + remainder) * 10) / 10)
-  return scaled
+  return normalizeOwnerHours(ownerIds, total, stored)
 }
 
 const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
@@ -769,7 +754,7 @@ const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
 
 function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange }: {
   value: string[]
-  onChange: (v: string[]) => void
+  onChange: (v: string[], distribution?: Record<string, number>) => void
   ownerHours?: Record<string, number>
   totalHours?: number
   onDistributionChange?: (v: Record<string, number>) => void
@@ -789,6 +774,12 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
     const resolved = resolveOwnerHours(value, totalHours, ownerHours)
     setLiveHours(resolved)
     setHourDrafts(ownerHoursDrafts(value, resolved))
+    const assigned = value.filter(id => id && id !== 'unassigned')
+    const needsRepair = assigned.length > 1 && totalHours > 0 &&
+      assigned.some(id => Math.max(0, Number(ownerHours?.[id]) || 0) <= 0)
+    // Migreer oude selecties waarbij toegevoegde owners stilletjes 0 uur
+    // kregen. Eén persist maakt Agenda, Home en Planning daarna consistent.
+    if (needsRepair) onDistributionChange?.(resolved)
   }, [ownersKey, totalHours, hoursKey])
   // Bron-lijst: live team_members uit Supabase aangevuld met data/team.json
   // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
@@ -812,7 +803,10 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   })()
   const toggle = (id: string) => {
     if (value.includes(id)) {
-      onChange(value.filter(x => x !== id))
+      const next = value.filter(x => x !== id)
+      const distribution = normalizeOwnerHours(next, totalHours,
+        Object.fromEntries(next.map(ownerId => [ownerId, liveHours[ownerId] ?? 0])))
+      onChange(next, distribution)
       return
     }
     // Bij assignen automatisch 'unassigned' eruit gooien — anders blijft een
@@ -821,7 +815,11 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
     const next = id === 'unassigned'
       ? [...value, id]
       : [...value.filter(x => x !== 'unassigned'), id]
-    onChange(next)
+    const initial = { ...liveHours, [id]: 0 }
+    const distribution = id === 'unassigned'
+      ? {}
+      : rebalanceOwnerHours(next, initial, totalHours, id, totalHours / Math.max(next.length, 1))
+    onChange(next, distribution)
   }
 
   // Zes meest gebruikte of reeds geselecteerde actieve leden staan direct
@@ -1533,7 +1531,7 @@ function Cell({ item, col, onUpdate }: {
       ownerHours: hours,
       ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
     })}
-    onChange={v => {
+    onChange={(v, distribution) => {
     // ownerIds én ownerHours samen consistent houden: verwijderde owner
     // mag geen stale uren-entry achterlaten (anders telt ie zomaar weer
     // mee zodra je 'm later opnieuw toevoegt of bij periode-pro-rate).
@@ -1548,9 +1546,9 @@ function Cell({ item, col, onUpdate }: {
         if (active.has(oid)) cleaned[oid] = hrs
       }
       const hasAny = Object.keys(cleaned).length > 0
-      onUpdate({ ownerIds: v, ownerHours: hasAny ? cleaned : undefined, ...lockPatch })
+      onUpdate({ ownerIds: v, ownerHours: distribution ?? (hasAny ? cleaned : undefined), ...lockPatch })
     } else {
-      onUpdate({ ownerIds: v, ...lockPatch })
+      onUpdate({ ownerIds: v, ownerHours: distribution, ...lockPatch })
     }
   }} />
   if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
@@ -1716,8 +1714,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
               ? { ownerIdsLocked: true }
               : {}),
           })}
-          onChange={v => onUpdate({
+          onChange={(v, distribution) => onUpdate({
             ownerIds: v,
+            ownerHours: distribution,
             ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
               ? { ownerIdsLocked: true }
               : {}),

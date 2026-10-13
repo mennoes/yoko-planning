@@ -1,5 +1,32 @@
 const round1 = (value: number) => Math.round(value * 10) / 10
 
+/** Maak een opgeslagen verdeling passend bij de geselecteerde owners.
+ * Een geselecteerde owner met 0 uur is geen bruikbare verdeling: verdeel in
+ * dat geval gelijk. Wie echt niet meedoet hoort uit de ownerselectie. */
+export function normalizeOwnerHours(
+  ownerIds: string[],
+  totalHours: number,
+  stored?: Record<string, number>,
+): Record<string, number> {
+  const ids = [...new Set(ownerIds.filter(id => id && id !== 'unassigned'))]
+  if (ids.length === 0) return {}
+  const total = Math.max(0, Number(totalHours) || 0)
+  const raw = Object.fromEntries(ids.map(id => [id, Math.max(0, Number(stored?.[id]) || 0)]))
+  if (total <= 0) return raw
+  const rawSum = Object.values(raw).reduce((sum, hours) => sum + hours, 0)
+  if (rawSum <= 0 || ids.some(id => raw[id] <= 0)) {
+    const equal = round1(total / ids.length)
+    const next = Object.fromEntries(ids.map(id => [id, equal]))
+    next[ids[0]] = round1(next[ids[0]] + round1(total - equal * ids.length))
+    return next
+  }
+  const factor = total / rawSum
+  const next = Object.fromEntries(ids.map(id => [id, round1(raw[id] * factor)]))
+  const sum = Object.values(next).reduce((acc, hours) => acc + hours, 0)
+  next[ids[0]] = round1(next[ids[0]] + round1(total - sum))
+  return next
+}
+
 /** Wijzig één eigenaar en verdeel het restant over de andere eigenaren. */
 export function rebalanceOwnerHours(
   ownerIds: string[],
