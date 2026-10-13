@@ -63,6 +63,7 @@ test('personal calendar view ignores a manually retained owner who is not an acc
     ...meeting,
     ownerIds: ['menno', 'job', 'ilse'],
     googleParticipantIds: ['job', 'ilse'],
+    googleCalendarMemberIds: ['vincent'],
     startDate: '2026-10-13', endDate: '2026-10-13',
   }
   const projects = groupsToProjects('yoko', [{ id: 'meetings', name: 'Meetings', items: [google] }])

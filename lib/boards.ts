@@ -13,6 +13,7 @@ export type SubItem = {
   // deelnemers van precies dit afspraakmoment.
   ownerIdsLocked?: boolean
   googleParticipantIds?: string[]
+  googleCalendarMemberIds?: string[]
   status:       string
   startDate:    string | null
   endDate:      string | null
@@ -79,6 +80,7 @@ export type BoardItem = {
   externalSyncedAt?: string             // gebruikt om de nieuwste Google-variant te kiezen
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
   googleParticipantIds?: string[]          // actuele accepted deelnemers uit Google; los van handmatige owners
+  googleCalendarMemberIds?: string[]        // teamleden wier eigen gekoppelde agenda deze afspraak bevat
   links?:         ItemLink[]            // gekoppelde bestanden / externe URL's
   // Wanneer 't item subitems heeft volgt de timeline (startDate/endDate)
   // normaliter automatisch de vroegste/laatste actieve-subitem-datum

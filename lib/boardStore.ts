@@ -328,10 +328,17 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
     return candidate.id < current.id
   }
   const winners = new Map<string, GoogleRow>()
+  const calendarMembersByKey = new Map<string, Set<string>>()
   for (const r of itemRows) {
     const row = r as GoogleRow
     const k = dedupeKey(row)
     if (!k) continue
+    const memberIds = Array.isArray(row.extra?.googleCalendarMemberIds)
+      ? row.extra.googleCalendarMemberIds.filter((id): id is string => typeof id === 'string')
+      : []
+    const combined = calendarMembersByKey.get(k) ?? new Set<string>()
+    for (const id of memberIds) combined.add(id)
+    calendarMembersByKey.set(k, combined)
     const cur = winners.get(k)
     if (!cur || preferGoogleRow(row, cur)) winners.set(k, row)
   }
@@ -344,6 +351,7 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
       if (winner && winner.id !== row.id) continue
     }
     const it = rowToItem(row)
+    if (k) it.googleCalendarMemberIds = [...(calendarMembersByKey.get(k) ?? [])]
     const gid = String((row as unknown as { group_id: string }).group_id)
     const arr = itemsByGroup.get(gid) ?? []
     arr.push(it); itemsByGroup.set(gid, arr)
