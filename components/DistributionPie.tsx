@@ -13,7 +13,7 @@
 // voor angle ↔ value-mapping, clamp op 0..total per drag-stap.
 
 'use client'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 export type PieSegment = {
   id:        string
@@ -88,13 +88,15 @@ export function DistributionPie({
     rightId:     string
   } | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const stopDragRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => stopDragRef.current?.(), [])
 
   function angleAt(e: PointerEvent | React.PointerEvent): number {
     const svg = svgRef.current
     if (!svg) return 0
     const rect = svg.getBoundingClientRect()
-    const x = e.clientX - rect.left - cx
-    const y = e.clientY - rect.top  - cy
+    const x = (e.clientX - rect.left) * size / rect.width - cx
+    const y = (e.clientY - rect.top) * size / rect.height - cy
     // atan2 levert -π..π met 0 op rechts; corrigeer naar 0..2π met 0 op top.
     let a = Math.atan2(y, x) + Math.PI / 2
     if (a < 0) a += Math.PI * 2
@@ -102,7 +104,7 @@ export function DistributionPie({
   }
 
   function startDrag(boundaryIdx: number, e: React.PointerEvent) {
-    if (!interactive || !onChange) return
+    if (!interactive || !onChange || stopDragRef.current || e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
     // Pointer-capture op de SVG zodat móve-events blijven aankomen ook als
@@ -137,27 +139,37 @@ export function DistributionPie({
     // (de hele taart) waardoor 3+-segment-configuraties boven de 100% konden
     // uitkomen omdat één paar de totale taart opslokte.
     const pairTotal = start.leftStart + start.rightStart
+    let previousAngle = start.startAngle
+    let sweptAngle = 0
 
     function onMove(ev: PointerEvent) {
+      if (ev.pointerId !== start.pointerId) return
       const cur  = angleAt(ev)
-      let dA = cur - start.startAngle
+      let dA = cur - previousAngle
       if (dA >  Math.PI) dA -= Math.PI * 2
       if (dA < -Math.PI) dA += Math.PI * 2
-      const dV = (dA / (Math.PI * 2)) * total
+      previousAngle = cur
+      sweptAngle += dA
+      const dV = (sweptAngle / (Math.PI * 2)) * total
       const newLeft  = Math.max(0, Math.min(pairTotal, start.leftStart + dV))
       // Spiegel: wat de linker-buur erbij krijgt, gaat van rechts af. Dat
       // houdt de som van de twee deelnemers EN het totaal constant.
-      const realDV   = newLeft - start.leftStart
-      const newRight = Math.max(0, start.rightStart - realDV)
       latest = { ...snapshot }
       latest[start.leftId]  = round1(newLeft)
-      latest[start.rightId] = round1(newRight)
+      latest[start.rightId] = round1(pairTotal - latest[start.leftId])
       onChange?.(latest)
     }
-    function onUp(ev: PointerEvent) {
+    function cleanup() {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup',   onUp)
-      try { svgRef.current?.releasePointerCapture(ev.pointerId) } catch {}
+      window.removeEventListener('pointercancel', onCancel)
+      stopDragRef.current = null
+      try { svgRef.current?.releasePointerCapture(start.pointerId) } catch {}
+    }
+    function onUp(ev: PointerEvent) {
+      if (ev.pointerId !== start.pointerId) return
+      onMove(ev)
+      cleanup()
       setDrag(null)
       // Eén keer committen aan het eind — zo doen we niet honderden writes
       // per drag. Alleen wanneer de gebruiker daadwerkelijk iets verschoven
@@ -165,8 +177,16 @@ export function DistributionPie({
       const moved = Object.keys(latest).some(k => latest[k] !== snapshot[k])
       if (moved) onCommit?.(latest)
     }
+    function onCancel(ev: PointerEvent) {
+      if (ev.pointerId !== start.pointerId) return
+      cleanup()
+      setDrag(null)
+      onChange?.(snapshot)
+    }
+    stopDragRef.current = cleanup
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup',   onUp)
+    window.addEventListener('pointercancel', onCancel)
   }
 
   if (total <= 0 || segments.length === 0) {
@@ -178,7 +198,8 @@ export function DistributionPie({
   }
 
   return (
-    <svg ref={svgRef} width={size} height={size} className={className} style={{ overflow: 'visible' }}>
+    <svg ref={svgRef} width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={className}
+      style={{ overflow: 'visible', flexShrink: 0, touchAction: interactive ? 'none' : undefined }}>
       {/* Achtergrond-cirkel zodat 0-value segmenten een lichte schil tonen */}
       <circle cx={cx} cy={cy} r={r} fill="var(--overlay-faint)" />
       {segments.map((s, i) => {
@@ -213,12 +234,10 @@ export function DistributionPie({
           {innerLabel}
         </text>
       )}
-      {/* Boundary-handles (alleen wanneer interactive) — een handle per
-          aangrenzend segment-paar, gepositioneerd op de buitenrand. */}
+      {/* Het begin op 12 uur is vast. Alleen de echte, bewegende grenzen
+          krijgen een handle; via deze N-1 grenzen is elke verdeling bereikbaar. */}
       {interactive && segments.length > 1 && segments.map((_, i) => {
-        // Skip boundary 0 wanneer we niet wrap-around willen — bij N segmenten
-        // bestaan er N boundaries (cirkel sluit zichzelf), wat handig is omdat
-        // alle paren bereikbaar zijn. We laten ze allemaal staan.
+        if (i === 0) return null
         const boundaryAngle = (cumulative[i] / total) * Math.PI * 2
         const [hx, hy] = polar(cx, cy, r, boundaryAngle)
         const active = drag?.boundaryIdx === i
