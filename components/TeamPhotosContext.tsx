@@ -7,6 +7,8 @@ import { isDemoPath, DEMO_PHOTOS } from '@/lib/demoFixtures'
 import { supabase } from '@/lib/supabase'
 import { pinnedStaticAvatarUrl } from '@/lib/avatarAssets'
 
+const TEAM_PHOTO_PREFIX = '__team_photo__:'
+
 type Ctx = {
   photos:   Record<string, string>
   getPhoto: (memberId: string) => string | null
@@ -31,15 +33,20 @@ export function TeamPhotosProvider({ children }: { children: ReactNode }) {
     let pullTimer: ReturnType<typeof setTimeout> | undefined
     async function pullRemotePhotos() {
       if (!supabase) return
-      const { data, error } = await supabase
+      const [{ data, error }, { data: metadata }] = await Promise.all([supabase
         .from('profiles')
         .select('member_id, photo')
         .not('member_id', 'is', null)
-        .not('photo', 'is', null)
+        .not('photo', 'is', null),
+      supabase.from('team_members_extra').select('id, email').like('id', `${TEAM_PHOTO_PREFIX}%`),
+      ])
       if (!alive || error || !data) return
       const remote: Record<string, string> = {}
       for (const row of data as { member_id: string | null; photo: string | null }[]) {
         if (row.member_id && row.photo) remote[row.member_id] = row.photo
+      }
+      for (const row of (metadata ?? []) as { id: string; email: string | null }[]) {
+        if (row.email) remote[row.id.slice(TEAM_PHOTO_PREFIX.length)] = row.email
       }
       // Supabase is de gedeelde bron; lokale foto's blijven alleen als
       // offline/legacy fallback bestaan voor leden zonder remote foto.
@@ -53,6 +60,10 @@ export function TeamPhotosProvider({ children }: { children: ReactNode }) {
     void pullRemotePhotos()
     const channel = supabase?.channel('team-photos:profiles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, schedulePull)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members_extra' }, payload => {
+        const id = String((payload.new as { id?: string } | null)?.id ?? (payload.old as { id?: string } | null)?.id ?? '')
+        if (id.startsWith(TEAM_PHOTO_PREFIX)) schedulePull()
+      })
       .subscribe()
     window.addEventListener('focus', schedulePull)
     return () => {
@@ -63,7 +74,7 @@ export function TeamPhotosProvider({ children }: { children: ReactNode }) {
     }
   }, [demo])
 
-  const getPhoto = useCallback((id: string) => pinnedStaticAvatarUrl(id) ?? photos[id] ?? null, [photos])
+  const getPhoto = useCallback((id: string) => photos[id] ?? pinnedStaticAvatarUrl(id) ?? null, [photos])
 
   const setPhoto = useCallback((id: string, dataUrl: string) => {
     // /demo: alleen lokale state bijwerken, nooit de echte foto-store

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import teamData from '@/data/team.json'
 import { useProfile } from '@/components/ProfileContext'
@@ -16,6 +16,7 @@ import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from 
 import { isTeamAdmin } from '@/lib/teamAdmin'
 import { pinnedStaticAvatarUrl, staticAvatarUrl } from '@/lib/avatarAssets'
 import { useTeamGroups } from '@/components/useTeamGroups'
+import { AvatarEditor } from '@/components/AvatarEditor'
 
 type ExtendedProfile = {
   user_id?:           string
@@ -75,6 +76,7 @@ export default function PublicProfilePage() {
   const isMe = myProfile?.memberId === memberId
   const admin = isTeamAdmin(myProfile?.memberId)
   const canEditProfile = isMe || (admin && !!data)
+  const canEditPhoto = isMe || admin
 
   useEffect(() => {
     const refresh = () => setCapacities(loadCapacities())
@@ -129,7 +131,7 @@ export default function PublicProfilePage() {
 
   const name    = liveMember?.name ?? data?.name ?? baseMember.name
   const color   = data?.color ?? baseMember.color
-  const photo   = pinnedStaticAvatarUrl(memberId) ?? data?.photo ?? (memberId ? getPhoto(memberId) : null) ?? staticAvatarUrl(memberId) ?? `/team/${memberId}.jpg`
+  const photo   = data?.photo ?? (memberId ? getPhoto(memberId) : null) ?? pinnedStaticAvatarUrl(memberId) ?? staticAvatarUrl(memberId) ?? `/team/${memberId}.jpg`
   const cap     = capacities[memberId] ?? data?.weekly_capacity ?? baseMember.weeklyCapacity ?? 40
   const planningTeam = teamGroups.find(group => group.memberIds.includes(memberId))?.name
     ?? (liveMember?.inactive ? 'Inactief team' : liveMember?.kind === 'freelance' ? 'Freelancers' : 'Team Yoko')
@@ -170,15 +172,20 @@ export default function PublicProfilePage() {
             photo={photo}
             name={name}
             color={color}
-            editable={isMe}
+            editable={canEditPhoto}
             onPicked={async (dataUrl) => {
-              if (myProfile) {
-                if (supabase && await getCurrentUserId()) {
-                  await supabase.from('profiles').update({ photo: dataUrl }).eq('member_id', memberId)
-                }
-                setPhoto(memberId, dataUrl)
-                setData(d => ({ ...(d ?? {}), photo: dataUrl }))
-              }
+              if (!supabase || !await getCurrentUserId()) throw new Error('Log opnieuw in om de foto op te slaan.')
+              const { data: sessionData } = await supabase.auth.getSession()
+              const token = sessionData.session?.access_token
+              if (!token) throw new Error('Log opnieuw in om de foto op te slaan.')
+              const response = await fetch('/api/team/photo', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ memberId, photo: dataUrl }),
+              })
+              const result = await response.json() as { ok?: boolean; error?: string }
+              if (!response.ok || !result.ok) throw new Error(result.error ?? 'Opslaan mislukt.')
+              setPhoto(memberId, dataUrl)
+              setData(d => ({ ...(d ?? {}), photo: dataUrl || null }))
             }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
@@ -482,31 +489,25 @@ const linkStyle: React.CSSProperties = { color: 'var(--text-primary)', textDecor
 // ─── Clickable avatar with file-upload menu ──────────────────────────────────
 function ClickableAvatar({ photo, name, color, editable, onPicked }: {
   photo: string; name: string; color: string; editable: boolean
-  onPicked: (dataUrl: string) => void
+  onPicked: (dataUrl: string) => Promise<void>
 }) {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editorPhoto, setEditorPhoto] = useState(photo)
   const [hover, setHover] = useState(false)
-
-  function handleFile(file: File) {
-    const reader = new FileReader()
-    reader.onload = e => { onPicked(String(e.target?.result ?? '')); setMenuOpen(false) }
-    reader.readAsDataURL(file)
-  }
 
   return (
     <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}>
       <img src={photo} alt={name}
-        onClick={() => editable && setMenuOpen(o => !o)}
+        onClick={() => { if (editable) { setEditorPhoto(photo); setEditorOpen(true) } }}
         onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
         style={{
           width: 110, height: 110, borderRadius: '50%',
           objectFit: 'cover', cursor: editable ? 'pointer' : 'default',
           background: 'var(--bg-card)',
         }} />
-      {editable && (hover || menuOpen) && (
+      {editable && (hover || editorOpen) && (
         <div style={{
           position: 'absolute', inset: 0, borderRadius: '50%',
           background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -517,38 +518,11 @@ function ClickableAvatar({ photo, name, color, editable, onPicked }: {
         </div>
       )}
 
-      {menuOpen && editable && (
-        <>
-          <div onClick={() => setMenuOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
-          <div style={{
-            position: 'absolute', top: 118, left: 0, zIndex: 201,
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: 6, minWidth: 200,
-            boxShadow: '0 14px 40px rgba(0,0,0,0.25)',
-            display: 'flex', flexDirection: 'column', gap: 2,
-          }}>
-            <button onClick={() => fileRef.current?.click()} style={menuItemStyle}>
-              📤 Upload foto…
-            </button>
-            <button onClick={() => { onPicked(''); setMenuOpen(false) }}
-              style={{ ...menuItemStyle, color: 'var(--text-muted)' }}>
-              Verwijder foto
-            </button>
-          </div>
-        </>
-      )}
-
-      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+      {editorOpen && editable && <AvatarEditor initialPhoto={editorPhoto} name={name} color={color}
+        onCancel={() => setEditorOpen(false)}
+        onSave={async dataUrl => { await onPicked(dataUrl); setEditorOpen(false) }} />}
     </div>
   )
-}
-
-const menuItemStyle: React.CSSProperties = {
-  background: 'transparent', border: 'none', textAlign: 'left',
-  padding: '8px 12px', borderRadius: 6, fontSize: 13, fontWeight: 500,
-  color: 'var(--text-primary)', cursor: 'pointer',
 }
 
 // ─── Editable fields config ──────────────────────────────────────────────────
