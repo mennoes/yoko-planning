@@ -55,8 +55,18 @@ test('title hints and configured rules work; no arbitrary substring or nonexiste
 })
 test('explicit title routing moves existing events while other routes preserve manual placement', () => {
   assert.equal(resolveMeetingBoard('yoko', { boardId: 'omdenken', reason: 'title' }), 'omdenken')
+  assert.equal(resolveMeetingBoard('yoko', { boardId: 'omdenken', reason: 'title' }, true), 'yoko')
   assert.equal(resolveMeetingBoard('omdenken', { boardId: 'nederland', reason: 'participants' }), 'omdenken')
   assert.equal(resolveMeetingBoard(undefined, { boardId: 'pnp', reason: 'participants' }), 'pnp')
+})
+test('nested Google meetings keep their independent id and match future syncs through sourceItemId', () => {
+  const moved = sub({ id: 'si_nested_event-1_123', sourceItemId: 'event-1', googlePlacementLocked: true })
+  const result = mergeNestedMeetings(parent({ subitems: [moved] }), [sub({ id: 'event-1', startTime: '12:00' })], 'event-1')
+  assert.equal(result.subitems.length, 1)
+  assert.equal(result.subitems[0].id, moved.id)
+  assert.equal(result.subitems[0].sourceItemId, 'event-1')
+  assert.equal(result.subitems[0].googlePlacementLocked, true)
+  assert.equal(result.subitems[0].startTime, '12:00')
 })
 test('clear project match; ambiguous and generic names stay in Meetings', () => {
   const r = { boardId: 'vlaanderen', reason: 'participants' }

@@ -881,7 +881,7 @@ export async function persistItemNesting(
 
   const { data: target, error: readError } = await supabase
     .from('board_items')
-    .select('id, subitems')
+    .select('id, subitems, extra')
     .eq('id', targetItemId)
     .eq('board_id', boardName)
     .is('deleted_at', null)
@@ -893,15 +893,75 @@ export async function persistItemNesting(
     candidate.id === subitem.id || candidate.sourceItemId === sourceItemId,
   )
   const nextSubitems = alreadyNested ? existing : [...existing, subitem]
+  const targetExtra = ((target as { extra?: Record<string, unknown> | null }).extra ?? {})
+  const sourceSeriesIds = subitem.source === 'google' && subitem.sourceItemId
+    ? [...new Set([...(Array.isArray(targetExtra.googleMeetingSeriesIds) ? targetExtra.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string') : []), subitem.sourceItemId])]
+    : undefined
   const { error: parentError } = await supabase
     .from('board_items')
-    .update({ subitems: nextSubitems })
+    .update({
+      subitems: nextSubitems,
+      extra: sourceSeriesIds ? { ...targetExtra, googleMeetingSeriesIds: sourceSeriesIds } : targetExtra,
+    })
     .eq('id', targetItemId)
     .eq('board_id', boardName)
     .is('deleted_at', null)
   if (parentError) return false
 
   return softDeleteItem(sourceItemId)
+}
+
+// Haal een eerder geneste Google-meeting veilig terug naar top-level.
+// Eerst wordt de canonical rij hersteld; pas daarna verdwijnt de JSON-sub
+// uit de parent. Bij een netwerkfout kan zo hooguit tijdelijk een duplicaat
+// zichtbaar zijn, maar nooit de meeting zelf verdwijnen.
+export async function persistGoogleSubitemPromotion(
+  boardName: string,
+  parentItemId: string,
+  targetGroupId: string,
+  subitemId: string,
+  promoted: BoardItem,
+  sourceSeriesId?: string,
+): Promise<boolean> {
+  if (!supabase || promoted.source !== 'google') return false
+  if (!await getCurrentUserId()) return false
+  lastLocalWriteAt[boardName] = Date.now()
+
+  const { data: parent, error: readError } = await supabase
+    .from('board_items')
+    .select('id, subitems, extra')
+    .eq('id', parentItemId)
+    .eq('board_id', boardName)
+    .is('deleted_at', null)
+    .single()
+  if (readError || !parent) return false
+
+  const restoredRow = {
+    ...itemToRow(boardName, targetGroupId, 9999, promoted),
+    deleted_at: null,
+  }
+  const { error: restoreError } = await supabase
+    .from('board_items')
+    .upsert(restoredRow, { onConflict: 'id' })
+  if (restoreError) return false
+
+  const currentSubs = Array.isArray(parent.subitems) ? parent.subitems as SubItem[] : []
+  const currentExtra = ((parent as { extra?: Record<string, unknown> | null }).extra ?? {})
+  const seriesIds = Array.isArray(currentExtra.googleMeetingSeriesIds)
+    ? currentExtra.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string')
+    : []
+  const { error: parentError } = await supabase
+    .from('board_items')
+    .update({
+      subitems: currentSubs.filter(sub => sub.id !== subitemId),
+      extra: sourceSeriesId
+        ? { ...currentExtra, googleMeetingSeriesIds: seriesIds.filter(id => id !== sourceSeriesId) }
+        : currentExtra,
+    })
+    .eq('id', parentItemId)
+    .eq('board_id', boardName)
+    .is('deleted_at', null)
+  return !parentError
 }
 
 const channelByBoard: Record<string, ReturnType<NonNullable<typeof supabase>['channel']>> = {}
@@ -1084,7 +1144,10 @@ export async function moveItemToBoard(
   if (typeof window === 'undefined') return { ok: false, message: 'No window' }
 
   const srcGroups = loadGroups(sourceBoard, fallbackGroups[sourceBoard] ?? [])
-  const movedItem = srcGroups.flatMap(g => g.items).find(i => i.id === itemId) ?? null
+  const movedItemRaw = srcGroups.flatMap(g => g.items).find(i => i.id === itemId) ?? null
+  const movedItem = movedItemRaw?.source === 'google'
+    ? { ...movedItemRaw, googlePlacementLocked: true }
+    : movedItemRaw
   if (!movedItem) return { ok: false, message: 'Item niet gevonden op bron-bord' }
 
   // Leer een routing-regel wanneer een Google-event handmatig naar een ander
@@ -1164,8 +1227,18 @@ export async function moveItemToBoard(
       }, { onConflict: 'id' })
       if (groupError) throw groupError
       // Move the existing row, never copy or rewrite its contents.
+      const movePatch: Record<string, unknown> = {
+        board_id: targetBoard, group_id: targetGroup.id, position: targetGroup.items.length - 1,
+      }
+      if (movedItem.source === 'google') {
+        const extra: Record<string, unknown> = {}
+        for (const field of Object.keys(movedItem)) {
+          if (!STANDARD_FIELDS.has(field)) extra[field] = (movedItem as Record<string, unknown>)[field]
+        }
+        movePatch.extra = { ...extra, googlePlacementLocked: true }
+      }
       const { data, error } = await supabase.from('board_items')
-        .update({ board_id: targetBoard, group_id: targetGroup.id, position: targetGroup.items.length - 1 })
+        .update(movePatch)
         .eq('id', itemId).eq('board_id', sourceBoard).select('id')
       if (error) throw error
       if (!data?.length) {

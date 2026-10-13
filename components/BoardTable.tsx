@@ -25,7 +25,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard, persistItemNesting } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard, persistItemNesting, persistGoogleSubitemPromotion } from '@/lib/boardStore'
 import { routeOmdenkenNow } from '@/lib/googleClient'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
@@ -4120,9 +4120,6 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       const data = JSON.parse(rawItem) as { itemId: string; fromGroupId: string; fromBoard?: string }
                       if (!data.itemId || data.itemId === item.id) return
                       if (data.fromBoard && data.fromBoard !== boardId) return
-                      // Dropping into another group (including Vrij) moves
-                      // the whole series, rather than nesting it under a row.
-                      if (data.fromGroupId !== group.id) return
                       e.preventDefault()
                       e.stopPropagation()
                       onNestItem(data.itemId, data.fromGroupId, item.id)
@@ -5143,15 +5140,27 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const parent    = fromGroup?.items.find(i => i.id === fromParentId)
     const sub       = parent?.subitems?.find(s => s.id === subitemId)
     if (!parent || !sub) return
+    const movedSub = sub.source === 'google' ? { ...sub, googlePlacementLocked: true } : sub
+    const seriesId = sub.source === 'google' ? sub.sourceItemId : undefined
     onChange(groups.map(g => {
       let items = g.items.map(i => {
         if (i.id === fromParentId) {
-          return { ...i, subitems: (i.subitems ?? []).filter(s => s.id !== subitemId) }
+          const currentSeries = Array.isArray(i.googleMeetingSeriesIds) ? i.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string') : []
+          return {
+            ...i,
+            subitems: (i.subitems ?? []).filter(s => s.id !== subitemId),
+            ...(seriesId ? { googleMeetingSeriesIds: currentSeries.filter(id => id !== seriesId) } : {}),
+          }
         }
         if (i.id === toParentId) {
           const already = (i.subitems ?? []).some(s => s.id === sub.id)
           if (already) return i
-          return { ...i, subitems: [...(i.subitems ?? []), sub] }
+          const currentSeries = Array.isArray(i.googleMeetingSeriesIds) ? i.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string') : []
+          return {
+            ...i,
+            subitems: [...(i.subitems ?? []), movedSub],
+            ...(seriesId ? { googleMeetingSeriesIds: [...new Set([...currentSeries, seriesId])] } : {}),
+          }
         }
         return i
       })
@@ -5159,13 +5168,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     }))
   }
 
-  function unnestSubitemHere(subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) {
+  async function unnestSubitemHere(subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) {
     const fromGroup = groups.find(g => g.id === fromGroupId)
     const parent    = fromGroup?.items.find(i => i.id === parentItemId)
     const sub       = parent?.subitems?.find(s => s.id === subitemId)
     if (!fromGroup || !parent || !sub) return
     const promoted: BoardItem = {
-      id:         sub.id,
+      id:         sub.source === 'google' && sub.sourceItemId ? sub.sourceItemId : sub.id,
       name:       sub.name,
       ownerIds:   sub.ownerIds ?? [],
       status:     sub.status ?? '',
@@ -5177,7 +5186,24 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       subitems:   sub.nestedSource?.subitems?.map(child => ({ ...child })),
       startTime:  (sub as { startTime?: string | null }).startTime ?? null,
       endTime:    (sub as { endTime?:   string | null }).endTime   ?? null,
+      source:     sub.source,
+      externalLink: sub.externalLink ?? undefined,
+      meetLink:   sub.meetLink ?? null,
+      ownerHours: sub.ownerHours,
+      ownerIdsLocked: sub.ownerIdsLocked,
+      googleParticipantIds: sub.googleParticipantIds,
+      googleCalendarMemberIds: sub.googleCalendarMemberIds,
+      ...(sub.source === 'google' ? { googlePlacementLocked: true } : {}),
     } as BoardItem
+    if (sub.source === 'google') {
+      const persisted = await persistGoogleSubitemPromotion(
+        boardId, parentItemId, toGroupId, subitemId, promoted, sub.sourceItemId,
+      )
+      if (!persisted) {
+        window.alert('Google-meeting terugplaatsen is niet opgeslagen. Er is niets verwijderd; probeer het opnieuw.')
+        return
+      }
+    }
     onChange(groups.map(g => {
       // BELANGRIJK: een groep kan tegelijk de bron-groep én de doel-groep
       // zijn (subitem in dezelfde groep terugplaatsen). Daarom apply'en we
@@ -5189,7 +5215,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           ...next,
           items: next.items.map(i =>
             i.id === parentItemId
-              ? { ...i, subitems: (i.subitems ?? []).filter(s => s.id !== subitemId) }
+              ? {
+                  ...i,
+                  subitems: (i.subitems ?? []).filter(s => s.id !== subitemId),
+                  ...(sub.source === 'google' && sub.sourceItemId
+                    ? {
+                        googleMeetingSeriesIds: (Array.isArray(i.googleMeetingSeriesIds)
+                          ? i.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string')
+                          : []).filter(id => id !== sub.sourceItemId),
+                      }
+                    : {}),
+                }
               : i
           ),
         }
@@ -5207,7 +5243,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   function moveItemBetweenGroups(itemId: string, fromGroupId: string, toGroupId: string) {
     if (fromGroupId === toGroupId) return
     const fromGroup = groups.find(g => g.id === fromGroupId)
-    const item = fromGroup?.items.find(i => i.id === itemId)
+    const rawItem = fromGroup?.items.find(i => i.id === itemId)
+    const item = rawItem?.source === 'google' ? { ...rawItem, googlePlacementLocked: true } : rawItem
     if (!item) return
     onChange(groups.map(g => {
       if (g.id === fromGroupId) return { ...g, items: g.items.filter(i => i.id !== itemId) }
@@ -5224,7 +5261,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const idSet = new Set(itemIds)
     const collected: BoardItem[] = []
     for (const g of groups) {
-      for (const it of g.items) if (idSet.has(it.id)) collected.push(it)
+      for (const it of g.items) {
+        if (idSet.has(it.id)) collected.push(it.source === 'google' ? { ...it, googlePlacementLocked: true } : it)
+      }
     }
     if (collected.length === 0) return
     onChange(groups.map(g => {

@@ -27,3 +27,18 @@ test('nesting preserves the total and a recoverable copy of existing children', 
   assert.equal(nested.nestedSource?.estHours, 4)
   assert.deepEqual(nested.nestedSource?.subitems, source.subitems)
 })
+
+test('nesting a Google meeting locks its chosen parent and preserves sync metadata', () => {
+  const source = {
+    id: 'google-event', name: 'Meeting', ownerIds: ['menno'], ownerIdsLocked: true,
+    ownerHours: { menno: 2 }, googleParticipantIds: ['menno'], googleCalendarMemberIds: ['menno'],
+    status: '', startDate: '2026-10-13', endDate: '2026-10-13', deadline: null,
+    estHours: 2, dagen: 0, source: 'google', externalLink: 'https://calendar.google.com/example',
+  }
+  const nested = boardItemToNestedSubitem(source, 789)
+  assert.equal(nested.sourceItemId, source.id)
+  assert.equal(nested.googlePlacementLocked, true)
+  assert.equal(nested.ownerIdsLocked, true)
+  assert.deepEqual(nested.ownerHours, source.ownerHours)
+  assert.deepEqual(nested.googleParticipantIds, source.googleParticipantIds)
+})

@@ -13,6 +13,10 @@ export function boardItemToNestedSubitem(source: BoardItem, nonce = Date.now()):
     sourceItemId: source.id,
     name: source.name,
     ownerIds: source.ownerIds ?? [],
+    ...(source.ownerIdsLocked === true ? { ownerIdsLocked: true } : {}),
+    ...(source.ownerHours ? { ownerHours: { ...source.ownerHours } } : {}),
+    ...(source.googleParticipantIds ? { googleParticipantIds: [...source.googleParticipantIds] } : {}),
+    ...(source.googleCalendarMemberIds ? { googleCalendarMemberIds: [...source.googleCalendarMemberIds] } : {}),
     status: source.status ?? '',
     startDate: source.startDate ?? null,
     endDate: source.endDate ?? null,
@@ -21,6 +25,7 @@ export function boardItemToNestedSubitem(source: BoardItem, nonce = Date.now()):
     externalLink: source.externalLink ?? null,
     meetLink: (source as { meetLink?: string | null }).meetLink ?? null,
     source: source.source,
+    ...(source.source === 'google' ? { googlePlacementLocked: true } : {}),
     estHours: ownHours + childHours,
     nestedSource: source.subitems?.length
       ? { estHours: ownHours, subitems: source.subitems.map(child => ({ ...child })) }

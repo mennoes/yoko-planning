@@ -227,7 +227,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
+type SubItemSnapshot = { id: string; sourceItemId?: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; googlePlacementLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
 type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 type Rule     = { pattern: string; board_id: string }
 
@@ -974,7 +974,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // Bewaar handmatige verplaatsingen — als de gebruiker het item naar
       // een Done-groep of ander bord heeft gesleept, mag Google die niet
       // weer terugsturen naar de target-groep volgens de route-regels.
-      const keepBoard = resolveMeetingBoard(existingRow?.board_id, route)
+      const keepBoard = resolveMeetingBoard(existingRow?.board_id, route, exExtraSingle.googlePlacementLocked === true)
       const newStatus = resolveStatus(existingRow?.status, end ?? start, existingRow?.end_date, exExtraSingle.statusOverride)
       // Vrij/Vakantie-events bundelen we in een eigen Vrij-groep zodat
       // afwezigheid meteen herkenbaar is in het bord. Done heeft daarna
@@ -1063,6 +1063,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
           const hasUsableOwnerHours = !!exOwnerHours && finalOwners.length > 0
             && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
           return {
+            ...exExtra,
             ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
             googleParticipantIds: eventOwners.owners,
             googleCalendarMemberIds: memberId ? [memberId] : [],
@@ -1259,7 +1260,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // aanmaken bij volgende syncs.
     if (nestedIds.has(id)) continue
     if (existingRow) updated++; else added++
-    const keepBoard = resolveMeetingBoard(existingRow?.board_id, route)
+    const keepBoard = resolveMeetingBoard(existingRow?.board_id, route, exExtraRec.googlePlacementLocked === true)
     const newStatus = resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart, exExtraRec.statusOverride)
     // Groep-keuze prioriteit: Done > Vrij > Doorlopend.
     //  - Done items horen in de Done-groep (ook wanneer de gebruiker zelf
@@ -1323,6 +1324,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         const hasUsableOwnerHours = !!exOwnerHours && finalOwners.length > 0
           && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
         return {
+          ...exExtra,
           ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
           googleParticipantIds: [...new Set(ownersByEvent.values().flatMap(value => value.owners))],
           googleCalendarMemberIds: memberId ? [memberId] : [],
