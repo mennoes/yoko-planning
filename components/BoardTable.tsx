@@ -3359,7 +3359,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onToggleReorder, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
@@ -3371,7 +3371,6 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   sortBy: { key: string; dir: 'asc' | 'desc' } | null
   onToggleSort: (key: string) => void
   reorderMode: boolean
-  onToggleReorder: () => void
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
   onMoveItemsHere: (itemIds: string[]) => void
@@ -3927,23 +3926,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             {group.items.length} items
           </span>
 
-          {/* Volgorde staat direct in de groepsbalk: dit is de plek waar
-              rijen geordend worden. De weinig gebruikte groepsselectie is
-              bewust verwijderd; losse rijselectie en bulk-acties blijven. */}
           {!editName && (
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button onClick={e => { e.stopPropagation(); onToggleReorder() }}
-                aria-pressed={reorderMode}
-                title={reorderMode ? 'Klaar met volgorde wijzigen' : 'Wijzig de volgorde van items'}
-                style={{
-                  background: reorderMode ? 'var(--accent)' : 'var(--bg-hover)',
-                  border: 'none', color: reorderMode ? 'var(--accent-contrast, #fff)' : 'var(--text-secondary)',
-                  cursor: 'pointer', fontSize: isMobile ? 13 : 12, fontWeight: 650,
-                  padding: isMobile ? '4px 8px' : '5px 10px', borderRadius: 6,
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                }}>
-                ↕ {!isMobile && (reorderMode ? 'Klaar' : 'Volgorde')}
-              </button>
               <button onClick={e => {
                   e.stopPropagation()
                   const count = group.items.length
@@ -4417,7 +4401,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   return (
     <>
       <button ref={btnRef} onClick={() => setOpen(o => !o)} className={open ? 'yoko-primary-button' : 'yoko-control-button'}
-        title="Kolommen beheren — toevoegen, verwijderen, herordenen"
+        title="Kolommen beheren en de volgorde van Status, Timeline en andere kolommen wijzigen"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           width: menu ? '100%' : undefined,
@@ -4431,7 +4415,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
           <rect x="9.5" y="4" width="5" height="16" rx="1" />
           <rect x="16" y="4" width="5" height="16" rx="1" />
         </svg>
-        Kolommen
+        Kolomvolgorde
       </button>
       {open && (
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
@@ -4441,7 +4425,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
             boxShadow: '0 10px 36px rgba(0,0,0,0.4)',
           }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-              Kolommen
+              Kolommen en volgorde
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {list.map((c, idx) => (
@@ -5651,7 +5635,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                     fontWeight: reorderMode ? 600 : 500, textAlign: 'left', borderRadius: 6 }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                  ↕ {reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+                  ↕ {reorderMode ? 'Klaar met items sorteren' : 'Items sorteren'}
                 </button>
                 <button onClick={() => { exportCSV(); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
@@ -5871,7 +5855,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onToggleSelect={toggleSelect}
               sortBy={sortBy} onToggleSort={toggleSort}
               reorderMode={reorderMode}
-              onToggleReorder={() => setReorderMode(value => !value)}
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
               onMoveItemsHere={(itemIds) => moveItemsBetweenGroups(itemIds, group.id)}
