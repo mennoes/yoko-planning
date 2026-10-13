@@ -102,6 +102,14 @@ export function findMeetingProject(title: string, candidates: MeetingParent[], r
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
 }
+
+/** Alleen een expliciete Ja telt als deelname. `needsAction` en `tentative`
+ * kunnen wel op de agenda van een collega staan, maar horen nog niet in de
+ * persoonlijke planning/to-do's van de genodigde. */
+export function isAcceptedCalendarResponse(responseStatus: string | null | undefined): boolean {
+  return responseStatus === 'accepted'
+}
+
 export function nestedMeetingId(seriesId: string, event: GoogleEvent): string {
   if (!event.recurringEventId) return seriesId
   const original = event.originalStartTime ?? event.start

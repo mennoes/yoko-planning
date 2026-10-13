@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
-import { loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
+import { isAcceptedCalendarResponse, loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -696,9 +696,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
   const ownerIds = memberId ? [memberId] : []
 
-  // Voor een event: alle Yoko-deelnemers die niet hebben afgezegd worden
-  // mede-eigenaar. Valt terug op de calendar-owner als er geen attendees
-  // zijn (bv. private events). Per-persoon-uren = de eventduur (iedereen
+  // Voor een event: alleen Yoko-deelnemers die expliciet Ja/accepted hebben
+  // geantwoord worden mede-eigenaar. Een openstaande uitnodiging uit de
+  // agenda van een collega hoort niet alvast in iemands persoonlijke to-do's.
+  // Valt terug op de calendar-owner als er geen accepted Yoko-attendees zijn.
+  // Per-persoon-uren = de eventduur (iedereen
   // is de hele meeting aanwezig); totaal-est-hours = duur × N personen
   // zodat de planning-werkbelasting de werkelijke groepsuren toont.
   function ownersForEvent(ev: GoogleEvent): { owners: string[]; perPerson: number; total: number } {
@@ -708,7 +710,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     for (const a of ats) {
       const email = a.email
       if (!email) continue
-      if (a.responseStatus === 'declined') continue
+      if (!isAcceptedCalendarResponse(a.responseStatus)) continue
       const id = resolveAttendeeEmail(email)
       if (id) yokos.add(id)
     }
