@@ -73,6 +73,20 @@ test('personal calendar view ignores a manually retained owner who is not an acc
   }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
   assert.equal(strict.length, 0)
 })
+test('personal calendar view hides legacy Google rows without verified participant data', () => {
+  const legacy = {
+    ...meeting,
+    ownerIds: ['menno'],
+    startDate: '2026-10-13', endDate: '2026-10-13',
+  }
+  const projects = groupsToProjects('yoko', [{ id: 'meetings', name: 'Meetings', items: [legacy] }])
+  const week = new Date('2026-10-12T00:00:00')
+  const strict = loadModule('../lib/workload.ts', {
+    './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
+    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+  }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
+  assert.equal(strict.length, 0)
+})
 test('a completed attached meeting does not hide the parent task or change its dates', () => {
   const mockGroups = groups([{ ...meeting, status: 'Done', startDate: '2000-01-01', endDate: '2000-01-01' }])
   const mocks = {

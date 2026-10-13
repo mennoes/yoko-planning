@@ -440,7 +440,7 @@ export function memberContributions(
   const overrides = loadCategoryOverrides()
   return projects
     .filter(project => !options?.acceptedGoogleOnly || project.source !== 'google' ||
-      !Array.isArray(project.googleParticipantIds) || project.googleParticipantIds.includes(memberId))
+      (Array.isArray(project.googleParticipantIds) && project.googleParticipantIds.includes(memberId)))
     .map(p => ({ project: p, hours: projectHoursInWeek(p, memberId, weekStart, overrides[p.id]) }))
     .filter(c => c.hours > 0)
 }
