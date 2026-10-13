@@ -15,17 +15,13 @@ type Row = { id: string; context_id: string; quote: string; thread: CommentThrea
 const fromRow = (r: Row): CommentThread => ({ id: r.id, contextId: r.context_id, quote: r.quote, thread: r.thread, createdAt: r.created_at, resolved: r.resolved })
 
 export async function setPersonalCompletion(admin: SupabaseClient, userId: string, target: CompletionTarget, done: boolean, expectedEventId: string | null,
-  status?: PersonalTaskStatus, timelineStart?: string | null, timelineEnd?: string | null, targetMemberId?: string) {
+  status?: PersonalTaskStatus) {
   if (status !== undefined && (!isPersonalTaskStatus(status) || (status === 'Done') !== done)) throw new CompletionError('Ongeldige taakstatus.', 400)
   const nextStatus = status ?? (done ? 'Done' : 'Not started')
   const { data: profile, error: profileError } = await admin.from('profiles').select('member_id,name').eq('user_id', userId).single()
   if (profileError || !profile?.member_id) throw new CompletionError('Je profiel kon niet worden gecontroleerd.', 403)
   const actorMemberId = String(profile.member_id)
-  const memberId = targetMemberId?.trim() || actorMemberId
-  const editingAnotherTimeline = memberId !== actorMemberId
-  if (editingAnotherTimeline && timelineStart === undefined && timelineEnd === undefined) {
-    throw new CompletionError('Je kunt de persoonlijke status van een ander teamlid niet wijzigen.', 403)
-  }
+  const memberId = actorMemberId
   const { data: item, error: itemError } = await admin.from('board_items')
     .select('id,name,board_id,group_id,owner_ids,status,subitems,deleted_at').eq('id', target.parentItemId).single()
   if (itemError || !item || item.deleted_at) throw new CompletionError('Dit item bestaat niet meer.', 404)
@@ -38,9 +34,7 @@ export async function setPersonalCompletion(admin: SupabaseClient, userId: strin
   const subOwners: string[] = (sub?.ownerIds ?? []).filter((id: string) => id && id !== 'unassigned')
   const owners = subOwners.length ? subOwners : parentOwners
   if (!owners.includes(memberId)) {
-    throw new CompletionError(editingAnotherTimeline
-      ? 'Dit teamlid is niet aan deze taak toegewezen.'
-      : 'Je kunt alleen je eigen toegewezen taak afronden.', 403)
+    throw new CompletionError('Je kunt alleen je eigen toegewezen taak afronden.', 403)
   }
 
   const context = completionContext(target)
@@ -52,26 +46,16 @@ export async function setPersonalCompletion(admin: SupabaseClient, userId: strin
     if ((page.data?.length ?? 0) < 500) break
   }
   const previous = completionState(rows.map(fromRow), target, memberId)
-  // Bij het plannen van een collega mogen uitsluitend de datums veranderen.
-  // De persoonlijke status/checkbox blijft exact zoals die collega hem zelf
-  // heeft gezet (of Not started wanneer er nog geen status bestaat).
-  const effectiveDone = editingAnotherTimeline ? !!previous?.done : done
-  const effectiveStatus = editingAnotherTimeline
-    ? previous?.status ?? (effectiveDone ? 'Done' : 'Not started')
-    : nextStatus
   // Een gezamenlijke Done-status is geen reden om iemands persoonlijke
   // checkbox te blokkeren. Alleen persoonlijk heropenen blijft onmogelijk.
-  if (!effectiveDone && !editingAnotherTimeline && (item.status === 'Done' || sub?.status === 'Done')) {
+  if (!done && (item.status === 'Done' || sub?.status === 'Done')) {
     throw new CompletionError('Het hele item staat al op Done. Heropen eerst de gezamenlijke status.', 409)
   }
-  const nextTimelineStart = timelineStart !== undefined ? timelineStart : previous?.timelineStart
-  const nextTimelineEnd = timelineEnd !== undefined ? timelineEnd : previous?.timelineEnd
-  let saved = previous && personalTaskStatus(previous) === effectiveStatus
-    && previous.timelineStart === nextTimelineStart && previous.timelineEnd === nextTimelineEnd
+  let saved = previous && personalTaskStatus(previous) === nextStatus
     ? rows.find(r => r.id === previous.eventId) : undefined
   if (!saved) {
     if ((previous?.eventId ?? null) !== expectedEventId) throw new CompletionError('Je voortgang is intussen gewijzigd. Ververs het item en probeer opnieuw.', 409)
-    const id = 'pc-' + hash([target.parentItemId, target.subitemId ?? null, memberId, previous?.eventId ?? null, effectiveDone, effectiveStatus, nextTimelineStart, nextTimelineEnd])
+    const id = 'pc-' + hash([target.parentItemId, target.subitemId ?? null, memberId, previous?.eventId ?? null, done, nextStatus])
     const recipientIds = [...new Set([...owners, ...(sub ? parentOwners : [])])].filter(id => id !== actorMemberId)
     const names = recipientIds.length
       ? await admin.from('team_members').select('id,name').in('id', recipientIds)
@@ -80,12 +64,8 @@ export async function setPersonalCompletion(admin: SupabaseClient, userId: strin
     const recipients = recipientIds.map(id => ({ id, name: names.data?.find(p => p.id === id)?.name ?? id }))
     const time = new Date(Math.max(Date.now(), Date.parse(previous?.createdAt ?? '') + 1 || 0)).toISOString()
     const taskName = sub ? `${sub.name} (bij ${item.name})` : item.name
-    const timelineChanged = previous?.timelineStart !== nextTimelineStart || previous?.timelineEnd !== nextTimelineEnd
-    const subject = editingAnotherTimeline
-      ? { memberId, name: names.data?.find(person => person.id === memberId)?.name ?? memberId }
-      : undefined
-    const reply = completionReply(id, { memberId: actorMemberId, name: profile.name || actorMemberId }, target, effectiveDone, taskName, recipients, time,
-      effectiveStatus, !!previous?.done, nextTimelineStart, nextTimelineEnd, timelineChanged, subject)
+    const reply = completionReply(id, { memberId: actorMemberId, name: profile.name || actorMemberId }, target, done, taskName, recipients, time,
+      nextStatus, !!previous?.done)
     const row = { id, context_kind: 'board_item', context_id: context, quote: taskName, thread: [reply], resolved: false, author_id: userId, created_at: time }
     const insert = await admin.from('comments').upsert(row, { onConflict: 'id', ignoreDuplicates: true })
     if (insert.error) throw new CompletionError('Je persoonlijke voortgang kon niet worden opgeslagen.')

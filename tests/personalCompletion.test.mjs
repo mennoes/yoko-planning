@@ -180,7 +180,6 @@ test('API rejects unauthenticated and malformed requests before doing any writes
   assert.equal((await POST(request({ parentItemId: 'project', done: false, timelineStart: 'morgen', expectedEventId: null }))).status, 400)
   assert.equal(calls, 0)
 })
-
 test('personal statuses persist separately without modifying project, hours or another owner', async () => {
   const db = fakeDb(); const before = structuredClone(db.tables.board_items)
   let previous = null
@@ -209,53 +208,4 @@ test('legacy completion records and To do boolean toggles remain compatible', as
   const reopened = await setPersonalCompletion(db, 'u-menno', target, false, done.comment.id)
   assert.equal(rules.personalTaskStatus(reopened.comment.thread[0].personalCompletion), 'Not started')
   assert.match(done.comment.thread[0].body, /afgerond/)
-})
-
-test('personal timelines persist independently and form the project envelope', async () => {
-  const db = fakeDb(); const before = structuredClone(db.tables.board_items)
-  const menno = await setPersonalCompletion(db, 'u-menno', target, false, null, 'Working on...', '2026-10-12', '2026-10-16')
-  const mennoState = rules.completionState([menno.comment], target, 'menno')
-  assert.equal(mennoState.timelineStart, '2026-10-12')
-  assert.equal(mennoState.timelineEnd, '2026-10-16')
-  assert.match(menno.comment.thread[0].body, /eigen tijdlijn aangepast/)
-  assert.deepEqual(db.tables.board_items, before)
-
-  // Odette heeft nog niets ingevuld en gebruikt daarom de projectfallback;
-  // Menno mag het gezamenlijke bereik niet eenzijdig kleiner maken.
-  assert.equal(JSON.stringify(rules.personalTimelineEnvelope(
-    [menno.comment], target, ['menno', 'odette'], '2026-10-01', '2026-10-31')),
-  JSON.stringify({ startDate: '2026-10-01', endDate: '2026-10-31' }))
-  const odette = await setPersonalCompletion(db, 'u-odette', target, false, null, 'Not started', '2026-10-08', '2026-10-22')
-  assert.equal(JSON.stringify(rules.personalTimelineEnvelope(
-    [menno.comment, odette.comment], target, ['menno', 'odette'], '2026-10-01', '2026-10-31')),
-  JSON.stringify({ startDate: '2026-10-08', endDate: '2026-10-22' }))
-})
-
-test('a teammate may drag another assigned owner timeline without changing their personal status', async () => {
-  const db = fakeDb()
-  const result = await setPersonalCompletion(
-    db, 'u-menno', target, true, null, 'Done', '2026-10-19', '2026-10-23', 'odette',
-  )
-  const state = rules.completionState([result.comment], target, 'odette')
-  assert.equal(state.done, false)
-  assert.equal(rules.personalTaskStatus(state), 'Not started')
-  assert.equal(state.timelineStart, '2026-10-19')
-  assert.equal(state.timelineEnd, '2026-10-23')
-  assert.match(result.comment.thread[0].body, /Menno heeft de tijdlijn van Odette aangepast/)
-  assert.equal(result.comment.thread[0].authorId, 'menno')
-  assert.equal(db.tables.notifications[0].recipient_id, 'odette')
-  assert.equal(db.tables.notifications[0].actor_id, 'menno')
-})
-
-test('editing another member remains timeline-only and requires assignment', async () => {
-  const db = fakeDb()
-  await assert.rejects(
-    setPersonalCompletion(db, 'u-menno', target, true, null, 'Done', undefined, undefined, 'odette'),
-    /status van een ander/,
-  )
-  await assert.rejects(
-    setPersonalCompletion(db, 'u-menno', target, false, null, 'Not started', '2026-10-19', '2026-10-23', 'other'),
-    /niet aan deze taak toegewezen/,
-  )
-  assert.equal(db.tables.comments.length, 0)
 })

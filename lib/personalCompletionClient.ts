@@ -62,8 +62,7 @@ export function completionTargetForProject(ref: { board: string; itemId: string 
 }
 
 const pending = new Map<string, Promise<{ notificationError: boolean }>>()
-export function updatePersonalCompletion(target: CompletionTarget, memberId: string, done: boolean, status?: PersonalTaskStatus,
-  timeline?: { start: string | null; end: string | null }): Promise<{ notificationError: boolean }> {
+export function updatePersonalCompletion(target: CompletionTarget, memberId: string, done: boolean, status?: PersonalTaskStatus): Promise<{ notificationError: boolean }> {
   const key = completionKey(target, memberId)
   const existing = pending.get(key)
   if (existing) return existing
@@ -71,8 +70,6 @@ export function updatePersonalCompletion(target: CompletionTarget, memberId: str
   optimisticCompletions.set(key, {
     version: 1, ...target, memberId, done,
     ...(status !== undefined ? { status } : previous?.status !== undefined ? { status: previous.status } : {}),
-    timelineStart: timeline ? timeline.start : previous?.timelineStart,
-    timelineEnd: timeline ? timeline.end : previous?.timelineEnd,
     mentions: [], eventId: `optimistic:${Date.now()}`, createdAt: new Date().toISOString(),
   })
   notifyCommentsUpdate(completionContext(target))
@@ -86,7 +83,6 @@ export function updatePersonalCompletion(target: CompletionTarget, memberId: str
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
         body: JSON.stringify({
           parentItemId: target.parentItemId, subitemId: target.subitemId, memberId, done, status,
-          ...(timeline ? { timelineStart: timeline.start, timelineEnd: timeline.end } : {}),
           expectedEventId: previous?.eventId ?? null,
         }),
       })
