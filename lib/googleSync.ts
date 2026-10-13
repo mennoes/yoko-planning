@@ -227,7 +227,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
+type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; googleParticipantIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
 type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 type Rule     = { pattern: string; board_id: string }
 
@@ -943,6 +943,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         id: nestedMeetingId(nestingLookup.id, ev),
         name: ev.summary?.trim() || meetingName,
         ownerIds: owners.owners,
+        googleParticipantIds: owners.owners,
         status: resolveStatus(undefined, dates.end ?? dates.start),
         startDate: dates.start, endDate: dates.end ?? dates.start,
         ...eventTimes(ev), estHours: owners.total,
@@ -1071,6 +1072,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
             && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
           return {
             ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
+            googleParticipantIds: eventOwners.owners,
             ...(exExtra.statusOverride === 'active' || exExtra.statusOverride === 'done'
               ? { statusOverride: exExtra.statusOverride }
               : {}),
@@ -1206,6 +1208,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         id:        sid,
         name:      subitemName,
         ownerIds:  occurrenceOwners,
+        googleParticipantIds: currentOwners.owners,
         ...(prev?.ownerIdsLocked ? { ownerIdsLocked: true } : {}),
         ...(prev?.ownerHours && prev.ownerIdsLocked ? { ownerHours: prev.ownerHours } : {}),
         status:    resolveStatus(prev?.status, end ?? start, undefined, prev?.statusOverride),
@@ -1327,6 +1330,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
           && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
         return {
           ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
+          googleParticipantIds: [...new Set(ownersByEvent.values().flatMap(value => value.owners))],
           ...(exExtra.statusOverride === 'active' || exExtra.statusOverride === 'done'
             ? { statusOverride: exExtra.statusOverride }
             : {}),

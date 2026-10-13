@@ -58,6 +58,21 @@ test('agenda and planning use the same own plus subitem hour total', () => {
   assert.equal(output.length, 1)
   assert.equal(output[0].estHours, 48)
 })
+test('personal calendar view ignores a manually retained owner who is not an accepted Google participant', () => {
+  const google = {
+    ...meeting,
+    ownerIds: ['menno', 'job', 'ilse'],
+    googleParticipantIds: ['job', 'ilse'],
+    startDate: '2026-10-13', endDate: '2026-10-13',
+  }
+  const projects = groupsToProjects('yoko', [{ id: 'meetings', name: 'Meetings', items: [google] }])
+  const week = new Date('2026-10-12T00:00:00')
+  const strict = loadModule('../lib/workload.ts', {
+    './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
+    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+  }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
+  assert.equal(strict.length, 0)
+})
 test('a completed attached meeting does not hide the parent task or change its dates', () => {
   const mockGroups = groups([{ ...meeting, status: 'Done', startDate: '2000-01-01', endDate: '2000-01-01' }])
   const mocks = {

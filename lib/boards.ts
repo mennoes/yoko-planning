@@ -12,6 +12,7 @@ export type SubItem = {
   // Zonder deze vlag vervangt de volgende sync de lijst met de actuele
   // deelnemers van precies dit afspraakmoment.
   ownerIdsLocked?: boolean
+  googleParticipantIds?: string[]
   status:       string
   startDate:    string | null
   endDate:      string | null
@@ -77,6 +78,7 @@ export type BoardItem = {
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
   externalSyncedAt?: string             // gebruikt om de nieuwste Google-variant te kiezen
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
+  googleParticipantIds?: string[]          // actuele accepted deelnemers uit Google; los van handmatige owners
   links?:         ItemLink[]            // gekoppelde bestanden / externe URL's
   // Wanneer 't item subitems heeft volgt de timeline (startDate/endDate)
   // normaliter automatisch de vroegste/laatste actieve-subitem-datum

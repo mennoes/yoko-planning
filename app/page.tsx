@@ -526,7 +526,7 @@ export default function HomePage() {
     if (!memberId) { setWeekItems([]); setWeekHours(0); return }
     const base = getWeekStart(new Date())
     const week = new Date(base); week.setDate(week.getDate() + weekOffset * 7)
-    const contribs = memberContributions(allProjects, memberId, week)
+    const contribs = memberContributions(allProjects, memberId, week, { acceptedGoogleOnly: true })
     setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
     // Items blijven op hun start-dag staan. Eerdere variant schoof
     // ongoing items naar 'vandaag', waardoor afgelopen dagen leeg
@@ -886,10 +886,10 @@ export default function HomePage() {
   const myLastWeekStart = new Date(weekStartTeam); myLastWeekStart.setDate(myLastWeekStart.getDate() - 7)
   const myNextWeekStart = new Date(weekStartTeam); myNextWeekStart.setDate(myNextWeekStart.getDate() + 7)
   const myThisContribs = memberId
-    ? memberContributions(allProjects, memberId, weekStartTeam).slice().sort((a, b) => b.hours - a.hours)
+    ? memberContributions(allProjects, memberId, weekStartTeam, { acceptedGoogleOnly: true }).slice().sort((a, b) => b.hours - a.hours)
     : []
-  const myLastContribs = memberId ? memberContributions(allProjects, memberId, myLastWeekStart) : []
-  const myNextContribs = memberId ? memberContributions(allProjects, memberId, myNextWeekStart) : []
+  const myLastContribs = memberId ? memberContributions(allProjects, memberId, myLastWeekStart, { acceptedGoogleOnly: true }) : []
+  const myNextContribs = memberId ? memberContributions(allProjects, memberId, myNextWeekStart, { acceptedGoogleOnly: true }) : []
   const myThisHours = Math.round(myThisContribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
 
   const firstNameOf = (id: string) =>
