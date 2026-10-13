@@ -25,7 +25,7 @@ test('owner relevance is limited to active work in the next five weeks', () => {
       sub({ ownerIds: ['odette'], status: 'Done' }),
     ],
   }
-  const result = exports.relevantOwnerRollup(item, new Set(['menno', 'anne-fleur', 'odette']), new Date('2026-10-08T10:00:00'), 35)
+  const result = exports.relevantOwnerRollup(item, new Set(['menno', 'anne-fleur', 'odette', 'manuel']), new Date('2026-10-08T10:00:00'), 35)
   assert.deepEqual(Array.from(result.relevantOwnerIds), ['menno'])
   assert.deepEqual(Array.from(result.historicalOwnerIds), ['anne-fleur', 'odette'])
   assert.equal(result.historicalOwnerIds.includes('manuel'), false)
@@ -37,6 +37,14 @@ test('relevant owner hours ignore completed and distant subitems', () => {
     sub({ ownerIds: ['menno'], estHours: 3 }),
   ]
   assert.deepEqual(JSON.parse(JSON.stringify(exports.relevantOwnerHours(relevant))), { menno: 8, odette: 5 })
+})
+
+test('parent rollup uses the stored distribution of relevant subitems', () => {
+  const relevant = [
+    sub({ ownerIds: ['menno', 'odette'], estHours: 24, ownerHours: { menno: 2.5, odette: 21.5 } }),
+    sub({ ownerIds: ['menno'], estHours: 1.6, ownerHours: { menno: 1.6 } }),
+  ]
+  assert.deepEqual(JSON.parse(JSON.stringify(exports.relevantOwnerHours(relevant))), { menno: 4.1, odette: 21.5 })
 })
 
 test('agenda UI persists pie metadata and supports custom columns', () => {

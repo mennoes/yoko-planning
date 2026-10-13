@@ -1524,9 +1524,10 @@ function overlapDays(
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
+  const rolledOwnerTotal = Number(item.__relevantOwnerHoursTotal)
   if (col.type === 'owners')    return <OwnersCell value={item.ownerIds}
     ownerHours={item.ownerHours}
-    totalHours={effectiveHours(item)}
+    totalHours={Number.isFinite(rolledOwnerTotal) ? rolledOwnerTotal : effectiveHours(item)}
     onDistributionChange={hours => onUpdate({
       ownerHours: hours,
       ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
@@ -2560,19 +2561,20 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     // naar de parent's ownerIds, subitem-owners blijven onaangeraakt.
     const activeMemberIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
     const ownerRollup = relevantOwnerRollup(item, activeMemberIds, new Date(), 35)
-    const displayedOwners = [...ownerRollup.relevantOwnerIds, ...ownerRollup.historicalOwnerIds]
-    if (displayedOwners.length > 0) updates.ownerIds = displayedOwners
+    // De hoofdregel toont uitsluitend owners van actuele/relevante subitems.
+    // Historische/done owners blijven als metadata beschikbaar, maar mogen
+    // de zichtbare avatars en taart niet meer vervuilen.
+    updates.ownerIds = ownerRollup.relevantOwnerIds
     updates.__relevantOwnerIds = ownerRollup.relevantOwnerIds
     updates.__historicalOwnerIds = ownerRollup.historicalOwnerIds
-    // Owner-hours rollup: wanneer de parent zelf geen verdeling heeft
-    // (item.ownerHours leeg) leiden we 'm af uit de subitems. Elke
-    // subitem-uren worden gelijk verdeeld over zijn eigen owners; die
-    // shares sommeren we per persoon. Display-only — wanneer de
-    // gebruiker zelf een verdeling instelt overruled die deze rollup.
-    if (!item.ownerHours || Object.keys(item.ownerHours).length === 0) {
-      const rolled = relevantOwnerHours(ownerRollup.relevantSubitems)
-      if (Object.keys(rolled).length > 0) updates.ownerHours = rolled
-    }
+    // Subitems zijn altijd de bron voor de parent-verdeling. Een oude,
+    // handmatig opgeslagen ownerHours-map op het hoofditem mag de rollup
+    // nooit overrulen. Expliciete subitem-ownerHours blijven behouden;
+    // alleen subitems zonder verdeling vallen terug op gelijke shares.
+    const rolled = relevantOwnerHours(ownerRollup.relevantSubitems)
+    updates.ownerHours = Object.keys(rolled).length > 0 ? rolled : undefined
+    updates.__relevantOwnerHoursTotal = ownerRollup.relevantSubitems
+      .reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
     // Status NIET auto-rollen. Done subitems blijven gewoon in het
     // parent-item zichtbaar; pas wanneer jij het item zelf op Done zet
     // verhuist 't naar de Done-groep. Voorkomt dat een item ongewenst
