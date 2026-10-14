@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mergeGoogleMeetingHistory } from '../lib/googleMeetingHistory.ts'
+import { mergeGoogleMeetingHistory, pastBillableOccurrences, historicalOccurrencesOnly } from '../lib/googleMeetingHistory.ts'
 import { readFileSync } from 'node:fs'
 
 const sync = readFileSync(new URL('../lib/googleSync.ts', import.meta.url), 'utf8')
@@ -70,4 +70,47 @@ test('legacy Google rows without a source flag still participate in history reco
   const titleRepair = sync.slice(sync.indexOf('const normalizedHistoryTitle'), sync.indexOf('if (canonicalByExt.size > 0)'))
   assert.match(titleRepair, /if \(!isGoogleHistoryRow\(row\)\) return false/)
   assert.doesNotMatch(titleRepair, /\.eq\('source', 'google'\)/)
+})
+
+test('past occurrences with hours are recognised as billable history', () => {
+  const today = '2026-10-14'
+  const subitems = [
+    { id: 'past-hours',   startDate: '2026-08-12', endDate: '2026-08-12', estHours: 0.8, status: 'Done' },
+    { id: 'past-nohours', startDate: '2026-09-09', endDate: '2026-09-09', estHours: 0 },
+    { id: 'future',       startDate: '2026-11-11', endDate: '2026-11-11', estHours: 1 },
+  ]
+  assert.deepEqual(pastBillableOccurrences(subitems, today).map(s => s.id), ['past-hours'])
+  assert.deepEqual(historicalOccurrencesOnly(subitems, today).map(s => s.id), ['past-hours', 'past-nohours'])
+})
+
+test('a series without past hours carries no billable history', () => {
+  const today = '2026-10-14'
+  const futureOnly = [
+    { id: 'a', startDate: '2026-10-14', endDate: '2026-10-14', estHours: 1 },
+    { id: 'b', startDate: '2026-12-09', endDate: '2026-12-09', estHours: 1 },
+  ]
+  assert.equal(pastBillableOccurrences(futureOnly, today).length, 0)
+  assert.equal(historicalOccurrencesOnly(futureOnly, today).length, 0)
+})
+
+test('declined or vanished Google rows keep their billable history visible', () => {
+  // Het opruimpad voor geweigerde/verdwenen afspraken verborg vroeger de hele
+  // rij, inclusief afgeronde occurrences met uren. Die uren waren daarna in
+  // geen enkele weergave meer uit te lezen.
+  const cleanup = sync.slice(sync.indexOf('const irrelevantIds ='))
+  assert.match(cleanup, /pastBillableSubitems\(row, todayIso\)\.length === 0/)
+  assert.match(cleanup, /historicalOccurrencesOnly\(subitems, todayIso\)/)
+  // Alleen rijen zonder voorbije uren mogen nog verborgen worden.
+  assert.match(cleanup, /\.in\('id', hideIds\)/)
+  assert.doesNotMatch(cleanup, /\.in\('id', irrelevantIds\)/)
+})
+
+test('the Google cleanup button never hard-deletes rows that carry past hours', () => {
+  const cleanup = readFileSync(new URL('../app/api/google/cleanup/route.ts', import.meta.url), 'utf8')
+  // Opschonen moet omkeerbaar zijn: soft-delete, geen .delete().
+  assert.match(cleanup, /deleted_at: hiddenAt/)
+  assert.doesNotMatch(cleanup, /from\('board_items'\)\s*\.delete\(\)/)
+  // En rijen met al gemaakte uren blijven sowieso staan.
+  assert.match(cleanup, /carriesPastHours\(r, todayIso\)/)
+  assert.match(cleanup, /pastBillableOccurrences/)
 })
