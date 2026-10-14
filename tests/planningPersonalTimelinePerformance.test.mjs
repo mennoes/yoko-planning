@@ -43,8 +43,19 @@ test('agenda column manager persists order and visibility for regular and person
   assert.match(board, /hidden: !c\.hidden/)
   assert.match(board, /draggable/)
   assert.match(board, /function moveTo\(from: number, to: number\)/)
+  assert.match(board, /Houd een rij vast en sleep hem naar de gewenste plek/)
+  assert.match(board, /\+ Kolom toevoegen/)
+  assert.match(board, /removeCustom\(c\.key, c\.label\)/)
   assert.match(board, /const tableColumns = completeColumns\.filter\(column => !column\.hidden\)/)
   assert.match(board, /const dataColumns = completeColumns\.filter\(column => !isPersonalColumn\(column\.key\) && !column\.hidden\)/)
+})
+
+test('agenda headers support direct column reordering with a visible drop position', () => {
+  assert.match(board, /application\/x-yoko-column/)
+  assert.match(board, /onMoveColumn\(sourceKey, col\.key, side\)/)
+  assert.match(board, /function moveColumn\(sourceKey: string, targetKey: string, side: 'before' \| 'after'\)/)
+  assert.match(board, /boxShadow: columnDrop\?\.key === col\.key/)
+  assert.match(board, /Sleep \$\{col\.label\} om de kolom te verplaatsen/)
 })
 
 test('personal completion client only persists personal status', () => {

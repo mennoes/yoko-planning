@@ -3281,7 +3281,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onToggleReorder, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onToggleReorder, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
@@ -3294,6 +3294,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   onToggleSort: (key: string) => void
   reorderMode: boolean
   onToggleReorder: () => void
+  onMoveColumn: (sourceKey: string, targetKey: string, side: 'before' | 'after') => void
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
   onMoveItemsHere: (itemIds: string[]) => void
@@ -3306,6 +3307,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   const isMobile = useIsMobile()
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
   const [dropHover, setDropHover] = useState(false)
+  const [columnDrop, setColumnDrop] = useState<{ key: string; side: 'before' | 'after' } | null>(null)
+  const suppressColumnSort = useRef(false)
   // 'Ghost mode': zodra ergens op het bord een subitem versleept wordt,
   // krijgt elke groep een opvallende drop-zone-stijl zodat de gebruiker
   // direct ziet WAAR 'ie kan loslaten. Reset bij dragend.
@@ -3940,8 +3943,40 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }} />
               </div>
               {cols.map(col => (
-                <div key={col.key} style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isPersonalColumn(col.key) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined }}
-                  onClick={() => { if (!isPersonalColumn(col.key)) onToggleSort(col.key) }}>
+                <div key={col.key} draggable={!isMobile}
+                  title={isMobile ? col.label : `Sleep ${col.label} om de kolom te verplaatsen`}
+                  onDragStart={event => {
+                    if (isMobile) { event.preventDefault(); return }
+                    suppressColumnSort.current = true
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('application/x-yoko-column', col.key)
+                  }}
+                  onDragOver={event => {
+                    if (!event.dataTransfer.types.includes('application/x-yoko-column')) return
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    setColumnDrop({ key: col.key, side: event.clientX < rect.left + rect.width / 2 ? 'before' : 'after' })
+                  }}
+                  onDragLeave={event => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      setColumnDrop(current => current?.key === col.key ? null : current)
+                    }
+                  }}
+                  onDrop={event => {
+                    event.preventDefault()
+                    const sourceKey = event.dataTransfer.getData('application/x-yoko-column')
+                    const side = columnDrop?.key === col.key ? columnDrop.side : 'before'
+                    setColumnDrop(null)
+                    if (sourceKey && sourceKey !== col.key) onMoveColumn(sourceKey, col.key, side)
+                  }}
+                  onDragEnd={() => {
+                    setColumnDrop(null)
+                    window.setTimeout(() => { suppressColumnSort.current = false }, 0)
+                  }}
+                  style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isMobile ? (isPersonalColumn(col.key) ? 'default' : 'pointer') : 'grab', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', backgroundColor: columnDrop?.key === col.key ? 'var(--accent-light)' : undefined, backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined, boxShadow: columnDrop?.key === col.key ? `inset ${columnDrop.side === 'before' ? '4px' : '-4px'} 0 0 var(--accent)` : undefined, transition: 'background-color 0.12s, box-shadow 0.12s' }}
+                  onClick={() => { if (!suppressColumnSort.current && !isPersonalColumn(col.key)) onToggleSort(col.key) }}>
+                  {!isMobile && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, letterSpacing: -2, marginRight: 2 }}>⠿</span>}
                   {col.label}
                   {sortBy?.key === col.key && (
                     <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
@@ -4295,8 +4330,11 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   menu?:   boolean
 }) {
   const [open, setOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [customLabel, setCustomLabel] = useState('')
   const [customType, setCustomType] = useState<ColumnType>('text')
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   // Lokale werk-set, gesynchroniseerd met de prop. Mutaties commit'ten
   // direct naar setBoardColumns zodat de tabel meteen meebeweegt en de
@@ -4310,14 +4348,17 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
     setBoardColumns(boardId, next)
   }
   function toggleVisible(key: string) { commit(list.map(c => c.key === key ? { ...c, hidden: !c.hidden } : c)) }
-  function moveUp(idx: number)   { if (idx <= 0) return; const n = [...list]; [n[idx-1], n[idx]] = [n[idx], n[idx-1]]; commit(n) }
-  function moveDown(idx: number) { if (idx >= list.length - 1) return; const n = [...list]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; commit(n) }
   function moveTo(from: number, to: number) {
     if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return
     const next = [...list]
     const [moved] = next.splice(from, 1)
     next.splice(to, 0, moved)
     commit(next)
+  }
+  function removeCustom(key: string, label: string) {
+    if (!key.startsWith('custom_')) return
+    if (!window.confirm(`Kolom '${label}' verwijderen? Bestaande waarden blijven in de items bewaard, maar zijn niet meer zichtbaar.`)) return
+    commit(list.filter(column => column.key !== key))
   }
   function add(col: ColumnDef)   { commit([...list, col]) }
   function addCustom() {
@@ -4359,71 +4400,70 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: 12, minWidth: 280,
+            borderRadius: 12, padding: 14, width: 360, maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(680px, calc(100vh - 32px))', overflowY: 'auto',
             boxShadow: '0 10px 36px rgba(0,0,0,0.4)',
           }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-              Kolommen
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>Kolommen beheren</strong>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{list.filter(column => !column.hidden).length} zichtbaar</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <p style={{ margin: '4px 0 11px', fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-muted)' }}>
+              Houd een rij vast en sleep hem naar de gewenste plek. De volgorde verandert direct in de Agenda.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {list.map((c, idx) => (
                 <div key={c.key} draggable
-                  onDragStart={event => { dragIndex.current = idx; event.dataTransfer.effectAllowed = 'move' }}
-                  onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }}
-                  onDrop={event => { event.preventDefault(); if (dragIndex.current !== null) moveTo(dragIndex.current, idx); dragIndex.current = null }}
-                  onDragEnd={() => { dragIndex.current = null }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 7px', borderRadius: 6, background: 'var(--overlay-faint)', opacity: c.hidden ? 0.52 : 1, cursor: 'grab' }}>
-                  <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 13, letterSpacing: -2, paddingRight: 3 }}>⠿</span>
-                  <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-secondary)' }}>{c.label}</span>
+                  onDragStart={event => {
+                    dragIndex.current = idx; setDraggingIndex(idx)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', c.key)
+                  }}
+                  onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropIndex(idx) }}
+                  onDrop={event => {
+                    event.preventDefault()
+                    if (dragIndex.current !== null) moveTo(dragIndex.current, idx)
+                    dragIndex.current = null; setDraggingIndex(null); setDropIndex(null)
+                  }}
+                  onDragEnd={() => { dragIndex.current = null; setDraggingIndex(null); setDropIndex(null) }}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '5px 7px', borderRadius: 8, background: dropIndex === idx ? 'var(--accent-light)' : 'var(--overlay-faint)', opacity: draggingIndex === idx ? 0.42 : c.hidden ? 0.62 : 1, cursor: 'grab', boxShadow: dropIndex === idx ? 'inset 0 3px 0 var(--accent)' : 'none', transition: 'background 0.12s, opacity 0.12s, box-shadow 0.12s' }}>
+                  <span aria-hidden title="Sleep om te verplaatsen" style={{ color: 'var(--text-muted)', fontSize: 16, letterSpacing: -2, padding: '2px 4px 2px 1px' }}>⠿</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, color: c.hidden ? 'var(--text-muted)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
                   <button onClick={() => toggleVisible(c.key)}
                     title={c.hidden ? 'Kolom tonen' : 'Kolom verbergen'} aria-label={c.hidden ? `${c.label} tonen` : `${c.label} verbergen`}
-                    style={{ background: c.hidden ? 'transparent' : color, border: c.hidden ? '1px solid var(--border-light)' : '1px solid transparent', cursor: 'pointer', color: c.hidden ? 'var(--text-muted)' : '#fff', padding: '2px 7px', borderRadius: 999, fontSize: 10.5, minWidth: 48 }}>
-                    {c.hidden ? 'Uit' : 'Aan'}
+                    style={{ background: c.hidden ? 'var(--bg-hover)' : color, border: 'none', cursor: 'pointer', color: c.hidden ? 'var(--text-muted)' : '#fff', padding: '5px 9px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, minWidth: 70 }}>
+                    {c.hidden ? 'Verborgen' : 'Zichtbaar'}
                   </button>
-                  <button onClick={() => moveUp(idx)}   disabled={idx === 0}
-                    title="Naar links"
-                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'not-allowed' : 'pointer', color: idx === 0 ? 'var(--text-muted)' : color, padding: '2px 5px', fontSize: 13 }}>◀</button>
-                  <button onClick={() => moveDown(idx)} disabled={idx === list.length - 1}
-                    title="Naar rechts"
-                    style={{ background: 'none', border: 'none', cursor: idx === list.length - 1 ? 'not-allowed' : 'pointer', color: idx === list.length - 1 ? 'var(--text-muted)' : color, padding: '2px 5px', fontSize: 13 }}>▶</button>
+                  {c.key.startsWith('custom_') && <button onClick={() => removeCustom(c.key, c.label)}
+                    title={`${c.label} verwijderen`} aria-label={`${c.label} verwijderen`}
+                    style={{ width: 27, height: 27, border: 'none', borderRadius: 6, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>}
                 </div>
               ))}
             </div>
-            {addable.length > 0 && (
-              <>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '12px 0 5px' }}>
-                  Toevoegen
+            <button onClick={() => setAdding(value => !value)} aria-expanded={adding}
+              style={{ width: '100%', marginTop: 10, padding: '9px 11px', border: 'none', borderRadius: 8, background: adding ? 'var(--accent-light)' : 'var(--bg-hover)', color: adding ? color : 'var(--text-secondary)', cursor: 'pointer', fontSize: 12.5, fontWeight: 750, textAlign: 'left' }}>
+              {adding ? '− Sluit toevoegen' : '+ Kolom toevoegen'}
+            </button>
+            {adding && <div style={{ marginTop: 9, padding: 10, borderRadius: 9, background: 'var(--overlay-faint)' }}>
+              {addable.length > 0 && <>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Standaardkolom</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 11 }}>
+                  {addable.map(c => <button key={c.key} onClick={() => add({ ...c, hidden: false })}
+                    style={{ padding: '6px 9px', borderRadius: 7, border: 'none', background: 'var(--bg-hover)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, fontWeight: 650 }}>+ {c.label}</button>)}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {addable.map(c => (
-                    <button key={c.key} onClick={() => add(c)}
-                      style={{ padding: '4px 9px', borderRadius: 999,
-                        border: '1px solid var(--border-light)', background: 'var(--bg-card)',
-                        color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                      + {c.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '14px 0 5px' }}>
-              Eigen kolom
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 92px auto', gap: 5 }}>
-              <input value={customLabel} onChange={event => setCustomLabel(event.target.value)}
-                onKeyDown={event => { if (event.key === 'Enter') addCustom() }} placeholder="Naam…"
-                style={{ minWidth: 0, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-light)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }} />
-              <select value={customType} onChange={event => setCustomType(event.target.value as ColumnType)}
-                style={{ padding: '6px 7px', borderRadius: 6, border: '1px solid var(--border-light)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 11 }}>
-                <option value="text">Tekst</option>
-                <option value="number">Getal</option>
-                <option value="date">Datum</option>
-                <option value="url">Link</option>
-                <option value="currency">Bedrag</option>
-              </select>
-              <button onClick={addCustom} disabled={!customLabel.trim()} title="Eigen kolom toevoegen"
-                style={{ padding: '5px 9px', borderRadius: 6, border: 'none', background: color, color: '#fff', fontSize: 15, fontWeight: 800, cursor: customLabel.trim() ? 'pointer' : 'not-allowed', opacity: customLabel.trim() ? 1 : 0.45 }}>+</button>
-            </div>
+              </>}
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Eigen kolom</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 92px auto', gap: 6 }}>
+                <input value={customLabel} onChange={event => setCustomLabel(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter') addCustom() }} placeholder="Naam van kolom…"
+                  style={{ minWidth: 0, padding: '8px 9px', borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 12, outline: 'none' }} />
+                <select value={customType} onChange={event => setCustomType(event.target.value as ColumnType)}
+                  style={{ padding: '8px 7px', borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 11 }}>
+                  <option value="text">Tekst</option><option value="number">Getal</option><option value="date">Datum</option><option value="url">Link</option><option value="currency">Bedrag</option>
+                </select>
+                <button onClick={addCustom} disabled={!customLabel.trim()} title="Eigen kolom toevoegen"
+                  style={{ padding: '6px 11px', borderRadius: 7, border: 'none', background: color, color: '#fff', fontSize: 13, fontWeight: 800, cursor: customLabel.trim() ? 'pointer' : 'not-allowed', opacity: customLabel.trim() ? 1 : 0.45 }}>Voeg toe</button>
+              </div>
+            </div>}
           </div>
         </PortalDropdown>
       )}
@@ -4634,6 +4674,17 @@ type BoardTableProps = {
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const completeColumns = completeColumnLayout(columns)
   const dataColumns = completeColumns.filter(column => !isPersonalColumn(column.key) && !column.hidden)
+  function moveColumn(sourceKey: string, targetKey: string, side: 'before' | 'after') {
+    const stored = getBoards().find(board => board.id === boardId)?.columns ?? completeColumns
+    const next = completeColumnLayout(stored)
+    const sourceIndex = next.findIndex(column => column.key === sourceKey)
+    if (sourceIndex < 0 || sourceKey === targetKey) return
+    const [moved] = next.splice(sourceIndex, 1)
+    const targetIndex = next.findIndex(column => column.key === targetKey)
+    if (targetIndex < 0) return
+    next.splice(targetIndex + (side === 'after' ? 1 : 0), 0, moved)
+    void setBoardColumns(boardId, next)
+  }
   const [openRequest, setOpenRequest] = useState<OpenItemRequest | null>(null)
   const omdenkenRepairRunning = useRef(false)
   useEffect(() => {
@@ -5794,6 +5845,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               sortBy={sortBy} onToggleSort={toggleSort}
               reorderMode={reorderMode}
               onToggleReorder={() => setReorderMode(value => !value)}
+              onMoveColumn={moveColumn}
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
               onMoveItemsHere={(itemIds) => moveItemsBetweenGroups(itemIds, group.id)}
