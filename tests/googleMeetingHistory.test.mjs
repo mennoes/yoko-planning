@@ -51,3 +51,12 @@ test('shared meeting history is recovered across linked Google accounts', () => 
   assert.match(repairBlock, /Bewust account-overstijgend/)
   assert.doesNotMatch(repairBlock, /\.eq\('external_user_id', cal\.user_id\)/)
 })
+
+test('a historical top-level Google event becomes a subitem before dedupe', () => {
+  assert.match(sync, /function historicalSubitemsForRow/)
+  assert.match(sync, /id: `si_history_\$\{row\.id\}`/)
+  assert.match(sync, /estHours: Number\(row\.est_hours\) \|\| 0/)
+  assert.match(sync, /duplicates\.map\(historicalSubitemsForRow\)/)
+  assert.match(sync, /Een oude losse occurrence mag pas verdwijnen nadat hij als subitem/)
+  assert.match(sync, /if \(mergeError\) continue/)
+})
