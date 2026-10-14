@@ -12,7 +12,7 @@ test('team capacity summaries render for every planning zoom level', () => {
 })
 
 test('team labels reserve the complete sticky name column', () => {
-  assert.match(planning, /width: opts\?\.members\?\.length \? nameW \+ namePad : 'max-content'/)
+  assert.match(planning, /width: opts\?\.members\?\.length \|\| opts\?\.dropTarget \? nameW \+ namePad : 'max-content'/)
   assert.match(planning, /width: nameW \+ namePad, flexShrink: 0/)
 })
 

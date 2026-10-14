@@ -24,19 +24,16 @@ test('completion reads are memoized until the shared comment store changes', () 
   assert.doesNotMatch(client, /completionState\(loadAllComments\(\)/)
 })
 
-test('agenda orders project fields before the personal status field', () => {
-  const start = board.indexOf('ordered.splice(insertAt, 0,')
-  const end = board.indexOf('return ordered', start)
-  const order = board.slice(start, end)
-  assert.ok(order.indexOf('...(status ? [status]') < order.indexOf('...(timeline ? [timeline]'))
-  assert.ok(order.indexOf('...(timeline ? [timeline]') < order.indexOf('PERSONAL_STATUS_KEY'))
-  assert.doesNotMatch(order, /PERSONAL_TIMELINE_KEY/)
+test('agenda nests personal status inside the project status menu', () => {
+  assert.match(board, /column\.key !== '__personalTimeline' && column\.key !== PERSONAL_STATUS_KEY/)
+  assert.match(board, /menuLabel="Status project" extraContent=\{statusExtra\}/)
+  assert.match(board, /statusExtra=\{col\.key === 'status' && shared && !!profile\?\.memberId && effectiveOwners\.includes\(profile\.memberId\) \? <PersonalCompletionSection/)
+  assert.doesNotMatch(board, /label: 'Jouw status'/)
   assert.match(board, /whiteSpace: 'nowrap'/)
-  assert.match(personalSection, /layout === 'cell'\) return <div[^>]+height: '100%'/)
-  assert.doesNotMatch(board, /padding: personal \? 0 : '4px 8px'/)
+  assert.match(personalSection, /owners\.length < 2/)
 })
 
-test('agenda column manager persists order and visibility for regular and personal status columns', () => {
+test('agenda column manager persists order and visibility for regular columns', () => {
   assert.match(board, /function completeColumnLayout\(columns: ColumnDef\[\]\)/)
   assert.match(board, /setBoardColumns\(boardId, next\)/)
   assert.match(board, /function toggleVisible\(key: string\)/)
@@ -58,6 +55,10 @@ test('agenda headers support direct column reordering with a visible drop positi
   assert.match(board, /Sleep \$\{col\.label\} om de kolom te verplaatsen/)
   assert.match(board, /pressedColumnKey === col\.key/)
   assert.match(board, /onMouseDown=\{\(\) => \{ if \(!isMobile\) setPressedColumnKey\(col\.key\) \}\}/)
+  // De grip blijft in de DOM terwijl de muis wordt ingedrukt. De eerdere
+  // conditionele mount annuleerde in sommige browsers de native dragstart.
+  assert.match(board, /\{!isMobile && <span aria-hidden/)
+  assert.doesNotMatch(board, /\{!isMobile && pressedColumnKey === col\.key && <span/)
 })
 
 test('personal completion client only persists personal status', () => {

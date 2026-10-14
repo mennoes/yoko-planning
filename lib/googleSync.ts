@@ -6,6 +6,7 @@ import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
 import { isAcceptedCalendarResponse, loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
+import { mergeGoogleMeetingHistory } from './googleMeetingHistory'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -67,8 +68,9 @@ const WINDOW_DAYS_FUTURE = 180
 // als losse afspraken. De oude 56-dagenknip liet de planning na een paar
 // weken plots leeg lijken, ook al stonden de meetings gewoon in Google.
 const RECURRING_DAYS_FUTURE = WINDOW_DAYS_FUTURE
-const WINDOW_DAYS_PAST   = 180  // 6 months back — zodat recurring meetings
-                                 //   ook hun historische instances meenemen
+const WINDOW_DAYS_PAST   = 730  // Twee jaar terug: oude recurring instances
+                                 // worden opnieuw ingelezen en blijven als
+                                 // Done-subitems met hun uren beschikbaar.
 const AUTO_DONE_AFTER_DAYS = 3  // events waarvan de end-date > N dagen
                                  //   geleden is, worden auto op 'Done' gezet
                                  //   tenzij de gebruiker 'Stuck' heeft gezet
@@ -1406,14 +1408,101 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (typeof u.external_id === 'string' && u.external_id) canonicalByExt.set(u.external_id, id)
   }
   const duplicateIds = new Set<string>()
+  // Houd de herstelde set per winnaar ook lokaal bij. Een tweede reparatie-
+  // stap hieronder vangt opnieuw aangemaakte Google-series op waarvan het
+  // iCalUID veranderde; die mag een eerdere exacte-iCal merge niet weer
+  // overschrijven.
+  const recoveredSubitems = new Map<string, SubItemSnapshot[]>(
+    upserts.map(row => [String(row.id), (row.subitems ?? []) as SubItemSnapshot[]]),
+  )
   if (canonicalByICal.size > 0) {
     const { data: rows } = await admin.from('board_items')
-      .select('id, ical_uid').eq('source', 'google').is('deleted_at', null)
+      .select('id, ical_uid, subitems, extra, deleted_at').eq('source', 'google')
       .eq('external_user_id', cal.user_id)
       .in('ical_uid', [...canonicalByICal.keys()])
-    for (const row of (rows as Array<{ id: string; ical_uid: string | null }> | null) ?? []) {
+    type HistoryRow = { id: string; ical_uid: string | null; subitems: SubItemSnapshot[] | null; extra: Record<string, unknown> | null; deleted_at: string | null }
+    const historyRows = (rows as HistoryRow[] | null) ?? []
+    const byWinner = new Map<string, HistoryRow[]>()
+    for (const row of historyRows) {
       const winner = row.ical_uid ? canonicalByICal.get(row.ical_uid) : null
-      if (winner && row.id !== winner && !canonicalIds.has(row.id)) duplicateIds.add(row.id)
+      if (!winner || row.id === winner || canonicalIds.has(row.id)) continue
+      byWinner.set(winner, [...(byWinner.get(winner) ?? []), row])
+    }
+    for (const [winner, duplicates] of byWinner) {
+      const winnerRow = historyRows.find(row => row.id === winner)
+      const dismissed = new Set(
+        Array.isArray(winnerRow?.extra?.dismissedInstanceIds)
+          ? winnerRow!.extra!.dismissedInstanceIds as string[]
+          : [],
+      )
+      const merged = mergeGoogleMeetingHistory(
+        recoveredSubitems.get(winner) ?? (winnerRow?.subitems ?? []) as SubItemSnapshot[],
+        duplicates.map(row => (row.subitems ?? []) as SubItemSnapshot[]),
+        dismissed,
+      )
+      const hasHistoricalSubitems = duplicates.some(row => (row.subitems?.length ?? 0) > 0)
+      if (hasHistoricalSubitems) {
+        const { error: mergeError } = await admin.from('board_items')
+          .update({ subitems: merged, updated_at: new Date().toISOString() })
+          .eq('id', winner)
+        // De oude rij pas verbergen nadat de historie aantoonbaar veilig in
+        // de zichtbare parent staat. Bij een DB-fout blijft de bron dus staan.
+        if (mergeError) continue
+        recoveredSubitems.set(winner, merged)
+      }
+      for (const row of duplicates) if (!row.deleted_at) duplicateIds.add(row.id)
+    }
+  }
+
+  // Google kan bij "deze en volgende afspraken" of het opnieuw aanmaken van
+  // een reeks een nieuw iCalUID geven. Dan is vergelijken op technisch ID
+  // alleen onvoldoende en blijft de oude serie in de prullenbak liggen. Neem
+  // daarom óók oude, reeds soft-deleted series met exact dezelfde titel en
+  // hetzelfde bord mee, maar uitsluitend wanneer al hun gedateerde momenten
+  // vóór de huidige reeks liggen. Dat voorkomt dat twee gelijktijdige,
+  // toevallig gelijknamige afspraken aan elkaar worden geplakt.
+  const normalizedHistoryTitle = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')
+  const currentSeries = upserts
+    .filter(row => Array.isArray(row.subitems) && row.subitems.length > 0)
+    .map(row => ({
+      id: String(row.id),
+      boardId: String(row.board_id),
+      name: normalizedHistoryTitle(row.name),
+      firstDate: ((row.subitems ?? []) as SubItemSnapshot[])
+        .map(subitem => subitem.startDate ?? subitem.endDate ?? '')
+        .filter(Boolean)
+        .sort()[0] ?? '',
+      dismissed: new Set(Array.isArray((row.extra as Record<string, unknown> | undefined)?.dismissedInstanceIds)
+        ? (row.extra as Record<string, unknown>).dismissedInstanceIds as string[]
+        : []),
+    }))
+  if (currentSeries.length > 0) {
+    const { data: retiredRows } = await admin.from('board_items')
+      .select('id, name, board_id, ical_uid, subitems, deleted_at')
+      .eq('source', 'google')
+      .eq('external_user_id', cal.user_id)
+      .not('deleted_at', 'is', null)
+    type RetiredHistoryRow = { id: string; name: string | null; board_id: string; ical_uid: string | null; subitems: SubItemSnapshot[] | null; deleted_at: string | null }
+    const retired = (retiredRows as RetiredHistoryRow[] | null) ?? []
+    for (const series of currentSeries) {
+      if (!series.name || !series.firstDate) continue
+      const candidates = retired.filter(row => {
+        if (row.id === series.id || row.board_id !== series.boardId || normalizedHistoryTitle(row.name) !== series.name) return false
+        const dated = (row.subitems ?? [])
+          .map(subitem => subitem.startDate ?? subitem.endDate ?? '')
+          .filter(Boolean)
+        return dated.length > 0 && dated.every(date => date < series.firstDate)
+      })
+      if (candidates.length === 0) continue
+      const merged = mergeGoogleMeetingHistory(
+        recoveredSubitems.get(series.id) ?? [],
+        candidates.map(row => row.subitems ?? []),
+        series.dismissed,
+      )
+      const { error: historyError } = await admin.from('board_items')
+        .update({ subitems: merged, updated_at: new Date().toISOString() })
+        .eq('id', series.id)
+      if (!historyError) recoveredSubitems.set(series.id, merged)
     }
   }
   if (canonicalByExt.size > 0) {
