@@ -43,7 +43,10 @@ test('a recreated recurring series recovers older same-board history without ove
   assert.match(sync, /row\.board_id !== series\.boardId/)
   assert.match(sync, /dated\.every\(date => date < series\.firstDate\)/)
   assert.match(sync, /recoveredSubitems\.get\(series\.id\)/)
-  assert.match(sync, /if \(!historyError\) recoveredSubitems\.set/)
+  assert.match(sync, /if \(!historyError\) \{[\s\S]*recoveredSubitems\.set\(series\.id, merged\)/)
+  const titleRepair = sync.slice(sync.indexOf('const normalizedHistoryTitle'), sync.indexOf('if (canonicalByExt.size > 0)'))
+  assert.doesNotMatch(titleRepair, /\.not\('deleted_at', 'is', null\)/)
+  assert.match(titleRepair, /for \(const row of candidates\) if \(!row\.deleted_at\) duplicateIds\.add\(row\.id\)/)
 })
 
 test('shared meeting history is recovered across linked Google accounts', () => {

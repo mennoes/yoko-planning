@@ -1478,9 +1478,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
 
   // Google kan bij "deze en volgende afspraken" of het opnieuw aanmaken van
   // een reeks een nieuw iCalUID geven. Dan is vergelijken op technisch ID
-  // alleen onvoldoende en blijft de oude serie in de prullenbak liggen. Neem
-  // daarom óók oude, reeds soft-deleted series met exact dezelfde titel en
-  // hetzelfde bord mee, maar uitsluitend wanneer al hun gedateerde momenten
+  // alleen onvoldoende en kan de oude serie als losse Done-regel blijven
+  // staan of in de prullenbak liggen. Neem daarom oude series met exact
+  // dezelfde titel en hetzelfde bord mee, maar uitsluitend wanneer al hun
+  // gedateerde momenten
   // vóór de huidige reeks liggen. Dat voorkomt dat twee gelijktijdige,
   // toevallig gelijknamige afspraken aan elkaar worden geplakt.
   const normalizedHistoryTitle = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')
@@ -1502,7 +1503,6 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const { data: retiredRows } = await admin.from('board_items')
       .select('id, name, board_id, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at')
       .eq('source', 'google')
-      .not('deleted_at', 'is', null)
     type RetiredHistoryRow = Pick<ItemRow, 'id' | 'name' | 'board_id' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
     const retired = (retiredRows as RetiredHistoryRow[] | null) ?? []
     for (const series of currentSeries) {
@@ -1523,7 +1523,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const { error: historyError } = await admin.from('board_items')
         .update({ subitems: merged, updated_at: new Date().toISOString() })
         .eq('id', series.id)
-      if (!historyError) recoveredSubitems.set(series.id, merged)
+      if (!historyError) {
+        recoveredSubitems.set(series.id, merged)
+        // Actieve oude losse rijen pas verbergen NADAT hun uren/subitem in
+        // de nieuwe reeks staan. Soft-deleted bronnen hoeven niet opnieuw.
+        for (const row of candidates) if (!row.deleted_at) duplicateIds.add(row.id)
+      }
     }
   }
   if (canonicalByExt.size > 0) {
