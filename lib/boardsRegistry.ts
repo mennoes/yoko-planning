@@ -165,6 +165,9 @@ export async function setBoardColumns(boardId: string, columns: ColumnDef[]): Pr
 }
 
 export function getBoards(): BoardConfig[] { return readCache() }
+export function isCoreBoardId(id: string): boolean {
+  return FALLBACK.some(board => board.id === id)
+}
 export function getBoardConfig(id: string): BoardConfig | null {
   return readCache().find(b => b.id === id) ?? null
 }
