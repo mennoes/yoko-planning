@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { getAllTeamPhotos, setTeamPhoto as storeSetPhoto } from '@/lib/teamPhotos'
 import { isDemoPath, DEMO_PHOTOS } from '@/lib/demoFixtures'
 import { supabase } from '@/lib/supabase'
-import { pinnedStaticAvatarUrl } from '@/lib/avatarAssets'
+import { pinnedStaticAvatarUrl, staticAvatarUrl } from '@/lib/avatarAssets'
 
 const TEAM_PHOTO_PREFIX = '__team_photo__:'
 
@@ -74,7 +74,13 @@ export function TeamPhotosProvider({ children }: { children: ReactNode }) {
     }
   }, [demo])
 
-  const getPhoto = useCallback((id: string) => photos[id] ?? pinnedStaticAvatarUrl(id) ?? null, [photos])
+  // Zelfde resolver voor álle avatar-weergaven, ook SVG-gebruikers zoals
+  // het verdelingstaartdiagram. Die renderen geen UserAvatar-component en
+  // misten daardoor eerder de statische fallback (Menno werd alleen "M").
+  // Vincent blijft bewust op de goedgekeurde statische teamfoto gepind.
+  const getPhoto = useCallback((id: string) => (
+    pinnedStaticAvatarUrl(id) ?? photos[id] ?? staticAvatarUrl(id) ?? null
+  ), [photos])
 
   const setPhoto = useCallback((id: string, dataUrl: string) => {
     // /demo: alleen lokale state bijwerken, nooit de echte foto-store
