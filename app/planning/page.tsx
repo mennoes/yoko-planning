@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { memo, useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useMemberPopup } from '@/components/MemberPopup'
@@ -413,7 +413,7 @@ type Contrib = { project: Project; hours: number }
 
 const NL_DAY_FULL = ['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag']
 
-function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenDetails }: {
+const WorkloadCell = memo(function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenDetails }: {
   contribs: Contrib[]; total: number; capacity: number
   cs: number; or: number; zoom: ZoomLevel
   onOpenDetails?: (p: Project) => void
@@ -496,7 +496,7 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
       {popover}
     </div>
   )
-}
+})
 
 // Floating detail popover: items grouped by start-day, each with a category
 // (Maken / Overhead / Meeting) picker. Layout matches the home page workload
@@ -2085,6 +2085,23 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   )
 }
 
+/** Planning-projects already carry stable completion ids from
+ * groupsToProjects. Reuse those instead of reading and scanning an entire
+ * agenda from localStorage for every meeting chip during expansion. */
+function planningCompletionTarget(project: Project): CompletionTarget | null {
+  if (project.completionParentItemId) {
+    return {
+      parentItemId: project.completionParentItemId,
+      ...(project.completionSubitemId ? { subitemId: project.completionSubitemId } : {}),
+    }
+  }
+  // Compatibility for legacy/virtual projects that predate the stable ids.
+  return completionTargetForProject({
+    board: project.board,
+    itemId: project.id.slice(project.board.length + 2),
+  })
+}
+
 function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: {
   meetings: Project[]; memberId: string; left: number; width: number
   onOpen: (project: Project) => void
@@ -2094,7 +2111,7 @@ function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: 
   const [, refreshCompletion] = useState(0)
   useEffect(() => {
     const meetingContexts = new Set(meetings.flatMap(meeting => {
-      const target = completionTargetForProject({ board: meeting.board, itemId: meeting.id.slice(meeting.board.length + 2) })
+      const target = planningCompletionTarget(meeting)
       return target ? [completionContext(target)] : []
     }))
     return onCommentsUpdate(event => {
@@ -2103,7 +2120,7 @@ function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: 
     })
   }, [meetings])
   function isMeetingDone(meeting: Project) {
-    const target = completionTargetForProject({ board: meeting.board, itemId: meeting.id.slice(meeting.board.length + 2) })
+    const target = planningCompletionTarget(meeting)
     return (target ? loadPersonalCompletion(target, memberId)?.done : undefined) ?? meeting.status === 'done'
   }
   const [pinned, setPinned] = useState(false)
@@ -4666,10 +4683,10 @@ export default function PlanningPage() {
     window.addEventListener('click', onWinClick, true)
     return () => window.removeEventListener('click', onWinClick, true)
   }, [])
-  function openDetail(p: Project) {
+  const openDetail = useCallback((p: Project) => {
     setDetailAnchor(lastClickRef.current ? { ...lastClickRef.current } : null)
     setDetailProject(p)
-  }
+  }, [])
   const [agendasOpen,  setAgendasOpen]  = useState(false)
   const [hiddenAgendas, setHiddenAgendas] = useState<string[]>([])
   useEffect(() => {
@@ -5465,6 +5482,22 @@ export default function PlanningPage() {
   }, [zoom, colOffset])
 
   const cols = useMemo(() => buildCols(zoom, baseFrom, colW), [zoom, baseFrom, colW])
+
+  // Indexeer één keer op eigenaar. Een persoon uitklappen filterde voorheen
+  // in iedere rij opnieuw de volledige projectlijst (op productie ~1.750
+  // items), waarna TimelineBars dezelfde filter nóg eens uitvoerde.
+  const datedProjectsByMember = useMemo(() => {
+    const result = new Map<string, Project[]>()
+    for (const project of effectiveProjects) {
+      if (!project.startDate && !project.endDate) continue
+      for (const memberId of project.ownerIds) {
+        const list = result.get(memberId)
+        if (list) list.push(project)
+        else result.set(memberId, [project])
+      }
+    }
+    return result
+  }, [effectiveProjects])
 
   // Uren per persoon/kolom zijn duur om uit te rekenen (alle projecten ×
   // teamleden × kolommen). Voorheen gebeurde dit opnieuw bij iedere gewone
@@ -7027,7 +7060,7 @@ export default function PlanningPage() {
             const renderMember = (member: TeamMember, mIdx: number) => {
             const isExp = expanded.has(member.id)
             const cap   = colCapacity(member.weeklyCapacity, member.id)
-            const memberProjects = effectiveProjects.filter(p => p.ownerIds.includes(member.id) && (p.startDate || p.endDate))
+            const memberProjects = datedProjectsByMember.get(member.id) ?? []
 
             return (
               <div key={member.id} data-member-id={member.id} style={{ borderBottom: '1px solid var(--border-strong)', background: 'transparent' }}>
@@ -7107,7 +7140,7 @@ export default function PlanningPage() {
                         borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                         padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent', position: 'relative' }}>
-                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => openDetail(p)} />
+                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={openDetail} />
                       </div>
                     )
                   })}
@@ -7118,11 +7151,11 @@ export default function PlanningPage() {
                   <div style={{ display: 'flex' }}>
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
-                      <TimelineBars memberId={member.id} projects={effectiveProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
+                      <TimelineBars memberId={member.id} projects={memberProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         rowScale={rowScale}
                         visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
                         visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
-                        onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={p => openDetail(p)}
+                        onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={openDetail}
                         onMarkDone={markProjectDone} onReassign={handleReassignOwner} />
                     </div>
                   </div>

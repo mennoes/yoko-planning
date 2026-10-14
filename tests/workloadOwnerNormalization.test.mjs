@@ -35,3 +35,30 @@ test('dated subitems carry their stable completion target without an agenda look
   assert.equal(project.completionParentItemId, 'parent')
   assert.equal(project.completionSubitemId, 'stable-sub')
 })
+
+test('stale owner hours are scaled to the current item total', () => {
+  const groups = [{ id: 'work', name: 'Werk', items: [{
+    id: 'experience', name: 'Experience', ownerIds: ['take'], status: '',
+    startDate: '2026-10-19', endDate: '2026-11-06', estHours: 56,
+    ownerHours: { take: 88 },
+  }] }]
+  const project = exports.groupsToProjects('pnp', groups)[0]
+  assert.equal(project.estHours, 56)
+  assert.equal(project.ownerHours.take, 56)
+})
+
+test('stale dated-subitem distribution cannot inflate its workload', () => {
+  const groups = [{ id: 'work', name: 'Werk', items: [{
+    id: 'parent', name: 'Parent', ownerIds: ['take', 'menno'], status: '',
+    startDate: null, endDate: null, estHours: 0,
+    subitems: [{
+      id: 'sub', name: 'Sub', ownerIds: ['take', 'menno'], status: '',
+      startDate: '2026-10-19', endDate: '2026-10-23', estHours: 24,
+      ownerHours: { take: 24, menno: 24 },
+    }],
+  }] }]
+  const project = exports.groupsToProjects('pnp', groups)[0]
+  assert.equal(Object.values(project.ownerHours).reduce((sum, hours) => sum + hours, 0), 24)
+  assert.equal(project.ownerHours.take, 12)
+  assert.equal(project.ownerHours.menno, 12)
+})

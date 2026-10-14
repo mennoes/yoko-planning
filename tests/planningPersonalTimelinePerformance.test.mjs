@@ -24,6 +24,15 @@ test('completion reads are memoized until the shared comment store changes', () 
   assert.doesNotMatch(client, /completionState\(loadAllComments\(\)/)
 })
 
+test('planning indexes projects per person and reuses stable completion ids', () => {
+  assert.match(planning, /const datedProjectsByMember = useMemo\(\(\) =>/)
+  assert.match(planning, /contributionsPerCell\(team, cols, effectiveProjects, loadCategoryOverrides\(\)\)/)
+  assert.match(planning, /<TimelineBars memberId=\{member\.id\} projects=\{memberProjects\}/)
+  assert.match(planning, /function planningCompletionTarget\(project: Project\)/)
+  assert.match(planning, /project\.completionParentItemId/)
+  assert.match(planning, /const WorkloadCell = memo\(function WorkloadCell/)
+})
+
 test('agenda nests personal status inside the project status menu', () => {
   assert.match(board, /column\.key !== '__personalTimeline' && column\.key !== PERSONAL_STATUS_KEY/)
   assert.match(board, /menuLabel="Status project" extraContent=\{statusExtra\}/)
