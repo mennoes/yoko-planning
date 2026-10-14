@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { BOARD_COLORS } from '@/lib/workload'
 import teamData from '@/data/team.json'
@@ -92,11 +92,13 @@ export default function ShareBoardPage() {
   const board = params.board
 
   const [groups, setGroups]             = useState<ShareGroup[]>([])
-  const [monthlyHours, setMonthlyHours] = useState<MonthlyHours[]>([])
+  const [, setMonthlyHours] = useState<MonthlyHours[]>([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
 
   const [preset, setPreset]     = useState<Preset>('month')
+  const [monthCursor, setMonthCursor] = useState(0)
+  const monthWheelAt = useRef(0)
   const [from, setFrom]         = useState('')
   const [until, setUntil]       = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set())
@@ -198,9 +200,12 @@ export default function ShareBoardPage() {
 
   const periodHours = Math.round(projectHours.reduce((sum, item) => sum + item.hours, 0) * 10) / 10
 
-  const visibleMonthlyHours = useMemo(() => monthlyHours.map(month => {
-    const [year, monthNumber] = month.key.split('-').map(Number)
-    const monthFrom = `${month.key}-01`
+  const visibleMonthlyHours = useMemo(() => [-1, 0, 1].map(delta => {
+    const date = addMonths(new Date(), monthCursor + delta)
+    const year = date.getFullYear()
+    const monthNumber = date.getMonth() + 1
+    const key = `${year}-${String(monthNumber).padStart(2, '0')}`
+    const monthFrom = `${key}-01`
     const monthUntil = monthEnd(new Date(year, monthNumber - 1, 1))
     const hours = selectedGroups.flatMap(group => group.items).reduce((total, item) => {
       const datedSubs = item.subitems.filter(sub => sub.startDate || sub.endDate)
@@ -209,8 +214,14 @@ export default function ShareBoardPage() {
       }
       return total + hoursInSelectedRange(item.startDate, item.endDate, item.estHours, monthFrom, monthUntil)
     }, 0)
-    return { ...month, hours: Math.round(hours * 10) / 10 }
-  }), [monthlyHours, selectedGroups])
+    const now = new Date()
+    return {
+      key,
+      label: date.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' }),
+      isCurrent: year === now.getFullYear() && monthNumber === now.getMonth() + 1,
+      hours: Math.round(hours * 10) / 10,
+    }
+  }), [monthCursor, selectedGroups])
 
   const stats = useMemo(() => {
     const items = filteredGroups.flatMap(g => g.items)
@@ -253,12 +264,22 @@ export default function ShareBoardPage() {
           hoeveel deze maand, en hoeveel staat er volgende maand gepland.
           Klikbaar: filtert de lijst eronder meteen op die maand. */}
       {visibleMonthlyHours.length === 3 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
+        <div onWheel={event => {
+          const direction = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+          if (Math.abs(direction) < 8 || Date.now() - monthWheelAt.current < 250) return
+          monthWheelAt.current = Date.now()
+          setMonthCursor(current => current + (direction > 0 ? 1 : -1))
+        }} style={{ display: 'grid', gridTemplateColumns: '34px minmax(0, 1fr) 34px', gap: 8, alignItems: 'stretch', marginBottom: 24 }}>
+          <button onClick={() => setMonthCursor(current => current - 1)} aria-label="Een maand terug"
+            style={{ border: 'none', borderRadius: 10, background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18 }}>‹</button>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
           {visibleMonthlyHours.map((m, idx) => {
-            const presetForCard: Preset = idx === 0 ? 'prevMonth' : idx === 1 ? 'month' : 'next'
-            const active = preset === presetForCard
+            const monthFrom = `${m.key}-01`
+            const [year, month] = m.key.split('-').map(Number)
+            const monthUntil = monthEnd(new Date(year, month - 1, 1))
+            const active = from === monthFrom && until === monthUntil
             return (
-              <button key={m.key} onClick={() => setPreset(presetForCard)}
+              <button key={m.key} onClick={() => { setPreset('custom'); setFrom(monthFrom); setUntil(monthUntil) }}
                 style={{
                   textAlign: 'left', cursor: 'pointer',
                   padding: '14px 16px', borderRadius: 12,
@@ -270,7 +291,7 @@ export default function ShareBoardPage() {
                   color: m.isCurrent ? color : 'var(--text-muted)', marginBottom: 6,
                   display: 'flex', alignItems: 'center', gap: 6,
                 }}>
-                  {idx === 0 ? 'Vorige maand' : idx === 1 ? 'Deze maand' : 'Volgende maand'}
+                  {m.isCurrent ? 'Deze maand' : idx === 0 ? 'Vorige maand' : idx === 2 ? 'Volgende maand' : 'Geselecteerde maand'}
                   {m.isCurrent && (
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
                   )}
@@ -284,6 +305,9 @@ export default function ShareBoardPage() {
               </button>
             )
           })}
+          </div>
+          <button onClick={() => setMonthCursor(current => current + 1)} aria-label="Een maand verder"
+            style={{ border: 'none', borderRadius: 10, background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18 }}>›</button>
         </div>
       )}
 

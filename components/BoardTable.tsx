@@ -494,7 +494,14 @@ function EditableCell({
 }
 
 // ─── Status cel ───────────────────────────────────────────────────────────────
-function StatusCell({ value, onChange, disabled = false, ariaLabel }: { value: string; onChange: (v: string) => void; disabled?: boolean; ariaLabel?: string }) {
+function StatusCell({ value, onChange, disabled = false, ariaLabel, menuLabel, extraContent }: {
+  value: string
+  onChange: (v: string) => void
+  disabled?: boolean
+  ariaLabel?: string
+  menuLabel?: string
+  extraContent?: React.ReactNode
+}) {
   const [open, setOpen] = useState(false)
   const [hover, setHover] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -535,9 +542,10 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel }: { value: s
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 4, minWidth: 168,
+            borderRadius: 8, padding: 4, minWidth: extraContent ? 220 : 168,
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
           }}>
+            {menuLabel && <div style={{ padding: '6px 10px 5px', fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{menuLabel}</div>}
             {STATUS_OPTIONS.map(o => (
               <button key={o.label || '_'} onClick={() => { onChange(o.label); setOpen(false) }} style={{
                 display: 'flex', alignItems: 'center', gap: 8,
@@ -549,6 +557,9 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel }: { value: s
                 {o.label || '(geen status)'}
               </button>
             ))}
+            {extraContent && <div onClick={event => event.stopPropagation()} style={{ marginTop: 5, padding: '10px 10px 8px', borderTop: '1px solid var(--border-light)', background: 'var(--overlay-faint)', borderRadius: 6 }}>
+              {extraContent}
+            </div>}
           </div>
         </PortalDropdown>
       )}
@@ -1521,8 +1532,8 @@ function overlapDays(
   return Math.round((hi - lo) / 86400000) + 1
 }
 // ─── Cel dispatcher ───────────────────────────────────────────────────────────
-function Cell({ item, col, onUpdate }: {
-  item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
+function Cell({ item, col, onUpdate, statusExtra }: {
+  item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void; statusExtra?: React.ReactNode
 }) {
   const rolledOwnerTotal = Number(item.__relevantOwnerHoursTotal)
   if (col.type === 'owners')    return <OwnersCell value={item.ownerIds}
@@ -1552,7 +1563,7 @@ function Cell({ item, col, onUpdate }: {
       onUpdate({ ownerIds: v, ownerHours: distribution, ...lockPatch })
     }
   }} />
-  if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
+  if (col.type === 'status')    return <StatusCell value={item.status} menuLabel="Status project" extraContent={statusExtra} onChange={v => {
     onUpdate({ status: v })
     notifyOwnersOfStatusChange(item, item.status, v)
   }} />
@@ -1682,6 +1693,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   onReorderBefore?: (draggedId: string, targetId: string) => void
 }) {
   const isMobile = useIsMobile()
+  const { profile } = useProfile()
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(defaultEditName ? '' : subitem.name)
@@ -1728,7 +1740,9 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         // gedrag als bij top-level items). alignSelf:stretch overruled
         // de alignItems:center van de grid-row zodat de pill écht uitvult.
         return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden', flex: 1, minWidth: 0 }}>
-          <StatusCell value={subitem.status} onChange={v => onUpdate({
+          <StatusCell value={subitem.status} menuLabel="Status project" extraContent={parentItemId && new Set(subitem.ownerIds.filter(id => id && id !== 'unassigned')).size > 1 && !!profile?.memberId && subitem.ownerIds.includes(profile.memberId) ? <PersonalCompletionSection
+            target={{ parentItemId, subitemId: subitem.id }} ownerIds={subitem.ownerIds} status={subitem.status}
+            renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : null} onChange={v => onUpdate({
             status: v,
             ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
               ? { statusOverride: v === 'Done' ? 'done' as const : 'active' as const }
@@ -2435,6 +2449,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   defaultEditName?: boolean
 }) {
   const isMobile = useIsMobile()
+  const { profile } = useProfile()
   const { members: liveTeam } = useTeam()
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
@@ -2768,11 +2783,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
             background: personal && !shared ? 'var(--bg-base)' : undefined,
             backgroundImage: personal && shared ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined,
           }}>
-            {col.key === PERSONAL_STATUS_KEY ? (shared ? <PersonalCompletionSection
-              target={personalTarget} ownerIds={effectiveOwners} status={effectiveItem.status}
-              layout="cell"
-              renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : null)
-            : col.key === 'notes' ? (
+            {col.key === 'notes' ? (
               // Notes is een vrije-tekst-veld. Inline-editable via klik op
               // de tekst; '↗' opent het detail-drawer met een groot
               // textarea + eventuele opmerkingen ernaast voor lange teksten.
@@ -2780,7 +2791,10 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
                 onOpen={() => setShowDetail(true)}
                 onSave={next => onUpdate({ notes: next })} />
             ) : (
-              <Cell item={effectiveItem} col={col} onUpdate={onUpdate} />
+              <Cell item={effectiveItem} col={col} onUpdate={onUpdate}
+                statusExtra={col.key === 'status' && shared && !!profile?.memberId && effectiveOwners.includes(profile.memberId) ? <PersonalCompletionSection
+                  target={personalTarget} ownerIds={effectiveOwners} status={effectiveItem.status}
+                  renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : undefined} />
             )}
           </div>
         })}
@@ -4062,7 +4076,13 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }}
                   style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isMobile ? (isPersonalColumn(col.key) ? 'default' : 'pointer') : 'grab', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', backgroundColor: columnDrop?.key === col.key ? 'var(--accent-light)' : undefined, backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined, boxShadow: columnDrop?.key === col.key ? `inset ${columnDrop.side === 'before' ? '4px' : '-4px'} 0 0 var(--accent)` : undefined, transition: 'background-color 0.12s, box-shadow 0.12s' }}
                   onClick={() => { if (!suppressColumnSort.current && !isPersonalColumn(col.key)) onToggleSort(col.key) }}>
-                  {!isMobile && pressedColumnKey === col.key && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, letterSpacing: -2, marginRight: 2 }}>⠿</span>}
+                  {!isMobile && <span aria-hidden style={{
+                    color: 'var(--text-muted)', fontSize: 11, letterSpacing: -2,
+                    marginRight: pressedColumnKey === col.key ? 2 : 0,
+                    width: pressedColumnKey === col.key ? 12 : 0,
+                    opacity: pressedColumnKey === col.key ? 1 : 0,
+                    overflow: 'hidden', transition: 'opacity 0.1s, width 0.1s, margin 0.1s',
+                  }}>⠿</span>}
                   {col.label}
                   {sortBy?.key === col.key && (
                     <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
@@ -4368,7 +4388,6 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
   { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
   { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
-  { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 },
   { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
   { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
   { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
@@ -4379,31 +4398,16 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'nummers',        label: 'Nummers',        type: 'currency',  width: 110 },
 ]
 
-/** Existing boards did not store the personal status column. Add it once to
- * the visual layout. The retired __personalTimeline column is stripped from
- * older saved layouts without touching project or subitem timeline data. */
+/** Personal status now lives inside the shared Status menu. Strip the retired
+ * personal columns from older layouts without touching their status data. */
 function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
-  const base = columns
-    .filter(column => column.key !== '__personalTimeline')
+  return columns
+    .filter(column => column.key !== '__personalTimeline' && column.key !== PERSONAL_STATUS_KEY)
     .map(column => column.key === 'status'
       ? { ...column, label: 'Status' }
       : column.key === 'timeline'
         ? { ...column, label: 'Timeline' }
         : column)
-  if (base.some(column => isPersonalColumn(column.key))) return base
-  const statusIndex = base.findIndex(column => column.key === 'status')
-  const timelineIndex = base.findIndex(column => column.key === 'timeline')
-  if (statusIndex < 0 && timelineIndex < 0) return base
-  const insertAt = Math.min(...[statusIndex, timelineIndex].filter(index => index >= 0))
-  const status = base.find(column => column.key === 'status')
-  const timeline = base.find(column => column.key === 'timeline')
-  const ordered = base.filter(column => column.key !== 'status' && column.key !== 'timeline')
-  ordered.splice(insertAt, 0,
-    ...(status ? [status] : []),
-    ...(timeline ? [timeline] : []),
-    { key: PERSONAL_STATUS_KEY, label: 'Jouw status', type: 'status', width: 145 },
-  )
-  return ordered
 }
 
 function ColumnManagerButton({ boardId, columns, color, menu = false }: {
@@ -4757,6 +4761,11 @@ type BoardTableProps = {
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
   const completeColumns = completeColumnLayout(columns)
   const dataColumns = completeColumns.filter(column => !isPersonalColumn(column.key) && !column.hidden)
+  useEffect(() => {
+    if (columns.some(column => isPersonalColumn(column.key) || column.key === '__personalTimeline')) {
+      void setBoardColumns(boardId, completeColumnLayout(columns))
+    }
+  }, [boardId, columns])
   function moveColumn(sourceKey: string, targetKey: string, side: 'before' | 'after') {
     const stored = getBoards().find(board => board.id === boardId)?.columns ?? completeColumns
     const next = completeColumnLayout(stored)

@@ -4685,6 +4685,81 @@ export default function PlanningPage() {
       return next
     })
   }
+  type PlanningTeamDropTarget = {
+    key: string
+    groupId: string | null
+    label: string
+    baseKind?: 'yoko' | 'freelancer'
+  }
+  const [draggingTeamMemberId, setDraggingTeamMemberId] = useState<string | null>(null)
+  const [teamDropTargetKey, setTeamDropTargetKey] = useState<string | null>(null)
+  function isValidPlanningTeamDrop(target: PlanningTeamDropTarget, memberId = draggingTeamMemberId): boolean {
+    if (!memberId || memberId === 'unassigned' || isMemberInactive(memberId)) return false
+    if (!target.baseKind) return true
+    return target.baseKind === (isYokoCrew(memberId) ? 'yoko' : 'freelancer')
+  }
+  function startPlanningTeamDrag(event: React.DragEvent, member: TeamMember) {
+    event.stopPropagation()
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/x-yoko-team-member', member.id)
+    event.dataTransfer.setData('text/plain', member.id)
+    setDraggingTeamMemberId(member.id)
+  }
+  function finishPlanningTeamDrag() {
+    setDraggingTeamMemberId(null)
+    setTeamDropTargetKey(null)
+  }
+  function planningTeamDragHandle(member: TeamMember) {
+    if (member.id === 'unassigned' || isMemberInactive(member.id)) return null
+    return (
+      <span
+        draggable
+        aria-label={`Sleep ${member.name} naar een ander team`}
+        title="Sleep naar een ander team"
+        onMouseDown={event => event.stopPropagation()}
+        onClick={event => event.stopPropagation()}
+        onDragStart={event => startPlanningTeamDrag(event, member)}
+        onDragEnd={finishPlanningTeamDrag}
+        style={{
+          width: 14, flexShrink: 0, cursor: 'grab', color: 'var(--text-muted)',
+          fontSize: 15, lineHeight: 1, textAlign: 'center', userSelect: 'none',
+        }}>
+        ⠿
+      </span>
+    )
+  }
+  function planningTeamDropProps(target?: PlanningTeamDropTarget) {
+    if (!target) return {}
+    return {
+      onDragEnter: (event: React.DragEvent<HTMLDivElement>) => {
+        if (!isValidPlanningTeamDrop(target)) return
+        event.preventDefault()
+        setTeamDropTargetKey(target.key)
+      },
+      onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+        if (!isValidPlanningTeamDrop(target)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'move'
+      },
+      onDragLeave: (event: React.DragEvent<HTMLDivElement>) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        setTeamDropTargetKey(current => current === target.key ? null : current)
+      },
+      onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const memberId = event.dataTransfer.getData('application/x-yoko-team-member') || event.dataTransfer.getData('text/plain')
+        if (!isValidPlanningTeamDrop(target, memberId)) {
+          finishPlanningTeamDrag()
+          return
+        }
+        finishPlanningTeamDrag()
+        void assignMemberToTeamGroup(memberId, target.groupId)
+          .then(() => showToast(`${team.find(member => member.id === memberId)?.name ?? 'Persoon'} verplaatst naar ${target.label}.`))
+          .catch(() => showToast('Verplaatsen is niet gelukt. Probeer het opnieuw.'))
+      },
+    }
+  }
   // Bij een nieuw bezoek altijd ingeklapt, ook wanneer een eerdere sessie
   // deze historische groep ooit open had gezet.
   const [inactiveTeamPos, setInactiveTeamPos] = useState<number>(0)
@@ -6597,7 +6672,7 @@ export default function PlanningPage() {
               members: group.memberIds
                 .map(id => team.find(member => member.id === id))
                 .filter((member): member is TeamMember => !!member && !isMemberInactive(member.id) && isMemberVisible(member.id)),
-            })).filter(entry => entry.members.length > 0)
+            }))
             const yokoVisible = team
               .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id) && !groupedIds.has(m.id) && isMemberVisible(m.id))
               .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
@@ -6621,6 +6696,7 @@ export default function PlanningPage() {
               const mobileAv = Math.min(av, 36)
               const header = (
                 <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', minWidth: 0, paddingLeft: editOrder ? namePad - 4 : namePad, paddingRight: 6, gap: 6 }}>
+                  {!editOrder && planningTeamDragHandle(m)}
                   <button onClick={() => { if (!editOrder) toggleExpand(m.id) }}
                     title={editOrder ? '' : (isExp ? 'Inklappen' : 'Uitvouwen')}
                     style={{ display: 'flex', alignItems: 'center',
@@ -6726,18 +6802,22 @@ export default function PlanningPage() {
               )
             }
 
-            const sectionLabel = (label: string, count: number, members: TeamMember[], onClick?: () => void, isOpen?: boolean) => (
-              <div onClick={onClick}
+            const sectionLabel = (label: string, count: number, members: TeamMember[], onClick?: () => void, isOpen?: boolean, dropTarget?: PlanningTeamDropTarget) => (
+              <div onClick={onClick} {...planningTeamDropProps(dropTarget)}
                 style={{ borderBottom: '1px solid var(--border-light)',
-                  background: 'var(--overlay-faint)', cursor: onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: 44 }}>
+                  background: teamDropTargetKey === dropTarget?.key ? 'var(--accent-light)' : 'var(--overlay-faint)',
+                  outline: teamDropTargetKey === dropTarget?.key ? '2px solid var(--accent)' : '2px solid transparent',
+                  outlineOffset: -2, cursor: onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: 44 }}>
                 <div style={{ position: 'sticky', left: 0, zIndex: 22, width: nameW + namePad, flexShrink: 0,
-                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--overlay-faint)' }}>
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8,
+                  background: teamDropTargetKey === dropTarget?.key ? 'var(--accent-light)' : 'var(--overlay-faint)' }}>
                   {onClick && (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', display: 'inline-block',
                       transform: isOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>▶</span>
                   )}
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
+                  {teamDropTargetKey === dropTarget?.key && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>Laat los</span>}
                 </div>
                 {members.length > 0 && cols.map(col => {
                   const total = Math.round(members.reduce((sum, member) => (
@@ -6761,12 +6841,13 @@ export default function PlanningPage() {
 
             return (
               <>
-                {yokoVisible.length > 0 && sectionLabel(
+                {(yokoVisible.length > 0 || (draggingTeamMemberId && isYokoCrew(draggingTeamMemberId))) && sectionLabel(
                   'Studio Yoko',
                   yokoVisible.length,
                   yokoVisible,
                   () => setYokoTeamPos(current => current === 0 ? 1 : 0),
                   yokoTeamPos !== 0,
+                  { key: 'base-yoko-day', groupId: null, label: 'Studio Yoko', baseKind: 'yoko' },
                 )}
                 {yokoTeamPos !== 0 && yokoVisible.map(renderPerson)}
                 {groupedVisible.map(({ group, members }) => (
@@ -6777,15 +6858,17 @@ export default function PlanningPage() {
                       members,
                       () => toggleTeamGroup(group.id),
                       !collapsedTeamGroups.has(group.id),
+                      { key: `group-${group.id}-day`, groupId: group.id, label: group.name },
                     )}
                     {!collapsedTeamGroups.has(group.id) && members.map(renderPerson)}
                   </div>
                 ))}
                 {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length, unassignedVisible)}
                 {unassignedVisible.map(renderPerson)}
-                {freelancersVisible.length > 0 && (
+                {(freelancersVisible.length > 0 || (draggingTeamMemberId && !isYokoCrew(draggingTeamMemberId))) && (
                   <>
-                    {sectionLabel('Freelancers', freelancersVisible.length, freelancersVisible, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0)}
+                    {sectionLabel('Freelancers', freelancersVisible.length, freelancersVisible, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0,
+                      { key: 'base-freelancers-day', groupId: null, label: 'Freelancers', baseKind: 'freelancer' })}
                     {freelancersPos !== 0 && freelancersVisible.map(renderPerson)}
                   </>
                 )}
@@ -6812,7 +6895,7 @@ export default function PlanningPage() {
               members: group.memberIds
                 .map(id => visible.find(member => member.id === id))
                 .filter((member): member is TeamMember => !!member && !isMemberInactive(member.id)),
-            })).filter(entry => entry.members.length > 0)
+            }))
             const yokoTeam = visible
               .filter(m => isYokoCrew(m.id) && !isMemberInactive(m.id) && !groupedIds.has(m.id))
               .sort((a, b) => {
@@ -6827,16 +6910,19 @@ export default function PlanningPage() {
             const inactiveTeam  = visible.filter(m => isMemberInactive(m.id))
             const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id))
 
-            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; members?: TeamMember[] }) => (
-              <div onClick={opts?.onClick}
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; members?: TeamMember[]; dropTarget?: PlanningTeamDropTarget }) => (
+              <div onClick={opts?.onClick} {...planningTeamDropProps(opts?.dropTarget)}
                 style={{ borderBottom: '1px solid var(--border-light)',
-                  background: 'var(--overlay-faint)',
+                  background: teamDropTargetKey === opts?.dropTarget?.key ? 'var(--accent-light)' : 'var(--overlay-faint)',
+                  outline: teamDropTargetKey === opts?.dropTarget?.key ? '2px solid var(--accent)' : '2px solid transparent',
+                  outlineOffset: -2,
                   cursor: opts?.onClick ? 'pointer' : 'default', userSelect: 'none', display: 'flex', minHeight: opts?.members?.length ? 48 : undefined }}>
                 {/* Label blijft tegen de linker rand kleven terwijl de balk
                     horizontaal meescrolt — anders schuift de tekst uit beeld
                     zodra je naar rechts scrollt in de tijdlijn. */}
-                <div style={{ position: 'sticky', left: 0, zIndex: 26, width: opts?.members?.length ? nameW + namePad : 'max-content', flexShrink: 0,
-                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-base)', overflow: 'hidden', borderRight: '1px solid var(--border-strong)' }}>
+                <div style={{ position: 'sticky', left: 0, zIndex: 26, width: opts?.members?.length || opts?.dropTarget ? nameW + namePad : 'max-content', flexShrink: 0,
+                  padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 8,
+                  background: teamDropTargetKey === opts?.dropTarget?.key ? 'var(--accent-light)' : 'var(--bg-base)', overflow: 'hidden', borderRight: '1px solid var(--border-strong)' }}>
                   {opts?.onClick && (
                     opts.arrowPos === 2 ? (
                       // pos 2: iedereen in deze sectie staat individueel
@@ -6855,6 +6941,7 @@ export default function PlanningPage() {
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
                   {!!opts?.members?.length && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· {Math.round(opts.members.reduce((sum, member) => sum + member.weeklyCapacity, 0) * 10) / 10}u/w</span>}
+                  {teamDropTargetKey === opts?.dropTarget?.key && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>Laat los</span>}
                 </div>
                 {opts?.members?.length ? cols.map(col => {
                   const total = Math.round(opts.members!.reduce((sum, member) => (
@@ -6893,6 +6980,7 @@ export default function PlanningPage() {
                     display: 'flex', alignItems: 'center',
                     padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border-light)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, width: '100%' }}>
+                      {!editOrder && planningTeamDragHandle(member)}
                       {!editOrder && (
                         <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
@@ -7006,8 +7094,8 @@ export default function PlanningPage() {
                 }}>{renderMember(m, i)}</div>
               )
             }
-            if (yokoTeam.length > 0) {
-              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, members: yokoTeam })}</div>)
+            if (yokoTeam.length > 0 || (draggingTeamMemberId && isYokoCrew(draggingTeamMemberId))) {
+              out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, members: yokoTeam, dropTarget: { key: 'base-yoko', groupId: null, label: 'Team Yoko', baseKind: 'yoko' } })}</div>)
               if (yokoTeamPos !== 0) {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
               }
@@ -7018,6 +7106,7 @@ export default function PlanningPage() {
                 members,
                 onClick: () => toggleTeamGroup(group.id),
                 arrowPos: isOpen ? 1 : 0,
+                dropTarget: { key: `group-${group.id}`, groupId: group.id, label: group.name },
               })}</div>)
               if (isOpen) members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i)))
             })
@@ -7025,8 +7114,8 @@ export default function PlanningPage() {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
             }
-            if (freelancers.length > 0) {
-              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos, members: freelancers })}</div>)
+            if (freelancers.length > 0 || (draggingTeamMemberId && !isYokoCrew(draggingTeamMemberId))) {
+              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos, members: freelancers, dropTarget: { key: 'base-freelancers', groupId: null, label: 'Freelancers', baseKind: 'freelancer' } })}</div>)
               if (freelancersPos !== 0) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
               }
