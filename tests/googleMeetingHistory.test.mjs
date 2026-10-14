@@ -63,3 +63,11 @@ test('a historical top-level Google event becomes a subitem before dedupe', () =
   assert.match(sync, /Een oude losse occurrence mag pas verdwijnen nadat hij als subitem/)
   assert.match(sync, /if \(mergeError\) continue/)
 })
+
+test('legacy Google rows without a source flag still participate in history recovery', () => {
+  assert.match(sync, /function isGoogleHistoryRow/)
+  assert.match(sync, /row\.source === 'google' \|\| row\.ical_uid \|\| row\.external_id \|\| row\.calendar_id/)
+  const titleRepair = sync.slice(sync.indexOf('const normalizedHistoryTitle'), sync.indexOf('if (canonicalByExt.size > 0)'))
+  assert.match(titleRepair, /if \(!isGoogleHistoryRow\(row\)\) return false/)
+  assert.doesNotMatch(titleRepair, /\.eq\('source', 'google'\)/)
+})

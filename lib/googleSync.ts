@@ -230,7 +230,26 @@ type GoogleCalRow = {
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
 type SubItemSnapshot = { id: string; sourceItemId?: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; googlePlacementLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
-type ItemRow  = { id: string; group_id: string; board_id: string; name?: string | null; external_id: string | null; external_link?: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; name?: string | null; source?: string | null; external_id: string | null; external_link?: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
+
+// Oude snapshots en vroege Calendar-imports hadden niet altijd
+// `source = 'google'`, terwijl hun Calendar-identiteit nog gewoon aanwezig
+// is. Geschiedenisherstel mag zulke rijen niet overslaan: juist daar zaten
+// de verdwenen Done-afspraken en hun uren nog in.
+function isGoogleHistoryRow(row: Pick<ItemRow, 'id' | 'source' | 'external_id' | 'external_link' | 'ical_uid' | 'calendar_id' | 'extra'>): boolean {
+  if (row.source === 'google' || row.ical_uid || row.external_id || row.calendar_id) return true
+  if (/(^|_)it_g_|^gcal_/i.test(row.id)) return true
+  const links = [row.external_link, typeof row.extra?.meetLink === 'string' ? row.extra.meetLink : null]
+  return links.some(link => {
+    if (!link) return false
+    try {
+      const parsed = new URL(link)
+      const host = parsed.hostname.toLowerCase()
+      return host === 'calendar.google.com' || host === 'meet.google.com'
+        || ((host === 'google.com' || host === 'www.google.com') && /\/calendar\//i.test(parsed.pathname))
+    } catch { return false }
+  })
+}
 type Rule     = { pattern: string; board_id: string }
 
 function historicalSubitemsForRow(row: Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'extra' | 'subitems'>): SubItemSnapshot[] {
@@ -1440,9 +1459,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // Anne-Fleur enz. als aparte calendar-row binnen. Juist die oudere kopie
     // kan de ontbrekende Done-historie bevatten.
     const { data: rows } = await admin.from('board_items')
-      .select('id, name, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at').eq('source', 'google')
+      .select('id, name, source, external_id, calendar_id, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at')
       .in('ical_uid', [...canonicalByICal.keys()])
-    type HistoryRow = Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
+    type HistoryRow = Pick<ItemRow, 'id' | 'name' | 'source' | 'external_id' | 'calendar_id' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
     const historyRows = (rows as HistoryRow[] | null) ?? []
     const byWinner = new Map<string, HistoryRow[]>()
     for (const row of historyRows) {
@@ -1501,13 +1520,13 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     }))
   if (currentSeries.length > 0) {
     const { data: retiredRows } = await admin.from('board_items')
-      .select('id, name, board_id, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at')
-      .eq('source', 'google')
-    type RetiredHistoryRow = Pick<ItemRow, 'id' | 'name' | 'board_id' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
+      .select('id, name, board_id, source, external_id, calendar_id, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at')
+    type RetiredHistoryRow = Pick<ItemRow, 'id' | 'name' | 'board_id' | 'source' | 'external_id' | 'calendar_id' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
     const retired = (retiredRows as RetiredHistoryRow[] | null) ?? []
     for (const series of currentSeries) {
       if (!series.name || !series.firstDate) continue
       const candidates = retired.filter(row => {
+        if (!isGoogleHistoryRow(row)) return false
         if (row.id === series.id || row.board_id !== series.boardId || normalizedHistoryTitle(row.name) !== series.name) return false
         const dated = historicalSubitemsForRow(row)
           .map(subitem => subitem.startDate ?? subitem.endDate ?? '')
@@ -1533,9 +1552,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
   if (canonicalByExt.size > 0) {
     const { data: rows } = await admin.from('board_items')
-      .select('id, name, owner_ids, status, start_date, end_date, est_hours, external_link, external_id, subitems, extra').eq('source', 'google').is('deleted_at', null)
+      .select('id, name, source, calendar_id, owner_ids, status, start_date, end_date, est_hours, external_link, external_id, subitems, extra').is('deleted_at', null)
       .in('external_id', [...canonicalByExt.keys()])
-    const extRows = (rows as Array<Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'external_id' | 'subitems' | 'extra'>> | null) ?? []
+    const extRows = (rows as Array<Pick<ItemRow, 'id' | 'name' | 'source' | 'calendar_id' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'external_id' | 'subitems' | 'extra'>> | null) ?? []
     const extByWinner = new Map<string, typeof extRows>()
     for (const row of extRows) {
       const winner = row.external_id ? canonicalByExt.get(row.external_id) : null
