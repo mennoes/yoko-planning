@@ -42,6 +42,27 @@ import { getBoardColor } from './boardsRegistry'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 import { blockedHoursForWorkdays } from './freeCapacity'
+
+function normalizeProjectOwnerHours(
+  ownerIds: string[],
+  totalHours: number,
+  stored?: Record<string, number>,
+): Record<string, number> {
+  const ids = [...new Set(ownerIds.filter(id => id && id !== 'unassigned'))]
+  if (ids.length === 0) return {}
+  const total = Math.max(0, Number(totalHours) || 0)
+  const raw = Object.fromEntries(ids.map(id => [id, Math.max(0, Number(stored?.[id]) || 0)]))
+  if (total <= 0) return raw
+  const rawSum = Object.values(raw).reduce((sum, hours) => sum + hours, 0)
+  const factor = rawSum > 0 ? total / rawSum : 0
+  const next = Object.fromEntries(ids.map(id => [
+    id,
+    Math.round((rawSum > 0 ? raw[id] * factor : total / ids.length) * 10) / 10,
+  ]))
+  const sum = Object.values(next).reduce((acc, hours) => acc + hours, 0)
+  next[ids[0]] = Math.round((next[ids[0]] + total - sum) * 10) / 10
+  return next
+}
 // Proxy zodat code als BOARD_COLORS[boardId] blijft werken, maar nu
 // dynamisch op de registry. Toegevoegde borden krijgen hun eigen kleur
 // uit de boards-tabel; onbekende keys vallen terug op grijs.
@@ -110,7 +131,10 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               board:     boardName,
               group:     g.name,
               ownerIds:  owners,
-              ownerHours: si.ownerHours,
+              // Opgeslagen verdelingen kunnen achterlopen wanneer het totaal
+              // later is aangepast. Planning mag nooit meer uren tonen dan
+              // het subitem zelf bevat.
+              ownerHours: normalizeProjectOwnerHours(owners, Number(si.estHours) || 0, si.ownerHours),
               googleParticipantIds: si.googleParticipantIds ?? (i.googleParticipantIds as string[] | undefined),
               googleCalendarMemberIds: si.googleCalendarMemberIds ?? (i.googleCalendarMemberIds as string[] | undefined),
               startDate: si.startDate ?? null,
@@ -153,16 +177,11 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           const parentOwners = [...new Set((Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : [])
             .filter(o => o && o !== 'unassigned'))]
           const ownerIds = parentOwners.length > 0 ? parentOwners : ['unassigned']
-          const storedOwnerHours = i.ownerHours as Record<string, number> | undefined
-          const storedTotal = storedOwnerHours
-            ? Object.values(storedOwnerHours).reduce((sum, value) => sum + (Number(value) || 0), 0)
-            : 0
-          const ownerHours = storedTotal > 0 && Math.abs(storedTotal - parentHours) > 0.01
-            ? Object.fromEntries(Object.entries(storedOwnerHours!).map(([ownerId, value]) => [
-                ownerId,
-                Math.round(((Number(value) || 0) * parentHours / storedTotal) * 10) / 10,
-              ]))
-            : storedOwnerHours
+          const ownerHours = normalizeProjectOwnerHours(
+            ownerIds,
+            parentHours,
+            i.ownerHours as Record<string, number> | undefined,
+          )
 
           return [{
             id: `${boardName}__${i.id}`,
@@ -208,7 +227,14 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           startTime: (i.startTime as string | null | undefined) ?? null,
           endTime:   (i.endTime   as string | null | undefined) ?? null,
           estHours:  hours,
-          ownerHours: (i.ownerHours as Record<string, number> | undefined),
+          // De owner-verdeling is afgeleid van het actuele totaal. Oude
+          // verdelingen (bijv. 88u nadat het item naar 56u is verlaagd)
+          // mogen de workload niet opnieuw ophogen.
+          ownerHours: normalizeProjectOwnerHours(
+            ownerIds,
+            hours,
+            i.ownerHours as Record<string, number> | undefined,
+          ),
           googleParticipantIds: i.googleParticipantIds as string[] | undefined,
           googleCalendarMemberIds: i.googleCalendarMemberIds as string[] | undefined,
           status:    (i.status as string) === 'Done' ? 'done' : 'active',
