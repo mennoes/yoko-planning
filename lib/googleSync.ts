@@ -250,6 +250,8 @@ function isGoogleHistoryRow(row: Pick<ItemRow, 'id' | 'source' | 'external_id' |
     } catch { return false }
   })
 }
+
+const normalizeHistoryTitle = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')
 type Rule     = { pattern: string; board_id: string }
 
 function historicalSubitemsForRow(row: Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'extra' | 'subitems'>): SubItemSnapshot[] {
@@ -1172,6 +1174,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const icalUid     = iCalKeyForGroup(sorted)
     const lookup      = findExistingFor(icalUid, groupKey, baseName, minStart)
     const existingRow = lookup.row
+    const keepBoard = resolveMeetingBoard(existingRow?.board_id, route, ((existingRow?.extra ?? {}) as Record<string, unknown>).googlePlacementLocked === true)
     // ownerIdsLocked-flag respect: zie comment in single-event branch.
     const exExtraRec = (existingRow?.extra ?? {}) as Record<string, unknown>
     const ownersLocked = exExtraRec.ownerIdsLocked === true
@@ -1208,7 +1211,24 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // Bouw een lookup van bestaande subitems zodat user-edits (status Done,
     // hernoemen, owner-aanpassingen) bij elke sync behouden blijven.
     const priorSubs = Array.isArray(existingRow?.subitems) ? existingRow!.subitems! : []
-    const priorById = new Map<string, SubItemSnapshot>(priorSubs.map(s => [s.id, s]))
+    // Herstel de oudere losse occurrences al IN de atomische parent-upsert.
+    // Een losse post-upsert reparatie bleek te laat voor legacy restores:
+    // de huidige serie kon dan zichtbaar blijven met alleen toekomstige
+    // momenten, terwijl de Done-rij los in Afgerond bleef staan.
+    const { data: siblingHistoryData } = await admin.from('board_items')
+      .select('id, name, source, external_id, calendar_id, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at')
+      .eq('board_id', keepBoard)
+      .eq('name', baseName)
+    type SiblingHistoryRow = Pick<ItemRow, 'id' | 'name' | 'source' | 'external_id' | 'calendar_id' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
+    const historicalSiblingSets = ((siblingHistoryData as SiblingHistoryRow[] | null) ?? [])
+      .filter(row => row.id !== lookup.id && isGoogleHistoryRow(row) && normalizeHistoryTitle(row.name) === normalizeHistoryTitle(baseName))
+      .map(historicalSubitemsForRow)
+      .filter(set => set.length > 0 && set.every(subitem => {
+        const date = subitem.startDate ?? subitem.endDate ?? ''
+        return !!date && (!minStart || date < minStart)
+      }))
+    const recoveredPriorSubs = mergeGoogleMeetingHistory(priorSubs, historicalSiblingSets, dismissedInstanceIds)
+    const priorById = new Map<string, SubItemSnapshot>(recoveredPriorSubs.map(s => [s.id, s]))
     const subitems = sorted.map(ev => {
       const { start, end } = eventDates(ev)
       const { startTime, endTime } = eventTimes(ev)
@@ -1277,7 +1297,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // kan terugkijken naar wat Done is).
     const syncedIds = new Set(subitems.map(s => s.id))
     const cutoffIso = new Date(Date.now() + RECURRING_DAYS_FUTURE * 86400000).toISOString().slice(0, 10)
-    const preserved = priorSubs.filter(s => {
+    const preserved = recoveredPriorSubs.filter(s => {
       if (syncedIds.has(s.id)) return false  // vervangen door verse sync-data
       // Handmatige (niet-Google) subs: altijd behouden — ID prefix verschilt.
       if (!s.id?.startsWith('si_g_')) return true
@@ -1301,7 +1321,6 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // aanmaken bij volgende syncs.
     if (nestedIds.has(id)) continue
     if (existingRow) updated++; else added++
-    const keepBoard = resolveMeetingBoard(existingRow?.board_id, route, exExtraRec.googlePlacementLocked === true)
     const newStatus = resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart, exExtraRec.statusOverride)
     // Groep-keuze prioriteit: Done > Vrij > Doorlopend.
     //  - Done items horen in de Done-groep (ook wanneer de gebruiker zelf
@@ -1503,13 +1522,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // gedateerde momenten
   // vóór de huidige reeks liggen. Dat voorkomt dat twee gelijktijdige,
   // toevallig gelijknamige afspraken aan elkaar worden geplakt.
-  const normalizedHistoryTitle = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')
   const currentSeries = upserts
     .filter(row => Array.isArray(row.subitems) && row.subitems.length > 0)
     .map(row => ({
       id: String(row.id),
       boardId: String(row.board_id),
-      name: normalizedHistoryTitle(row.name),
+      name: normalizeHistoryTitle(row.name),
       firstDate: ((row.subitems ?? []) as SubItemSnapshot[])
         .map(subitem => subitem.startDate ?? subitem.endDate ?? '')
         .filter(Boolean)
@@ -1527,7 +1545,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       if (!series.name || !series.firstDate) continue
       const candidates = retired.filter(row => {
         if (!isGoogleHistoryRow(row)) return false
-        if (row.id === series.id || row.board_id !== series.boardId || normalizedHistoryTitle(row.name) !== series.name) return false
+        if (row.id === series.id || row.board_id !== series.boardId || normalizeHistoryTitle(row.name) !== series.name) return false
         const dated = historicalSubitemsForRow(row)
           .map(subitem => subitem.startDate ?? subitem.endDate ?? '')
           .filter(Boolean)

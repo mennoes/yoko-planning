@@ -39,12 +39,12 @@ test('sync repairs duplicate parents before hiding them and reads two years back
 })
 
 test('a recreated recurring series recovers older same-board history without overlap', () => {
-  assert.match(sync, /normalizedHistoryTitle/)
+  assert.match(sync, /normalizeHistoryTitle/)
   assert.match(sync, /row\.board_id !== series\.boardId/)
   assert.match(sync, /dated\.every\(date => date < series\.firstDate\)/)
   assert.match(sync, /recoveredSubitems\.get\(series\.id\)/)
   assert.match(sync, /if \(!historyError\) \{[\s\S]*recoveredSubitems\.set\(series\.id, merged\)/)
-  const titleRepair = sync.slice(sync.indexOf('const normalizedHistoryTitle'), sync.indexOf('if (canonicalByExt.size > 0)'))
+  const titleRepair = sync.slice(sync.indexOf('const currentSeries'), sync.indexOf('if (canonicalByExt.size > 0)'))
   assert.doesNotMatch(titleRepair, /\.not\('deleted_at', 'is', null\)/)
   assert.match(titleRepair, /for \(const row of candidates\) if \(!row\.deleted_at\) duplicateIds\.add\(row\.id\)/)
 })
@@ -67,7 +67,9 @@ test('a historical top-level Google event becomes a subitem before dedupe', () =
 test('legacy Google rows without a source flag still participate in history recovery', () => {
   assert.match(sync, /function isGoogleHistoryRow/)
   assert.match(sync, /row\.source === 'google' \|\| row\.ical_uid \|\| row\.external_id \|\| row\.calendar_id/)
-  const titleRepair = sync.slice(sync.indexOf('const normalizedHistoryTitle'), sync.indexOf('if (canonicalByExt.size > 0)'))
+  const titleRepair = sync.slice(sync.indexOf('const currentSeries'), sync.indexOf('if (canonicalByExt.size > 0)'))
   assert.match(titleRepair, /if \(!isGoogleHistoryRow\(row\)\) return false/)
   assert.doesNotMatch(titleRepair, /\.eq\('source', 'google'\)/)
+  assert.match(sync, /const recoveredPriorSubs = mergeGoogleMeetingHistory\(priorSubs, historicalSiblingSets, dismissedInstanceIds\)/)
+  assert.match(sync, /const preserved = recoveredPriorSubs\.filter/)
 })
