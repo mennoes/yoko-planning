@@ -472,6 +472,28 @@ export function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Prom
   return task
 }
 
+async function ensureBoardParentExists(boardName: string): Promise<boolean> {
+  if (!supabase) return false
+  const { data, error } = await supabase
+    .from('boards')
+    .select('id')
+    .eq('id', boardName)
+    .limit(1)
+  if (error) return false
+  if (data?.length) return true
+
+  // Een verse tab kan al groepen opslaan terwijl de gedeelde bord-registry
+  // nog wordt opgehaald. Maak alleen een ontbrekende parent-row aan; een
+  // bestaand bord schrijven we bewust niet opnieuw, zodat we nooit een verse
+  // naam of kolomindeling met een oudere lokale configuratie overschrijven.
+  const config = getBoardConfig(boardName)
+  // Een inmiddels bewust verwijderde custom agenda mag door een laat
+  // binnenkomende save niet opnieuw worden aangemaakt.
+  if (!config) return false
+  const index = getBoardIds().indexOf(boardName)
+  return upsertBoard(config, index >= 0 ? index : getBoardIds().length)
+}
+
 async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promise<boolean> {
   const fail = (message: string): false => {
     if (typeof window !== 'undefined') {
@@ -505,6 +527,9 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
     id: g.id, board_id: boardName, name: g.name,
     color: g.color ?? '#9aadbd', collapsed: g.collapsed ?? false, position: gi,
   }))
+  if (groupRows.length > 0 && !await ensureBoardParentExists(boardName)) {
+    return fail(`Agenda '${boardName}' voorbereiden mislukt; de groepen zijn niet opgeslagen.`)
+  }
   const { error: gErr } = await supabase.from('board_groups').upsert(groupRows, { onConflict: 'id' })
   if (gErr) return fail(`Groepen opslaan mislukt: ${gErr.message}`)
 
