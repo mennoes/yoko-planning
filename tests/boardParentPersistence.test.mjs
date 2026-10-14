@@ -18,10 +18,19 @@ test('existing board settings are not overwritten by the parent safeguard', () =
   const helperStart = store.indexOf('async function ensureBoardParentExists')
   const helper = store.slice(helperStart, store.indexOf('async function pushBoardSnapshot', helperStart))
   assert.match(helper, /from\('boards'\)/)
-  assert.match(helper, /if \(data\?\.length\) return true/)
-  assert.match(helper, /if \(!config\) return false/)
+  assert.match(helper, /if \(data\?\.length\) return 'ready'/)
+  assert.match(helper, /if \(!config\) return 'retired'/)
   assert.ok(
-    helper.indexOf('if (data?.length) return true') < helper.indexOf('return upsertBoard'),
+    helper.indexOf("if (data?.length) return 'ready'") < helper.indexOf('return await upsertBoard'),
     'upsertBoard should only run when the parent row is missing',
   )
+})
+
+test('stale writes for a retired board are cleared without an error toast', () => {
+  assert.match(store, /if \(parentState === 'retired'\) \{\s*discardRetiredBoardCache\(boardName\)\s*return true/)
+  const cleanupStart = store.indexOf('function discardRetiredBoardCache')
+  const cleanup = store.slice(cleanupStart, store.indexOf('async function pushBoardSnapshot', cleanupStart))
+  assert.match(cleanup, /localStorage\.removeItem\(key\(boardName\)\)/)
+  assert.match(cleanup, /localStorage\.removeItem\(pulledKey\(boardName\)\)/)
+  assert.match(cleanup, /localStorage\.removeItem\(dirtyKey\(boardName\)\)/)
 })

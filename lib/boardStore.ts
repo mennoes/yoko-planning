@@ -472,15 +472,17 @@ export function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Prom
   return task
 }
 
-async function ensureBoardParentExists(boardName: string): Promise<boolean> {
-  if (!supabase) return false
+type BoardParentState = 'ready' | 'retired' | 'error'
+
+async function ensureBoardParentExists(boardName: string): Promise<BoardParentState> {
+  if (!supabase) return 'error'
   const { data, error } = await supabase
     .from('boards')
     .select('id')
     .eq('id', boardName)
     .limit(1)
-  if (error) return false
-  if (data?.length) return true
+  if (error) return 'error'
+  if (data?.length) return 'ready'
 
   // Een verse tab kan al groepen opslaan terwijl de gedeelde bord-registry
   // nog wordt opgehaald. Maak alleen een ontbrekende parent-row aan; een
@@ -489,9 +491,20 @@ async function ensureBoardParentExists(boardName: string): Promise<boolean> {
   const config = getBoardConfig(boardName)
   // Een inmiddels bewust verwijderde custom agenda mag door een laat
   // binnenkomende save niet opnieuw worden aangemaakt.
-  if (!config) return false
+  if (!config) return 'retired'
   const index = getBoardIds().indexOf(boardName)
-  return upsertBoard(config, index >= 0 ? index : getBoardIds().length)
+  return await upsertBoard(config, index >= 0 ? index : getBoardIds().length) ? 'ready' : 'error'
+}
+
+function discardRetiredBoardCache(boardName: string): void {
+  // De remote agenda én de registry-entry zijn weg: dit zijn uitsluitend
+  // achtergebleven lokale snapshots/retries. Laat ze niet eindeloos toast
+  // na toast produceren en voorkom dat een later nieuw bord met dezelfde
+  // slug oude groepen terugkrijgt.
+  localStorage.removeItem(key(boardName))
+  localStorage.removeItem(pulledKey(boardName))
+  localStorage.removeItem(dirtyKey(boardName))
+  window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
 }
 
 async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promise<boolean> {
@@ -527,8 +540,15 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
     id: g.id, board_id: boardName, name: g.name,
     color: g.color ?? '#9aadbd', collapsed: g.collapsed ?? false, position: gi,
   }))
-  if (groupRows.length > 0 && !await ensureBoardParentExists(boardName)) {
-    return fail(`Agenda '${boardName}' voorbereiden mislukt; de groepen zijn niet opgeslagen.`)
+  if (groupRows.length > 0) {
+    const parentState = await ensureBoardParentExists(boardName)
+    if (parentState === 'retired') {
+      discardRetiredBoardCache(boardName)
+      return true
+    }
+    if (parentState === 'error') {
+      return fail(`Agenda '${boardName}' voorbereiden mislukt; de groepen zijn niet opgeslagen.`)
+    }
   }
   const { error: gErr } = await supabase.from('board_groups').upsert(groupRows, { onConflict: 'id' })
   if (gErr) return fail(`Groepen opslaan mislukt: ${gErr.message}`)
