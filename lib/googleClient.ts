@@ -75,7 +75,7 @@ export async function importBoardsFromBundle(): Promise<{ ok: boolean; stats?: R
   return res.json().catch(() => ({ ok: false, error: 'Bad response' }))
 }
 
-export async function cleanupGoogleDuplicates(): Promise<{ deleted: number; perBoard: Record<string, number> } | null> {
+export async function cleanupGoogleDuplicates(): Promise<{ deleted: number; keptForHours?: number; perBoard: Record<string, number> } | null> {
   const headers = await authHeaders()
   if (!headers) return null
   const res = await fetch('/api/google/cleanup', { method: 'POST', headers })

@@ -26,7 +26,7 @@ test('completion reads are memoized until the shared comment store changes', () 
 
 test('planning indexes projects per person and reuses stable completion ids', () => {
   assert.match(planning, /const datedProjectsByMember = useMemo\(\(\) =>/)
-  assert.match(planning, /memberHoursInCol\(memberProjects, member\.id, col, overrides\)/)
+  assert.match(planning, /contributionsPerCell\(team, cols, effectiveProjects, loadCategoryOverrides\(\)\)/)
   assert.match(planning, /<TimelineBars memberId=\{member\.id\} projects=\{memberProjects\}/)
   assert.match(planning, /function planningCompletionTarget\(project: Project\)/)
   assert.match(planning, /project\.completionParentItemId/)

@@ -291,10 +291,75 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   return Math.round(fraction * myShare * 10) / 10
 }
 
-function memberHoursInCol(projects: Project[], memberId: string, col: Col, overrides = loadCategoryOverrides()) {
-  return projects
-    .map(p => ({ project: p, hours: hoursInRange(p, memberId, col.rangeStart, col.rangeEnd, overrides[p.id]) }))
-    .filter(c => c.hours > 0)
+type CellContribution = { project: Project; hours: number }
+
+/**
+ * Werkdruk per (lid × kolom) voor de hele tijdlijn.
+ *
+ * Bewust per PROJECT gerekend en niet per cel. De cel-variant was
+ * `leden × kolommen × projecten`, en omdat de planning 104 kolommen opspant
+ * (twee jaar) liep dat met een paar honderd projecten al in de honderden
+ * milliseconden per render — bij elke statewijziging opnieuw. Per project
+ * zoeken we nu alleen de kolommen op die het écht overlapt, en de dingen die
+ * per project constant zijn (datums parsen, werkdagen-totaal, vrij-check)
+ * berekenen we één keer in plaats van voor iedere cel opnieuw.
+ *
+ * De uitkomst is identiek aan de oude cel-variant, inclusief de vololgorde
+ * binnen een cel: projecten worden in dezelfde volgorde doorlopen.
+ */
+function contributionsPerCell(
+  team: TeamMember[], cols: Col[], projects: Project[], overrides: Record<string, string>,
+): Map<string, CellContribution[]> {
+  const result = new Map<string, CellContribution[]>()
+  if (cols.length === 0) return result
+  const memberIds = new Set(team.map(m => m.id))
+  const colStart = cols.map(c => c.rangeStart.getTime())
+  const colEnd   = cols.map(c => c.rangeEnd.getTime())
+
+  for (const project of projects) {
+    if (!project.startDate || !project.endDate) continue
+    const owners = project.ownerIds.filter(id => memberIds.has(id))
+    if (owners.length === 0) continue
+
+    const pS = new Date(project.startDate)
+    const pE = new Date(project.endDate); pE.setHours(23, 59, 59, 999)
+    const pSms = pS.getTime(), pEms = pE.getTime()
+    const totalWork = countWorkdaysMs(pSms, pEms)
+    if (totalWork === 0) continue
+    const isVrij = overrides[project.id] === 'vrij' || isVrijTitle(project.name)
+      || (project.group ?? '').toLowerCase().includes('vrij')
+
+    // Eerste kolom die op of ná de projectstart eindigt; daarna doorlopen tot
+    // een kolom voorbij het projecteinde begint.
+    let lo = 0, hi = cols.length - 1, first = cols.length
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (colEnd[mid] >= pSms) { first = mid; hi = mid - 1 } else lo = mid + 1
+    }
+    for (let i = first; i < cols.length && colStart[i] <= pEms; i++) {
+      const overlapWork = countWorkdaysMs(
+        colStart[i] > pSms ? colStart[i] : pSms,
+        colEnd[i]   < pEms ? colEnd[i]   : pEms,
+      )
+      if (overlapWork === 0) continue
+      for (const memberId of owners) {
+        let hours: number
+        if (isVrij) hours = blockedHoursForWorkdays(overlapWork)
+        else {
+          const myShare = project.ownerHours && memberId in project.ownerHours
+            ? Number(project.ownerHours[memberId]) || 0
+            : project.estHours / Math.max(project.ownerIds.length, 1)
+          hours = Math.round((overlapWork / totalWork) * myShare * 10) / 10
+        }
+        if (hours <= 0) continue
+        const key = `${memberId}\u0000${cols[i].key}`
+        const cell = result.get(key)
+        if (cell) cell.push({ project, hours })
+        else result.set(key, [{ project, hours }])
+      }
+    }
+  }
+  return result
 }
 
 // groupsToProjects is gedeeld met de home-werkdruk via lib/workload.ts —
@@ -5438,17 +5503,10 @@ export default function PlanningPage() {
   // teamleden × kolommen). Voorheen gebeurde dit opnieuw bij iedere gewone
   // scroll-render. Cache de matrix totdat data, kolommen, team of categorieën
   // daadwerkelijk veranderen.
-  const contributionsByCell = useMemo(() => {
-    const overrides = loadCategoryOverrides()
-    const result = new Map<string, ReturnType<typeof memberHoursInCol>>()
-    for (const member of team) {
-      const memberProjects = datedProjectsByMember.get(member.id) ?? []
-      for (const col of cols) {
-        result.set(`${member.id}\u0000${col.key}`, memberHoursInCol(memberProjects, member.id, col, overrides))
-      }
-    }
-    return result
-  }, [datedProjectsByMember, team, cols, categoryRevision])
+  const contributionsByCell = useMemo(
+    () => contributionsPerCell(team, cols, effectiveProjects, loadCategoryOverrides()),
+    [effectiveProjects, team, cols, categoryRevision],
+  )
   const contributionsFor = (memberId: string, col: Col) =>
     contributionsByCell.get(`${memberId}\u0000${col.key}`) ?? []
 
