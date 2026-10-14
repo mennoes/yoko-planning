@@ -25,13 +25,14 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard, persistItemNesting } from '@/lib/boardStore'
+import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard, persistItemNesting, persistGoogleSubitemPromotion } from '@/lib/boardStore'
 import { routeOmdenkenNow } from '@/lib/googleClient'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
+import { normalizeOwnerHours, rebalanceOwnerHours } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
@@ -745,27 +746,15 @@ function MemberAvatar({ id, size = 24 }: { id: string; size?: number }) {
 }
 
 function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<string, number>): Record<string, number> {
-  const ids = ownerIds.filter(id => id && id !== 'unassigned')
-  if (ids.length === 0) return {}
-  const safeTotal = Math.max(0, Number(total) || 0)
-  const raw = Object.fromEntries(ids.map(id => [id, Math.max(0, Number(stored?.[id]) || 0)]))
-  const rawSum = Object.values(raw).reduce((sum, hours) => sum + hours, 0)
-  if (safeTotal <= 0) return raw
-  if (rawSum <= 0) {
-    const equal = safeTotal / ids.length
-    return Object.fromEntries(ids.map(id => [id, Math.round(equal * 10) / 10]))
-  }
-  const factor = safeTotal / rawSum
-  const scaled = Object.fromEntries(ids.map(id => [id, Math.round(raw[id] * factor * 10) / 10]))
-  const scaledSum = Object.values(scaled).reduce((sum, hours) => sum + hours, 0)
-  const remainder = Math.round((safeTotal - scaledSum) * 10) / 10
-  if (Math.abs(remainder) >= 0.1) scaled[ids[0]] = Math.max(0, Math.round((scaled[ids[0]] + remainder) * 10) / 10)
-  return scaled
+  return normalizeOwnerHours(ownerIds, total, stored)
 }
+
+const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
+  Object.fromEntries(ids.map(id => [id, String(Math.round((hours[id] ?? 0) * 10) / 10)]))
 
 function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange }: {
   value: string[]
-  onChange: (v: string[]) => void
+  onChange: (v: string[], distribution?: Record<string, number>) => void
   ownerHours?: Record<string, number>
   totalHours?: number
   onDistributionChange?: (v: Record<string, number>) => void
@@ -780,8 +769,17 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   const ownersKey = value.join(',')
   const hoursKey = JSON.stringify(ownerHours ?? {})
   const [liveHours, setLiveHours] = useState<Record<string, number>>(() => resolveOwnerHours(value, totalHours, ownerHours))
+  const [hourDrafts, setHourDrafts] = useState<Record<string, string>>(() => ownerHoursDrafts(value, resolveOwnerHours(value, totalHours, ownerHours)))
   useEffect(() => {
-    setLiveHours(resolveOwnerHours(value, totalHours, ownerHours))
+    const resolved = resolveOwnerHours(value, totalHours, ownerHours)
+    setLiveHours(resolved)
+    setHourDrafts(ownerHoursDrafts(value, resolved))
+    const assigned = value.filter(id => id && id !== 'unassigned')
+    const needsRepair = assigned.length > 1 && totalHours > 0 &&
+      assigned.some(id => Math.max(0, Number(ownerHours?.[id]) || 0) <= 0)
+    // Migreer oude selecties waarbij toegevoegde owners stilletjes 0 uur
+    // kregen. Eén persist maakt Agenda, Home en Planning daarna consistent.
+    if (needsRepair) onDistributionChange?.(resolved)
   }, [ownersKey, totalHours, hoursKey])
   // Bron-lijst: live team_members uit Supabase aangevuld met data/team.json
   // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
@@ -805,7 +803,10 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   })()
   const toggle = (id: string) => {
     if (value.includes(id)) {
-      onChange(value.filter(x => x !== id))
+      const next = value.filter(x => x !== id)
+      const distribution = normalizeOwnerHours(next, totalHours,
+        Object.fromEntries(next.map(ownerId => [ownerId, liveHours[ownerId] ?? 0])))
+      onChange(next, distribution)
       return
     }
     // Bij assignen automatisch 'unassigned' eruit gooien — anders blijft een
@@ -814,7 +815,11 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
     const next = id === 'unassigned'
       ? [...value, id]
       : [...value.filter(x => x !== 'unassigned'), id]
-    onChange(next)
+    const initial = { ...liveHours, [id]: 0 }
+    const distribution = id === 'unassigned'
+      ? {}
+      : rebalanceOwnerHours(next, initial, totalHours, id, totalHours / Math.max(next.length, 1))
+    onChange(next, distribution)
   }
 
   // Zes meest gebruikte of reeds geselecteerde actieve leden staan direct
@@ -853,7 +858,25 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   const commitDistribution = (next: Record<string, number>) => {
     const cleaned = Object.fromEntries(visibleOwners.map(id => [id, Math.max(0, Number(next[id]) || 0)]))
     setLiveHours(cleaned)
+    setHourDrafts(ownerHoursDrafts(visibleOwners, cleaned))
     onDistributionChange?.(cleaned)
+  }
+  const previewTypedHours = (id: string, raw: string) => {
+    setHourDrafts(prev => ({ ...prev, [id]: raw }))
+    if (raw.trim() === '') return
+    const parsed = Number(raw.replace(',', '.'))
+    if (!Number.isFinite(parsed)) return
+    const next = rebalanceOwnerHours(visibleOwners, liveHours, totalHours, id, parsed)
+    setLiveHours(next)
+    setHourDrafts({ ...ownerHoursDrafts(visibleOwners, next), [id]: raw })
+  }
+  const commitTypedHours = (id: string) => {
+    const parsed = Number((hourDrafts[id] ?? '').replace(',', '.'))
+    if (!Number.isFinite(parsed)) {
+      setHourDrafts(ownerHoursDrafts(visibleOwners, liveHours))
+      return
+    }
+    commitDistribution(rebalanceOwnerHours(visibleOwners, liveHours, totalHours, id, parsed))
   }
 
   function allocatedAvatar(id: string, index: number) {
@@ -902,7 +925,8 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <DistributionPie segments={segments} total={totalHours} size={94} interactive showAvatars
                     innerLabel={`${Math.round(totalHours * 10) / 10}u`}
-                    onChange={setLiveHours} onCommit={commitDistribution} />
+                    onChange={next => { setLiveHours(next); setHourDrafts(ownerHoursDrafts(visibleOwners, next)) }}
+                    onCommit={commitDistribution} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
                     {segments.map(segment => {
                       const pct = totalHours > 0 ? Math.round(segment.value / totalHours * 100) : 0
@@ -910,16 +934,32 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                         <div key={segment.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
                           <span style={{ width: 8, height: 8, borderRadius: 2, background: segment.color, flexShrink: 0 }} />
                           <span style={{ flex: 1, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{segment.label}</span>
-                          <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                            {Math.round(segment.value * 10) / 10}u · {pct}%
-                          </span>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                            <input type="text" inputMode="decimal" aria-label={`Uren voor ${segment.label}`}
+                              value={hourDrafts[segment.id] ?? String(Math.round(segment.value * 10) / 10)}
+                              onClick={event => event.stopPropagation()}
+                              onFocus={event => event.currentTarget.select()}
+                              onChange={event => previewTypedHours(segment.id, event.target.value)}
+                              onBlur={() => commitTypedHours(segment.id)}
+                              onKeyDown={event => {
+                                if (event.key === 'Enter') event.currentTarget.blur()
+                                if (event.key === 'Escape') {
+                                  setHourDrafts(ownerHoursDrafts(visibleOwners, liveHours))
+                                  event.currentTarget.blur()
+                                }
+                              }}
+                              style={{ width: 43, height: 25, boxSizing: 'border-box', padding: '2px 5px', borderRadius: 5,
+                                border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)',
+                                font: 'inherit', fontVariantNumeric: 'tabular-nums', textAlign: 'right', outline: 'none' }} />
+                            <span style={{ color: 'var(--text-muted)' }}>u · {pct}%</span>
+                          </label>
                         </div>
                       )
                     })}
                   </div>
                 </div>
                 <div style={{ marginTop: 7, fontSize: 10.5, color: 'var(--text-muted)' }}>
-                  Sleep de witte bolletjes om uren te verdelen.
+                  Sleep de witte bolletjes of vul de uren per persoon in.
                 </div>
               </div>
             )}
@@ -1484,14 +1524,15 @@ function overlapDays(
 function Cell({ item, col, onUpdate }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void
 }) {
+  const rolledOwnerTotal = Number(item.__relevantOwnerHoursTotal)
   if (col.type === 'owners')    return <OwnersCell value={item.ownerIds}
     ownerHours={item.ownerHours}
-    totalHours={effectiveHours(item)}
+    totalHours={Number.isFinite(rolledOwnerTotal) ? rolledOwnerTotal : effectiveHours(item)}
     onDistributionChange={hours => onUpdate({
       ownerHours: hours,
       ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
     })}
-    onChange={v => {
+    onChange={(v, distribution) => {
     // ownerIds én ownerHours samen consistent houden: verwijderde owner
     // mag geen stale uren-entry achterlaten (anders telt ie zomaar weer
     // mee zodra je 'm later opnieuw toevoegt of bij periode-pro-rate).
@@ -1506,9 +1547,9 @@ function Cell({ item, col, onUpdate }: {
         if (active.has(oid)) cleaned[oid] = hrs
       }
       const hasAny = Object.keys(cleaned).length > 0
-      onUpdate({ ownerIds: v, ownerHours: hasAny ? cleaned : undefined, ...lockPatch })
+      onUpdate({ ownerIds: v, ownerHours: distribution ?? (hasAny ? cleaned : undefined), ...lockPatch })
     } else {
-      onUpdate({ ownerIds: v, ...lockPatch })
+      onUpdate({ ownerIds: v, ownerHours: distribution, ...lockPatch })
     }
   }} />
   if (col.type === 'status')    return <StatusCell    value={item.status}   onChange={v => {
@@ -1668,8 +1709,19 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         return <div style={cellBorder}><OwnersCell value={subitem.ownerIds}
           ownerHours={subitem.ownerHours}
           totalHours={Number(subitem.estHours) || 0}
-          onDistributionChange={hours => onUpdate({ ownerHours: hours })}
-          onChange={v => onUpdate({ ownerIds: v })} /></div>
+          onDistributionChange={hours => onUpdate({
+            ownerHours: hours,
+            ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
+              ? { ownerIdsLocked: true }
+              : {}),
+          })}
+          onChange={(v, distribution) => onUpdate({
+            ownerIds: v,
+            ownerHours: distribution,
+            ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
+              ? { ownerIdsLocked: true }
+              : {}),
+          })} /></div>
       case 'status':
         // Status: cell-border zonder padding/center zodat de status-tag
         // de volledige rij-hoogte van het subitem vult (visueel hetzelfde
@@ -2509,19 +2561,20 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     // naar de parent's ownerIds, subitem-owners blijven onaangeraakt.
     const activeMemberIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
     const ownerRollup = relevantOwnerRollup(item, activeMemberIds, new Date(), 35)
-    const displayedOwners = [...ownerRollup.relevantOwnerIds, ...ownerRollup.historicalOwnerIds]
-    if (displayedOwners.length > 0) updates.ownerIds = displayedOwners
+    // De hoofdregel toont uitsluitend owners van actuele/relevante subitems.
+    // Historische/done owners blijven als metadata beschikbaar, maar mogen
+    // de zichtbare avatars en taart niet meer vervuilen.
+    updates.ownerIds = ownerRollup.relevantOwnerIds
     updates.__relevantOwnerIds = ownerRollup.relevantOwnerIds
     updates.__historicalOwnerIds = ownerRollup.historicalOwnerIds
-    // Owner-hours rollup: wanneer de parent zelf geen verdeling heeft
-    // (item.ownerHours leeg) leiden we 'm af uit de subitems. Elke
-    // subitem-uren worden gelijk verdeeld over zijn eigen owners; die
-    // shares sommeren we per persoon. Display-only — wanneer de
-    // gebruiker zelf een verdeling instelt overruled die deze rollup.
-    if (!item.ownerHours || Object.keys(item.ownerHours).length === 0) {
-      const rolled = relevantOwnerHours(ownerRollup.relevantSubitems)
-      if (Object.keys(rolled).length > 0) updates.ownerHours = rolled
-    }
+    // Subitems zijn altijd de bron voor de parent-verdeling. Een oude,
+    // handmatig opgeslagen ownerHours-map op het hoofditem mag de rollup
+    // nooit overrulen. Expliciete subitem-ownerHours blijven behouden;
+    // alleen subitems zonder verdeling vallen terug op gelijke shares.
+    const rolled = relevantOwnerHours(ownerRollup.relevantSubitems)
+    updates.ownerHours = Object.keys(rolled).length > 0 ? rolled : undefined
+    updates.__relevantOwnerHoursTotal = ownerRollup.relevantSubitems
+      .reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
     // Status NIET auto-rollen. Done subitems blijven gewoon in het
     // parent-item zichtbaar; pas wanneer jij het item zelf op Done zet
     // verhuist 't naar de Done-groep. Voorkomt dat een item ongewenst
@@ -2942,10 +2995,12 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
     for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
     return next
   })
+  const [hourDrafts, setHourDrafts] = useState<Record<string, string>>(() => ownerHoursDrafts(owners, live))
   useEffect(() => {
     const next: Record<string, number> = {}
     for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
     setLive(next)
+    setHourDrafts(ownerHoursDrafts(owners, next))
   }, [item.id, ownersKey, total, valuesKey, defaultPer])
 
   const round1 = (n: number) => Math.round(n * 10) / 10
@@ -2962,6 +3017,38 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
     }
   })
 
+  const commitOwnerHours = (next: Record<string, number>) => {
+    const active = new Set(owners)
+    const cleaned: Record<string, number> = {}
+    for (const [oid, hrs] of Object.entries(next)) {
+      if (active.has(oid)) cleaned[oid] = hrs
+    }
+    setLive(cleaned)
+    setHourDrafts(ownerHoursDrafts(owners, cleaned))
+    onUpdate({
+      ownerIds: owners,
+      ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined,
+      ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
+    })
+  }
+  const previewTypedHours = (ownerId: string, raw: string) => {
+    setHourDrafts(prev => ({ ...prev, [ownerId]: raw }))
+    if (raw.trim() === '') return
+    const parsed = Number(raw.replace(',', '.'))
+    if (!Number.isFinite(parsed)) return
+    const next = rebalanceOwnerHours(owners, live, total, ownerId, parsed)
+    setLive(next)
+    setHourDrafts({ ...ownerHoursDrafts(owners, next), [ownerId]: raw })
+  }
+  const commitTypedHours = (ownerId: string) => {
+    const parsed = Number((hourDrafts[ownerId] ?? '').replace(',', '.'))
+    if (!Number.isFinite(parsed)) {
+      setHourDrafts(ownerHoursDrafts(owners, live))
+      return
+    }
+    commitOwnerHours(rebalanceOwnerHours(owners, live, total, ownerId, parsed))
+  }
+
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
@@ -2975,23 +3062,8 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
           interactive
           showAvatars
           innerLabel={`${round1(total)}u`}
-          onChange={setLive}
-          onCommit={(next) => {
-            // Filter: alleen huidige owners. De pie kan in een
-            // raceconditie nog een stale owner-key meeleveren als de
-            // ownerIds-prop net wisselde — die mag NIET naar de DB.
-            const active = new Set(owners)
-            const cleaned: Record<string, number> = {}
-            for (const [oid, hrs] of Object.entries(next)) {
-              if (active.has(oid)) cleaned[oid] = hrs
-            }
-            setLive(cleaned)
-            onUpdate({
-              ownerIds: owners,
-              ownerHours: Object.keys(cleaned).length > 0 ? cleaned : undefined,
-              ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
-            })
-          }}
+          onChange={next => { setLive(next); setHourDrafts(ownerHoursDrafts(owners, next)) }}
+          onCommit={commitOwnerHours}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
           {owners.map(oid => {
@@ -3012,14 +3084,31 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
                     </span>
                   )}
                 </span>
-                <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{round1(val)}u · {pct}%</span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <input type="text" inputMode="decimal" aria-label={`Uren voor ${m.name}`}
+                    value={hourDrafts[oid] ?? String(round1(val))}
+                    onFocus={event => event.currentTarget.select()}
+                    onChange={event => previewTypedHours(oid, event.target.value)}
+                    onBlur={() => commitTypedHours(oid)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') event.currentTarget.blur()
+                      if (event.key === 'Escape') {
+                        setHourDrafts(ownerHoursDrafts(owners, live))
+                        event.currentTarget.blur()
+                      }
+                    }}
+                    style={{ width: 54, height: 30, boxSizing: 'border-box', padding: '3px 6px', borderRadius: 6,
+                      border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)',
+                      font: 'inherit', fontVariantNumeric: 'tabular-nums', textAlign: 'right', outline: 'none' }} />
+                  <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>u · {pct}%</span>
+                </label>
               </div>
             )
           })}
         </div>
       </div>
       <p style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-        Sleep de witte bolletjes op de taart om uren tussen mensen te verdelen.
+        Sleep de witte bolletjes of vul de uren per persoon rechtstreeks in.
       </p>
     </div>
   )
@@ -3281,7 +3370,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onToggleReorder, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
@@ -3293,7 +3382,6 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   sortBy: { key: string; dir: 'asc' | 'desc' } | null
   onToggleSort: (key: string) => void
   reorderMode: boolean
-  onToggleReorder: () => void
   onMoveColumn: (sourceKey: string, targetKey: string, side: 'before' | 'after') => void
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
@@ -3852,23 +3940,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
             {group.items.length} items
           </span>
 
-          {/* Volgorde staat direct in de groepsbalk: dit is de plek waar
-              rijen geordend worden. De weinig gebruikte groepsselectie is
-              bewust verwijderd; losse rijselectie en bulk-acties blijven. */}
           {!editName && (
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button onClick={e => { e.stopPropagation(); onToggleReorder() }}
-                aria-pressed={reorderMode}
-                title={reorderMode ? 'Klaar met volgorde wijzigen' : 'Wijzig de volgorde van items'}
-                style={{
-                  background: reorderMode ? 'var(--accent)' : 'var(--bg-hover)',
-                  border: 'none', color: reorderMode ? 'var(--accent-contrast, #fff)' : 'var(--text-secondary)',
-                  cursor: 'pointer', fontSize: isMobile ? 13 : 12, fontWeight: 650,
-                  padding: isMobile ? '4px 8px' : '5px 10px', borderRadius: 6,
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                }}>
-                ↕ {!isMobile && (reorderMode ? 'Klaar' : 'Volgorde')}
-              </button>
               <button onClick={e => {
                   e.stopPropagation()
                   const count = group.items.length
@@ -4082,9 +4155,6 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                       const data = JSON.parse(rawItem) as { itemId: string; fromGroupId: string; fromBoard?: string }
                       if (!data.itemId || data.itemId === item.id) return
                       if (data.fromBoard && data.fromBoard !== boardId) return
-                      // Dropping into another group (including Vrij) moves
-                      // the whole series, rather than nesting it under a row.
-                      if (data.fromGroupId !== group.id) return
                       e.preventDefault()
                       e.stopPropagation()
                       onNestItem(data.itemId, data.fromGroupId, item.id)
@@ -4380,7 +4450,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
   return (
     <>
       <button ref={btnRef} onClick={() => setOpen(o => !o)} className={open ? 'yoko-primary-button' : 'yoko-control-button'}
-        title="Kolommen beheren — toevoegen, verwijderen, herordenen"
+        title="Kolommen beheren en de volgorde van Status, Timeline en andere kolommen wijzigen"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           width: menu ? '100%' : undefined,
@@ -4394,7 +4464,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
           <rect x="9.5" y="4" width="5" height="16" rx="1" />
           <rect x="16" y="4" width="5" height="16" rx="1" />
         </svg>
-        Kolommen
+        Kolomvolgorde
       </button>
       {open && (
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
@@ -4404,7 +4474,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
             boxShadow: '0 10px 36px rgba(0,0,0,0.4)',
           }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>Kolommen beheren</strong>
+              <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>Kolommen en volgorde</strong>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{list.filter(column => !column.hidden).length} zichtbaar</span>
             </div>
             <p style={{ margin: '4px 0 11px', fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-muted)' }}>
@@ -5121,15 +5191,27 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const parent    = fromGroup?.items.find(i => i.id === fromParentId)
     const sub       = parent?.subitems?.find(s => s.id === subitemId)
     if (!parent || !sub) return
+    const movedSub = sub.source === 'google' ? { ...sub, googlePlacementLocked: true } : sub
+    const seriesId = sub.source === 'google' ? sub.sourceItemId : undefined
     onChange(groups.map(g => {
       let items = g.items.map(i => {
         if (i.id === fromParentId) {
-          return { ...i, subitems: (i.subitems ?? []).filter(s => s.id !== subitemId) }
+          const currentSeries = Array.isArray(i.googleMeetingSeriesIds) ? i.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string') : []
+          return {
+            ...i,
+            subitems: (i.subitems ?? []).filter(s => s.id !== subitemId),
+            ...(seriesId ? { googleMeetingSeriesIds: currentSeries.filter(id => id !== seriesId) } : {}),
+          }
         }
         if (i.id === toParentId) {
           const already = (i.subitems ?? []).some(s => s.id === sub.id)
           if (already) return i
-          return { ...i, subitems: [...(i.subitems ?? []), sub] }
+          const currentSeries = Array.isArray(i.googleMeetingSeriesIds) ? i.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string') : []
+          return {
+            ...i,
+            subitems: [...(i.subitems ?? []), movedSub],
+            ...(seriesId ? { googleMeetingSeriesIds: [...new Set([...currentSeries, seriesId])] } : {}),
+          }
         }
         return i
       })
@@ -5137,13 +5219,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     }))
   }
 
-  function unnestSubitemHere(subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) {
+  async function unnestSubitemHere(subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) {
     const fromGroup = groups.find(g => g.id === fromGroupId)
     const parent    = fromGroup?.items.find(i => i.id === parentItemId)
     const sub       = parent?.subitems?.find(s => s.id === subitemId)
     if (!fromGroup || !parent || !sub) return
     const promoted: BoardItem = {
-      id:         sub.id,
+      id:         sub.source === 'google' && sub.sourceItemId ? sub.sourceItemId : sub.id,
       name:       sub.name,
       ownerIds:   sub.ownerIds ?? [],
       status:     sub.status ?? '',
@@ -5155,7 +5237,24 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       subitems:   sub.nestedSource?.subitems?.map(child => ({ ...child })),
       startTime:  (sub as { startTime?: string | null }).startTime ?? null,
       endTime:    (sub as { endTime?:   string | null }).endTime   ?? null,
+      source:     sub.source,
+      externalLink: sub.externalLink ?? undefined,
+      meetLink:   sub.meetLink ?? null,
+      ownerHours: sub.ownerHours,
+      ownerIdsLocked: sub.ownerIdsLocked,
+      googleParticipantIds: sub.googleParticipantIds,
+      googleCalendarMemberIds: sub.googleCalendarMemberIds,
+      ...(sub.source === 'google' ? { googlePlacementLocked: true } : {}),
     } as BoardItem
+    if (sub.source === 'google') {
+      const persisted = await persistGoogleSubitemPromotion(
+        boardId, parentItemId, toGroupId, subitemId, promoted, sub.sourceItemId,
+      )
+      if (!persisted) {
+        window.alert('Google-meeting terugplaatsen is niet opgeslagen. Er is niets verwijderd; probeer het opnieuw.')
+        return
+      }
+    }
     onChange(groups.map(g => {
       // BELANGRIJK: een groep kan tegelijk de bron-groep én de doel-groep
       // zijn (subitem in dezelfde groep terugplaatsen). Daarom apply'en we
@@ -5167,7 +5266,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           ...next,
           items: next.items.map(i =>
             i.id === parentItemId
-              ? { ...i, subitems: (i.subitems ?? []).filter(s => s.id !== subitemId) }
+              ? {
+                  ...i,
+                  subitems: (i.subitems ?? []).filter(s => s.id !== subitemId),
+                  ...(sub.source === 'google' && sub.sourceItemId
+                    ? {
+                        googleMeetingSeriesIds: (Array.isArray(i.googleMeetingSeriesIds)
+                          ? i.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string')
+                          : []).filter(id => id !== sub.sourceItemId),
+                      }
+                    : {}),
+                }
               : i
           ),
         }
@@ -5185,7 +5294,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   function moveItemBetweenGroups(itemId: string, fromGroupId: string, toGroupId: string) {
     if (fromGroupId === toGroupId) return
     const fromGroup = groups.find(g => g.id === fromGroupId)
-    const item = fromGroup?.items.find(i => i.id === itemId)
+    const rawItem = fromGroup?.items.find(i => i.id === itemId)
+    const item = rawItem?.source === 'google' ? { ...rawItem, googlePlacementLocked: true } : rawItem
     if (!item) return
     onChange(groups.map(g => {
       if (g.id === fromGroupId) return { ...g, items: g.items.filter(i => i.id !== itemId) }
@@ -5202,7 +5312,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const idSet = new Set(itemIds)
     const collected: BoardItem[] = []
     for (const g of groups) {
-      for (const it of g.items) if (idSet.has(it.id)) collected.push(it)
+      for (const it of g.items) {
+        if (idSet.has(it.id)) collected.push(it.source === 'google' ? { ...it, googlePlacementLocked: true } : it)
+      }
     }
     if (collected.length === 0) return
     onChange(groups.map(g => {
@@ -5624,7 +5736,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                     fontWeight: reorderMode ? 600 : 500, textAlign: 'left', borderRadius: 6 }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                  ↕ {reorderMode ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+                  ↕ {reorderMode ? 'Klaar met items sorteren' : 'Items sorteren'}
                 </button>
                 <button onClick={() => { exportCSV(); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
@@ -5844,7 +5956,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onToggleSelect={toggleSelect}
               sortBy={sortBy} onToggleSort={toggleSort}
               reorderMode={reorderMode}
-              onToggleReorder={() => setReorderMode(value => !value)}
               onMoveColumn={moveColumn}
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}

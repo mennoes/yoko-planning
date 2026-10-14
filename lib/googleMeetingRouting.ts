@@ -60,10 +60,10 @@ export function routeGoogleMeeting(events: GoogleEvent[], rules: RoutingRule[], 
     : { boardId: 'yoko', reason: 'fallback' }
 }
 
-/** Bewaar handmatige plaatsingen, behalve wanneer een expliciete titelregel
- * het event bij een specifieke agenda indeelt. Zo verhuist 'Omdenken' ook
- * voor bestaande Google-items en blijft de keuze na elke sync hetzelfde. */
-export function resolveMeetingBoard(existingBoard: string | null | undefined, route: MeetingRoute): string {
+/** Automatische titelregels mogen bestaande items migreren, maar nooit een
+ * expliciete drag/drop-keuze van de gebruiker terugdraaien. */
+export function resolveMeetingBoard(existingBoard: string | null | undefined, route: MeetingRoute, placementLocked = false): string {
+  if (existingBoard && placementLocked) return existingBoard
   return route.reason === 'title' ? route.boardId : (existingBoard ?? route.boardId)
 }
 
@@ -102,11 +102,25 @@ export function findMeetingProject(title: string, candidates: MeetingParent[], r
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
 }
+
+/** Alleen een expliciete Ja telt als deelname. `needsAction` en `tentative`
+ * kunnen wel op de agenda van een collega staan, maar horen nog niet in de
+ * persoonlijke planning/to-do's van de genodigde. */
+export function isAcceptedCalendarResponse(responseStatus: string | null | undefined): boolean {
+  return responseStatus === 'accepted'
+}
+
 export function nestedMeetingId(seriesId: string, event: GoogleEvent): string {
   if (!event.recurringEventId) return seriesId
   const original = event.originalStartTime ?? event.start
   const date = original.dateTime ? new Date(original.dateTime).toISOString() : original.date
   return `si_g_${seriesId}_${encodeURIComponent(date ?? event.id)}`
+}
+
+/** Google blijft leidend voor deelnemers, behalve wanneer de gebruiker de
+ * owners van dit specifieke afspraakmoment bewust heeft aangepast. */
+export function syncedOccurrenceOwners(previous: Pick<SubItem, 'ownerIds' | 'ownerIdsLocked'> | undefined, freshOwners: string[]): string[] {
+  return previous?.ownerIdsLocked ? [...previous.ownerIds] : [...freshOwners]
 }
 
 export function mergeNestedMeetings(parent: MeetingParent, incoming: SubItem[], seriesId: string): { subitems: SubItem[]; extra: Record<string, unknown> } {
@@ -115,16 +129,21 @@ export function mergeNestedMeetings(parent: MeetingParent, incoming: SubItem[], 
   const merged = [...(parent.subitems ?? [])]
   for (const fresh of incoming) {
     if (dismissed.has(fresh.id)) continue
-    const idx = merged.findIndex(s => s.id === fresh.id)
+    // Een top-level meeting krijgt bij handmatig nesten een onafhankelijk
+    // subitem-id, met de oude Google-id in sourceItemId. Match ook daarop,
+    // anders maakt de volgende sync een duplicaat naast het versleepte item.
+    const idx = merged.findIndex(s => s.id === fresh.id || s.sourceItemId === fresh.id)
     const previous = idx < 0 ? undefined : merged[idx]
     const sub: SubItem = {
       ...fresh,
       ...previous,
+      id: previous?.id ?? fresh.id,
       // Calendar fields stay live; user-entered hours/owners/status and
       // other subitem fields survive. Never change the parent project.
       startDate: fresh.startDate, endDate: fresh.endDate,
       startTime: fresh.startTime, endTime: fresh.endTime,
       externalLink: fresh.externalLink, meetLink: fresh.meetLink,
+      ownerIds: syncedOccurrenceOwners(previous, fresh.ownerIds),
       source: 'google', googleSeriesId: seriesId,
       status: previous?.statusOverride === 'active' ? (previous.status === 'Done' ? '' : previous.status)
         : previous?.statusOverride === 'done' || previous?.status === 'Done' ? 'Done'
@@ -176,10 +195,13 @@ export async function loadMeetingPlacement(admin: SupabaseClient) {
   if (error) throw new Error(`Agendagroepen laden mislukt: ${error.message}`)
   const activeGroups = new Set((groups ?? []).map(g => String(g.id)))
   const projectGroups = new Set((groups ?? []).filter(g => !/^(meetings?|doorlopend|done|vrij|google agenda|opkomend|toekomstig)\b/i.test(String(g.name).trim())).map(g => String(g.id)))
-  const nestedIds = new Set(parents.flatMap(p => (p.subitems ?? []).map(s => s.id)))
+  const nestedIds = new Set(parents.flatMap(p => (p.subitems ?? []).flatMap(s => [s.id, ...(s.sourceItemId ? [s.sourceItemId] : [])])))
   const seriesParents = new Map<string, MeetingParent>()
   for (const parent of parents) {
     for (const id of strings(parent.extra?.googleMeetingSeriesIds)) seriesParents.set(id, parent)
+    for (const subitem of parent.subitems ?? []) {
+      if (subitem.source === 'google' && subitem.sourceItemId) seriesParents.set(subitem.sourceItemId, parent)
+    }
   }
   return {
     nestedIds,

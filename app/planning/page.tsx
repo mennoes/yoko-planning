@@ -68,6 +68,7 @@ import { onCommentsUpdate } from '@/lib/commentsStore'
 import { useCompletedOwners } from '@/components/useCompletedOwners'
 import { completionContext, type CompletionTarget } from '@/lib/personalCompletion'
 import type { BoardGroup } from '@/lib/boards'
+import { planningDetailHours } from '@/lib/planningDetailHours'
 
 const RAW: Record<string, { groups: unknown[] }> = {
   yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
@@ -3235,8 +3236,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     setCategoryOverride(project.id, c)
   }
   const hasSubitems = ((rawItem?.subitems as { estHours?: number }[] | undefined)?.length ?? 0) > 0
-  const subitemsTotal = ((rawItem?.subitems as { estHours?: number }[] | undefined) ?? [])
-    .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  const effectiveDetailHours = planningDetailHours(
+    parseFloat(estHours) || 0,
+    (rawItem?.subitems as import('@/lib/boards').SubItem[] | undefined) ?? [],
+    ownerHours,
+  )
   const [timerTick, setTimerTick] = useState(0)
   useEffect(() => onTimerUpdate(() => setTimerTick(t => t + 1)), [])
   const activeTimer = getActiveTimer()
@@ -3807,8 +3811,10 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {hasSubitems ? (
               <>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{subitemsTotal} uur</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(som van subitems)</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{effectiveDetailHours.total} uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {effectiveDetailHours.source === 'subitems' ? '(som van subitems)' : '(uren van hoofditem; subitems hebben nog 0u)'}
+                </span>
               </>
             ) : (
               <>
@@ -3829,7 +3835,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           <Row label="Verdeling">
             <DistributionEditor
               owners={ownerIds.filter(id => id !== 'unassigned')}
-              total={hasSubitems ? subitemsTotal : (parseFloat(estHours) || 0)}
+              total={effectiveDetailHours.total}
               values={ownerHours}
               onLive={next => setOwnerHours(next)}
               onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
@@ -3856,7 +3862,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Gewerkt: <strong style={{ color: 'var(--text-secondary)' }}>{fmtMinutes(workedMin)}</strong>
-              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{estHours}u</strong>
+              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{effectiveDetailHours.total}u</strong>
             </span>
           </div>
         </Row>
@@ -5194,28 +5200,6 @@ export default function PlanningPage() {
     }
     return next
   }, [projects, zoom, hiddenIds, ownerExcludesTick, hiddenAgendas])
-
-  // Inactieve freelancers: freelancers zonder activiteit in de afgelopen
-  // 2 maanden EN zonder activiteit in de komende 3 maanden zijn waar-
-  // schijnlijk niet relevant voor de huidige planning. We laten ze
-  // standaard weg zodat de lijst overzichtelijk blijft. Een freelancer
-  // kan altijd zichtbaar gemaakt worden via de filter-UI.
-  const activeFreelancerIds = useMemo(() => {
-    const now = Date.now()
-    const winStart = now - 60 * 86400000   // 2 maanden terug
-    const winEnd   = now + 90 * 86400000   // 3 maanden vooruit
-    const active = new Set<string>()
-    for (const p of effectiveProjects) {
-      if (!p.startDate && !p.endDate) continue
-      const s = p.startDate ? new Date(p.startDate).getTime() : (p.endDate ? new Date(p.endDate).getTime() : NaN)
-      const e = p.endDate   ? new Date(p.endDate).getTime() + 86400000 : (p.startDate ? new Date(p.startDate).getTime() + 86400000 : NaN)
-      if (isNaN(s) || isNaN(e)) continue
-      if (e < winStart || s > winEnd) continue
-      for (const oid of p.ownerIds) active.add(oid)
-    }
-    return active
-  }, [effectiveProjects])
-  const isFreelancerActive = (id: string) => activeFreelancerIds.has(id)
 
   // Compute view constants
   const { cs, or, hh, av } = vc(viewSize)
@@ -6597,9 +6581,11 @@ export default function PlanningPage() {
           {zoom === 'dag' ? (() => {
             // Default-visible set: alle yoko-crew + unassigned. Yoko-crew
             // is alles wat isYokoCrew() teruggeeft (DB-kind óf hardcoded).
-            const defaultVisibleIds = new Set<string>(['unassigned'])
-            for (const m of team) if (isYokoCrew(m.id)) defaultVisibleIds.add(m.id)
-            for (const m of team) if (isMemberInactive(m.id)) defaultVisibleIds.add(m.id)
+            // Een actief en zichtbaar teamlid blijft altijd als profielrij
+            // bestaan, ook met 0 uur of tijdelijk zonder project. De
+            // gebruiker kan personen expliciet filteren via Mensen &
+            // capaciteit; activiteit mag nooit stilletjes iemand verbergen.
+            const defaultVisibleIds = new Set<string>(team.map(member => member.id))
             const DEFAULT_VIS = defaultVisibleIds
             const isMemberVisible = (id: string) =>
               filterMembers.size === 0 ? DEFAULT_VIS.has(id) : filterMembers.has(id)
@@ -6617,10 +6603,7 @@ export default function PlanningPage() {
               .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0))
             const unassignedVisible = team.filter(m => m.id === 'unassigned' && isMemberVisible(m.id))
             const inactiveVisible = team.filter(m => isMemberInactive(m.id) && isMemberVisible(m.id))
-            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id) && isMemberVisible(m.id)
-              // Verberg freelancers zonder activiteit in [-2mnd, +3mnd]
-              // tenzij de gebruiker 'm expliciet via 't filter aanzet.
-              && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
+            const freelancersVisible = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id) && isMemberVisible(m.id))
 
             // Focus-mode: zelfde gedrag als in Overzicht — wanneer iemand
             // is uitgeklapt dempen we de andere rijen zodat de uitgevouwen
@@ -6842,10 +6825,7 @@ export default function PlanningPage() {
             // activity-heuristiek hieronder — een expliciet gezette vlag,
             // altijd in z'n eigen groep, nooit bij Team Yoko/Freelancers.
             const inactiveTeam  = visible.filter(m => isMemberInactive(m.id))
-            const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id)
-              // Verberg freelancers zonder recente activiteit (geen werk in
-              // [-2mnd, +3mnd]) tenzij gebruiker 'm expliciet via 't filter aanzet.
-              && (filterMembers.has(m.id) || isFreelancerActive(m.id)))
+            const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id))
 
             const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; members?: TeamMember[] }) => (
               <div onClick={opts?.onClick}

@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
-import { loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting } from './googleMeetingRouting'
+import { isAcceptedCalendarResponse, loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -227,7 +227,7 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; name?: string; ownerIds?: string[]; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
+type SubItemSnapshot = { id: string; sourceItemId?: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; googlePlacementLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
 type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 type Rule     = { pattern: string; board_id: string }
 
@@ -696,9 +696,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
   const ownerIds = memberId ? [memberId] : []
 
-  // Voor een event: alle Yoko-deelnemers die niet hebben afgezegd worden
-  // mede-eigenaar. Valt terug op de calendar-owner als er geen attendees
-  // zijn (bv. private events). Per-persoon-uren = de eventduur (iedereen
+  // Voor een event: alleen Yoko-deelnemers die expliciet Ja/accepted hebben
+  // geantwoord worden mede-eigenaar. Een openstaande uitnodiging uit de
+  // agenda van een collega hoort niet alvast in iemands persoonlijke to-do's.
+  // Valt terug op de calendar-owner als er geen accepted Yoko-attendees zijn.
+  // Per-persoon-uren = de eventduur (iedereen
   // is de hele meeting aanwezig); totaal-est-hours = duur × N personen
   // zodat de planning-werkbelasting de werkelijke groepsuren toont.
   function ownersForEvent(ev: GoogleEvent): { owners: string[]; perPerson: number; total: number } {
@@ -708,7 +710,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     for (const a of ats) {
       const email = a.email
       if (!email) continue
-      if (a.responseStatus === 'declined') continue
+      if (!isAcceptedCalendarResponse(a.responseStatus)) continue
       const id = resolveAttendeeEmail(email)
       if (id) yokos.add(id)
     }
@@ -744,6 +746,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   const existing = (existingRows as ItemRow[] | null) ?? []
   const byExt    = new Map(existing.map(r => [r.external_id, r.id]))
   const byExtFull = new Map(existing.map(r => [r.external_id, r]))
+  const ownByICal = new Map<string, ItemRow>()
+  for (const row of existing) {
+    if (!row.ical_uid) continue
+    const previous = ownByICal.get(row.ical_uid)
+    if (!previous || row.id < previous.id) ownByICal.set(row.ical_uid, row)
+  }
 
   // Verzamel alle item-id's die ergens al als subitem zijn ingenest. Wanneer
   // een gebruiker een Google-item handmatig onder een ander item heeft
@@ -820,25 +828,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // duplicaat. Fix: in de upsert preserven we external_id /
   // calendar_id / external_user_id van existingRow zodat alleen de
   // EERSTE sync die velden zet en daarna niemand ze overschrijft.
-  const sharedByICal = new Map<string, ItemRow>()
-  if (wantedICals.length > 0) {
-    // BELANGRIJK: WEL soft-deleted rijen meenemen. Een eerdere bug-cyclus
-    // of de push-safety-guard kan de canonical Weekstart-row hebben
-    // soft-deleted; we willen die kunnen 'revive' ipv een tweede rij
-    // ernaast aanmaken. De upsert hieronder zet deleted_at expliciet op
-    // null om de row weer zichtbaar te maken.
-    const { data: sharedRows, error: sharedError } = await admin
-      .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, name, start_date, deleted_at')
-      .eq('source', 'google')
-      .in('ical_uid', Array.from(new Set(wantedICals)))
-    if (sharedError) throw new Error(`Gedeelde Google-items laden mislukt: ${sharedError.message}`)
-    for (const r of (sharedRows as ItemRow[] | null) ?? []) {
-      if (!r.ical_uid) continue
-      const prev = sharedByICal.get(r.ical_uid)
-      if (!prev || r.id < prev.id) sharedByICal.set(r.ical_uid, r)
-    }
-  }
+  void wantedICals
 
   // Legacy dedup BINNEN mijn eigen rijen: oude rijen zonder iCalUID
   // krijgen via findExistingFor een match op naam+datum zodat ze niet
@@ -877,7 +867,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
 
   // Helper: vind de bestaande rij voor dit event, bij voorkeur via iCalUID.
   // Fallback-chain:
-  //  1. sharedByICal (cross-user dedup via iCalUID — beste match)
+  //  1. ownByICal (alleen dezelfde gekoppelde gebruikersagenda)
   //  2. byExt (mijn eigen oude id-vorm met user-prefix)
   //  3. legacyLookup (oude rijen ZONDER iCalUID die door eerdere sync-
   //     versies gemaakt zijn; match op board+name+startDate)
@@ -889,8 +879,8 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     startDate: string | null,
   ): { row: ItemRow | undefined; id: string } {
     if (icalUid) {
-      const shared = sharedByICal.get(icalUid)
-      if (shared) return { row: shared, id: shared.id }
+      const own = ownByICal.get(icalUid)
+      if (own) return { row: own, id: own.id }
     }
     const mineId = byExt.get(extId)
     const mineRow = byExtFull.get(extId)
@@ -900,9 +890,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // eigen rows). Backfill van iCalUID gebeurt via de upsert.
     const legacy = legacyLookup(name, startDate)
     if (legacy) return { row: legacy, id: legacy.id }
-    // Nieuwe rij — CANONICAL id-vorm op basis van iCalUID. Eén rij
-    // per event, gedeeld door alle teamleden.
-    const newId = icalUid ? `it_g_${icalUid}` : `it_g_${extId}_${cal.user_id.slice(0, 8)}`
+    // Eén rij per gekoppelde gebruikersagenda. De UI dedupliceert dezelfde
+    // iCal-afspraak visueel, maar persoonlijke lijsten kunnen zo betrouwbaar
+    // onderscheiden in wiens eigen Google Agenda de afspraak echt staat.
+    const newId = icalUid
+      ? `it_g_${icalUid}_${cal.user_id.slice(0, 8)}`
+      : `it_g_${extId}_${cal.user_id.slice(0, 8)}`
     return { row: undefined, id: newId }
   }
 
@@ -941,6 +934,8 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         id: nestedMeetingId(nestingLookup.id, ev),
         name: ev.summary?.trim() || meetingName,
         ownerIds: owners.owners,
+        googleParticipantIds: owners.owners,
+        googleCalendarMemberIds: memberId ? [memberId] : [],
         status: resolveStatus(undefined, dates.end ?? dates.start),
         startDate: dates.start, endDate: dates.end ?? dates.start,
         ...eventTimes(ev), estHours: owners.total,
@@ -979,7 +974,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // Bewaar handmatige verplaatsingen — als de gebruiker het item naar
       // een Done-groep of ander bord heeft gesleept, mag Google die niet
       // weer terugsturen naar de target-groep volgens de route-regels.
-      const keepBoard = resolveMeetingBoard(existingRow?.board_id, route)
+      const keepBoard = resolveMeetingBoard(existingRow?.board_id, route, exExtraSingle.googlePlacementLocked === true)
       const newStatus = resolveStatus(existingRow?.status, end ?? start, existingRow?.end_date, exExtraSingle.statusOverride)
       // Vrij/Vakantie-events bundelen we in een eigen Vrij-groep zodat
       // afwezigheid meteen herkenbaar is in het bord. Done heeft daarna
@@ -1068,7 +1063,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
           const hasUsableOwnerHours = !!exOwnerHours && finalOwners.length > 0
             && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
           return {
+            ...exExtra,
             ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
+            googleParticipantIds: eventOwners.owners,
+            googleCalendarMemberIds: memberId ? [memberId] : [],
             ...(exExtra.statusOverride === 'active' || exExtra.statusOverride === 'done'
               ? { statusOverride: exExtra.statusOverride }
               : {}),
@@ -1127,9 +1125,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // nieuwe rijen (zie keepGroup hieronder).
     const minStart = eventDates(sorted[0]).start
     const maxEnd   = eventDates(sorted[sorted.length - 1]).end ?? eventDates(sorted[sorted.length - 1]).start
-    // Voor recurring nemen we de owners van de meeste recente instantie —
-    // attendee-lijsten zijn meestal hetzelfde over alle herhalingen.
-    const groupOwners = ownersForEvent(sorted[sorted.length - 1])
+    // Deelnemers kunnen per afspraakmoment wijzigen. Bouw de parent uit de
+    // actuele unie, maar houd de precieze lijst straks ook per subitem bij.
+    const ownersByEvent = new Map(sorted.map(ev => [ev.id, ownersForEvent(ev)]))
     const icalUid     = iCalKeyForGroup(sorted)
     const lookup      = findExistingFor(icalUid, groupKey, baseName, minStart)
     const existingRow = lookup.row
@@ -1149,14 +1147,23 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     if (ownersLocked && Array.isArray(existingRow?.owner_ids)) {
       for (const o of (existingRow!.owner_ids as string[])) ownerSet.add(o)
     } else {
-      for (const o of (existingRow?.owner_ids ?? [])) ownerSet.add(o)
-      for (const o of groupOwners.owners) ownerSet.add(o)
+      for (const eventOwners of ownersByEvent.values()) {
+        for (const o of eventOwners.owners) ownerSet.add(o)
+      }
     }
     const finalOwners = [...ownerSet]
-    const totalHours = sorted.reduce((s, ev) => s + eventHours(ev), 0) * finalOwners.length
+    const totalHours = sorted.reduce((sum, ev) => {
+      const current = ownersByEvent.get(ev.id)
+      return sum + (current?.total ?? 0)
+    }, 0)
     const ownerHoursMap: Record<string, number> = {}
-    const perPersonTotal = sorted.reduce((s, ev) => s + eventHours(ev), 0)
-    for (const oid of finalOwners) ownerHoursMap[oid] = perPersonTotal
+    for (const ev of sorted) {
+      const current = ownersByEvent.get(ev.id)
+      if (!current) continue
+      for (const oid of current.owners) {
+        ownerHoursMap[oid] = (ownerHoursMap[oid] ?? 0) + current.perPerson
+      }
+    }
     // Bouw een lookup van bestaande subitems zodat user-edits (status Done,
     // hernoemen, owner-aanpassingen) bij elke sync behouden blijven.
     const priorSubs = Array.isArray(existingRow?.subitems) ? existingRow!.subitems! : []
@@ -1167,6 +1174,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const dateLabel = start ? new Date(start).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'
       const sid  = `si_g_${ev.id}`
       const prev = priorById.get(sid)
+      const currentOwners = ownersByEvent.get(ev.id) ?? ownersForEvent(ev)
+      const occurrenceOwners = syncedOccurrenceOwners(
+        prev?.ownerIds ? { ownerIds: prev.ownerIds, ownerIdsLocked: prev.ownerIdsLocked } : undefined,
+        currentOwners.owners,
+      )
       // Naam-bepaling voor recurring instances, prioriteit:
       //   1. Heeft de gebruiker dit specifieke event in Google een eigen
       //      titel gegeven (anders dan de master)? → die Google-titel
@@ -1189,7 +1201,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       return {
         id:        sid,
         name:      subitemName,
-        ownerIds:  prev?.ownerIds && prev.ownerIds.length > 0 ? prev.ownerIds : finalOwners,
+        ownerIds:  occurrenceOwners,
+        googleParticipantIds: currentOwners.owners,
+        googleCalendarMemberIds: memberId ? [memberId] : [],
+        ...(prev?.ownerIdsLocked ? { ownerIdsLocked: true } : {}),
+        ...(prev?.ownerHours && prev.ownerIdsLocked ? { ownerHours: prev.ownerHours } : {}),
         status:    resolveStatus(prev?.status, end ?? start, undefined, prev?.statusOverride),
         ...(prev?.statusOverride ? { statusOverride: prev.statusOverride } : {}),
         startDate: start,
@@ -1202,7 +1218,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         // berekenen als er nog niks stond.
         estHours:  (typeof prev?.estHours === 'number' && prev.estHours > 0)
                      ? prev.estHours
-                     : eventHours(ev) * finalOwners.length,
+                     : eventHours(ev) * occurrenceOwners.length,
         // Per-instance Meet-link — sommige reeksen verschillen per moment.
         meetLink:  ev.hangoutLink ?? prev?.meetLink ?? null,
         // Per-instance Google-Calendar-link — zo kan de UI naar de juiste
@@ -1244,7 +1260,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // aanmaken bij volgende syncs.
     if (nestedIds.has(id)) continue
     if (existingRow) updated++; else added++
-    const keepBoard = resolveMeetingBoard(existingRow?.board_id, route)
+    const keepBoard = resolveMeetingBoard(existingRow?.board_id, route, exExtraRec.googlePlacementLocked === true)
     const newStatus = resolveRecurringStatus(existingRow?.status, maxEnd ?? minStart, exExtraRec.statusOverride)
     // Groep-keuze prioriteit: Done > Vrij > Doorlopend.
     //  - Done items horen in de Done-groep (ook wanneer de gebruiker zelf
@@ -1308,7 +1324,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         const hasUsableOwnerHours = !!exOwnerHours && finalOwners.length > 0
           && finalOwners.every(id => Number(exOwnerHours?.[id]) > 0)
         return {
+          ...exExtra,
           ownerHours: hasUsableOwnerHours ? exOwnerHours : ownerHoursMap,
+          googleParticipantIds: [...new Set(ownersByEvent.values().flatMap(value => value.owners))],
+          googleCalendarMemberIds: memberId ? [memberId] : [],
           ...(exExtra.statusOverride === 'active' || exExtra.statusOverride === 'done'
             ? { statusOverride: exExtra.statusOverride }
             : {}),
@@ -1390,6 +1409,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   if (canonicalByICal.size > 0) {
     const { data: rows } = await admin.from('board_items')
       .select('id, ical_uid').eq('source', 'google').is('deleted_at', null)
+      .eq('external_user_id', cal.user_id)
       .in('ical_uid', [...canonicalByICal.keys()])
     for (const row of (rows as Array<{ id: string; ical_uid: string | null }> | null) ?? []) {
       const winner = row.ical_uid ? canonicalByICal.get(row.ical_uid) : null
@@ -1399,6 +1419,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   if (canonicalByExt.size > 0) {
     const { data: rows } = await admin.from('board_items')
       .select('id, external_id').eq('source', 'google').is('deleted_at', null)
+      .eq('external_user_id', cal.user_id)
       .in('external_id', [...canonicalByExt.keys()])
     for (const row of (rows as Array<{ id: string; external_id: string | null }> | null) ?? []) {
       const winner = row.external_id ? canonicalByExt.get(row.external_id) : null
@@ -1421,15 +1442,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     .filter(r => !r.deleted_at && r.external_id && !fetchedExternalIds.has(r.external_id) && liesInActiveWindow(r))
     .map(r => r.id)
   const irrelevantIds = Array.from(new Set([...noLongerAcceptedIds, ...noLongerReturnedIds]))
-  // NIET hier soft-deleten. Dezelfde meeting kan in meerdere persoonlijke
-  // agenda's staan, terwijl alle agenda's één canonical board_item delen.
-  // Eén agenda kan de afspraak niet meer teruggeven (of de eigenaar kan
-  // declined zijn), terwijl een andere Yoko-deelnemer nog gewoon accepted
-  // is. Per-calendar cleanup maakte de uiteindelijke zichtbaarheid daardoor
-  // afhankelijk van welke sync als laatste draaide: eerst verscheen de groep,
-  // enkele seconden later verdween hij weer. Geldige events worden hierboven
-  // nog steeds geüpsert/revived; expliciet verwijderen blijft via de UI gaan.
-  void irrelevantIds
+  // Rijen zijn nu per gekoppelde gebruikersagenda. Daardoor mag alleen deze
+  // gebruiker zijn eigen verdwenen/geweigerde Google-rij verbergen zonder de
+  // afspraak uit de agenda van een collega te wissen.
+  if (irrelevantIds.length > 0) {
+    const hiddenAt = new Date().toISOString()
+    await admin.from('board_items')
+      .update({ deleted_at: hiddenAt, updated_at: hiddenAt })
+      .eq('external_user_id', cal.user_id)
+      .in('id', irrelevantIds)
+  }
 
   // Auto-categoriseer items met 'Vrij'/'Vakantie'/'Verlof'/etc. in de titel
   // als category='vrij' in workload_categories. De classifier doet dit op de

@@ -8,6 +8,12 @@ export type SubItem = {
   sourceItemId?: string
   name:         string
   ownerIds:     string[]
+  // Alleen expliciet handmatig aangepaste Google-owners blijven staan.
+  // Zonder deze vlag vervangt de volgende sync de lijst met de actuele
+  // deelnemers van precies dit afspraakmoment.
+  ownerIdsLocked?: boolean
+  googleParticipantIds?: string[]
+  googleCalendarMemberIds?: string[]
   status:       string
   startDate:    string | null
   endDate:      string | null
@@ -23,6 +29,9 @@ export type SubItem = {
   externalLink?: string | null
   source?:      'manual' | 'google'
   googleSeriesId?: string // server-side koppeling voor automatisch geneste meetings
+  // Een handmatige drag/drop-locatie wint altijd van automatische
+  // Google-routing. Dit veld reist mee wanneer een meeting wordt genest.
+  googlePlacementLocked?: boolean
   // Expliciete gebruikerskeuze voor Google-sync. Met 'active' blijft een
   // eerder afgeronde afspraak heropend, ook wanneer de datum >3 dagen oud is.
   statusOverride?: 'active' | 'done'
@@ -73,6 +82,9 @@ export type BoardItem = {
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
   externalSyncedAt?: string             // gebruikt om de nieuwste Google-variant te kiezen
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
+  googleParticipantIds?: string[]          // actuele accepted deelnemers uit Google; los van handmatige owners
+  googleCalendarMemberIds?: string[]        // teamleden wier eigen gekoppelde agenda deze afspraak bevat
+  googlePlacementLocked?: boolean           // user heeft agenda/groep/parent bewust gekozen
   links?:         ItemLink[]            // gekoppelde bestanden / externe URL's
   // Wanneer 't item subitems heeft volgt de timeline (startDate/endDate)
   // normaliter automatisch de vroegste/laatste actieve-subitem-datum

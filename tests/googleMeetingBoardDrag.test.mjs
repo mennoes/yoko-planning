@@ -23,3 +23,13 @@ test('moved Google meetings land in a Meetings group', () => {
   assert.match(store, /name:\s+movedItem\.source === 'google' \? 'Meetings' : 'Lopende projecten'/)
   assert.match(store, /updatedTarget\.find\(group => group\.id === targetGroupId\)/)
 })
+
+test('manual Google moves are persisted as placement locks', () => {
+  assert.match(store, /googlePlacementLocked: true/)
+  assert.match(store, /movePatch\.extra = \{ \.\.\.extra, googlePlacementLocked: true \}/)
+  assert.match(table, /rawItem\?\.source === 'google' \? \{ \.\.\.rawItem, googlePlacementLocked: true \}/)
+})
+
+test('an item can be nested into a parent in another group', () => {
+  assert.doesNotMatch(table, /if \(data\.fromGroupId !== group\.id\) return/)
+})

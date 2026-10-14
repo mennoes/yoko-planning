@@ -20,6 +20,8 @@ export type Project = {
   endTime?:   string | null
   estHours: number
   ownerHours?: Record<string, number>   // optional per-owner hours override
+  googleParticipantIds?: string[]       // accepted Google attendees; used by personal calendar views
+  googleCalendarMemberIds?: string[]    // whose own connected calendars contain the event
   status: 'active' | 'done'
   source?: 'manual' | 'google'
   externalLink?: string
@@ -61,7 +63,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
+        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
         // erbij maar krijgt status='done' zodat 'ie in de planning faded
         // wordt i.p.v. te verdwijnen (anders 'verdwijnen items zomaar' bij
@@ -109,6 +111,8 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               group:     g.name,
               ownerIds:  owners,
               ownerHours: si.ownerHours,
+              googleParticipantIds: si.googleParticipantIds ?? (i.googleParticipantIds as string[] | undefined),
+              googleCalendarMemberIds: si.googleCalendarMemberIds ?? (i.googleCalendarMemberIds as string[] | undefined),
               startDate: si.startDate ?? null,
               endDate:   si.endDate ?? si.startDate ?? null,
               startTime: si.startTime ?? null,
@@ -173,6 +177,8 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
             endTime: (i.endTime as string | null | undefined) ?? null,
             estHours: parentHours,
             ownerHours,
+            googleParticipantIds: i.googleParticipantIds as string[] | undefined,
+            googleCalendarMemberIds: i.googleCalendarMemberIds as string[] | undefined,
             status: (i.status as string) === 'Done' ? 'done' : 'active',
             source: (i.source as 'manual' | 'google' | undefined),
             externalLink: (i.externalLink as string | undefined),
@@ -203,6 +209,8 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           endTime:   (i.endTime   as string | null | undefined) ?? null,
           estHours:  hours,
           ownerHours: (i.ownerHours as Record<string, number> | undefined),
+          googleParticipantIds: i.googleParticipantIds as string[] | undefined,
+          googleCalendarMemberIds: i.googleCalendarMemberIds as string[] | undefined,
           status:    (i.status as string) === 'Done' ? 'done' : 'active',
           source:        (i.source as 'manual' | 'google' | undefined),
           externalLink:  (i.externalLink as string | undefined),
@@ -428,12 +436,16 @@ export function memberContributions(
   projects: Project[],
   memberId: string,
   weekStart: Date,
+  options?: { acceptedGoogleOnly?: boolean },
 ): ProjectContribution[] {
   // Eén keer laden i.p.v. per project — dit loopt over alle projects ×
   // members × weken in de planning-grid, dus een localStorage-read per
   // item zou nodeloos vaak herhalen.
   const overrides = loadCategoryOverrides()
   return projects
+    .filter(project => !options?.acceptedGoogleOnly || project.source !== 'google' ||
+      (Array.isArray(project.googleCalendarMemberIds) && project.googleCalendarMemberIds.includes(memberId) &&
+       Array.isArray(project.googleParticipantIds) && project.googleParticipantIds.includes(memberId)))
     .map(p => ({ project: p, hours: projectHoursInWeek(p, memberId, weekStart, overrides[p.id]) }))
     .filter(c => c.hours > 0)
 }

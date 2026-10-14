@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { routeGoogleMeeting, resolveMeetingBoard, findMeetingProject, nestedMeetingId, mergeNestedMeetings, saveNestedMeetings, loadMeetingPlacement } from '../lib/googleMeetingRouting.ts'
+import { routeGoogleMeeting, resolveMeetingBoard, findMeetingProject, nestedMeetingId, mergeNestedMeetings, saveNestedMeetings, loadMeetingPlacement, syncedOccurrenceOwners, isAcceptedCalendarResponse } from '../lib/googleMeetingRouting.ts'
 
 const boards = new Set(['yoko', 'nederland', 'vlaanderen', 'pnp', 'omdenken'])
 const event = (summary = 'Overleg', emails = [], patch = {}) => ({
@@ -55,8 +55,18 @@ test('title hints and configured rules work; no arbitrary substring or nonexiste
 })
 test('explicit title routing moves existing events while other routes preserve manual placement', () => {
   assert.equal(resolveMeetingBoard('yoko', { boardId: 'omdenken', reason: 'title' }), 'omdenken')
+  assert.equal(resolveMeetingBoard('yoko', { boardId: 'omdenken', reason: 'title' }, true), 'yoko')
   assert.equal(resolveMeetingBoard('omdenken', { boardId: 'nederland', reason: 'participants' }), 'omdenken')
   assert.equal(resolveMeetingBoard(undefined, { boardId: 'pnp', reason: 'participants' }), 'pnp')
+})
+test('nested Google meetings keep their independent id and match future syncs through sourceItemId', () => {
+  const moved = sub({ id: 'si_nested_event-1_123', sourceItemId: 'event-1', googlePlacementLocked: true })
+  const result = mergeNestedMeetings(parent({ subitems: [moved] }), [sub({ id: 'event-1', startTime: '12:00' })], 'event-1')
+  assert.equal(result.subitems.length, 1)
+  assert.equal(result.subitems[0].id, moved.id)
+  assert.equal(result.subitems[0].sourceItemId, 'event-1')
+  assert.equal(result.subitems[0].googlePlacementLocked, true)
+  assert.equal(result.subitems[0].startTime, '12:00')
 })
 test('clear project match; ambiguous and generic names stay in Meetings', () => {
   const r = { boardId: 'vlaanderen', reason: 'participants' }
@@ -83,8 +93,8 @@ test('recurring identities survive rescheduling and calendar-specific event IDs'
   assert.notEqual(nestedMeetingId('shared-series', first), nestedMeetingId('shared-series', event('Two', [], { recurringEventId: 'master1' , originalStartTime: { date: '2026-09-08' } })))
   assert.equal(nestedMeetingId('single', event()), 'single')
 })
-test('merge preserves unrelated subitems, manual hours/owners, Done overrides and project fields', () => {
-  const previous = sub({ estHours: 0, ownerIds: ['odette'], status: '', statusOverride: 'active' })
+test('merge preserves unrelated subitems, explicitly locked owners, Done overrides and project fields', () => {
+  const previous = sub({ estHours: 0, ownerIds: ['odette'], ownerIdsLocked: true, status: '', statusOverride: 'active' })
   const p = parent({ subitems: [sub({ id: 'manual', source: 'manual' }), previous] })
   const result = mergeNestedMeetings(p, [sub({ startTime: '12:00', estHours: 5, status: 'Done' })], 'series')
   assert.equal(result.subitems.length, 2)
@@ -95,6 +105,21 @@ test('merge preserves unrelated subitems, manual hours/owners, Done overrides an
   assert.deepEqual(result.extra.ownerHours, { menno: 12 })
   assert.deepEqual(result.extra.googleMeetingSeriesIds, ['series'])
   assert.equal(p.subitems[1].startTime, '10:00')
+})
+test('Google replaces stale occurrence owners unless that occurrence was explicitly locked', () => {
+  assert.deepEqual(syncedOccurrenceOwners({ ownerIds: ['job', 'ilse'] }, ['menno']), ['menno'])
+  assert.deepEqual(syncedOccurrenceOwners({ ownerIds: ['job'], ownerIdsLocked: true }, ['menno']), ['job'])
+
+  const p = parent({ subitems: [sub({ ownerIds: ['job', 'ilse'] })] })
+  const result = mergeNestedMeetings(p, [sub({ ownerIds: ['menno'] })], 'series')
+  assert.deepEqual(result.subitems[0].ownerIds, ['menno'])
+})
+test('only an explicit accepted response counts as personal calendar participation', () => {
+  assert.equal(isAcceptedCalendarResponse('accepted'), true)
+  assert.equal(isAcceptedCalendarResponse('needsAction'), false)
+  assert.equal(isAcceptedCalendarResponse('tentative'), false)
+  assert.equal(isAcceptedCalendarResponse('declined'), false)
+  assert.equal(isAcceptedCalendarResponse(undefined), false)
 })
 test('deleted occurrences are not recreated, including after deleting the last subitem', () => {
   const p = parent({ extra: { dismissedInstanceIds: ['shared-event'], googleMeetingSeriesIds: ['series'] } })

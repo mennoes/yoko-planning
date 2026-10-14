@@ -48,10 +48,10 @@ export function relevantOwnerRollup(
   const relevantSubitems = subitems.filter(sub => isOwnerTimelineRelevant(sub, now, horizonDays))
   const allowed = (id: string) => !activeMemberIds || activeMemberIds.has(id)
   const relevantOwnerIds = orderedUnique(relevantSubitems.flatMap(sub => sub.ownerIds ?? [])).filter(allowed)
-  const all = orderedUnique([
-    ...(item.ownerIds ?? []),
-    ...subitems.flatMap(sub => sub.ownerIds ?? []),
-  ]).filter(allowed)
+  // Zodra er subitems zijn, zijn uitsluitend die subitems de bron voor de
+  // parent-rollup. Oude owners die alleen nog op het hoofditem zelf staan
+  // mogen dus niet opnieuw in de avatar- of urenverdeling verschijnen.
+  const all = orderedUnique(subitems.flatMap(sub => sub.ownerIds ?? [])).filter(allowed)
   const current = new Set(relevantOwnerIds)
   return {
     relevantOwnerIds,
@@ -66,8 +66,19 @@ export function relevantOwnerHours(subitems: SubItem[]): Record<string, number> 
     const owners = orderedUnique(sub.ownerIds ?? [])
     const hours = Number(sub.estHours) || 0
     if (owners.length === 0 || hours <= 0) continue
-    const share = hours / owners.length
-    for (const owner of owners) rolled[owner] = (rolled[owner] ?? 0) + share
+    const stored = sub.ownerHours ?? {}
+    const storedTotal = owners.reduce((sum, owner) => sum + Math.max(0, Number(stored[owner]) || 0), 0)
+    if (storedTotal > 0) {
+      // Bewaar de echte verdeling van het subitem. Schaal alleen wanneer
+      // oudere data niet exact optelt tot estHours.
+      const factor = hours / storedTotal
+      for (const owner of owners) {
+        rolled[owner] = (rolled[owner] ?? 0) + Math.max(0, Number(stored[owner]) || 0) * factor
+      }
+    } else {
+      const share = hours / owners.length
+      for (const owner of owners) rolled[owner] = (rolled[owner] ?? 0) + share
+    }
   }
   for (const owner of Object.keys(rolled)) rolled[owner] = Math.round(rolled[owner] * 10) / 10
   return rolled
