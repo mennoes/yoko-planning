@@ -45,3 +45,9 @@ test('a recreated recurring series recovers older same-board history without ove
   assert.match(sync, /recoveredSubitems\.get\(series\.id\)/)
   assert.match(sync, /if \(!historyError\) recoveredSubitems\.set/)
 })
+
+test('shared meeting history is recovered across linked Google accounts', () => {
+  const repairBlock = sync.slice(sync.indexOf('if (canonicalByICal.size > 0)'), sync.indexOf('if (canonicalByExt.size > 0)'))
+  assert.match(repairBlock, /Bewust account-overstijgend/)
+  assert.doesNotMatch(repairBlock, /\.eq\('external_user_id', cal\.user_id\)/)
+})

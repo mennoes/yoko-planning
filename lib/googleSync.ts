@@ -1416,9 +1416,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     upserts.map(row => [String(row.id), (row.subitems ?? []) as SubItemSnapshot[]]),
   )
   if (canonicalByICal.size > 0) {
+    // Bewust account-overstijgend: dezelfde gedeelde meeting komt via Menno,
+    // Anne-Fleur enz. als aparte calendar-row binnen. Juist die oudere kopie
+    // kan de ontbrekende Done-historie bevatten.
     const { data: rows } = await admin.from('board_items')
       .select('id, ical_uid, subitems, extra, deleted_at').eq('source', 'google')
-      .eq('external_user_id', cal.user_id)
       .in('ical_uid', [...canonicalByICal.keys()])
     type HistoryRow = { id: string; ical_uid: string | null; subitems: SubItemSnapshot[] | null; extra: Record<string, unknown> | null; deleted_at: string | null }
     const historyRows = (rows as HistoryRow[] | null) ?? []
@@ -1480,7 +1482,6 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const { data: retiredRows } = await admin.from('board_items')
       .select('id, name, board_id, ical_uid, subitems, deleted_at')
       .eq('source', 'google')
-      .eq('external_user_id', cal.user_id)
       .not('deleted_at', 'is', null)
     type RetiredHistoryRow = { id: string; name: string | null; board_id: string; ical_uid: string | null; subitems: SubItemSnapshot[] | null; deleted_at: string | null }
     const retired = (retiredRows as RetiredHistoryRow[] | null) ?? []
