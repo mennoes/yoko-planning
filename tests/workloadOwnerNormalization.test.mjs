@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 
+// Reproduceer de Nederlandse wintertijdwissel onafhankelijk van de timezone
+// van de machine waarop de tests draaien.
+process.env.TZ = 'Europe/Amsterdam'
+
 const source = readFileSync(new URL('../lib/workload.ts', import.meta.url), 'utf8')
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
 const exports = {}
@@ -61,4 +65,29 @@ test('stale dated-subitem distribution cannot inflate its workload', () => {
   assert.equal(Object.values(project.ownerHours).reduce((sum, hours) => sum + hours, 0), 24)
   assert.equal(project.ownerHours.take, 12)
   assert.equal(project.ownerHours.menno, 12)
+})
+
+test('a missing share for one of multiple owners falls back to an equal distribution', () => {
+  const groups = [{ id: 'work', name: 'Werk', items: [{
+    id: 'shared', name: 'Gedeeld project', ownerIds: ['take', 'ander'], status: '',
+    startDate: '2026-10-19', endDate: '2026-10-23', estHours: 24,
+    ownerHours: { take: 24, ander: 0 },
+  }] }]
+  const project = exports.groupsToProjects('pnp', groups)[0]
+  assert.equal(project.ownerHours.take, 12)
+  assert.equal(project.ownerHours.ander, 12)
+})
+
+test('winter time does not inflate hours across adjacent weeks', () => {
+  const project = {
+    id: 'wintertijd', name: 'Experience', board: 'pnp', ownerIds: ['take'],
+    startDate: '2026-10-15', endDate: '2026-10-29', estHours: 56,
+    ownerHours: { take: 56 }, status: 'active',
+  }
+  const weeks = ['2026-10-12', '2026-10-19', '2026-10-26']
+  const total = weeks.reduce((sum, start) =>
+    sum + exports.projectHoursInWeek(project, 'take', new Date(`${start}T00:00:00`)), 0)
+  // Elke week wordt op één decimaal afgerond; 56,1 is hooguit die 0,1
+  // presentatieronding. De oude 24-uursloop kwam hier foutief op 61,6 uit.
+  assert.equal(total, 56.1)
 })

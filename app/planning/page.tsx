@@ -246,11 +246,13 @@ function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; wi
 function countWorkdaysMs(startMs: number, endMs: number): number {
   if (endMs < startMs) return 0
   let count = 0
-  const oneDay = 86400000
   const start = new Date(startMs); start.setHours(0, 0, 0, 0)
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
-  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
-    const d = new Date(t)
+  // Gebruik kalenderdagen en geen vaste stappen van 24 uur. Rond de
+  // zomer-/wintertijd is een lokale dag 23 of 25 uur; een milliseconde-loop
+  // kon daardoor dezelfde kalenderdag tweemaal meetellen en projecturen over
+  // meerdere weekbollen samen boven het itemtotaal laten uitkomen.
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dow = d.getDay()
     if (dow === 0 || dow === 6) continue
     count++
@@ -336,27 +338,44 @@ function contributionsPerCell(
       const mid = (lo + hi) >> 1
       if (colEnd[mid] >= pSms) { first = mid; hi = mid - 1 } else lo = mid + 1
     }
+    const overlaps: Array<{ columnIndex: number; workdays: number }> = []
     for (let i = first; i < cols.length && colStart[i] <= pEms; i++) {
       const overlapWork = countWorkdaysMs(
         colStart[i] > pSms ? colStart[i] : pSms,
         colEnd[i]   < pEms ? colEnd[i]   : pEms,
       )
       if (overlapWork === 0) continue
-      for (const memberId of owners) {
-        let hours: number
-        if (isVrij) hours = blockedHoursForWorkdays(overlapWork)
-        else {
-          const myShare = project.ownerHours && memberId in project.ownerHours
-            ? Number(project.ownerHours[memberId]) || 0
-            : project.estHours / Math.max(project.ownerIds.length, 1)
-          hours = Math.round((overlapWork / totalWork) * myShare * 10) / 10
-        }
-        if (hours <= 0) continue
-        const key = `${memberId}\u0000${cols[i].key}`
+      overlaps.push({ columnIndex: i, workdays: overlapWork })
+    }
+
+    const visibleWorkdays = overlaps.reduce((sum, overlap) => sum + overlap.workdays, 0)
+    for (const memberId of owners) {
+      const myShare = project.ownerHours && memberId in project.ownerHours
+        ? Number(project.ownerHours[memberId]) || 0
+        : project.estHours / Math.max(project.ownerIds.length, 1)
+      const hoursByOverlap = overlaps.map(overlap => isVrij
+        ? blockedHoursForWorkdays(overlap.workdays)
+        : Math.round((overlap.workdays / totalWork) * myShare * 10) / 10)
+
+      // Als de zichtbare kolommen het hele project beslaan, corrigeer dan de
+      // afronding in de laatste cel. Zo blijven ook de getoonde weekbollen
+      // samen exact gelijk aan iemands aandeel (geen 56,1u voor een item van
+      // 56u). Bij een gedeeltelijk zichtbare periode corrigeren we bewust
+      // niet naar het volledige projecttotaal.
+      if (!isVrij && visibleWorkdays === totalWork && hoursByOverlap.length > 0) {
+        const roundedTotal = hoursByOverlap.reduce((sum, hours) => sum + hours, 0)
+        const last = hoursByOverlap.length - 1
+        hoursByOverlap[last] = Math.round((hoursByOverlap[last] + myShare - roundedTotal) * 10) / 10
+      }
+
+      overlaps.forEach((overlap, overlapIndex) => {
+        const hours = hoursByOverlap[overlapIndex]
+        if (hours <= 0) return
+        const key = `${memberId}\u0000${cols[overlap.columnIndex].key}`
         const cell = result.get(key)
         if (cell) cell.push({ project, hours })
         else result.set(key, [{ project, hours }])
-      }
+      })
     }
   }
   return result

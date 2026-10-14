@@ -54,10 +54,14 @@ function normalizeProjectOwnerHours(
   const raw = Object.fromEntries(ids.map(id => [id, Math.max(0, Number(stored?.[id]) || 0)]))
   if (total <= 0) return raw
   const rawSum = Object.values(raw).reduce((sum, hours) => sum + hours, 0)
-  const factor = rawSum > 0 ? total / rawSum : 0
+  // Iedere geselecteerde eigenaar hoort een positief aandeel te hebben.
+  // Een gedeeltelijk ingevulde/stale map zoals { take: 24, ander: 0 }
+  // betekende eerder ten onrechte dat Take het volledige gedeelde item kreeg.
+  const hasCompleteDistribution = rawSum > 0 && ids.every(id => raw[id] > 0)
+  const factor = hasCompleteDistribution ? total / rawSum : 0
   const next = Object.fromEntries(ids.map(id => [
     id,
-    Math.round((rawSum > 0 ? raw[id] * factor : total / ids.length) * 10) / 10,
+    Math.round((hasCompleteDistribution ? raw[id] * factor : total / ids.length) * 10) / 10,
   ]))
   const sum = Object.values(next).reduce((acc, hours) => acc + hours, 0)
   next[ids[0]] = Math.round((next[ids[0]] + total - sum) * 10) / 10
@@ -378,11 +382,11 @@ export type ProjectContribution = {
 function countWorkdays(startMs: number, endMs: number): number {
   if (endMs < startMs) return 0
   let count = 0
-  const oneDay = 86400000
   const start = new Date(startMs); start.setHours(0, 0, 0, 0)
   const end   = new Date(endMs);   end.setHours(0, 0, 0, 0)
-  for (let t = start.getTime(); t <= end.getTime(); t += oneDay) {
-    const d = new Date(t)
+  // Stap door lokale kalenderdagen. Een vaste 24-uursstap raakt uit fase bij
+  // zomer-/wintertijd en kan werkdagen dubbel tellen of overslaan.
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dow = d.getDay()                       // 0=Sun..6=Sat
     if (dow === 0 || dow === 6) continue          // weekend altijd uit
     count++
