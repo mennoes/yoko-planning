@@ -230,8 +230,28 @@ type GoogleCalRow = {
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
 type SubItemSnapshot = { id: string; sourceItemId?: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; googlePlacementLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
-type ItemRow  = { id: string; group_id: string; board_id: string; external_id: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; name?: string | null; external_id: string | null; external_link?: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 type Rule     = { pattern: string; board_id: string }
+
+function historicalSubitemsForRow(row: Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'extra' | 'subitems'>): SubItemSnapshot[] {
+  if (Array.isArray(row.subitems) && row.subitems.length > 0) return row.subitems
+  if (!row.start_date && !row.end_date) return []
+  const extra = row.extra ?? {}
+  return [{
+    id: `si_history_${row.id}`,
+    sourceItemId: row.id,
+    name: row.name ?? 'Google meeting',
+    ownerIds: row.owner_ids ?? [],
+    status: row.status ?? undefined,
+    startDate: row.start_date ?? row.end_date ?? null,
+    endDate: row.end_date ?? row.start_date ?? null,
+    startTime: typeof extra.startTime === 'string' ? extra.startTime : null,
+    endTime: typeof extra.endTime === 'string' ? extra.endTime : null,
+    estHours: Number(row.est_hours) || 0,
+    meetLink: typeof extra.meetLink === 'string' ? extra.meetLink : null,
+    externalLink: row.external_link ?? null,
+  }]
+}
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
   const s = ev.start.date ?? ev.start.dateTime?.slice(0, 10) ?? null
@@ -1420,9 +1440,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     // Anne-Fleur enz. als aparte calendar-row binnen. Juist die oudere kopie
     // kan de ontbrekende Done-historie bevatten.
     const { data: rows } = await admin.from('board_items')
-      .select('id, ical_uid, subitems, extra, deleted_at').eq('source', 'google')
+      .select('id, name, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at').eq('source', 'google')
       .in('ical_uid', [...canonicalByICal.keys()])
-    type HistoryRow = { id: string; ical_uid: string | null; subitems: SubItemSnapshot[] | null; extra: Record<string, unknown> | null; deleted_at: string | null }
+    type HistoryRow = Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
     const historyRows = (rows as HistoryRow[] | null) ?? []
     const byWinner = new Map<string, HistoryRow[]>()
     for (const row of historyRows) {
@@ -1439,10 +1459,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       )
       const merged = mergeGoogleMeetingHistory(
         recoveredSubitems.get(winner) ?? (winnerRow?.subitems ?? []) as SubItemSnapshot[],
-        duplicates.map(row => (row.subitems ?? []) as SubItemSnapshot[]),
+        duplicates.map(historicalSubitemsForRow),
         dismissed,
       )
-      const hasHistoricalSubitems = duplicates.some(row => (row.subitems?.length ?? 0) > 0)
+      const hasHistoricalSubitems = duplicates.some(row => historicalSubitemsForRow(row).length > 0)
       if (hasHistoricalSubitems) {
         const { error: mergeError } = await admin.from('board_items')
           .update({ subitems: merged, updated_at: new Date().toISOString() })
@@ -1480,16 +1500,16 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     }))
   if (currentSeries.length > 0) {
     const { data: retiredRows } = await admin.from('board_items')
-      .select('id, name, board_id, ical_uid, subitems, deleted_at')
+      .select('id, name, board_id, owner_ids, status, start_date, end_date, est_hours, external_link, ical_uid, subitems, extra, deleted_at')
       .eq('source', 'google')
       .not('deleted_at', 'is', null)
-    type RetiredHistoryRow = { id: string; name: string | null; board_id: string; ical_uid: string | null; subitems: SubItemSnapshot[] | null; deleted_at: string | null }
+    type RetiredHistoryRow = Pick<ItemRow, 'id' | 'name' | 'board_id' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'ical_uid' | 'subitems' | 'extra' | 'deleted_at'>
     const retired = (retiredRows as RetiredHistoryRow[] | null) ?? []
     for (const series of currentSeries) {
       if (!series.name || !series.firstDate) continue
       const candidates = retired.filter(row => {
         if (row.id === series.id || row.board_id !== series.boardId || normalizedHistoryTitle(row.name) !== series.name) return false
-        const dated = (row.subitems ?? [])
+        const dated = historicalSubitemsForRow(row)
           .map(subitem => subitem.startDate ?? subitem.endDate ?? '')
           .filter(Boolean)
         return dated.length > 0 && dated.every(date => date < series.firstDate)
@@ -1497,7 +1517,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       if (candidates.length === 0) continue
       const merged = mergeGoogleMeetingHistory(
         recoveredSubitems.get(series.id) ?? [],
-        candidates.map(row => row.subitems ?? []),
+        candidates.map(historicalSubitemsForRow),
         series.dismissed,
       )
       const { error: historyError } = await admin.from('board_items')
@@ -1508,12 +1528,30 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   }
   if (canonicalByExt.size > 0) {
     const { data: rows } = await admin.from('board_items')
-      .select('id, external_id').eq('source', 'google').is('deleted_at', null)
-      .eq('external_user_id', cal.user_id)
+      .select('id, name, owner_ids, status, start_date, end_date, est_hours, external_link, external_id, subitems, extra').eq('source', 'google').is('deleted_at', null)
       .in('external_id', [...canonicalByExt.keys()])
-    for (const row of (rows as Array<{ id: string; external_id: string | null }> | null) ?? []) {
+    const extRows = (rows as Array<Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'external_id' | 'subitems' | 'extra'>> | null) ?? []
+    const extByWinner = new Map<string, typeof extRows>()
+    for (const row of extRows) {
       const winner = row.external_id ? canonicalByExt.get(row.external_id) : null
-      if (winner && row.id !== winner && !canonicalIds.has(row.id)) duplicateIds.add(row.id)
+      if (winner && row.id !== winner && !canonicalIds.has(row.id)) extByWinner.set(winner, [...(extByWinner.get(winner) ?? []), row])
+    }
+    for (const [winner, duplicates] of extByWinner) {
+      const current = recoveredSubitems.get(winner) ?? []
+      // Een oude losse occurrence mag pas verdwijnen nadat hij als subitem
+      // in de huidige recurring parent is opgeslagen.
+      if (current.length > 0) {
+        const winnerUpsert = upserts.find(row => String(row.id) === winner)
+        const extra = (winnerUpsert?.extra ?? {}) as Record<string, unknown>
+        const dismissed = new Set(Array.isArray(extra.dismissedInstanceIds) ? extra.dismissedInstanceIds as string[] : [])
+        const merged = mergeGoogleMeetingHistory(current, duplicates.map(historicalSubitemsForRow), dismissed)
+        const { error: mergeError } = await admin.from('board_items')
+          .update({ subitems: merged, updated_at: new Date().toISOString() })
+          .eq('id', winner)
+        if (mergeError) continue
+        recoveredSubitems.set(winner, merged)
+      }
+      for (const row of duplicates) duplicateIds.add(row.id)
     }
   }
   if (duplicateIds.size > 0) {
