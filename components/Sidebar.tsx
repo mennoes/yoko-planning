@@ -1211,15 +1211,17 @@ function GoogleConnector() {
             ↻ Sync alle borden nu
           </button>
           <button onClick={async () => {
-              if (!confirm('Verwijder alle handmatige rijen die dezelfde naam hebben als een Google-event? (Bijv. duplicaten van vóór de Google koppeling.)')) return
+              if (!confirm('Handmatige rijen met dezelfde naam als een Google-event naar de papierbak verplaatsen? (Bijv. duplicaten van vóór de Google koppeling.)\n\nRijen met al gemaakte uren blijven staan.')) return
               setBusy(true)
               const r = await cleanupGoogleDuplicates()
               await Promise.all((connections.map(c => c.boardId).filter(Boolean) as string[]).map(b => import('@/lib/boardStore').then(m => m.pullBoardFromRemote(b))))
-              setMsg(r ? { text: `${r.deleted} dubbelen verwijderd`, ok: true } : { text: 'Opschonen mislukt', ok: false })
+              setMsg(r
+                ? { text: `${r.deleted} dubbelen naar papierbak${r.keptForHours ? ` · ${r.keptForHours} bewaard om uren` : ''}`, ok: true }
+                : { text: 'Opschonen mislukt', ok: false })
               setBusy(false)
             }} disabled={busy}
             style={{ padding: '7px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--red)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
-            🧹 Opschonen — verwijder dubbelen
+            🧹 Opschonen — dubbelen naar papierbak
           </button>
           <button onClick={connect} disabled={busy}
             style={{ padding: '7px', borderRadius: 7, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>

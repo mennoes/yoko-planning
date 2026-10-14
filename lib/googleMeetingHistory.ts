@@ -35,6 +35,34 @@ function shouldBeDone(item: GoogleMeetingHistorySubitem, todayIso: string): bool
   return Number.isFinite(age) && age > 3
 }
 
+function isPast(item: GoogleMeetingHistorySubitem, todayIso: string): boolean {
+  const end = item.endDate ?? item.startDate
+  return !!end && end < todayIso
+}
+
+/**
+ * Occurrences die al voorbij zijn én uren dragen. Deze uren zijn nodig voor
+ * uren- en factuurverantwoording: zodra een rij ze draagt mag een opruimpad
+ * 'm niet meer soft-deleten, want `deleted_at` haalt de rij in één klap uit
+ * planning, maandtotalen, budget én de publieke share-API.
+ */
+export function pastBillableOccurrences<T extends GoogleMeetingHistorySubitem>(
+  subitems: T[], todayIso: string,
+): T[] {
+  return subitems.filter(item => isPast(item, todayIso) && (Number(item.estHours) || 0) > 0)
+}
+
+/**
+ * Alleen de occurrences die al geweest zijn. Gebruikt om een geweigerde of
+ * uit Google verdwenen reeks te snoeien: de toekomst komt niet meer, de
+ * historie moet leesbaar blijven staan.
+ */
+export function historicalOccurrencesOnly<T extends GoogleMeetingHistorySubitem>(
+  subitems: T[], todayIso: string,
+): T[] {
+  return subitems.filter(item => isPast(item, todayIso))
+}
+
 /**
  * Union fresh and historical recurring instances without losing old hours.
  * Historical rows include soft-deleted duplicate parents from older sync

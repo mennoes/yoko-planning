@@ -6,7 +6,7 @@ import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
 import { isAcceptedCalendarResponse, loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
-import { mergeGoogleMeetingHistory } from './googleMeetingHistory'
+import { mergeGoogleMeetingHistory, pastBillableOccurrences, historicalOccurrencesOnly } from './googleMeetingHistory'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -270,6 +270,19 @@ function historicalSubitemsForRow(row: Pick<ItemRow, 'id' | 'name' | 'owner_ids'
     meetLink: typeof extra.meetLink === 'string' ? extra.meetLink : null,
     externalLink: row.external_link ?? null,
   }]
+}
+
+// Occurrences die al voorbij zijn én uren dragen. `deleted_at` haalt een rij
+// uit ELKE weergave tegelijk — planning, maandtotalen, budget en de publieke
+// share-API filteren allemaal op `deleted_at is null`. Een rij met al gemaakte
+// uren verbergen is dus geen opruimactie maar urenverlies: precies wat de
+// uren- en factuurverantwoording onbruikbaar maakt. Deze helper markeert zulke
+// rijen zodat de opruimpaden ze met rust laten.
+function pastBillableSubitems(
+  row: Pick<ItemRow, 'id' | 'name' | 'owner_ids' | 'status' | 'start_date' | 'end_date' | 'est_hours' | 'external_link' | 'extra' | 'subitems'>,
+  todayIso: string,
+): SubItemSnapshot[] {
+  return pastBillableOccurrences(historicalSubitemsForRow(row), todayIso)
 }
 
 function eventDates(ev: GoogleEvent): { start: string | null; end: string | null } {
@@ -777,7 +790,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // overschrijven bij de volgende Google-sync.
   const { data: existingRows, error: existingError } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at')
+    .select('id, group_id, board_id, name, external_id, external_link, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
@@ -1597,12 +1610,38 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // Rijen zijn nu per gekoppelde gebruikersagenda. Daardoor mag alleen deze
   // gebruiker zijn eigen verdwenen/geweigerde Google-rij verbergen zonder de
   // afspraak uit de agenda van een collega te wissen.
+  //
+  // Een geweigerde of uit Google verdwenen afspraak mag echter nooit al
+  // GEMAAKTE uren meenemen in het graf. Dit pad kreeg (anders dan het
+  // duplicaten-pad hierboven) nooit een historie-garantie: het verborg de
+  // hele rij, inclusief afgeronde occurrences met uren. Een geweigerde reeks
+  // waar je de eerste helft van het jaar wél bij zat verloor zo z'n complete
+  // urenhistorie. Nu geldt: draagt de rij voorbije uren, dan blijft 'ie staan
+  // en snoeien we alleen de toekomstige occurrences weg — die komen immers
+  // niet meer terug.
   if (irrelevantIds.length > 0) {
-    const hiddenAt = new Date().toISOString()
-    await admin.from('board_items')
-      .update({ deleted_at: hiddenAt, updated_at: hiddenAt })
-      .eq('external_user_id', cal.user_id)
-      .in('id', irrelevantIds)
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const existingById = new Map(existing.map(row => [row.id, row]))
+    const hideIds: string[] = []
+    for (const id of irrelevantIds) {
+      const row = existingById.get(id)
+      if (!row || pastBillableSubitems(row, todayIso).length === 0) { hideIds.push(id); continue }
+      const subitems = Array.isArray(row.subitems) ? row.subitems : []
+      const kept = historicalOccurrencesOnly(subitems, todayIso)
+      if (subitems.length > 0 && kept.length !== subitems.length) {
+        const prunedAt = new Date().toISOString()
+        await admin.from('board_items')
+          .update({ subitems: kept, updated_at: prunedAt })
+          .eq('id', id)
+      }
+    }
+    if (hideIds.length > 0) {
+      const hiddenAt = new Date().toISOString()
+      await admin.from('board_items')
+        .update({ deleted_at: hiddenAt, updated_at: hiddenAt })
+        .eq('external_user_id', cal.user_id)
+        .in('id', hideIds)
+    }
   }
 
   // Auto-categoriseer items met 'Vrij'/'Vakantie'/'Verlof'/etc. in de titel
