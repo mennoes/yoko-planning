@@ -494,19 +494,40 @@ function ClickableAvatar({ photo, name, color, editable, onPicked }: {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editorPhoto, setEditorPhoto] = useState(photo)
   const [hover, setHover] = useState(false)
+  const [photoFailed, setPhotoFailed] = useState(false)
+  const initials = name.split(' ').map(part => part[0]).slice(0, 2).join('').toUpperCase()
+
+  useEffect(() => setPhotoFailed(false), [photo])
+
+  function openEditor() {
+    if (!editable || editorOpen) return
+    setEditorPhoto(photo)
+    setEditorOpen(true)
+  }
 
   return (
-    <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}
+    <div role={editable ? 'button' : undefined}
+      tabIndex={editable ? 0 : undefined}
+      aria-label={editable ? `Profielfoto van ${name} wijzigen` : undefined}
+      onClick={openEditor}
+      onKeyDown={event => {
+        if (!editable || (event.key !== 'Enter' && event.key !== ' ')) return
+        event.preventDefault()
+        openEditor()
+      }}
       onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}>
-      <img src={photo} alt={name}
-        onClick={() => { if (editable) { setEditorPhoto(photo); setEditorOpen(true) } }}
-        onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+      onMouseLeave={() => setHover(false)}
+      style={{ position: 'relative', width: 110, height: 110, flexShrink: 0, cursor: editable ? 'pointer' : 'default', outline: 'none' }}>
+      {!photoFailed ? <img src={photo} alt={name}
+        onError={() => setPhotoFailed(true)}
         style={{
           width: 110, height: 110, borderRadius: '50%',
           objectFit: 'cover', cursor: editable ? 'pointer' : 'default',
           background: 'var(--bg-card)',
-        }} />
+        }} /> : <div aria-hidden style={{
+          width: 110, height: 110, borderRadius: '50%', display: 'grid', placeItems: 'center',
+          background: `${color}24`, color, fontSize: 30, fontWeight: 800,
+        }}>{initials}</div>}
       {editable && (hover || editorOpen) && (
         <div style={{
           position: 'absolute', inset: 0, borderRadius: '50%',
