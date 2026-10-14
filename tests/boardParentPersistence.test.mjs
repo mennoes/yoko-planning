@@ -20,9 +20,20 @@ test('existing board settings are not overwritten by the parent safeguard', () =
   assert.match(helper, /from\('boards'\)/)
   assert.match(helper, /if \(data\?\.length\) return 'ready'/)
   assert.match(helper, /if \(!config\) return 'retired'/)
+  assert.match(helper, /if \(!isCoreBoardId\(boardName\)\) return 'retired'/)
   assert.ok(
     helper.indexOf("if (data?.length) return 'ready'") < helper.indexOf('return await upsertBoard'),
     'upsertBoard should only run when the parent row is missing',
+  )
+})
+
+test('a missing custom board is retired instead of silently recreated', () => {
+  assert.match(store, /import \{[^}]*isCoreBoardId[^}]*\} from '\.\/boardsRegistry'/)
+  const helperStart = store.indexOf('async function ensureBoardParentExists')
+  const helper = store.slice(helperStart, store.indexOf('async function pushBoardSnapshot', helperStart))
+  assert.ok(
+    helper.indexOf('if (!isCoreBoardId(boardName)) return \'retired\'') < helper.indexOf('return await upsertBoard'),
+    'a stale custom board must be discarded before the core-board repair path',
   )
 })
 

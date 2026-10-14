@@ -1,7 +1,7 @@
 import type { BoardGroup, BoardItem, SubItem } from './boards'
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
-import { getBoardIds, getBoardConfig, upsertBoard, defaultColumnsForNewBoard } from './boardsRegistry'
+import { getBoardIds, getBoardConfig, isCoreBoardId, upsertBoard, defaultColumnsForNewBoard } from './boardsRegistry'
 import { normalizeTitle } from './subitemRules'
 
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
@@ -492,6 +492,11 @@ async function ensureBoardParentExists(boardName: string): Promise<BoardParentSt
   // Een inmiddels bewust verwijderde custom agenda mag door een laat
   // binnenkomende save niet opnieuw worden aangemaakt.
   if (!config) return 'retired'
+  // Custom agenda's worden bij het aanmaken eerst expliciet in `boards`
+  // opgeslagen en pas daarna krijgen ze groepen. Ontbreekt zo'n parent nu,
+  // dan is de agenda dus verwijderd en betreft dit een achtergebleven lokale
+  // dirty retry. Alleen de vaste kernagenda's mogen zichzelf repareren.
+  if (!isCoreBoardId(boardName)) return 'retired'
   const index = getBoardIds().indexOf(boardName)
   return await upsertBoard(config, index >= 0 ? index : getBoardIds().length) ? 'ready' : 'error'
 }
