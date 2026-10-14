@@ -56,6 +56,8 @@ test('agenda headers support direct column reordering with a visible drop positi
   assert.match(board, /function moveColumn\(sourceKey: string, targetKey: string, side: 'before' \| 'after'\)/)
   assert.match(board, /boxShadow: columnDrop\?\.key === col\.key/)
   assert.match(board, /Sleep \$\{col\.label\} om de kolom te verplaatsen/)
+  assert.match(board, /pressedColumnKey === col\.key/)
+  assert.match(board, /onMouseDown=\{\(\) => \{ if \(!isMobile\) setPressedColumnKey\(col\.key\) \}\}/)
 })
 
 test('personal completion client only persists personal status', () => {

@@ -3396,7 +3396,17 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
   const [dropHover, setDropHover] = useState(false)
   const [columnDrop, setColumnDrop] = useState<{ key: string; side: 'before' | 'after' } | null>(null)
+  const [pressedColumnKey, setPressedColumnKey] = useState<string | null>(null)
   const suppressColumnSort = useRef(false)
+  useEffect(() => {
+    const releaseColumn = () => setPressedColumnKey(null)
+    window.addEventListener('mouseup', releaseColumn)
+    window.addEventListener('blur', releaseColumn)
+    return () => {
+      window.removeEventListener('mouseup', releaseColumn)
+      window.removeEventListener('blur', releaseColumn)
+    }
+  }, [])
   // 'Ghost mode': zodra ergens op het bord een subitem versleept wordt,
   // krijgt elke groep een opvallende drop-zone-stijl zodat de gebruiker
   // direct ziet WAAR 'ie kan loslaten. Reset bij dragend.
@@ -4018,8 +4028,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
               {cols.map(col => (
                 <div key={col.key} draggable={!isMobile}
                   title={isMobile ? col.label : `Sleep ${col.label} om de kolom te verplaatsen`}
+                  onMouseDown={() => { if (!isMobile) setPressedColumnKey(col.key) }}
                   onDragStart={event => {
                     if (isMobile) { event.preventDefault(); return }
+                    setPressedColumnKey(col.key)
                     suppressColumnSort.current = true
                     event.dataTransfer.effectAllowed = 'move'
                     event.dataTransfer.setData('application/x-yoko-column', col.key)
@@ -4045,11 +4057,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   }}
                   onDragEnd={() => {
                     setColumnDrop(null)
+                    setPressedColumnKey(null)
                     window.setTimeout(() => { suppressColumnSort.current = false }, 0)
                   }}
                   style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isMobile ? (isPersonalColumn(col.key) ? 'default' : 'pointer') : 'grab', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', backgroundColor: columnDrop?.key === col.key ? 'var(--accent-light)' : undefined, backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined, boxShadow: columnDrop?.key === col.key ? `inset ${columnDrop.side === 'before' ? '4px' : '-4px'} 0 0 var(--accent)` : undefined, transition: 'background-color 0.12s, box-shadow 0.12s' }}
                   onClick={() => { if (!suppressColumnSort.current && !isPersonalColumn(col.key)) onToggleSort(col.key) }}>
-                  {!isMobile && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, letterSpacing: -2, marginRight: 2 }}>⠿</span>}
+                  {!isMobile && pressedColumnKey === col.key && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, letterSpacing: -2, marginRight: 2 }}>⠿</span>}
                   {col.label}
                   {sortBy?.key === col.key && (
                     <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
