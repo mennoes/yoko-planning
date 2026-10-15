@@ -1,7 +1,7 @@
 'use client'
 import { completeLinkedTask, completionTargetForProject } from '@/lib/personalCompletionClient'
 import { completionState } from '@/lib/personalCompletion'
-import { pullBoardFromRemote } from '@/lib/boardStore'
+import { loadGroups, pullBoardFromRemote } from '@/lib/boardStore'
 import { getBoardIds } from '@/lib/boardsRegistry'
 
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react'
@@ -15,9 +15,18 @@ import { useUndo } from '@/components/UndoContext'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { isTeamMetadataId } from '@/lib/teamMemberIdentity'
 import { IconCheckList, IconComment } from '@/components/Icon'
+import { MemberWeeklyTodos } from '@/components/MemberWeeklyTodos'
 import initialData from '@/data/todos.json'
 import teamData    from '@/data/team.json'
 import { BOARD_COLORS } from '@/lib/workload'
+import { getWeekStart, groupsToProjects, type Project } from '@/lib/workload'
+import { loadCapacities, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
+import type { BoardGroup } from '@/lib/boards'
+import yokoRaw from '@/data/boards/yoko.json'
+import pnpRaw from '@/data/boards/pnp.json'
+import nederlandRaw from '@/data/boards/nederland.json'
+import vlaanderenRaw from '@/data/boards/vlaanderen.json'
+import dienjaarRaw from '@/data/boards/dienjaar.json'
 import { TextWithItemRefs } from '@/components/ItemRefChip'
 import {
   loadAllTodoProjects,
@@ -50,6 +59,21 @@ import {
 // statische Set bij module-load mist die. Functie + Set in elke compute,
 // goedkoop genoeg.
 const memberIdSet = () => new Set(teamData.members.map(m => m.id))
+
+const RAW_BOARDS: Record<string, { groups: BoardGroup[] }> = {
+  yoko: yokoRaw as { groups: BoardGroup[] },
+  pnp: pnpRaw as { groups: BoardGroup[] },
+  nederland: nederlandRaw as { groups: BoardGroup[] },
+  vlaanderen: vlaanderenRaw as { groups: BoardGroup[] },
+  dienjaar: dienjaarRaw as { groups: BoardGroup[] },
+}
+
+function loadWorkloadProjects(): Project[] {
+  return getBoardIds().flatMap(boardId => groupsToProjects(
+    boardId,
+    loadGroups(boardId, RAW_BOARDS[boardId]?.groups ?? []),
+  ))
+}
 
 // Onthoud welke project-id's de gebruiker zelf uit z'n auto-seed-lijst
 // heeft gegooid, zodat ze niet bij elke pageload terugkomen. Per-device
@@ -145,7 +169,7 @@ const MoveTodoContext = createContext<(item: TodoItem, from: string, to: string)
 function TodoCard({
   section, isMember, onUpdate, allProjects, doneProjectKeys,
   editOrder, isFirstCard, isLastCard, onMoveCard,
-  onDeleteSection, onDragStartCard, onDropOnCard,
+  onDeleteSection, onDragStartCard, onDropOnCard, displayTitle, hideAvatar,
 }: {
   section: Section
   isMember: boolean
@@ -164,6 +188,8 @@ function TodoCard({
   // de handle, onDropOnCard wordt door de pagina afgehandeld.
   onDragStartCard?: () => void
   onDropOnCard?: () => void
+  displayTitle?: string
+  hideAvatar?: boolean
 }) {
   const { profile: actingProfile } = useProfile()
   const moveTodo = useContext(MoveTodoContext)
@@ -514,7 +540,7 @@ function TodoCard({
               padding: '2px 4px', borderRadius: 5,
               opacity: headerHover ? 1 : 0, transition: 'opacity 0.12s' }}>⠿</span>
         )}
-        {isMember && member ? (
+        {isMember && member && !hideAvatar ? (
           <MemberAvatar memberId={section.id} size={28} />
         ) : editEmoji ? (
           <input autoFocus value={emojiDraft}
@@ -530,7 +556,9 @@ function TodoCard({
           </span>
         )}
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.01em', minWidth: 0 }}>
-          {isMember && member ? (
+          {displayTitle ? (
+            <span>{displayTitle}</span>
+          ) : isMember && member ? (
             <span onClick={e => showMember(section.id, e)}
               title="Klik voor profiel"
               style={{ cursor: 'pointer' }}
@@ -1122,11 +1150,22 @@ export default function TodosPage() {
   }
   const [allProjects, setAllProjects] = useState<ProjectLink[]>([])
   const [doneProjectKeys, setDoneProjectKeys] = useState<Set<string>>(new Set())
+  const [workloadProjects, setWorkloadProjects] = useState<Project[]>([])
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [capacities, setCapacities] = useState<Record<string, number>>(() => loadCapacities())
+
+  useEffect(() => {
+    const refresh = () => setCapacities(loadCapacities())
+    refresh()
+    void pullCapacities().then(refresh)
+    return onCapacitiesChange(refresh)
+  }, [])
 
   useEffect(() => {
     setSections(loadSections())
     setAllProjects(loadAllTodoProjects())
     setDoneProjectKeys(loadDoneTodoProjectKeys())
+    setWorkloadProjects(loadWorkloadProjects())
     setHydrated(true)
 
     // De agenda's zijn de bron van waarheid. Trek ze eerst vers binnen,
@@ -1135,6 +1174,7 @@ export default function TodosPage() {
     void Promise.all(getBoardIds().map(boardId => pullBoardFromRemote(boardId).catch(() => false))).then(() => {
       setAllProjects(loadAllTodoProjects())
       setDoneProjectKeys(loadDoneTodoProjectKeys())
+      setWorkloadProjects(loadWorkloadProjects())
     })
 
     pullTodos().then(remote => {
@@ -1146,6 +1186,7 @@ export default function TodosPage() {
     const onBoardUpdate = () => {
       setAllProjects(loadAllTodoProjects())
       setDoneProjectKeys(loadDoneTodoProjectKeys())
+      setWorkloadProjects(loadWorkloadProjects())
     }
     window.addEventListener('yoko-board-update', onBoardUpdate)
     const offComments = onCommentsUpdate(onBoardUpdate)
@@ -1429,6 +1470,31 @@ export default function TodosPage() {
       return loadMyOpenProjects(s.id).length > 0
     })
 
+  const visibleWeekStart = new Date(getWeekStart(new Date()))
+  visibleWeekStart.setDate(visibleWeekStart.getDate() + weekOffset * 7)
+  const visibleWeekEnd = new Date(visibleWeekStart)
+  visibleWeekEnd.setDate(visibleWeekEnd.getDate() + 4)
+  const weekRange = `${visibleWeekStart.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${visibleWeekEnd.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`
+
+  function memberCapacity(memberId: string): number {
+    return capacities[memberId]
+      ?? liveTeam.find(member => member.id === memberId)?.weeklyCapacity
+      ?? teamData.members.find(member => member.id === memberId)?.weeklyCapacity
+      ?? 40
+  }
+
+  function extrasOnly(section: Section): Section {
+    return { ...section, items: section.items.filter(item => !item.projectRef) }
+  }
+
+  function updateExtras(original: Section, updated: Section, previous?: Section) {
+    const linked = original.items.filter(item => !!item.projectRef)
+    const previousFull = previous
+      ? { ...original, items: [...linked, ...previous.items] }
+      : undefined
+    updateSection({ ...original, items: [...linked, ...updated.items] }, previousFull)
+  }
+
   const peoplePicker = (
 <details open={peopleOpen} onToggle={e => setPeopleOpen(e.currentTarget.open)} style={{ marginBottom: 18 }}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Personen tonen / verbergen</summary>
@@ -1452,6 +1518,16 @@ export default function TodosPage() {
           <IconCheckList size={isMobile ? 22 : 28} />
           To do&apos;s
         </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <button onClick={() => setWeekOffset(offset => offset - 1)} title="Vorige week"
+            style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17 }}>‹</button>
+          <button onClick={() => setWeekOffset(0)} title="Naar deze week"
+            style={{ minWidth: isMobile ? 92 : 138, height: 32, padding: '0 10px', borderRadius: 7, border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', background: weekOffset === 0 ? 'var(--accent-light)' : 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}>
+            {weekOffset === 0 ? `Deze week · ${weekRange}` : weekOffset === -1 ? `Vorige week · ${weekRange}` : weekOffset === 1 ? `Volgende week · ${weekRange}` : weekRange}
+          </button>
+          <button onClick={() => setWeekOffset(offset => offset + 1)} title="Volgende week"
+            style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17 }}>›</button>
+        </div>
         <button onClick={addSection}
           title="Nieuwe sectie aanmaken"
           style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
@@ -1478,37 +1554,31 @@ export default function TodosPage() {
         // de rechterkant, gebruikers moesten extra swipen om collega's
         // te zien. Stacking is voorspelbaarder en matched het desktop-
         // gedrag dichter.
-        const me     = personal[0]
-        const others = personal.slice(1)
         return (
           <>
             <h2 style={{ fontSize: 16 }}>Persoonlijk</h2>
             {peoplePicker}
-            {me && (
-              <div style={{ marginBottom: 14 }}>
-                <TodoCard section={me} isMember={true} onUpdate={updateSection}
-                  allProjects={allProjects}
-                  doneProjectKeys={doneProjectKeys}
-                  editOrder={editOrder}
-                  isFirstCard={true}
-                  isLastCard={others.length === 0 && general.length === 0}
-                  onMoveCard={dir => moveCard(me.id, dir)} />
-              </div>
-            )}
-
-            {others.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 24 }}>
-                {others.map((s, i) => (
-                  <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
-                    allProjects={allProjects}
-                    doneProjectKeys={doneProjectKeys}
-                    editOrder={editOrder}
-                    isFirstCard={i === 0}
-                    isLastCard={i === others.length - 1 && general.length === 0}
-                    onMoveCard={dir => moveCard(s.id, dir)} />
-                ))}
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22, marginBottom: 28 }}>
+              {personal.map((section, index) => {
+                const member = liveTeam.find(item => item.id === section.id)
+                const additions = extrasOnly(section)
+                return <section key={section.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
+                    <MemberAvatar memberId={section.id} size={34} />
+                    <div><strong style={{ color: 'var(--text-primary)', fontSize: 16 }}>{member?.name ?? section.title}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{memberCapacity(section.id)}u per week</div></div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+                    <MemberWeeklyTodos memberId={section.id} projects={workloadProjects} capacity={memberCapacity(section.id)} weekOffset={weekOffset} />
+                    <TodoCard section={additions} isMember={true}
+                      displayTitle="Aanvullingen" hideAvatar
+                      onUpdate={(updated, previous) => updateExtras(section, updated, previous)}
+                      allProjects={allProjects} doneProjectKeys={doneProjectKeys}
+                      editOrder={editOrder} isFirstCard={index === 0} isLastCard={index === personal.length - 1}
+                      onMoveCard={dir => moveCard(section.id, dir)} />
+                  </div>
+                </section>
+              })}
+            </div>
 
             {general.length > 0 && personal.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
@@ -1592,18 +1662,31 @@ export default function TodosPage() {
             )}
 
             {peoplePicker}
-            <div style={rowStyle}>
-              {personal.map((s, i) => (
-                <TodoCard key={s.id} section={s} isMember={true} onUpdate={updateSection}
-                  allProjects={allProjects}
-                  doneProjectKeys={doneProjectKeys}
-                  editOrder={editOrder}
-                  isFirstCard={i === 0}
-                  isLastCard={i === personal.length - 1}
-                  onMoveCard={dir => moveCard(s.id, dir)}
-                  onDragStartCard={() => { dragSectionRef.current = s.id }}
-                  onDropOnCard={() => dropSectionOn(s.id)} />
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+              {personal.map((section, index) => {
+                const member = liveTeam.find(item => item.id === section.id)
+                const additions = extrasOnly(section)
+                return <section key={section.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <MemberAvatar memberId={section.id} size={36} />
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: 17 }}>{member?.name ?? section.title}</strong>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 1 }}>{memberCapacity(section.id)}u per week</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(300px, .85fr)', gap: 12, alignItems: 'start' }}>
+                    <MemberWeeklyTodos memberId={section.id} projects={workloadProjects} capacity={memberCapacity(section.id)} weekOffset={weekOffset} />
+                    <TodoCard section={additions} isMember={true}
+                      displayTitle="Aanvullingen" hideAvatar
+                      onUpdate={(updated, previous) => updateExtras(section, updated, previous)}
+                      allProjects={allProjects} doneProjectKeys={doneProjectKeys}
+                      editOrder={editOrder} isFirstCard={index === 0} isLastCard={index === personal.length - 1}
+                      onMoveCard={dir => moveCard(section.id, dir)}
+                      onDragStartCard={() => { dragSectionRef.current = section.id }}
+                      onDropOnCard={() => dropSectionOn(section.id)} />
+                  </div>
+                </section>
+              })}
             </div>
           </>
         )
