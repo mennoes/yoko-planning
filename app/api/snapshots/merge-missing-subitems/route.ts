@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   const { data: userData, error: userErr } = await supabase.auth.getUser(auth.slice(7))
   if (userErr || !userData.user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
 
-  let body: { boardId?: string; since?: string }
+  let body: { boardId?: string; since?: string; dryRun?: boolean }
   try { body = await req.json() } catch { return Response.json({ ok: false, error: 'invalid_body' }, { status: 400 }) }
   const boardId = (body.boardId ?? '').trim()
   if (!boardId) return Response.json({ ok: false, error: 'invalid_board_id' }, { status: 400 })
@@ -195,6 +195,17 @@ export async function POST(req: NextRequest) {
 
   if (toUpsert.length === 0) {
     return Response.json({ ok: true, status: 'nothing_to_restore', scannedSnapshots: snapshotRows.length, usedSnapshot: snapshotRows[0].snapshot_at, touchedItems: 0, restoredSubs: 0 })
+  }
+
+  if (body.dryRun) {
+    return Response.json({
+      ok: true,
+      status: 'preview',
+      scannedSnapshots: snapshotRows.length,
+      usedSnapshot: snapshotRows[0].snapshot_at,
+      touchedItems: touchedItemCount,
+      restoredSubs: restoredSubCount,
+    })
   }
 
   // Pre-restore snapshot zodat deze actie ook omkeerbaar is via

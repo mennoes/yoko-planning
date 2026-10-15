@@ -133,15 +133,26 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
 
   async function herstelOntbrekendeAfspraken() {
     if (!supabase) return
-    if (!window.confirm(
-      `Alle eerdere versies van '${boardTitle}' controleren op verdwenen afspraken?\n\n` +
-      `Alleen ontbrekende subitems worden toegevoegd. Huidige wijzigingen blijven staan en bewust verwijderde Google-afspraken komen niet terug.`,
-    )) return
     const sess = await supabase.auth.getSession()
     const token = sess.data.session?.access_token
     if (!token) { window.alert('Niet ingelogd.'); return }
     setBusy('history-scan'); setMsg(null)
     try {
+      const previewRes = await fetch('/api/snapshots/merge-missing-subitems', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId, dryRun: true }),
+      })
+      const preview = await previewRes.json() as { ok: boolean; error?: string; touchedItems?: number; restoredSubs?: number; status?: string }
+      if (!preview.ok) { setMsg(`Controle mislukt: ${preview.error ?? 'onbekend'}`); return }
+      if (preview.status === 'nothing_to_restore' || !preview.restoredSubs) {
+        setMsg('Geen ontbrekende afspraken gevonden. Er is niets gewijzigd.')
+        return
+      }
+      if (!window.confirm(
+        `${preview.restoredSubs} unieke ontbrekende afspraak/afspraken gevonden op ${preview.touchedItems ?? 0} item(s).\n\n` +
+        `Deze nu toevoegen? Er wordt eerst automatisch een herstelpunt gemaakt; bewust verwijderde Google-afspraken komen niet terug.`,
+      )) return
       const res = await fetch('/api/snapshots/merge-missing-subitems', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },

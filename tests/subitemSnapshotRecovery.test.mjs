@@ -35,3 +35,8 @@ test('recovery also follows earlier parents of the same recurring meeting series
   assert.match(route, /uniqueSnapshotSubs/)
   assert.match(route, /if \(!uniqueSnapshotSubs\.has\(key\)\)/)
 })
+
+test('recovery supports a no-write preview before restoring data', () => {
+  assert.match(route, /body\.dryRun/)
+  assert.match(route, /status: 'preview'/)
+})
