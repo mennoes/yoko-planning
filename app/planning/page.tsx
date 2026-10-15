@@ -6004,7 +6004,7 @@ export default function PlanningPage() {
       const cap = m.weeklyCapacity
       totalCap += cap
       let memberHours = 0
-      for (const p of projects) {
+      for (const p of effectiveProjects) {
         if (!p.ownerIds.includes(m.id)) continue
         if (!p.startDate || !p.endDate) continue
         const hours = hoursInRange(p, m.id, weekStart, workloadWeekEnd, overrides[p.id])
@@ -6027,7 +6027,7 @@ export default function PlanningPage() {
     }
     const pctUsed = totalCap > 0 ? Math.round((totalHours / totalCap) * 100) : 0
     return { totalHours: Math.round(totalHours * 10) / 10, totalCap, pctUsed, overbooked, activeProjects: activeIds.size, deadlinesThis }
-  }, [team, projects, allGroups])
+  }, [team, effectiveProjects, allGroups, categoryRevision])
 
   // ─── "Now" indicator position ───────────────────────────────────────────────
   const nowOffset = useMemo(() => {

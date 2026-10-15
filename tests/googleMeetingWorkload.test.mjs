@@ -43,7 +43,9 @@ test('auto-nested meeting adds hours without replacing the original project', ()
 test('existing dated subitems and indices stay intact when meetings are attached', () => {
   const manual = { ...meeting, id: 'work', source: 'manual', googleSeriesId: undefined, estHours: 8, name: 'Artwork' }
   const output = groupsToProjects('vlaanderen', groups([manual, meeting]))
-  assert.equal(output.reduce((sum, p) => sum + p.estHours, 0), 49)
+  // De handmatige sub is de uitsplitsing van het hoofdtotaal; de losse
+  // Google-afspraak komt daar als werkelijk extra agendawerk bovenop.
+  assert.equal(output.reduce((sum, p) => sum + p.estHours, 0), 9)
   assert.equal(output.find(p => p.id.endsWith('__si0')).source, 'manual')
   assert.equal(output.find(p => p.id.endsWith('__si1')).source, 'google')
 })
@@ -53,11 +55,11 @@ test('existing undated subtasks retain their previous workload', () => {
   const after = groupsToProjects('vlaanderen', groups([manual, meeting]))
   assert.equal(after.reduce((sum, p) => sum + p.estHours, 0), before[0].estHours + 1)
 })
-test('agenda and planning use the same own plus subitem hour total', () => {
+test('agenda and planning treat manual subitems as the parent rollup', () => {
   const undated = { ...meeting, id: 'undated', source: 'manual', startDate: null, endDate: null, estHours: 8 }
   const output = groupsToProjects('omdenken', groups([undated]))
   assert.equal(output.length, 1)
-  assert.equal(output[0].estHours, 48)
+  assert.equal(output[0].estHours, 8)
 })
 test('a recurring Google parent never duplicates the hours of its dated occurrences', () => {
   const occurrence = {
@@ -86,7 +88,7 @@ test('the agenda ignores a recurring Google container total as well', () => {
   const helperStart = board.indexOf('export function effectiveHours')
   const helper = board.slice(helperStart, board.indexOf('export function effectiveDays', helperStart))
   assert.match(helper, /item\.source === 'google'/)
-  assert.match(helper, /return subs/)
+  assert.match(helper, /return manualSubs \+ googleSubs/)
 })
 
 test('recurring Google meetings are limited to eight weeks ahead', () => {

@@ -374,14 +374,14 @@ function MobileCreateItemSheet({ kind, groups, onClose, onCreate }: {
 }
 
 // ─── Generieke bewerkbare cel (single-click) ──────────────────────────────────
-// Custom est-cel voor items met subitems (of pro-rated). Toont 't
-// totaal (own + subs) in displaymodus, opent een input met alléén de
-// 'own'-waarde in editmodus zodat de gebruiker z'n extra-uren los van
-// de rollup kan invullen. Geen tekstuele hint — de display IS de som.
-function EstHoursSummedCell({ own, ownEdit, subsSum, isProrated, onChange }: {
+// Custom est-cel voor items met subitems (of pro-rated). Subitems zijn de
+// uitsplitsing van het hoofdtotaal: zodra zij uren hebben tonen we hun som;
+// bij uitsluitend 0u-placeholders blijft de parentwaarde leidend.
+function EstHoursSummedCell({ own, ownEdit, subsSum, totalValue, isProrated, onChange }: {
   own:        number    // huidige display-waarde van item.estHours (kan pro-rated zijn)
   ownEdit?:   number    // waarde die in de input verschijnt (= origineel)
   subsSum:    number    // som van subitem.estHours (kan pro-rated zijn)
+  totalValue?: number
   isProrated?: boolean
   onChange: (v: number) => void
 }) {
@@ -391,7 +391,7 @@ function EstHoursSummedCell({ own, ownEdit, subsSum, isProrated, onChange }: {
   function start() { setDraft(editV ? String(editV) : ''); setEditing(true) }
   function save()  { onChange(parseFloat(draft) || 0); setEditing(false) }
   const round = (n: number) => Math.round(n * 10) / 10
-  const total = round(own + subsSum)
+  const total = round(totalValue ?? (subsSum > 0 ? subsSum : own))
   if (editing) return (
     <input autoFocus type="number" value={draft}
       onChange={e => setDraft(e.target.value)}
@@ -403,7 +403,7 @@ function EstHoursSummedCell({ own, ownEdit, subsSum, isProrated, onChange }: {
     <div onClick={start}
       title={isProrated
         ? `Periode-fractie · klik om de echte item-uren te wijzigen (${editV}u)`
-        : (own > 0 ? `Eigen ${own}u + ${subsSum}u uit subs = ${total}u` : `${subsSum}u uit subs`)}
+        : (subsSum > 0 ? `${subsSum}u uit subitems` : `${own}u op het hoofditem`)}
       style={{
         padding: '0 4px', cursor: 'pointer', fontSize: 13,
         color: total > 0 ? 'var(--text-secondary)' : 'var(--text-muted)',
@@ -1489,18 +1489,22 @@ function UrlCell({ value, onChange }: { value: string; onChange: (v: string) => 
 // ─── Effective hours/days helpers ─────────────────────────────────────────────
 // Days are always derived from hours at 8h/day.
 export function effectiveHours(item: BoardItem): number {
-  // Totaal van 't item = de eigen ingevulde uren PLUS de som van alle
-  // subitem-uren. Het item zelf kan dus extra werk hebben naast wat 'r
-  // in de subs is opgesplitst. Bij geen subs (subs.length=0) telt
-  // alleen item.estHours.
+  // Subitems zijn de uitsplitsing van het hoofdtotaal. Een parent van 88u
+  // met subitems van 80u en 8u blijft dus 88u, geen 176u. Een parentwaarde
+  // blijft alleen de fallback voor lege/0u-placeholder-subitems.
   const own  = Number(item.estHours) || 0
   const visibleSubs = visibleRecurringSubitems(item.source, item.subitems ?? [])
-  const subs = visibleSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  const manualSubs = visibleSubs
+    .filter(si => si.source !== 'google')
+    .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  const googleSubs = visibleSubs
+    .filter(si => si.source === 'google')
+    .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
   // Bij een terugkerend Google-item is de hoofdrij een container. `estHours`
   // daarop is een (vaak oud) serietotaal en de occurrences staan al volledig
   // in subitems. Parent + subitems optellen verdubbelt de meetinguren.
-  if (item.source === 'google' && (item.subitems?.length ?? 0) > 0) return subs
-  return own + subs
+  if (item.source === 'google' && (item.subitems?.length ?? 0) > 0) return manualSubs + googleSubs
+  return (manualSubs > 0 ? manualSubs : own) + googleSubs
 }
 export function effectiveDays(item: BoardItem): number {
   return Math.round((effectiveHours(item) / 8) * 10) / 10
@@ -1609,9 +1613,8 @@ function Cell({ item, col, onUpdate, statusExtra }: {
   const hasSubs = (item.subitems?.length ?? 0) > 0
 
   // estHours: ook bij subitems én bij actief periode-filter is 't veld
-  // bewerkbaar. We tonen 't TOTAAL = item.estHours + som-van-subs.
-  // Bij klik op de cel komt de eigen waarde van item.estHours in een
-  // input zodat de gebruiker die kan aanpassen — totaal beweegt mee.
+  // bewerkbaar. De subitems vormen de uitsplitsing van het hoofdtotaal;
+  // alleen wanneer zij allemaal 0u zijn tonen we de parentwaarde.
   if (col.key === 'estHours' && hasSubs) {
     // Bij actief periode-filter zijn item.estHours en subitem.estHours
     // pro-rated. We tonen 't pro-rated totaal in de cel maar geven de
@@ -1639,6 +1642,7 @@ function Cell({ item, col, onUpdate, statusExtra }: {
         own={ownDisplay}
         ownEdit={ownEditValue}
         subsSum={subsDisplaySum}
+        totalValue={effectiveHours(item)}
         isProrated={isProrated}
         onChange={v => onUpdate({ estHours: v })}
       />

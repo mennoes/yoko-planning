@@ -41,6 +41,46 @@ test('dated subitems carry their stable completion target without an agenda look
   assert.equal(project.completionSubitemId, 'stable-sub')
 })
 
+test('parent rollup is not added again on top of dated subitems', () => {
+  const groups = [{ id: 'work', name: 'Werk', items: [{
+    id: 'parent', name: 'Project', ownerIds: ['menno'], status: '',
+    startDate: '2026-10-12', endDate: '2026-10-16', estHours: 88,
+    subitems: [
+      { id: 'a', name: 'A', ownerIds: ['menno'], status: '', startDate: '2026-10-12', endDate: '2026-10-14', estHours: 80 },
+      { id: 'b', name: 'B', ownerIds: ['menno'], status: '', startDate: '2026-10-15', endDate: '2026-10-16', estHours: 8 },
+    ],
+  }] }]
+  const projects = exports.groupsToProjects('yoko', groups)
+  assert.equal(projects.length, 2)
+  assert.equal(projects.reduce((sum, project) => sum + project.estHours, 0), 88)
+})
+
+test('subitems without dates use the parent timeline without duplicating its rollup', () => {
+  const groups = [{ id: 'work', name: 'Werk', items: [{
+    id: 'parent', name: 'Project', ownerIds: ['menno'], status: '',
+    startDate: '2026-10-12', endDate: '2026-10-16', estHours: 40,
+    subitems: [
+      { id: 'a', name: 'A', ownerIds: ['menno'], status: '', estHours: 12 },
+      { id: 'b', name: 'B', ownerIds: ['menno'], status: '', estHours: 8 },
+    ],
+  }] }]
+  const projects = exports.groupsToProjects('yoko', groups)
+  assert.equal(projects.length, 1)
+  assert.equal(projects[0].estHours, 20)
+  assert.equal(exports.projectHoursInWeek(projects[0], 'menno', new Date('2026-10-12T12:00:00')), 20)
+})
+
+test('parent hours remain available when subitems are only zero-hour placeholders', () => {
+  const groups = [{ id: 'work', name: 'Werk', items: [{
+    id: 'parent', name: 'Project', ownerIds: ['menno'], status: '',
+    startDate: '2026-10-12', endDate: '2026-10-16', estHours: 40,
+    subitems: [{ id: 'placeholder', name: 'Later', ownerIds: ['menno'], status: '', estHours: 0 }],
+  }] }]
+  const projects = exports.groupsToProjects('yoko', groups)
+  assert.equal(projects.length, 1)
+  assert.equal(projects[0].estHours, 40)
+})
+
 test('stale owner hours are scaled to the current item total', () => {
   const groups = [{ id: 'work', name: 'Werk', items: [{
     id: 'experience', name: 'Experience', ownerIds: ['take'], status: '',
