@@ -6470,6 +6470,9 @@ export default function PlanningPage() {
         const unassigned   = team.filter(m => m.id === 'unassigned')
         const inactiveTeam = team.filter(m => isMemberInactive(m.id))
         const freelancers  = team.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id))
+        const peopleYokoTarget: PlanningTeamDropTarget = { key: 'people-base-yoko', groupId: null, label: 'Studio Yoko', baseKind: 'yoko' }
+        const peopleFreelanceTarget: PlanningTeamDropTarget = { key: 'people-base-freelance', groupId: null, label: 'Freelancers', baseKind: 'freelancer' }
+        const peopleInactiveTarget: PlanningTeamDropTarget = { key: 'people-base-inactive', groupId: null, label: 'Inactief team', inactive: true }
         function toggle(id: string) {
           setFilterMembers(prev => {
             const next = new Set(prev)
@@ -6493,16 +6496,30 @@ export default function PlanningPage() {
               <MemberAvatar member={m} size={30} />
               <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
               {m.id !== 'unassigned' && <select
-                value={teamGroups.find(group => group.memberIds.includes(m.id))?.id ?? ''}
+                value={(() => {
+                  const group = teamGroups.find(candidate => candidate.memberIds.includes(m.id))
+                  if (group) return `group:${group.id}`
+                  if (isMemberInactive(m.id)) return 'base:inactive'
+                  return isYokoCrew(m.id) ? 'base:yoko' : 'base:freelance'
+                })()}
                 onChange={e => {
-                  const groupId = e.target.value || null
-                  const label = groupId ? teamGroups.find(group => group.id === groupId)?.name ?? 'team' : 'eigen team'
-                  void movePlanningTeamMember(m.id, { key: `people-select-${groupId ?? 'base'}`, groupId, label })
+                  const value = e.target.value
+                  const target = value === 'base:yoko' ? peopleYokoTarget
+                    : value === 'base:freelance' ? peopleFreelanceTarget
+                    : value === 'base:inactive' ? peopleInactiveTarget
+                    : (() => {
+                        const groupId = value.replace(/^group:/, '')
+                        const group = teamGroups.find(candidate => candidate.id === groupId)
+                        return { key: `people-select-${groupId}`, groupId, label: group?.name ?? 'team' }
+                      })()
+                  void movePlanningTeamMember(m.id, target)
                 }}
                 aria-label={`Team van ${m.name}`}
-                style={{ maxWidth: 112, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px', color: 'var(--text-secondary)', fontSize: 11 }}>
-                <option value="">Studio Yoko</option>
-                {teamGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+                style={{ width: 132, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px', color: 'var(--text-secondary)', fontSize: 11 }}>
+                <option value="base:yoko">Studio Yoko</option>
+                <option value="base:freelance">Freelancers</option>
+                <option value="base:inactive">Inactief team</option>
+                {teamGroups.map(group => <option key={group.id} value={`group:${group.id}`}>{group.name}</option>)}
               </select>}
               <input type="number" value={m.weeklyCapacity} min={0} step={1}
                 aria-label={`Capaciteit ${m.name} in uren per week`}
@@ -6554,10 +6571,10 @@ export default function PlanningPage() {
             <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 10, marginBottom: 2 }}>
               Studio Yoko
             </div>
-            <div {...planningTeamDropProps({ key: 'people-base-team', groupId: null, label: 'eigen team' })}
+            <div {...planningTeamDropProps(peopleYokoTarget)}
               style={{ minHeight: yokoTeam.length === 0 ? 42 : undefined, borderRadius: 8,
-                background: teamDropTargetKey === 'people-base-team' ? 'var(--accent-light)' : 'transparent',
-                outline: teamDropTargetKey === 'people-base-team' ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
+                background: teamDropTargetKey === peopleYokoTarget.key ? 'var(--accent-light)' : 'transparent',
+                outline: teamDropTargetKey === peopleYokoTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
               {yokoTeam.length > 0 ? yokoTeam.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Sleep hierheen om uit een groep te halen</div>}
             </div>
             {unassigned.length > 0 && (
@@ -6568,27 +6585,34 @@ export default function PlanningPage() {
                 {unassigned.map(row)}
               </>
             )}
-            {freelancers.length > 0 && (
-              <details style={{ marginTop: 12 }}>
+            <div {...planningTeamDropProps(peopleFreelanceTarget)} style={{ marginTop: 12, borderRadius: 8,
+              background: teamDropTargetKey === peopleFreelanceTarget.key ? 'var(--accent-light)' : 'transparent',
+              outline: teamDropTargetKey === peopleFreelanceTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
+              <details>
                 <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
                   fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em',
                   padding: '8px 0', borderTop: '1px solid var(--border-light)' }}>
                   <span>▸ Freelancers ({freelancers.length})</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', color: 'var(--text-muted)' }}>klik om uit te klappen</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: teamDropTargetKey === peopleFreelanceTarget.key ? 800 : 500, textTransform: 'none', letterSpacing: 'normal', color: teamDropTargetKey === peopleFreelanceTarget.key ? 'var(--accent)' : 'var(--text-muted)' }}>
+                    {teamDropTargetKey === peopleFreelanceTarget.key ? 'Laat los' : 'klik om uit te klappen'}
+                  </span>
                 </summary>
-                {freelancers.map(row)}
+                {freelancers.length > 0 ? freelancers.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Nog geen freelancers</div>}
               </details>
-            )}
-            {inactiveTeam.length > 0 && (
-              <details style={{ marginTop: 12 }}>
+            </div>
+            <div {...planningTeamDropProps(peopleInactiveTarget)} style={{ marginTop: 12, borderRadius: 8,
+              background: teamDropTargetKey === peopleInactiveTarget.key ? 'var(--accent-light)' : 'transparent',
+              outline: teamDropTargetKey === peopleInactiveTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
+              <details>
                 <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
                   fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em',
                   padding: '8px 0', borderTop: '1px solid var(--border-light)' }}>
                   <span>▸ Inactief team ({inactiveTeam.length})</span>
+                  {teamDropTargetKey === peopleInactiveTarget.key && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'none', letterSpacing: 'normal' }}>Laat los</span>}
                 </summary>
-                {inactiveTeam.map(row)}
+                {inactiveTeam.length > 0 ? inactiveTeam.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Geen inactieve teamleden</div>}
               </details>
-            )}
+            </div>
             <form onSubmit={e => {
               e.preventDefault()
               const name = newTeamGroupName.trim()

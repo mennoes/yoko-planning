@@ -18,6 +18,16 @@ test('people manager is wide and uses the same persisted drop flow', () => {
   assert.match(planning, /movePlanningTeamMember\(m\.id/)
 })
 
+test('all built-in people sections are real drop targets and dropdown options', () => {
+  assert.match(planning, /peopleYokoTarget: PlanningTeamDropTarget/)
+  assert.match(planning, /peopleFreelanceTarget: PlanningTeamDropTarget/)
+  assert.match(planning, /peopleInactiveTarget: PlanningTeamDropTarget/)
+  assert.match(planning, /planningTeamDropProps\(peopleFreelanceTarget\)/)
+  assert.match(planning, /planningTeamDropProps\(peopleInactiveTarget\)/)
+  assert.match(planning, /<option value="base:freelance">Freelancers<\/option>/)
+  assert.match(planning, /<option value="base:inactive">Inactief team<\/option>/)
+})
+
 test('planning group headers persist dropped members through the shared group store', () => {
   assert.match(planning, /function planningTeamDropProps\(target\?: PlanningTeamDropTarget\)/)
   assert.match(planning, /assignMemberToTeamGroup\(memberId, target\.groupId\)/)
