@@ -222,6 +222,28 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
     }
   }
 
+  async function laatsteRecoveryTerugdraaien() {
+    if (!supabase) return
+    if (!window.confirm(
+      `De laatste herstelactie op '${boardTitle}' volledig terugdraaien?\n\nDe staat vlak vóór die actie wordt hersteld.`,
+    )) return
+    const sess = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token
+    if (!token) { window.alert('Niet ingelogd.'); return }
+    setBusy('revert-latest'); setMsg(null)
+    try {
+      const res = await fetch('/api/snapshots/restore', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId, latestPreRestore: true }),
+      })
+      const json = await res.json() as { ok: boolean; error?: string; groupsRestored?: number; itemsRestored?: number }
+      if (!json.ok) { setMsg(`Terugdraaien mislukt: ${json.error ?? 'onbekend'}`); return }
+      await pullBoardFromRemote(boardId).catch(() => {})
+      setMsg(`✓ Laatste herstelactie teruggedraaid: ${json.itemsRestored ?? 0} items.`)
+    } finally { setBusy(null) }
+  }
+
   async function herstelItemUren(item: BoardItem) {
     if (!supabase) return
     const sess = await supabase.auth.getSession()
@@ -313,6 +335,12 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
           }}
         >
           {busy === 'history-scan' ? 'Eerdere versies controleren…' : 'Zoek en herstel ontbrekende afspraken'}
+        </button>
+        <button onClick={() => void laatsteRecoveryTerugdraaien()} disabled={busy !== null}
+          style={{ marginTop: 6, width: '100%', padding: '7px 12px', borderRadius: 7,
+            border: '1px solid var(--red)', background: 'transparent', color: 'var(--red)',
+            fontSize: 11.5, fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>
+          {busy === 'revert-latest' ? 'Terugdraaien…' : 'Laatste herstelactie terugdraaien'}
         </button>
       </div>
 

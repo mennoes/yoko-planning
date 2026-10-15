@@ -30,9 +30,20 @@ export async function POST(req: NextRequest) {
   const { data: userData, error: userErr } = await supabase.auth.getUser(auth.slice(7))
   if (userErr || !userData.user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
 
-  let body: { snapshotId?: string }
+  let body: { snapshotId?: string; boardId?: string; latestPreRestore?: boolean }
   try { body = await req.json() } catch { return Response.json({ ok: false, error: 'invalid_body' }, { status: 400 }) }
-  const snapshotId = (body.snapshotId ?? '').trim()
+  let snapshotId = (body.snapshotId ?? '').trim()
+  if (!snapshotId && body.latestPreRestore && body.boardId?.trim()) {
+    const { data: latest } = await supabaseAdmin
+      .from('board_snapshots')
+      .select('id')
+      .eq('board_id', body.boardId.trim())
+      .eq('trigger', 'restore')
+      .order('snapshot_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    snapshotId = latest?.id ?? ''
+  }
   if (!snapshotId) return Response.json({ ok: false, error: 'invalid_id' }, { status: 400 })
 
   // 1. Snapshot lezen
