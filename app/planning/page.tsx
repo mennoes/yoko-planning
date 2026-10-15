@@ -130,8 +130,8 @@ function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate'
 
 // ─── View-size presets ────────────────────────────────────────────────────────
 function vc(vs: ViewSize) {
-  if (vs === 'large') return { cs: 78, or: 35, hh: 110, av: 58 }
-  return                     { cs: 46, or: 20, hh:  72, av: 44 }
+  if (vs === 'large') return { cs: 90, or: 41, hh: 116, av: 58 }
+  return                     { cs: 58, or: 26, hh:  78, av: 44 }
 }
 // Column widths per zoom
 // 'dag' = Google-Agenda-stijl Week (dagkolommen). Wijder zodat eventblokken
@@ -415,18 +415,16 @@ function MemberAvatar({ member, size }: { member: TeamMember; size: number }) {
 function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; or: number }) {
   const cx    = cs / 2, cy = cs / 2
   const color = pct > 1 ? '#e2445c' : '#579bfc'
-  // Pure proportionele vulling: oppervlakte (niet straal!) schaalt
-  // lineair met pct. Voorheen pakten we straal × sqrt-curve plus een
-  // 35% minimum — daardoor zag een lege bol er al voor de helft vol
-  // uit, en deed alles met >1u 'snel druk' aan terwijl er nog volop
-  // capaciteit over was. Nu: 0u = leeg, 50% cap = 50% area, 100% cap
-  // = volle bol. Boven 100% kleurt 'ie rood en groeit nog 4% over de
-  // ring heen als overflow-signaal.
+  // Vergroot het visuele verschil tussen rustig en druk. Een lineaire
+  // oppervlaktecurve (sqrt op de straal) maakte 25%, 50% en 75% te veel
+  // hetzelfde. Met deze nadrukkelijkere straalcurve blijven rustige weken
+  // echt klein, terwijl drukke weken duidelijk naar de buitenring groeien.
   const ratio = Math.min(Math.max(pct, 0), 1)
   const fillR = pct > 0
-    ? Math.max(2, (outerR - 1) * Math.sqrt(ratio))  // straal = sqrt zodat OPPERVLAK lineair is
+    ? Math.max(2, (outerR - 1) * Math.pow(ratio, 0.78))
     : 0
-  const aFillR = pct > 1 ? Math.min(outerR - 1, fillR * 1.04) : fillR
+  const overloadGrowth = pct > 1 ? 1 + Math.min(0.14, (pct - 1) * 0.16) : 1
+  const aFillR = Math.min(cs / 2 - 1, fillR * overloadGrowth)
   return (
     <svg width={cs} height={cs} viewBox={`0 0 ${cs} ${cs}`} style={{ display: 'block' }}>
       <circle cx={cx} cy={cy} r={outerR} fill={color + '25'} />
