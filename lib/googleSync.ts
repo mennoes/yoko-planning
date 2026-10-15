@@ -64,10 +64,9 @@ function resolveAttendeeEmailWith(memberKeys: MemberKey[], email: string): strin
 // begrenzen we afzonderlijk: zo verdwijnen save-the-dates niet meer na twee
 // weken, zonder dat een wekelijkse reeks honderden subitems produceert.
 const WINDOW_DAYS_FUTURE = 180
-// Houd terugkerende afspraken over hetzelfde volledige venster beschikbaar
-// als losse afspraken. De oude 56-dagenknip liet de planning na een paar
-// weken plots leeg lijken, ook al stonden de meetings gewoon in Google.
-const RECURRING_DAYS_FUTURE = WINDOW_DAYS_FUTURE
+// Voor doorlopende reeksen is acht weken vooruit voldoende. Losse afspraken
+// blijven wel over het ruimere venster beschikbaar.
+const RECURRING_DAYS_FUTURE = 56
 const WINDOW_DAYS_PAST   = 730  // Twee jaar terug: oude recurring instances
                                  // worden opnieuw ingelezen en blijven als
                                  // Done-subitems met hun uren beschikbaar.
@@ -1206,10 +1205,6 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       }
     }
     const finalOwners = [...ownerSet]
-    const totalHours = sorted.reduce((sum, ev) => {
-      const current = ownersByEvent.get(ev.id)
-      return sum + (current?.total ?? 0)
-    }, 0)
     const ownerHoursMap: Record<string, number> = {}
     for (const ev of sorted) {
       const current = ownersByEvent.get(ev.id)
@@ -1363,10 +1358,10 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       start_date:         minStart,
       end_date:           maxEnd ?? minStart,
       deadline:           null,
-      // est_hours bewaren als user 'm heeft bijgesteld in de planning-
-      // detail-popup. Sync zou anders elke 5 min terugzetten op de uit
-      // Google-duur berekende totaal.
-      est_hours:          (existingRow?.est_hours ?? 0) > 0 ? existingRow!.est_hours : totalHours,
+      // De recurring hoofdrij is alleen een container. Iedere occurrence
+      // heeft hieronder al zijn eigen uren; een serietotaal op de parent
+      // werd in andere schermen als extra werk meegerekend.
+      est_hours:          0,
       dagen:              0,
       notes:              sorted[0].description ?? null,
       contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,

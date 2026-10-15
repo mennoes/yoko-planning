@@ -1486,8 +1486,7 @@ function UrlCell({ value, onChange }: { value: string; onChange: (v: string) => 
 }
 
 // ─── Effective hours/days helpers ─────────────────────────────────────────────
-// When subitems exist they are the source of truth; the parent's stored
-// estHours is ignored. Days are always derived from hours at 8h/day.
+// Days are always derived from hours at 8h/day.
 export function effectiveHours(item: BoardItem): number {
   // Totaal van 't item = de eigen ingevulde uren PLUS de som van alle
   // subitem-uren. Het item zelf kan dus extra werk hebben naast wat 'r
@@ -1495,6 +1494,10 @@ export function effectiveHours(item: BoardItem): number {
   // alleen item.estHours.
   const own  = Number(item.estHours) || 0
   const subs = (item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  // Bij een terugkerend Google-item is de hoofdrij een container. `estHours`
+  // daarop is een (vaak oud) serietotaal en de occurrences staan al volledig
+  // in subitems. Parent + subitems optellen verdubbelt de meetinguren.
+  if (item.source === 'google' && (item.subitems?.length ?? 0) > 0) return subs
   return own + subs
 }
 export function effectiveDays(item: BoardItem): number {
@@ -1616,6 +1619,18 @@ function Cell({ item, col, onUpdate, statusExtra }: {
     const isProrated = typeof ownOrig === 'number'
     const ownEditValue = isProrated ? ownOrig! : (Number(item.estHours) || 0)
     const subsDisplaySum = (item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+    const isGoogleSeries = item.source === 'google'
+    if (isGoogleSeries) {
+      const total = Math.round(subsDisplaySum * 10) / 10
+      return (
+        <span
+          title="Som van de losse Google-afspraken; de hoofdrij telt niet apart mee"
+          style={{ fontSize: 13, color: total > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}
+        >
+          {total > 0 ? total : '—'}
+        </span>
+      )
+    }
     const ownDisplay = Number(item.estHours) || 0
     return (
       <EstHoursSummedCell
