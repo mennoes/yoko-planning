@@ -44,6 +44,7 @@ import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem
 import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
 import { boardItemToNestedSubitem } from '@/lib/nestBoardItem'
 import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
+import { visibleRecurringSubitems } from '@/lib/recurringMeetingWindow'
 
 const OwnerUsageCtx = createContext<Record<string, number>>({})
 const PERSONAL_STATUS_KEY = '__personalStatus'
@@ -1493,7 +1494,8 @@ export function effectiveHours(item: BoardItem): number {
   // in de subs is opgesplitst. Bij geen subs (subs.length=0) telt
   // alleen item.estHours.
   const own  = Number(item.estHours) || 0
-  const subs = (item.subitems ?? []).reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+  const visibleSubs = visibleRecurringSubitems(item.source, item.subitems ?? [])
+  const subs = visibleSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
   // Bij een terugkerend Google-item is de hoofdrij een container. `estHours`
   // daarop is een (vaak oud) serietotaal en de occurrences staan al volledig
   // in subitems. Parent + subitems optellen verdubbelt de meetinguren.
@@ -2470,7 +2472,8 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(item.name)
   const [expanded,  setExpanded]  = useState(false)
-  const subitems    = item.subitems ?? []
+  const allSubitems = item.subitems ?? []
+  const subitems    = visibleRecurringSubitems(item.source, allSubitems)
   const hasSubitems = subitems.length > 0
 
   function saveItemName() {
@@ -2495,7 +2498,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   const googleHref: string | undefined = (() => {
     if (item.source !== 'google') return undefined
     const today = new Date().toISOString().slice(0, 10)
-    const upcoming = (item.subitems ?? [])
+    const upcoming = subitems
       .filter(s => s.externalLink)
       .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
     const next = upcoming.find(s => (s.startDate ?? '') >= today) ?? upcoming[upcoming.length - 1]
@@ -2508,7 +2511,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   const nextMeetingTime: string | null = (() => {
     if (item.source !== 'google') return null
     const today = new Date().toISOString().slice(0, 10)
-    const subs = (item.subitems ?? [])
+    const subs = subitems
       .filter(s => s.startTime)
       .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
     if (subs.length > 0) {
@@ -2566,7 +2569,9 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   // datum-cel), dan zet de UI datesOverride=true en wint vanaf dat moment
   // de eigen waarde — tot de gebruiker 'm weer terugzet via de '↺ Auto'-
   // knop (die datesOverride weer op false zet).
-  let effectiveItem: BoardItem = item
+  let effectiveItem: BoardItem = allSubitems.length === subitems.length
+    ? item
+    : { ...item, subitems }
   if (hasSubitems) {
     const updates: Partial<BoardItem> = {}
     // Parent-timeline volgt altijd de ACTIEVE (niet-Done) subitems. Een
@@ -2609,7 +2614,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     // parent-item zichtbaar; pas wanneer jij het item zelf op Done zet
     // verhuist 't naar de Done-groep. Voorkomt dat een item ongewenst
     // wegspringt zodra de laatste subitem klaar is.
-    if (Object.keys(updates).length > 0) effectiveItem = { ...item, ...updates }
+    if (Object.keys(updates).length > 0) effectiveItem = { ...effectiveItem, ...updates }
   }
 
   const personalTarget: CompletionTarget = { parentItemId: item.id }
@@ -2838,7 +2843,15 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
           onOpenDetail={sub => setOpenSub(sub)}
           colWidths={subColWidths ?? colWidths} onResizeCol={onResizeSubCol ?? onResizeCol}
           dismissedInstanceIds={item.dismissedInstanceIds as string[] | undefined}
-          onUpdate={(updated, patch) => onUpdate({ subitems: updated, ...(patch ?? {}) })} />
+          onUpdate={(updated, patch) => {
+            // Occurrences beyond the eight-week display window stay stored
+            // until their owner's next Google sync prunes them. Never let an
+            // edit/delete inside the visible subset accidentally erase those
+            // hidden rows.
+            const visibleIds = new Set(subitems.map(subitem => subitem.id))
+            const hidden = allSubitems.filter(subitem => !visibleIds.has(subitem.id))
+            onUpdate({ subitems: [...updated, ...hidden], ...(patch ?? {}) })
+          }} />
       )}
       {showDetail && (
         <ItemDetailDrawer item={effectiveItem} cols={cols} accentColor={accentColor}

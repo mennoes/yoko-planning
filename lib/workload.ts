@@ -42,6 +42,7 @@ import { getBoardColor } from './boardsRegistry'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 import { blockedHoursForWorkdays } from './freeCapacity'
+import { visibleRecurringSubitems } from './recurringMeetingWindow'
 
 function normalizeProjectOwnerHours(
   ownerIds: string[],
@@ -88,7 +89,8 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
-        const subs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
+        const allSubs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
+        const subs = visibleRecurringSubitems(i.source as string | undefined, allSubs)
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
         // erbij maar krijgt status='done' zodat 'ie in de planning faded
         // wordt i.p.v. te verdwijnen (anders 'verdwijnen items zomaar' bij
