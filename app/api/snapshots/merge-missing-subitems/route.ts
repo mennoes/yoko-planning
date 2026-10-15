@@ -38,8 +38,28 @@ type SubItem = {
 type ItemRow = Record<string, unknown> & {
   id: string
   board_id: string
+  name?: string | null
+  source?: string | null
+  external_link?: string | null
+  owner_ids?: string[] | null
   subitems?: SubItem[] | null
   extra?: Record<string, unknown> | null
+}
+
+function normalizedTitle(value: unknown): string {
+  return String(value ?? '').trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')
+}
+
+function looksLikeGoogleItem(item: ItemRow): boolean {
+  return item.source === 'google'
+    || String(item.external_link ?? '').includes('calendar.google.com')
+    || (Array.isArray(item.subitems) && item.subitems.some(sub => !!sub.externalLink || !!sub.sourceItemId))
+}
+
+function ownersOverlap(a: ItemRow, b: ItemRow): boolean {
+  const left = new Set(Array.isArray(a.owner_ids) ? a.owner_ids : [])
+  const right = Array.isArray(b.owner_ids) ? b.owner_ids : []
+  return left.size === 0 || right.length === 0 || right.some(id => left.has(id))
 }
 
 function subIdentity(sub: SubItem): string {
@@ -91,6 +111,7 @@ export async function POST(req: NextRequest) {
   // 3. Per current item: subitems uit snapshot mergen die nu missen.
   const historyByItemId = new Map<string, SubItem[]>()
   const historyIdentityByItemId = new Map<string, Set<string>>()
+  const historicalItemsByTitle = new Map<string, ItemRow[]>()
   for (const snapshot of snapshotRows) {
     const snapshotItems = Array.isArray(snapshot.data?.items) ? snapshot.data.items : []
     for (const item of snapshotItems) {
@@ -106,6 +127,16 @@ export async function POST(req: NextRequest) {
       }
       historyIdentityByItemId.set(item.id, identities)
       historyByItemId.set(item.id, collected)
+      if (looksLikeGoogleItem(item)) {
+        const title = normalizedTitle(item.name)
+        if (title) {
+          const aliases = historicalItemsByTitle.get(title) ?? []
+          // Bewaar iedere snapshotversie: juist een oudere versie van dezelfde
+          // parent kan occurrences bevatten die in een latere al verdwenen.
+          aliases.push(item)
+          historicalItemsByTitle.set(title, aliases)
+        }
+      }
     }
   }
 
@@ -114,9 +145,25 @@ export async function POST(req: NextRequest) {
   let touchedItemCount = 0
 
   for (const cur of currentItems) {
-    const snapSubs = historyByItemId.get(cur.id) ?? []
-    if (snapSubs.length === 0) continue
+    const exactSubs = historyByItemId.get(cur.id) ?? []
     const curSubs = Array.isArray(cur.subitems) ? cur.subitems! : []
+    const earliestCurrentDate = curSubs
+      .map(sub => sub.startDate ?? sub.endDate ?? '')
+      .filter(Boolean)
+      .sort()[0]
+
+    // Google maakt na "deze en volgende" soms een nieuwe parent-id voor
+    // dezelfde reeks. Herstel daarom ook occurrences uit eerdere parents met
+    // dezelfde titel en overlappende owners, maar uitsluitend van vóór de
+    // huidige reeks. Zo komen juni/juli terug zonder toekomstige dubbelingen.
+    const aliasSubs = looksLikeGoogleItem(cur) && earliestCurrentDate
+      ? (historicalItemsByTitle.get(normalizedTitle(cur.name)) ?? [])
+          .filter(alias => alias.id !== cur.id && ownersOverlap(cur, alias))
+          .flatMap(alias => Array.isArray(alias.subitems) ? alias.subitems : [])
+          .filter(sub => (sub.startDate ?? sub.endDate ?? '') < earliestCurrentDate)
+      : []
+    const snapSubs = [...exactSubs, ...aliasSubs]
+    if (snapSubs.length === 0) continue
     const currentIdentities = new Set(curSubs.map(subIdentity))
     const dismissed = new Set(
       Array.isArray(cur.extra?.dismissedInstanceIds)

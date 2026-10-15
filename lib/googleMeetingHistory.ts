@@ -114,3 +114,21 @@ export function mergeGoogleMeetingHistory<T extends GoogleMeetingHistorySubitem>
     return date || (a.startTime ?? '').localeCompare(b.startTime ?? '')
   })
 }
+
+/**
+ * Database invariant for every board save: an already stored, dated occurrence
+ * from the past may only disappear after an explicit delete (tombstone).
+ *
+ * This is deliberately broader than Google sync. Historical subitems are the
+ * work log used for time accountability. A stale browser tab, sync rebuild or
+ * whole-item update must therefore never be able to erase them incidentally.
+ */
+export function preserveStoredHistory<T extends GoogleMeetingHistorySubitem>(
+  incoming: T[], stored: T[], dismissedIds: Set<string>, todayIso = new Date().toISOString().slice(0, 10),
+): T[] {
+  const protectedHistory = stored.filter(item => {
+    if (!item?.id || dismissedIds.has(item.id) || (item.sourceItemId && dismissedIds.has(item.sourceItemId))) return false
+    return isPast(item, todayIso)
+  })
+  return mergeGoogleMeetingHistory(incoming, [protectedHistory], dismissedIds, todayIso)
+}

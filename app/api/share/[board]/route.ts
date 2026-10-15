@@ -28,6 +28,7 @@ type ShareSubItem = {
   endDate:   string | null
   status:    string
   estHours:  number
+  ownerIds:  string[]
 }
 type ShareItem = {
   id:        string
@@ -51,7 +52,7 @@ type ItemRow = {
   owner_ids: string[] | null; status: string | null;
   start_date: string | null; end_date: string | null;
   est_hours: number | null;
-  subitems: Array<{ id?: string; name?: string; startDate?: string | null; endDate?: string | null; status?: string; hiddenFromPlanning?: boolean; estHours?: number }> | null;
+  subitems: Array<{ id?: string; name?: string; startDate?: string | null; endDate?: string | null; status?: string; hiddenFromPlanning?: boolean; estHours?: number; ownerIds?: string[] }> | null;
   position: number | null;
   extra: Record<string, unknown> | null;
 }
@@ -186,6 +187,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
         endDate:   s.endDate   ?? null,
         status:    s.status ?? '',
         estHours:  Number(s.estHours) || 0,
+        ownerIds:  s.ownerIds ?? r.owner_ids ?? [],
       }))
     const arr = itemsByGroup.get(r.group_id) ?? []
     arr.push({

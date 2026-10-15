@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 import { getBoardIds, getBoardConfig, isCoreBoardId, upsertBoard, defaultColumnsForNewBoard } from './boardsRegistry'
 import { normalizeTitle } from './subitemRules'
+import { preserveStoredHistory } from './googleMeetingHistory'
 
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
 // migraties van Google-id-vormen (it_g_{ev.id} → it_g_{iCalUID}) konden
@@ -646,10 +647,35 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
     // A stale tab must not move a row back by saving its old board snapshot.
     // Cross-board changes belong exclusively to moveItemToBoard.
     const { data: locations, error: locationError } = await supabase.from('board_items')
-      .select('id, board_id').in('id', itemRows.map(row => String(row.id)))
+      .select('id, board_id, subitems, extra').in('id', itemRows.map(row => String(row.id)))
     if (locationError) return fail(`Items controleren mislukt: ${locationError.message}`)
     const movedAway = new Set((locations ?? []).filter((row: { id: string; board_id: string }) => row.board_id !== boardName).map((row: { id: string }) => row.id))
     const safeRows = itemRows.filter(row => !movedAway.has(String(row.id)))
+    const storedById = new Map((locations ?? []).map(row => [String(row.id), row as {
+      id: string
+      subitems?: SubItem[] | null
+      extra?: Record<string, unknown> | null
+    }]))
+
+    // SAFETY GUARD #2 — merge de live databasehistorie vlak vóór iedere
+    // upsert terug. Hiermee kan een stale tab of sync-rebuild nooit oudere
+    // uren wissen. Alleen een expliciete verwijdering met een tombstone in
+    // dismissedInstanceIds mag een historische occurrence weghalen.
+    for (const row of safeRows) {
+      const stored = storedById.get(String(row.id))
+      if (!stored || !Array.isArray(stored.subitems)) continue
+      const extra = (row.extra && typeof row.extra === 'object' ? row.extra : {}) as Record<string, unknown>
+      const dismissed = new Set(
+        Array.isArray(extra.dismissedInstanceIds)
+          ? extra.dismissedInstanceIds.filter((id): id is string => typeof id === 'string')
+          : [],
+      )
+      row.subitems = preserveStoredHistory(
+        Array.isArray(row.subitems) ? row.subitems as SubItem[] : [],
+        stored.subitems,
+        dismissed,
+      )
+    }
     const { error: iErr } = safeRows.length > 0
       ? await supabase.from('board_items').upsert(safeRows, { onConflict: 'id' })
       : { error: null }

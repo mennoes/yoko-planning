@@ -15,6 +15,7 @@ type ShareSubItem = {
   endDate:   string | null
   status:    string
   estHours:  number
+  ownerIds:  string[]
 }
 type ShareItem = {
   id:        string
@@ -41,26 +42,21 @@ function fmtDate(iso: string | null): string {
   return `${d.getDate()} ${NL_MON[d.getMonth()]}`
 }
 
-const STATUS_BG: Record<string, string> = {
-  'Done': 'rgba(0,200,117,0.15)',
-  'Working on...': 'rgba(255,123,36,0.15)',
-  'Stuck': 'rgba(196,69,58,0.15)',
-  'Not started': 'rgba(154,149,144,0.15)',
-  'Doorlopend': 'rgba(87,155,252,0.15)',
-}
-const STATUS_FG: Record<string, string> = {
-  'Done': '#037f4c',
-  'Working on...': '#ff7b24',
-  'Stuck': '#C4453A',
-  'Not started': '#9A9590',
-  'Doorlopend': '#579bfc',
+function relativeMonthLabel(key: string): string | null {
+  const now = new Date()
+  const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const previousDate = addMonths(now, -1)
+  const nextDate = addMonths(now, 1)
+  const previous = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, '0')}`
+  const next = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`
+  if (key === current) return 'Deze maand'
+  if (key === previous) return 'Vorige maand'
+  if (key === next) return 'Volgende maand'
+  return null
 }
 
 type Preset = 'all' | 'prevMonth' | 'month' | 'next' | 'quarter' | 'custom'
 
-function localIsoToday(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 function monthStart(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
@@ -164,41 +160,29 @@ export default function ShareBoardPage() {
     })
   }
 
-  const filteredGroups: ShareGroup[] = useMemo(() => {
-    if (!from && !until) return selectedGroups
-    const fromTs  = from  ? new Date(from).getTime()           : null
-    const untilTs = until ? new Date(until).getTime() + 86400000 - 1 : null
-    const overlaps = (s: string | null, e: string | null) => {
-      if (!s) return false
-      const ms = new Date(s).getTime()
-      const me = e ? new Date(e).getTime() + 86400000 - 1 : ms + 86400000 - 1
-      if (fromTs  != null && me < fromTs)  return false
-      if (untilTs != null && ms > untilTs) return false
-      return true
-    }
-    return selectedGroups
-      .map(g => ({
-        ...g,
-        items: g.items
-          .filter(i => overlaps(i.startDate, i.endDate) || i.subitems.some(s => overlaps(s.startDate, s.endDate))),
-      }))
-      .filter(g => g.items.length > 0)
-  }, [selectedGroups, from, until])
+  const workRows = useMemo(() => selectedGroups.flatMap(group => group.items.flatMap(item => {
+    const datedSubs = item.subitems.filter(sub => sub.startDate || sub.endDate)
+    const sources = datedSubs.length > 0
+      ? datedSubs.map(sub => ({
+          id: sub.id,
+          name: sub.name || item.name,
+          startDate: sub.startDate ?? sub.endDate,
+          endDate: sub.endDate ?? sub.startDate,
+          status: sub.status || item.status,
+          ownerIds: sub.ownerIds?.length ? sub.ownerIds : item.ownerIds,
+          estHours: sub.estHours,
+        }))
+      : [{ id: item.id, name: item.name, startDate: item.startDate, endDate: item.endDate, status: item.status, ownerIds: item.ownerIds, estHours: item.estHours }]
+    return sources.map(source => ({
+      ...source,
+      groupId: group.id,
+      groupName: group.name,
+      color: group.color,
+      hours: Math.round(hoursInSelectedRange(source.startDate, source.endDate, source.estHours, from, until) * 10) / 10,
+    })).filter(row => row.hours > 0)
+  })).sort((a, b) => String(b.startDate ?? '').localeCompare(String(a.startDate ?? '')) || a.name.localeCompare(b.name)), [selectedGroups, from, until])
 
-  const projectHours = useMemo(() => {
-    return selectedGroups
-      .flatMap(group => group.items.map(item => {
-        const datedSubs = item.subitems.filter(sub => sub.startDate || sub.endDate)
-        const hours = datedSubs.length > 0
-          ? datedSubs.reduce((sum, sub) => sum + hoursInSelectedRange(sub.startDate ?? sub.endDate, sub.endDate ?? sub.startDate, sub.estHours, from, until), 0)
-          : hoursInSelectedRange(item.startDate, item.endDate, item.estHours, from, until)
-        return { id: item.id, name: item.name, groupName: group.name, color: group.color, hours: Math.round(hours * 10) / 10 }
-      }))
-      .filter(item => item.hours > 0)
-      .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name))
-  }, [selectedGroups, from, until])
-
-  const periodHours = Math.round(projectHours.reduce((sum, item) => sum + item.hours, 0) * 10) / 10
+  const periodHours = Math.round(workRows.reduce((sum, item) => sum + item.hours, 0) * 10) / 10
 
   const visibleMonthlyHours = useMemo(() => [-1, 0, 1].map(delta => {
     const date = addMonths(new Date(), monthCursor + delta)
@@ -224,11 +208,10 @@ export default function ShareBoardPage() {
   }), [monthCursor, selectedGroups])
 
   const stats = useMemo(() => {
-    const items = filteredGroups.flatMap(g => g.items)
-    const total = items.length
-    const done  = items.filter(i => i.status === 'Done').length
+    const total = workRows.length
+    const done  = workRows.filter(i => i.status === 'Done').length
     return { total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
-  }, [filteredGroups])
+  }, [workRows])
 
   if (loading) {
     return <main style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Laden…</main>
@@ -273,7 +256,7 @@ export default function ShareBoardPage() {
           <button onClick={() => setMonthCursor(current => current - 1)} aria-label="Een maand terug"
             style={{ border: 'none', borderRadius: 10, background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18 }}>‹</button>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-          {visibleMonthlyHours.map((m, idx) => {
+          {visibleMonthlyHours.map(m => {
             const monthFrom = `${m.key}-01`
             const [year, month] = m.key.split('-').map(Number)
             const monthUntil = monthEnd(new Date(year, month - 1, 1))
@@ -291,7 +274,7 @@ export default function ShareBoardPage() {
                   color: m.isCurrent ? color : 'var(--text-muted)', marginBottom: 6,
                   display: 'flex', alignItems: 'center', gap: 6,
                 }}>
-                  {m.isCurrent ? 'Deze maand' : idx === 0 ? 'Vorige maand' : idx === 2 ? 'Volgende maand' : 'Geselecteerde maand'}
+                  {relativeMonthLabel(m.key) ?? m.label}
                   {m.isCurrent && (
                     <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
                   )}
@@ -377,123 +360,42 @@ export default function ShareBoardPage() {
         )}
       </div>
 
-      <section style={{ marginBottom: 28, padding: '16px 18px', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: projectHours.length > 0 ? 12 : 0 }}>
+      <section aria-label="Urenverantwoording" style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 10 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 750, color: 'var(--text-primary)' }}>Uren per project</h2>
-            <div style={{ marginTop: 2, fontSize: 11.5, color: 'var(--text-muted)' }}>
-              {selectedGroupLabel}
-              {from || until ? ` · ${from ? fmtDate(from) : 'begin'} – ${until ? fmtDate(until) : 'nu'}` : ' · volledige planning'}
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Werkverantwoording</h2>
+            <div style={{ marginTop: 3, fontSize: 11.5, color: 'var(--text-muted)' }}>
+              {selectedGroupLabel}{from || until ? ` · ${from ? fmtDate(from) : 'begin'} – ${until ? fmtDate(until) : 'nu'}` : ' · alle datums'}
             </div>
           </div>
-          <strong style={{ fontSize: 22, color: 'var(--text-primary)', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>{periodHours}u</strong>
+          <strong style={{ fontSize: 20, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{periodHours}u</strong>
         </div>
-        {projectHours.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen geplande uren binnen deze selectie.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {projectHours.map((project, index) => (
-              <div key={`${project.id}-${project.groupName}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 14, alignItems: 'center', padding: '9px 0', borderTop: index === 0 ? '1px solid var(--border-light)' : '1px solid var(--border-light)' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, fontSize: 10.5, color: 'var(--text-muted)' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 2, background: project.color || color }} />
-                    {project.groupName}
-                  </div>
-                </div>
-                <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{project.hours}u</strong>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {filteredGroups.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '20px 0' }}>
-          Geen items in deze periode.
-        </p>
-      )}
-
-      {filteredGroups.map(g => (
-        <section key={g.id} style={{ marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <span style={{ width: 4, height: 16, borderRadius: 2, background: g.color || color }} />
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em' }}>{g.name}</h2>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.items.length}</span>
-          </div>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 12, overflow: 'hidden' }}>
-            {g.items.map((item, i) => {
-              const owners = (item.ownerIds ?? [])
-                .map(id => teamData.members.find(m => m.id === id))
-                .filter(Boolean) as typeof teamData.members
-              const status = item.status
+        <div style={{ overflowX: 'auto', background: 'var(--bg-card)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)' }}>
+          <div role="table" style={{ minWidth: 670 }}>
+            <div role="row" style={{ display: 'grid', gridTemplateColumns: '120px minmax(260px,1fr) minmax(160px,.65fr) 72px', gap: 16, padding: '9px 12px', fontSize: 10.5, fontWeight: 750, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+              <span role="columnheader">Datum</span><span role="columnheader">Werk</span><span role="columnheader">Door</span><span role="columnheader" style={{ textAlign: 'right' }}>Uren</span>
+            </div>
+            {workRows.length === 0 ? (
+              <div style={{ padding: '22px 12px', color: 'var(--text-muted)', fontSize: 12 }}>Geen geschreven uren binnen deze selectie.</div>
+            ) : workRows.map((row, index) => {
+              const ownerNames = row.ownerIds.map(id => teamData.members.find(member => member.id === id)?.name).filter(Boolean)
               return (
-                <div key={item.id} style={{
-                  padding: '12px 18px',
-                  borderBottom: i < g.items.length - 1 ? '1px solid var(--border-light)' : 'none',
-                }}>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0,1fr) auto auto auto',
-                    alignItems: 'center', gap: 12,
-                  }}>
-                    <div style={{ minWidth: 0, fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
-                    <div style={{ display: 'flex', marginRight: 4 }}>
-                      {owners.slice(0, 4).map((m, idx) => (
-                        <span key={m.id} style={{
-                          width: 24, height: 24, borderRadius: '50%',
-                          background: m.color + '30', border: `1.5px solid ${m.color}`,
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 10, fontWeight: 700, color: m.color,
-                          marginLeft: idx === 0 ? 0 : -8,
-                        }} title={m.name}>
-                          {m.name.charAt(0)}
-                        </span>
-                      ))}
-                    </div>
-                    {status ? (
-                      <span style={{
-                        fontSize: 11, fontWeight: 600,
-                        padding: '2px 10px', borderRadius: 999,
-                        background: STATUS_BG[status] ?? 'var(--bg-hover)',
-                        color: STATUS_FG[status] ?? 'var(--text-secondary)',
-                        whiteSpace: 'nowrap',
-                      }}>{status}</span>
-                    ) : <span />}
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 110, textAlign: 'right' }}>
-                      {item.startDate ? fmtDate(item.startDate) : ''}
-                      {item.startDate && item.endDate && item.startDate !== item.endDate && ' → '}
-                      {item.endDate && item.endDate !== item.startDate ? fmtDate(item.endDate) : ''}
-                    </div>
-                  </div>
-                  {/* Subitem-instances (bv. recurring events): alleen
-                      naam + datum, geen status of owners om de weergave
-                      compact te houden. */}
-                  {item.subitems.length > 0 && (
-                    <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: '0 0 0 14px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {item.subitems.slice(0, 8).map(sub => (
-                        <li key={sub.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)' }}>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.name}</span>
-                          <span style={{ flexShrink: 0, marginLeft: 8 }}>
-                            {sub.startDate ? fmtDate(sub.startDate) : ''}
-                            {sub.startDate && sub.endDate && sub.startDate !== sub.endDate && ' → '}
-                            {sub.endDate && sub.endDate !== sub.startDate ? fmtDate(sub.endDate) : ''}
-                          </span>
-                        </li>
-                      ))}
-                      {item.subitems.length > 8 && (
-                        <li style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                          + {item.subitems.length - 8} meer
-                        </li>
-                      )}
-                    </ul>
-                  )}
+                <div role="row" key={`${row.groupId}-${row.id}-${row.startDate}-${index}`} style={{ display: 'grid', gridTemplateColumns: '120px minmax(260px,1fr) minmax(160px,.65fr) 72px', gap: 16, alignItems: 'center', padding: '11px 12px', borderTop: '1px solid var(--border-light)', color: 'var(--text-primary)' }}>
+                  <span role="cell" style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                    {fmtDate(row.startDate)}{row.endDate && row.endDate !== row.startDate ? ` – ${fmtDate(row.endDate)}` : ''}
+                  </span>
+                  <span role="cell" style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, fontSize: 10.5, color: 'var(--text-muted)' }}><i style={{ width: 6, height: 6, borderRadius: 2, background: row.color }} />{row.groupName}</span>
+                  </span>
+                  <span role="cell" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{ownerNames.join(', ') || '—'}</span>
+                  <strong role="cell" style={{ textAlign: 'right', fontSize: 13 }}>{row.hours}u</strong>
                 </div>
               )
             })}
           </div>
-        </section>
-      ))}
+        </div>
+      </section>
 
       <footer style={{ marginTop: 40, paddingTop: 16, borderTop: '1px solid var(--border-light)', fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
         Read-only deelweergave · gegenereerd door Yoko Planner · interne notities, contactgegevens en links worden niet getoond
