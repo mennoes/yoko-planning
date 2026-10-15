@@ -131,6 +131,42 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
     }
   }
 
+  async function herstelOntbrekendeAfspraken() {
+    if (!supabase) return
+    if (!window.confirm(
+      `Alle eerdere versies van '${boardTitle}' controleren op verdwenen afspraken?\n\n` +
+      `Alleen ontbrekende subitems worden toegevoegd. Huidige wijzigingen blijven staan en bewust verwijderde Google-afspraken komen niet terug.`,
+    )) return
+    const sess = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token
+    if (!token) { window.alert('Niet ingelogd.'); return }
+    setBusy('history-scan'); setMsg(null)
+    try {
+      const res = await fetch('/api/snapshots/merge-missing-subitems', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId }),
+      })
+      const json = await res.json() as {
+        ok: boolean
+        error?: string
+        touchedItems?: number
+        restoredSubs?: number
+        scannedSnapshots?: number
+        status?: string
+      }
+      if (!json.ok) { setMsg(`Afspraken herstellen mislukt: ${json.error ?? 'onbekend'}`); return }
+      await pullBoardFromRemote(boardId).catch(() => {})
+      if (json.status === 'nothing_to_restore') {
+        setMsg(`Geen ontbrekende afspraken gevonden in ${json.scannedSnapshots ?? 0} eerdere versies.`)
+      } else {
+        setMsg(`✓ ${json.restoredSubs ?? 0} afspraak/afspraken hersteld op ${json.touchedItems ?? 0} item(s).`)
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function herstelEst(snap: Snapshot) {
     if (!supabase) return
     if (!window.confirm(
@@ -242,6 +278,17 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
           Kies een versie om verdwenen hoofditems, groepen of subitems terug te halen. Bestaande items en
           recente wijzigingen blijven staan; Recovery voegt uitsluitend ontbrekende gegevens toe.
         </p>
+        <button
+          onClick={() => void herstelOntbrekendeAfspraken()}
+          disabled={busy !== null || loading}
+          style={{
+            marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 7,
+            border: 'none', background: 'var(--accent)', color: 'white',
+            fontSize: 12.5, fontWeight: 800, cursor: busy || loading ? 'wait' : 'pointer',
+          }}
+        >
+          {busy === 'history-scan' ? 'Eerdere versies controleren…' : 'Zoek en herstel ontbrekende afspraken'}
+        </button>
       </div>
 
       {msg && (

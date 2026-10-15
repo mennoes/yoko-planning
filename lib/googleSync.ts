@@ -6,7 +6,13 @@ import { refreshAccessToken, listEvents, type GoogleEvent } from './googleOAuth'
 import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
 import { isAcceptedCalendarResponse, loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
-import { mergeGoogleMeetingHistory, pastBillableOccurrences, historicalOccurrencesOnly } from './googleMeetingHistory'
+import {
+  allDatedOccurrencesBefore,
+  mergeGoogleMeetingHistory,
+  occurrencesBefore,
+  pastBillableOccurrences,
+  historicalOccurrencesOnly,
+} from './googleMeetingHistory'
 import { RECURRING_MEETING_FUTURE_DAYS } from './recurringMeetingWindow'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
@@ -1508,10 +1514,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // een reeks een nieuw iCalUID geven. Dan is vergelijken op technisch ID
   // alleen onvoldoende en kan de oude serie als losse Done-regel blijven
   // staan of in de prullenbak liggen. Neem daarom oude series met exact
-  // dezelfde titel en hetzelfde bord mee, maar uitsluitend wanneer al hun
-  // gedateerde momenten
-  // vóór de huidige reeks liggen. Dat voorkomt dat twee gelijktijdige,
-  // toevallig gelijknamige afspraken aan elkaar worden geplakt.
+  // dezelfde titel en hetzelfde bord mee. Alleen de momenten vóór het begin
+  // van de huidige reeks worden overgenomen. Een oude Google-reeks kan door
+  // "deze en volgende" namelijk zowel september-historie als een overlappende
+  // november-occurrence bevatten; die overlap mag september niet laten
+  // verdwijnen. De oude bronrij wordt alleen verborgen als álle occurrences
+  // vóór de nieuwe reeks liggen.
   const normalizedHistoryTitle = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase('nl-NL').replace(/\s+/g, ' ')
   const currentSeries = upserts
     .filter(row => Array.isArray(row.subitems) && row.subitems.length > 0)
@@ -1534,18 +1542,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const retired = (retiredRows as RetiredHistoryRow[] | null) ?? []
     for (const series of currentSeries) {
       if (!series.name || !series.firstDate) continue
-      const candidates = retired.filter(row => {
+      const candidates = retired.map(row => {
         if (!isGoogleHistoryRow(row)) return false
         if (row.id === series.id || row.board_id !== series.boardId || normalizedHistoryTitle(row.name) !== series.name) return false
-        const dated = historicalSubitemsForRow(row)
-          .map(subitem => subitem.startDate ?? subitem.endDate ?? '')
-          .filter(Boolean)
-        return dated.length > 0 && dated.every(date => date < series.firstDate)
-      })
+        const allOccurrences = historicalSubitemsForRow(row)
+        const recoverable = occurrencesBefore(allOccurrences, series.firstDate)
+        return recoverable.length > 0 ? { row, allOccurrences, recoverable } : false
+      }).filter((candidate): candidate is {
+        row: RetiredHistoryRow
+        allOccurrences: SubItemSnapshot[]
+        recoverable: SubItemSnapshot[]
+      } => candidate !== false)
       if (candidates.length === 0) continue
       const merged = mergeGoogleMeetingHistory(
         recoveredSubitems.get(series.id) ?? [],
-        candidates.map(historicalSubitemsForRow),
+        candidates.map(candidate => candidate.recoverable),
         series.dismissed,
       )
       const { error: historyError } = await admin.from('board_items')
@@ -1555,7 +1566,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         recoveredSubitems.set(series.id, merged)
         // Actieve oude losse rijen pas verbergen NADAT hun uren/subitem in
         // de nieuwe reeks staan. Soft-deleted bronnen hoeven niet opnieuw.
-        for (const row of candidates) if (!row.deleted_at) duplicateIds.add(row.id)
+        for (const candidate of candidates) {
+          if (!candidate.row.deleted_at && allDatedOccurrencesBefore(candidate.allOccurrences, series.firstDate)) {
+            duplicateIds.add(candidate.row.id)
+          }
+        }
       }
     }
   }
