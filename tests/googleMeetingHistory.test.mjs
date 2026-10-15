@@ -6,6 +6,7 @@ import {
   occurrencesBefore,
   pastBillableOccurrences,
   historicalOccurrencesOnly,
+  preserveStoredHistory,
 } from '../lib/googleMeetingHistory.ts'
 import { readFileSync } from 'node:fs'
 
@@ -109,6 +110,28 @@ test('a series without past hours carries no billable history', () => {
   ]
   assert.equal(pastBillableOccurrences(futureOnly, today).length, 0)
   assert.equal(historicalOccurrencesOnly(futureOnly, today).length, 0)
+})
+
+test('editing a Done occurrence wins over the stored value after refresh', () => {
+  const result = preserveStoredHistory(
+    [{ id: 'same', name: 'Nieuwe naam', status: 'Working on...', startDate: '2026-08-12', estHours: 0 }],
+    [{ id: 'same', name: 'Oude naam', status: 'Done', startDate: '2026-08-12', estHours: 4 }],
+    new Set(),
+    '2026-10-15',
+  )
+  assert.deepEqual(result, [
+    { id: 'same', name: 'Nieuwe naam', status: 'Working on...', startDate: '2026-08-12', estHours: 0 },
+  ])
+})
+
+test('the write guard only appends genuinely missing historical occurrences', () => {
+  const result = preserveStoredHistory(
+    [{ id: 'current', sourceItemId: 'google-current', startDate: '2026-11-01', estHours: 1 }],
+    [{ id: 'history', sourceItemId: 'google-history', startDate: '2026-08-12', estHours: 0.8, status: 'Done' }],
+    new Set(),
+    '2026-10-15',
+  )
+  assert.deepEqual(result.map(item => item.id), ['history', 'current'])
 })
 
 test('declined or vanished Google rows keep their billable history visible', () => {

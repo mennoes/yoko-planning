@@ -241,7 +241,12 @@ function isGoogleDbRow(r: GoogleDbRow): boolean {
 
 function rowToItem(r: Record<string, unknown>): BoardItem {
   const googleBacked = isGoogleDbRow(r as GoogleDbRow)
+  const extra = ((r.extra as Record<string, unknown>) ?? {})
   return {
+    // Extra first: database columns below are authoritative. Old rows may
+    // still contain legacy copies such as extra.status or extra.ownerIds;
+    // those must never resurrect an earlier value after a successful save.
+    ...extra,
     id:        String(r.id),
     name:      (r.name as string) ?? '',
     ownerIds:  (r.owner_ids as string[]) ?? [],
@@ -259,7 +264,6 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     subitems:       dedupeSubitems(r.subitems as BoardItem['subitems']) ?? undefined,
     journal:        (r.journal as BoardItem['journal']) ?? undefined,
     source:         googleBacked ? 'google' : ((r.source as BoardItem['source']) ?? undefined),
-    ...((r.extra as Record<string, unknown>) ?? {}),    // includes ownerHours
     externalLink:     (r.external_link as string | undefined) ?? undefined,
     externalSyncedAt: (r.external_synced_at as string | undefined) ?? undefined,
   } as BoardItem

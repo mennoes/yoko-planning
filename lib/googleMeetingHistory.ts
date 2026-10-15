@@ -130,5 +130,29 @@ export function preserveStoredHistory<T extends GoogleMeetingHistorySubitem>(
     if (!item?.id || dismissedIds.has(item.id) || (item.sourceItemId && dismissedIds.has(item.sourceItemId))) return false
     return isPast(item, todayIso)
   })
-  return mergeGoogleMeetingHistory(incoming, [protectedHistory], dismissedIds, todayIso)
+
+  // `incoming` is the item the user has just edited. Earlier we fed stored
+  // history through mergeGoogleMeetingHistory(), whose defensive status/hour
+  // precedence could put the OLD Done value back on the row. The write then
+  // succeeded technically, but a refresh showed the old value again.
+  //
+  // This guard has only one job: append historical occurrences that vanished
+  // from a stale snapshot. It must never merge old fields into an occurrence
+  // that is still present. Match both the row id and the stable Google source
+  // id/link; the incoming occurrence wins in full, including an intentional
+  // change from Done to active and an intentional change to 0 hours.
+  const incomingIds = new Set(incoming.map(item => item.id).filter(Boolean))
+  const incomingSources = new Set(incoming.map(item => item.sourceItemId).filter((id): id is string => !!id))
+  const incomingLinks = new Set(incoming.map(item => item.externalLink).filter((link): link is string => !!link))
+  const missingHistory = protectedHistory.filter(item => {
+    if (incomingIds.has(item.id)) return false
+    if (item.sourceItemId && incomingSources.has(item.sourceItemId)) return false
+    if (item.externalLink && incomingLinks.has(item.externalLink)) return false
+    return true
+  })
+
+  return [...incoming, ...missingHistory].sort((a, b) => {
+    const date = (a.startDate ?? '').localeCompare(b.startDate ?? '')
+    return date || (a.startTime ?? '').localeCompare(b.startTime ?? '')
+  })
 }
