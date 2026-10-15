@@ -32,4 +32,6 @@ test('recovery also follows earlier parents of the same recurring meeting series
   assert.match(route, /normalizedTitle\(cur\.name\)/)
   assert.match(route, /ownersOverlap\(cur, alias\)/)
   assert.match(route, /< earliestCurrentDate/)
+  assert.match(route, /uniqueSnapshotSubs/)
+  assert.match(route, /if \(!uniqueSnapshotSubs\.has\(key\)\)/)
 })

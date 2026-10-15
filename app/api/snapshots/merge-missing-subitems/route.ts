@@ -162,7 +162,14 @@ export async function POST(req: NextRequest) {
           .flatMap(alias => Array.isArray(alias.subitems) ? alias.subitems : [])
           .filter(sub => (sub.startDate ?? sub.endDate ?? '') < earliestCurrentDate)
       : []
-    const snapSubs = [...exactSubs, ...aliasSubs]
+    const uniqueSnapshotSubs = new Map<string, SubItem>()
+    // Dezelfde occurrence staat doorgaans in tientallen dagelijkse snapshots.
+    // Nieuwste snapshots staan vooraan; bewaar daarvan exact één versie.
+    for (const sub of [...exactSubs, ...aliasSubs]) {
+      const key = subIdentity(sub)
+      if (!uniqueSnapshotSubs.has(key)) uniqueSnapshotSubs.set(key, sub)
+    }
+    const snapSubs = [...uniqueSnapshotSubs.values()]
     if (snapSubs.length === 0) continue
     const currentIdentities = new Set(curSubs.map(subIdentity))
     const dismissed = new Set(
