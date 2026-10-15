@@ -64,6 +64,28 @@ export function historicalOccurrencesOnly<T extends GoogleMeetingHistorySubitem>
 }
 
 /**
+ * Alleen occurrences van vóór het begin van een vervangende reeks. Google
+ * geeft bij "deze en volgende" geregeld een nieuw iCalUID, terwijl de oude
+ * rij óók alvast toekomstige occurrences kan bevatten. Die toekomstige
+ * overlap mag herstel van augustus/september niet blokkeren.
+ */
+export function occurrencesBefore<T extends GoogleMeetingHistorySubitem>(
+  subitems: T[], cutoffIso: string,
+): T[] {
+  return subitems.filter(item => {
+    const date = item.startDate ?? item.endDate
+    return !!date && date < cutoffIso
+  })
+}
+
+export function allDatedOccurrencesBefore<T extends GoogleMeetingHistorySubitem>(
+  subitems: T[], cutoffIso: string,
+): boolean {
+  const dated = subitems.filter(item => item.startDate || item.endDate)
+  return dated.length > 0 && dated.every(item => (item.startDate ?? item.endDate ?? '') < cutoffIso)
+}
+
+/**
  * Union fresh and historical recurring instances without losing old hours.
  * Historical rows include soft-deleted duplicate parents from older sync
  * versions; their occurrences are repaired into the live parent before the

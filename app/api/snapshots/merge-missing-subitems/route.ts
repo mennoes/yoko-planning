@@ -7,10 +7,9 @@
 // blijven dus behouden.
 //
 // Strategie:
-//   1. Pak de meest recente snapshot van vóór 'now - 30 min' — dat is laat
-//      genoeg om wijzigingen-van-deze-minuut intact te houden maar oud genoeg
-//      om de Done-subs voor de Google-sync-wipe te bevatten. Bij twijfel kun
-//      je ?since=YYYY-MM-DDTHH:mm meegeven om een specifieke snapshot te pakken.
+//   1. Lees de snapshots tot en met het gekozen herstelmoment. Eén momentopname
+//      is onvoldoende voor terugkerende meetings: augustus kan in de nieuwste
+//      snapshot staan terwijl september al eerder uit die reeks verdwenen is.
 //   2. Voor elk huidig item: zoek matching item in snapshot. Bouw de unie
 //      van subitems (huidige + snapshot, gededupt op id). Wanneer een subitem
 //      in beide voorkomt prefereren we de huidige versie (kan recent gewijzigd
@@ -26,10 +25,13 @@ export const dynamic = 'force-dynamic'
 
 type SubItem = {
   id?: string
+  sourceItemId?: string
   name?: string
   status?: string
   startDate?: string | null
   endDate?: string | null
+  startTime?: string | null
+  externalLink?: string | null
   [k: string]: unknown
 }
 
@@ -37,6 +39,13 @@ type ItemRow = Record<string, unknown> & {
   id: string
   board_id: string
   subitems?: SubItem[] | null
+  extra?: Record<string, unknown> | null
+}
+
+function subIdentity(sub: SubItem): string {
+  if (sub.sourceItemId) return `source:${sub.sourceItemId}`
+  if (sub.externalLink) return `link:${sub.externalLink}`
+  return `date:${sub.startDate ?? sub.endDate ?? ''}:${sub.startTime ?? ''}:${String(sub.name ?? '').trim().toLocaleLowerCase('nl-NL')}`
 }
 
 export async function POST(req: NextRequest) {
@@ -52,8 +61,8 @@ export async function POST(req: NextRequest) {
   const boardId = (body.boardId ?? '').trim()
   if (!boardId) return Response.json({ ok: false, error: 'invalid_board_id' }, { status: 400 })
 
-  // 1. Snapshot zoeken — meest recente voor `since` (default: 30 min geleden,
-  //    voldoende voor de Google-sync window van 5 min).
+  // 1. Snapshotgeschiedenis zoeken. Nieuwste eerst, zodat bij eenzelfde
+  // occurrence de meest recente opgeslagen variant (uren/status) wint.
   const sinceIso = body.since
     ? new Date(body.since).toISOString()
     : new Date(Date.now() - 30 * 60 * 1000).toISOString()
@@ -63,13 +72,12 @@ export async function POST(req: NextRequest) {
     .eq('board_id', boardId)
     .lte('snapshot_at', sinceIso)
     .order('snapshot_at', { ascending: false })
-    .limit(1)
+    .limit(100)
   if (snapErr) return Response.json({ ok: false, error: snapErr.message }, { status: 500 })
   if (!snaps || snaps.length === 0) {
     return Response.json({ ok: false, error: 'no_snapshot_before_cutoff' }, { status: 404 })
   }
-  const snap = snaps[0] as { id: string; snapshot_at: string; data: { items?: ItemRow[] } }
-  const snapItems: ItemRow[] = Array.isArray(snap.data?.items) ? snap.data.items! : []
+  const snapshotRows = snaps as Array<{ id: string; snapshot_at: string; data: { items?: ItemRow[] } }>
 
   // 2. Huidige items ophalen
   const { data: currentRows, error: curErr } = await supabaseAdmin
@@ -81,21 +89,44 @@ export async function POST(req: NextRequest) {
   const currentItems: ItemRow[] = (currentRows ?? []) as ItemRow[]
 
   // 3. Per current item: subitems uit snapshot mergen die nu missen.
-  const snapById = new Map<string, ItemRow>()
-  for (const it of snapItems) if (it?.id) snapById.set(it.id, it)
+  const historyByItemId = new Map<string, SubItem[]>()
+  const historyIdentityByItemId = new Map<string, Set<string>>()
+  for (const snapshot of snapshotRows) {
+    const snapshotItems = Array.isArray(snapshot.data?.items) ? snapshot.data.items : []
+    for (const item of snapshotItems) {
+      if (!item?.id || !Array.isArray(item.subitems)) continue
+      const identities = historyIdentityByItemId.get(item.id) ?? new Set<string>()
+      const collected = historyByItemId.get(item.id) ?? []
+      for (const sub of item.subitems) {
+        if (!sub?.id) continue
+        const key = subIdentity(sub)
+        if (identities.has(key)) continue
+        identities.add(key)
+        collected.push(sub)
+      }
+      historyIdentityByItemId.set(item.id, identities)
+      historyByItemId.set(item.id, collected)
+    }
+  }
 
   const toUpsert: ItemRow[] = []
   let restoredSubCount = 0
   let touchedItemCount = 0
 
   for (const cur of currentItems) {
-    const snapMatch = snapById.get(cur.id)
-    if (!snapMatch) continue
-    const snapSubs = Array.isArray(snapMatch.subitems) ? snapMatch.subitems! : []
+    const snapSubs = historyByItemId.get(cur.id) ?? []
     if (snapSubs.length === 0) continue
     const curSubs = Array.isArray(cur.subitems) ? cur.subitems! : []
-    const curSubIds = new Set(curSubs.map(s => s?.id).filter(Boolean) as string[])
-    const missing = snapSubs.filter(s => s?.id && !curSubIds.has(s.id))
+    const currentIdentities = new Set(curSubs.map(subIdentity))
+    const dismissed = new Set(
+      Array.isArray(cur.extra?.dismissedInstanceIds)
+        ? cur.extra!.dismissedInstanceIds.filter((id): id is string => typeof id === 'string')
+        : [],
+    )
+    const missing = snapSubs.filter(sub => {
+      if (!sub?.id || dismissed.has(sub.id) || (sub.sourceItemId && dismissed.has(sub.sourceItemId))) return false
+      return !currentIdentities.has(subIdentity(sub))
+    })
     if (missing.length === 0) continue
 
     // Sorteer chronologisch zodat de Done-sectie weer netjes onderaan in
@@ -109,7 +140,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (toUpsert.length === 0) {
-    return Response.json({ ok: true, status: 'nothing_to_restore', usedSnapshot: snap.snapshot_at, touchedItems: 0, restoredSubs: 0 })
+    return Response.json({ ok: true, status: 'nothing_to_restore', scannedSnapshots: snapshotRows.length, usedSnapshot: snapshotRows[0].snapshot_at, touchedItems: 0, restoredSubs: 0 })
   }
 
   // Pre-restore snapshot zodat deze actie ook omkeerbaar is via
@@ -131,7 +162,8 @@ export async function POST(req: NextRequest) {
 
   return Response.json({
     ok: true,
-    usedSnapshot:   snap.snapshot_at,
+    usedSnapshot:   snapshotRows[0].snapshot_at,
+    scannedSnapshots: snapshotRows.length,
     touchedItems:   touchedItemCount,
     restoredSubs:   restoredSubCount,
   })

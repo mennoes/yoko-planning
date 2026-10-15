@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mergeGoogleMeetingHistory, pastBillableOccurrences, historicalOccurrencesOnly } from '../lib/googleMeetingHistory.ts'
+import {
+  allDatedOccurrencesBefore,
+  mergeGoogleMeetingHistory,
+  occurrencesBefore,
+  pastBillableOccurrences,
+  historicalOccurrencesOnly,
+} from '../lib/googleMeetingHistory.ts'
 import { readFileSync } from 'node:fs'
 
 const sync = readFileSync(new URL('../lib/googleSync.ts', import.meta.url), 'utf8')
@@ -38,15 +44,27 @@ test('sync repairs duplicate parents before hiding them and reads two years back
   assert.match(sync, /De oude rij pas verbergen nadat de historie aantoonbaar veilig/)
 })
 
-test('a recreated recurring series recovers older same-board history without overlap', () => {
+test('a recreated recurring series recovers older same-board history even when the old series overlaps', () => {
   assert.match(sync, /normalizedHistoryTitle/)
   assert.match(sync, /row\.board_id !== series\.boardId/)
-  assert.match(sync, /dated\.every\(date => date < series\.firstDate\)/)
+  assert.match(sync, /occurrencesBefore\(allOccurrences, series\.firstDate\)/)
+  assert.match(sync, /allDatedOccurrencesBefore\(candidate\.allOccurrences, series\.firstDate\)/)
   assert.match(sync, /recoveredSubitems\.get\(series\.id\)/)
   assert.match(sync, /if \(!historyError\) \{[\s\S]*recoveredSubitems\.set\(series\.id, merged\)/)
   const titleRepair = sync.slice(sync.indexOf('const normalizedHistoryTitle'), sync.indexOf('if (canonicalByExt.size > 0)'))
   assert.doesNotMatch(titleRepair, /\.not\('deleted_at', 'is', null\)/)
-  assert.match(titleRepair, /for \(const row of candidates\) if \(!row\.deleted_at\) duplicateIds\.add\(row\.id\)/)
+  assert.match(titleRepair, /candidate\.row\.deleted_at/)
+})
+
+test('history before a replacement series is recovered without hiding an overlapping source row', () => {
+  const oldSeries = [
+    { id: 'aug', startDate: '2026-08-12', endDate: '2026-08-12' },
+    { id: 'sep', startDate: '2026-09-16', endDate: '2026-09-16' },
+    { id: 'nov', startDate: '2026-11-11', endDate: '2026-11-11' },
+  ]
+  assert.deepEqual(occurrencesBefore(oldSeries, '2026-10-14').map(item => item.id), ['aug', 'sep'])
+  assert.equal(allDatedOccurrencesBefore(oldSeries, '2026-10-14'), false)
+  assert.equal(allDatedOccurrencesBefore(oldSeries.slice(0, 2), '2026-10-14'), true)
 })
 
 test('shared meeting history is recovered across linked Google accounts', () => {
