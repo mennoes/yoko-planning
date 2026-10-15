@@ -58,6 +58,41 @@ test('agenda and planning use the same own plus subitem hour total', () => {
   assert.equal(output.length, 1)
   assert.equal(output[0].estHours, 48)
 })
+test('a recurring Google parent never duplicates the hours of its dated occurrences', () => {
+  const occurrence = {
+    ...meeting,
+    id: 'weekstart-2026-10-12',
+    name: 'Weekstart',
+    ownerIds: ['menno', 'vincent', 'anne-fleur'],
+    startDate: '2026-10-12', endDate: '2026-10-12', estHours: 1.5,
+  }
+  const recurring = [{ id: 'meetings', name: 'Meetings', items: [{
+    id: 'weekstart', name: 'Weekstart', source: 'google', status: 'Doorlopend',
+    ownerIds: occurrence.ownerIds,
+    startDate: '2026-10-12', endDate: '2026-12-07',
+    // Oud serietotaal op de container: dit mag nooit als extra project tellen.
+    estHours: 147.5,
+    subitems: [occurrence],
+  }] }]
+  const output = groupsToProjects('yoko', recurring)
+  assert.equal(output.length, 1)
+  assert.equal(output[0].id, 'yoko__weekstart__si0')
+  assert.equal(output.reduce((sum, project) => sum + project.estHours, 0), 1.5)
+})
+
+test('the agenda ignores a recurring Google container total as well', () => {
+  const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
+  const helperStart = board.indexOf('export function effectiveHours')
+  const helper = board.slice(helperStart, board.indexOf('export function effectiveDays', helperStart))
+  assert.match(helper, /item\.source === 'google'/)
+  assert.match(helper, /return subs/)
+})
+
+test('recurring Google meetings are limited to eight weeks ahead', () => {
+  const sync = readFileSync(new URL('../lib/googleSync.ts', import.meta.url), 'utf8')
+  assert.match(sync, /const RECURRING_DAYS_FUTURE = 56\b/)
+  assert.match(sync, /est_hours:\s+0,/)
+})
 test('personal calendar view ignores a manually retained owner who is not an accepted Google participant', () => {
   const google = {
     ...meeting,

@@ -175,7 +175,12 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           const undatedActiveHours = subs
             .filter(si => !si.startDate && !si.endDate && (si.status ?? '') !== 'Done')
             .reduce((sum, si) => sum + (Number(si.estHours) || 0), 0)
-          const parentHours = (Number(i.estHours) || 0) + undatedActiveHours
+          // Een Google recurring-parent is uitsluitend een container. Google
+          // Sync bewaart op die hoofdrij historisch ook het serietotaal,
+          // terwijl iedere occurrence al als gedateerd subitem aanwezig is.
+          // Dat parenttotaal nogmaals als project toevoegen veroorzaakte
+          // bijvoorbeeld 40u Weekstart bovenop de echte afspraak van 1,5u.
+          const parentHours = ((i.source as string) === 'google' ? 0 : (Number(i.estHours) || 0)) + undatedActiveHours
           if (parentHours <= 0 || (!i.startDate && !i.endDate)) return datedProjects
 
           const parentOwners = [...new Set((Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : [])
@@ -212,7 +217,10 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         const activeSubs = subs.filter(si => (si.status ?? '') !== 'Done')
         // Zelfde totaal als in de Agenda: eigen uren plus actieve subitems.
         // Voorheen vervingen subitem-uren de eigen uren van het hoofditem.
-        const hours = (Number(i.estHours) || 0) +
+        const ownHours = subs.length > 0 && (i.source as string) === 'google'
+          ? 0
+          : (Number(i.estHours) || 0)
+        const hours = ownHours +
           activeSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
         // Owners zonder eigenaar landen op 'unassigned' zodat ze in de
         // planning onder de Unassigned-rij verschijnen i.p.v. uit beeld
