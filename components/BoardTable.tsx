@@ -1953,22 +1953,16 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
             style={{ ...editInput, flex: 1 }} />
         ) : (
           <>
-            {/* Naam opent details; hernoemen zit in een kleine, expliciete
-                potloodactie. Zo is het grootste klikvlak voor de popup en
-                beland je niet meer per ongeluk in tekstbewerking. */}
+            {/* De naam zelf is het primaire bewerkvlak. Details hebben hun
+                eigen ↗-knop; zo vereist hernoemen geen klein potlooddoel. */}
             <span
-                  onClick={() => onOpenDetail?.()}
-                  title="Details openen"
+                  onClick={() => { setNameDraft(subitem.name); setEditName(true) }}
+                  title="Klik om naam aan te passen"
                   style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500,
-                    cursor: onOpenDetail ? 'pointer' : 'default',
+                    cursor: 'text',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                   {subitem.name}
             </span>
-            {hover && !(subitem.source === 'google' || subitem.externalLink || subitem.id?.startsWith('si_g_')) && (
-              <button onClick={e => { e.stopPropagation(); setNameDraft(subitem.name); setEditName(true) }}
-                title="Naam aanpassen" aria-label="Naam aanpassen"
-                style={{ border: 0, borderRadius: 4, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 5px', flexShrink: 0 }}>✎</button>
-            )}
             {onOpenDetail && (
               <button onClick={e => { e.stopPropagation(); onOpenDetail() }}
                 title="Reageren op dit subitem" aria-label="Reacties op subitem"
@@ -2729,20 +2723,20 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               <span
                 onClick={e => {
                   e.stopPropagation()
-                  setShowDetail(true)
+                  if (item.source === 'google') {
+                    setShowDetail(true)
+                    return
+                  }
+                  setNameDraft(item.name)
+                  setEditName(true)
                 }}
-                title="Details openen"
+                title={item.source === 'google' ? 'Details openen' : 'Klik om naam aan te passen'}
                 style={{ fontSize: 14.5, color: 'var(--text-primary)', fontWeight: 500,
-                  cursor: 'pointer',
+                  cursor: item.source === 'google' ? 'pointer' : 'text',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {item.name}
               </span>
-              {hover && item.source !== 'google' && (
-                <button onClick={e => { e.stopPropagation(); setNameDraft(item.name); setEditName(true) }}
-                  title="Naam aanpassen" aria-label="Naam aanpassen"
-                  style={{ border: 0, borderRadius: 4, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 5px', flexShrink: 0 }}>✎</button>
-              )}
-              {hover && (
+              {(hover || isMobile) && (
                 <button
                   onClick={e => { e.stopPropagation(); setShowDetail(true) }}
                   title="Details openen"
