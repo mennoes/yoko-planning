@@ -73,6 +73,9 @@ export async function createTeamGroup(name: string, color = '#579bfc'): Promise<
 
 export async function assignMemberToTeamGroup(memberId: string, targetGroupId: string | null): Promise<void> {
   const before = read()
+  if (targetGroupId && !before.some(group => group.id === targetGroupId)) {
+    throw new Error('team_group_not_found')
+  }
   const next = before.map(group => ({
     ...group,
     memberIds: targetGroupId === group.id
@@ -81,7 +84,16 @@ export async function assignMemberToTeamGroup(memberId: string, targetGroupId: s
   }))
   write(next)
   const changed = next.filter((group, index) => JSON.stringify(group.memberIds) !== JSON.stringify(before[index]?.memberIds ?? []))
-  await push(changed)
+  if (changed.length === 0) return
+  const remoteExpected = !!supabase && !!await getCurrentUserId()
+  const persisted = await push(changed)
+  if (remoteExpected && !persisted) {
+    // Laat de interface nooit een verplaatsing bevestigen die na refresh
+    // weer verdwijnt. Herstel de vorige indeling en laat de aanroeper melden
+    // dat opslaan niet is gelukt.
+    write(before)
+    throw new Error('team_group_save_failed')
+  }
 }
 
 export async function moveTeamGroup(groupId: string, direction: -1 | 1): Promise<void> {

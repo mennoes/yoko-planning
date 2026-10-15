@@ -4531,8 +4531,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 // ─── Generic centered popup ───────────────────────────────────────────────────
-function Popup({ title, onClose, children }: {
-  title: string; onClose: () => void; children: React.ReactNode
+function Popup({ title, onClose, children, width = 360 }: {
+  title: string; onClose: () => void; children: React.ReactNode; width?: number
 }) {
   return (
     <>
@@ -4543,7 +4543,7 @@ function Popup({ title, onClose, children }: {
         transform: 'translate(-50%, -50%)',
         zIndex: 251, background: 'var(--bg-card)',
         border: '1px solid var(--border)', borderRadius: 12,
-        padding: '14px 18px', minWidth: 280, maxWidth: '92vw', width: 360,
+        padding: '14px 18px', minWidth: 280, maxWidth: 'calc(100vw - 32px)', width,
         maxHeight: '80vh', overflowY: 'auto',
         boxShadow: '0 14px 40px rgba(0,0,0,0.35)',
       }}>
@@ -4873,22 +4873,27 @@ export default function PlanningPage() {
     }
   }
   async function movePlanningTeamMember(memberId: string, target: PlanningTeamDropTarget) {
-    const member = liveTeam.find(candidate => candidate.id === memberId)
-    if (!member) {
+    const liveMember = liveTeam.find(candidate => candidate.id === memberId)
+    const displayMember = team.find(candidate => candidate.id === memberId)
+    if (!displayMember) {
       showToast('Verplaatsen is niet gelukt: teamlid niet gevonden.')
       return
     }
     try {
       // Een vaste sectie is meer dan alleen een visuele groep: kind en
       // actief-status bepalen waar het lid na een refresh thuishoort.
-      const nextMember = {
-        ...member,
+      const nextMember = liveMember ? {
+        ...liveMember,
         kind: target.baseKind === 'freelancer' ? 'freelance' as const
           : target.baseKind === 'yoko' ? 'yoko' as const
-          : member.kind,
+          : liveMember.kind,
         inactive: target.inactive === true,
+      } : null
+      const changesMemberRecord = !!target.baseKind || target.inactive === true
+      if (changesMemberRecord && !nextMember) {
+        throw new Error('team_member_record_missing')
       }
-      if (nextMember.kind !== member.kind || nextMember.inactive !== member.inactive) {
+      if (nextMember && (nextMember.kind !== liveMember?.kind || nextMember.inactive !== liveMember?.inactive)) {
         const result = await upsertTeamMember(nextMember)
         if (!result.ok) throw new Error(result.error ?? 'team_member_update_failed')
       }
@@ -4897,7 +4902,7 @@ export default function PlanningPage() {
       // een eerder inactief lid wel opnieuw.
       await assignMemberToTeamGroup(memberId, target.groupId)
       await refreshTeam()
-      showToast(`${member.name} verplaatst naar ${target.label}.`)
+      showToast(`${displayMember.name} verplaatst naar ${target.label}.`)
     } catch {
       showToast('Verplaatsen is niet gelukt. Probeer het opnieuw.')
     }
@@ -6482,21 +6487,20 @@ export default function PlanningPage() {
         const row = (m: TeamMember) => {
           const checked = filterMembers.size === 0 ? (isYokoCrew(m.id) && !isMemberInactive(m.id)) || m.id === 'unassigned' : filterMembers.has(m.id)
           return (
-            <div key={m.id} draggable={m.id !== 'unassigned'}
-              onDragStart={e => {
-                e.dataTransfer.effectAllowed = 'move'
-                e.dataTransfer.setData('application/x-yoko-team-member', m.id)
-                e.dataTransfer.setData('text/plain', m.id)
-              }}
-              title={m.id === 'unassigned' ? undefined : 'Sleep naar een teamgroep'}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: m.id === 'unassigned' ? 'default' : 'grab' }}>
+            <div key={m.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
+              {m.id !== 'unassigned' ? planningTeamDragHandle(m) : <span style={{ width: 22, flexShrink: 0 }} />}
               <input type="checkbox" checked={checked} onChange={() => toggle(m.id)}
                 style={{ width: 18, height: 18, accentColor: m.color, cursor: 'pointer', flexShrink: 0 }} />
               <MemberAvatar member={m} size={30} />
               <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{m.name}</span>
               {m.id !== 'unassigned' && <select
                 value={teamGroups.find(group => group.memberIds.includes(m.id))?.id ?? ''}
-                onChange={e => void assignMemberToTeamGroup(m.id, e.target.value || null)}
+                onChange={e => {
+                  const groupId = e.target.value || null
+                  const label = groupId ? teamGroups.find(group => group.id === groupId)?.name ?? 'team' : 'eigen team'
+                  void movePlanningTeamMember(m.id, { key: `people-select-${groupId ?? 'base'}`, groupId, label })
+                }}
                 aria-label={`Team van ${m.name}`}
                 style={{ maxWidth: 112, background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px', color: 'var(--text-secondary)', fontSize: 11 }}>
                 <option value="">Studio Yoko</option>
@@ -6510,24 +6514,18 @@ export default function PlanningPage() {
             </div>
           )
         }
-        const groupDrop = (groupId: string | null) => (e: React.DragEvent) => {
-          e.preventDefault()
-          const memberId = e.dataTransfer.getData('application/x-yoko-team-member') || e.dataTransfer.getData('text/plain')
-          if (!memberId || memberId === 'unassigned') return
-          void assignMemberToTeamGroup(memberId, groupId).then(() => {
-            const destination = groupId ? teamGroups.find(group => group.id === groupId)?.name : 'Geen groep'
-            showToast(`Persoon verplaatst naar ${destination ?? 'groep'}.`)
-          })
-        }
         const groupZone = (group: typeof teamGroups[number]) => {
           const members = group.memberIds.map(id => team.find(member => member.id === id)).filter((member): member is TeamMember => !!member)
+          const dropTarget = { key: `people-group-${group.id}`, groupId: group.id, label: group.name }
           return (
-            <div key={group.id} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }} onDrop={groupDrop(group.id)}
-              style={{ marginTop: 12, padding: '8px 10px 4px', border: '1px dashed var(--border-strong)', borderRadius: 10, background: 'var(--overlay-faint)' }}>
+            <div key={group.id} {...planningTeamDropProps(dropTarget)}
+              style={{ marginTop: 12, padding: '8px 10px 4px', border: '1px dashed var(--border-strong)', borderRadius: 10,
+                background: teamDropTargetKey === dropTarget.key ? 'var(--accent-light)' : 'var(--overlay-faint)',
+                outline: teamDropTargetKey === dropTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
                 <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{group.name}</span>
-                <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-muted)' }}>{members.length}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-muted)' }}>{teamDropTargetKey === dropTarget.key ? 'Laat los' : members.length}</span>
                 <button onClick={() => void moveTeamGroup(group.id, -1)} title="Team omhoog" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>↑</button>
                 <button onClick={() => void moveTeamGroup(group.id, 1)} title="Team omlaag" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>↓</button>
               </div>
@@ -6538,7 +6536,7 @@ export default function PlanningPage() {
           )
         }
         return (
-          <Popup title="Mensen & capaciteit" onClose={() => setPeopleOpen(false)}>
+          <Popup title="Mensen & capaciteit" width={680} onClose={() => setPeopleOpen(false)}>
             <div style={{ padding: '10px 12px', marginBottom: 10, borderRadius: 10, background: 'var(--accent-light)', border: '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))' }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-primary)' }}>Teams beheren</div>
               <div style={{ marginTop: 3, fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-muted)' }}>Maak hieronder een team en sleep mensen daarna naar die groep. De indeling wordt overal in TEAM gebruikt.</div>
@@ -6558,8 +6556,10 @@ export default function PlanningPage() {
             <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 10, marginBottom: 2 }}>
               Studio Yoko
             </div>
-            <div onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }} onDrop={groupDrop(null)}
-              style={{ minHeight: yokoTeam.length === 0 ? 42 : undefined, borderRadius: 8 }}>
+            <div {...planningTeamDropProps({ key: 'people-base-team', groupId: null, label: 'eigen team' })}
+              style={{ minHeight: yokoTeam.length === 0 ? 42 : undefined, borderRadius: 8,
+                background: teamDropTargetKey === 'people-base-team' ? 'var(--accent-light)' : 'transparent',
+                outline: teamDropTargetKey === 'people-base-team' ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
               {yokoTeam.length > 0 ? yokoTeam.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Sleep hierheen om uit een groep te halen</div>}
             </div>
             {unassigned.length > 0 && (
