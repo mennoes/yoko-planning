@@ -90,6 +90,9 @@ export async function POST(req: NextRequest) {
     .from('board_snapshots')
     .select('id, snapshot_at, data')
     .eq('board_id', boardId)
+    // Pre-restore snapshots can contain the result of a failed recovery and
+    // are therefore not a trustworthy source for another recovery scan.
+    .neq('trigger', 'restore')
     .lte('snapshot_at', sinceIso)
     .order('snapshot_at', { ascending: false })
     .limit(100)

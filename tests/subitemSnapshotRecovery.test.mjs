@@ -9,6 +9,7 @@ test('subitem recovery scans history instead of trusting one snapshot', () => {
   assert.match(route, /\.limit\(100\)/)
   assert.match(route, /for \(const snapshot of snapshotRows\)/)
   assert.match(route, /historyByItemId/)
+  assert.match(route, /\.neq\('trigger', 'restore'\)/)
   assert.doesNotMatch(route, /\.limit\(1\)/)
 })
 
