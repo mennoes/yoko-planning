@@ -15,7 +15,16 @@ test('Google meetings expose a clear cross-agenda drag affordance', () => {
 test("Agenda's opens automatically and exposes destination rows while dragging", () => {
   assert.match(sidebar, /window\.addEventListener\('yoko-board-item-drag-start', onStart\)/)
   assert.match(sidebar, /setOpen\(true\)/)
-  assert.match(sidebar, /hierheen/)
+  assert.match(sidebar, /boardDropTarget === targetBoardId/)
+  assert.doesNotMatch(sidebar, />\s*hierheen\s*</i)
+})
+
+test('agenda drag affordance always clears after drop, cancel or interrupted drag', () => {
+  assert.match(sidebar, /window\.addEventListener\('dragend', resetBoardDrag, true\)/)
+  assert.match(sidebar, /window\.addEventListener\('drop', resetBoardDrag, true\)/)
+  assert.match(sidebar, /window\.addEventListener\('blur', resetBoardDrag\)/)
+  assert.match(sidebar, /event\.key === 'Escape'/)
+  assert.match(sidebar, /document\.addEventListener\('visibilitychange', onVisibilityChange\)/)
 })
 
 test('moved Google meetings land in a Meetings group', () => {

@@ -297,20 +297,48 @@ function SectionBlock({
     })
   }
   const [boardItemDragging, setBoardItemDragging] = useState(false)
+  const [boardDropTarget, setBoardDropTarget] = useState<string | null>(null)
   useEffect(() => {
     if (section.type !== 'projects') return
+    let resetTimer: ReturnType<typeof setTimeout> | null = null
+    const resetBoardDrag = () => {
+      if (resetTimer) clearTimeout(resetTimer)
+      resetTimer = null
+      setBoardItemDragging(false)
+      setBoardDropTarget(null)
+    }
     const onStart = () => {
+      if (resetTimer) clearTimeout(resetTimer)
       setBoardItemDragging(true)
+      setBoardDropTarget(null)
       // Een ingeklapte agendalijst toont geen drop-targets. Zodra een
       // bord-item wordt opgepakt, klappen we daarom Agenda's open.
       setOpen(true)
+      // Vang ook browser-drags op die zonder dragend/drop eindigen.
+      resetTimer = setTimeout(resetBoardDrag, 30_000)
     }
-    const onEnd = () => setBoardItemDragging(false)
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') resetBoardDrag()
+    }
+    const onVisibilityChange = () => {
+      if (document.hidden) resetBoardDrag()
+    }
     window.addEventListener('yoko-board-item-drag-start', onStart)
-    window.addEventListener('yoko-board-item-drag-end', onEnd)
+    window.addEventListener('yoko-board-item-drag-end', resetBoardDrag)
+    window.addEventListener('dragend', resetBoardDrag, true)
+    window.addEventListener('drop', resetBoardDrag, true)
+    window.addEventListener('blur', resetBoardDrag)
+    window.addEventListener('keyup', onEscape)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
+      if (resetTimer) clearTimeout(resetTimer)
       window.removeEventListener('yoko-board-item-drag-start', onStart)
-      window.removeEventListener('yoko-board-item-drag-end', onEnd)
+      window.removeEventListener('yoko-board-item-drag-end', resetBoardDrag)
+      window.removeEventListener('dragend', resetBoardDrag, true)
+      window.removeEventListener('drop', resetBoardDrag, true)
+      window.removeEventListener('blur', resetBoardDrag)
+      window.removeEventListener('keyup', onEscape)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   // setOpen is bewust lokaal; listeners hoeven alleen bij een ander
   // sectietype opnieuw geregistreerd te worden.
@@ -568,22 +596,14 @@ function SectionBlock({
                   if (targetBoardId && e.dataTransfer.types.includes('application/x-yoko-item')) {
                     e.preventDefault()
                     e.dataTransfer.dropEffect = 'move'
-                    e.currentTarget.style.background = 'rgba(88,150,255,0.18)'
-                    e.currentTarget.style.outline = '2px solid rgba(88,150,255,0.85)'
-                    e.currentTarget.style.outlineOffset = '-2px'
+                    setBoardDropTarget(targetBoardId)
                     return
                   }
                   onDragOver(e, idx)
                 }}
-                onDragLeave={e => {
-                  e.currentTarget.style.background = ''
-                  e.currentTarget.style.outline = ''
-                  e.currentTarget.style.outlineOffset = ''
-                }}
+                onDragLeave={() => setBoardDropTarget(current => current === targetBoardId ? null : current)}
                 onDrop={async e => {
-                  e.currentTarget.style.background = ''
-                  e.currentTarget.style.outline = ''
-                  e.currentTarget.style.outlineOffset = ''
+                  setBoardDropTarget(null)
                   if (!targetBoardId) return
                   const raw = e.dataTransfer.getData('application/x-yoko-item')
                   if (!raw) return
@@ -608,7 +628,12 @@ function SectionBlock({
                 style={{
                   position: 'relative', display: 'flex', alignItems: 'center', cursor: 'grab', borderRadius: 6,
                   transition: 'background 0.12s, outline-color 0.12s',
-                  outline: boardItemDragging && targetBoardId && !active ? '1px dashed var(--border-strong)' : '1px solid transparent',
+                  background: boardDropTarget === targetBoardId ? 'rgba(88,150,255,0.18)' : undefined,
+                  outline: boardDropTarget === targetBoardId
+                    ? '2px solid rgba(88,150,255,0.85)'
+                    : boardItemDragging && targetBoardId && !active
+                      ? '1px dashed var(--border-strong)'
+                      : '1px solid transparent',
                   outlineOffset: '-2px',
                 }}
                 onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '1')) }}
@@ -635,12 +660,6 @@ function SectionBlock({
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
-                    {boardItemDragging && targetBoardId && !active && (
-                      <span aria-hidden style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800,
-                        color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                        hierheen
-                      </span>
-                    )}
                   </Link>
                 )}
 
