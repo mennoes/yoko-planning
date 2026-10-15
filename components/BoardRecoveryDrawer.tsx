@@ -52,7 +52,15 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
   const [msg, setMsg]             = useState<string | null>(null)
   const zeroHourItems = groups.flatMap(group => group.items).filter(item => {
     if (!item.subitems?.length) return false
-    const total = (Number(item.estHours) || 0) + item.subitems.reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+    const manualSubTotal = item.subitems
+      .filter(sub => sub.source !== 'google')
+      .reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+    const googleSubTotal = item.subitems
+      .filter(sub => sub.source === 'google')
+      .reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+    const total = item.source === 'google'
+      ? manualSubTotal + googleSubTotal
+      : (manualSubTotal > 0 ? manualSubTotal : (Number(item.estHours) || 0)) + googleSubTotal
     return total === 0
   })
 

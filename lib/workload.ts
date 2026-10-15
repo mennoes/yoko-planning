@@ -164,25 +164,29 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
             }
           })
 
-          // Een hoofditem kan eigen uren hebben naast gedateerde subitems.
-          // De Agenda toont daarom `item.estHours + som(subitems)`, maar de
-          // Planning liet hier voorheen uitsluitend de gedateerde subitems
-          // door. Daardoor verscheen bijvoorbeeld een item met 16 eigen uren
-          // als 0u zodra er ook maar één subitem met een datum onder hing.
-          //
-          // Ongedateerde subitems kunnen niet zelfstandig op de tijdlijn
-          // worden geplaatst. Hun actieve uren horen daarom bij het
-          // hoofditem en gebruiken diens datumrange. Gedateerde subitems
-          // blijven hun eigen project, zodat hun timing intact blijft.
-          const undatedActiveHours = subs
+          // Subitems zijn de uitsplitsing van het hoofdtotaal, niet extra
+          // uren erbovenop. Voorbeeld uit de Agenda: parent 88u met subs
+          // 80u + 8u is samen 88u, niet 176u. Alleen ongedateerde subitems
+          // hebben nog een parent-project nodig omdat zij niet zelfstandig
+          // op de tijdlijn geplaatst kunnen worden.
+          const manualSubitems = subs.filter(si => si.source !== 'google')
+          const undatedManualHours = manualSubitems
             .filter(si => !si.startDate && !si.endDate && (si.status ?? '') !== 'Done')
+            .reduce((sum, si) => sum + (Number(si.estHours) || 0), 0)
+          const undatedGoogleHours = subs
+            .filter(si => si.source === 'google' && !si.startDate && !si.endDate && (si.status ?? '') !== 'Done')
             .reduce((sum, si) => sum + (Number(si.estHours) || 0), 0)
           // Een Google recurring-parent is uitsluitend een container. Google
           // Sync bewaart op die hoofdrij historisch ook het serietotaal,
           // terwijl iedere occurrence al als gedateerd subitem aanwezig is.
           // Dat parenttotaal nogmaals als project toevoegen veroorzaakte
           // bijvoorbeeld 40u Weekstart bovenop de echte afspraak van 1,5u.
-          const parentHours = ((i.source as string) === 'google' ? 0 : (Number(i.estHours) || 0)) + undatedActiveHours
+          const manualSubitemsTotal = manualSubitems.reduce((sum, si) => sum + (Number(si.estHours) || 0), 0)
+          const parentHours = (i.source as string) === 'google'
+            ? 0
+            : (manualSubitemsTotal > 0
+                ? undatedManualHours
+                : (Number(i.estHours) || 0)) + undatedGoogleHours
           if (parentHours <= 0 || (!i.startDate && !i.endDate)) return datedProjects
 
           const parentOwners = [...new Set((Array.isArray(i.ownerIds) ? (i.ownerIds as string[]) : [])
@@ -217,13 +221,18 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           }, ...datedProjects]
         }
         const activeSubs = subs.filter(si => (si.status ?? '') !== 'Done')
-        // Zelfde totaal als in de Agenda: eigen uren plus actieve subitems.
-        // Voorheen vervingen subitem-uren de eigen uren van het hoofditem.
-        const ownHours = subs.length > 0 && (i.source as string) === 'google'
-          ? 0
-          : (Number(i.estHours) || 0)
-        const hours = ownHours +
-          activeSubs.reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+        const activeManualHours = activeSubs
+          .filter(si => si.source !== 'google')
+          .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+        const activeGoogleHours = activeSubs
+          .filter(si => si.source === 'google')
+          .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
+        // Zodra subitems echte uren bevatten zijn zij de bron. De waarde op
+        // de hoofdregel is dan het rollup-totaal en mag niet nogmaals worden
+        // toegevoegd. Alleen 0u-placeholder-subs vallen terug op de parent.
+        const hours = (i.source as string) === 'google'
+          ? activeManualHours + activeGoogleHours
+          : (activeManualHours > 0 ? activeManualHours : (Number(i.estHours) || 0)) + activeGoogleHours
         // Owners zonder eigenaar landen op 'unassigned' zodat ze in de
         // planning onder de Unassigned-rij verschijnen i.p.v. uit beeld
         // te verdwijnen.

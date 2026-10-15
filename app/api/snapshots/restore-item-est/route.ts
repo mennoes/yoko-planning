@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type SnapshotSub = { id?: string; estHours?: number; [key: string]: unknown }
+type SnapshotSub = { id?: string; estHours?: number; source?: string; [key: string]: unknown }
 type ItemRow = Record<string, unknown> & {
   id: string
   board_id: string
@@ -15,10 +15,15 @@ type ItemRow = Record<string, unknown> & {
 
 function itemTotal(item: ItemRow): number {
   const own = Number(item.est_hours ?? (item as { estHours?: unknown }).estHours) || 0
-  const subs = Array.isArray(item.subitems)
-    ? item.subitems.reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
-    : 0
-  return Math.round((own + subs) * 10) / 10
+  const subs = Array.isArray(item.subitems) ? item.subitems : []
+  const manualSubs = subs.filter(sub => sub.source !== 'google')
+    .reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+  const googleSubs = subs.filter(sub => sub.source === 'google')
+    .reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+  const total = item.source === 'google'
+    ? manualSubs + googleSubs
+    : (manualSubs > 0 ? manualSubs : own) + googleSubs
+  return Math.round(total * 10) / 10
 }
 
 export async function POST(req: NextRequest) {
