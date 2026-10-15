@@ -20,6 +20,7 @@ const category = { isVrijTitle: () => false, loadCategoryOverrides: () => ({}) }
 const { groupsToProjects } = loadModule('../lib/workload.ts', {
   './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
   './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+  './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
 })
 const meeting = {
   id: 'meeting', name: 'Project overleg', ownerIds: ['menno'], status: '',
@@ -90,7 +91,7 @@ test('the agenda ignores a recurring Google container total as well', () => {
 
 test('recurring Google meetings are limited to eight weeks ahead', () => {
   const sync = readFileSync(new URL('../lib/googleSync.ts', import.meta.url), 'utf8')
-  assert.match(sync, /const RECURRING_DAYS_FUTURE = 56\b/)
+  assert.match(sync, /const RECURRING_DAYS_FUTURE = RECURRING_MEETING_FUTURE_DAYS\b/)
   assert.match(sync, /est_hours:\s+0,/)
 })
 test('personal calendar view ignores a manually retained owner who is not an accepted Google participant', () => {
@@ -106,6 +107,7 @@ test('personal calendar view ignores a manually retained owner who is not an acc
   const strict = loadModule('../lib/workload.ts', {
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
     './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
   }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
   assert.equal(strict.length, 0)
 })
@@ -120,6 +122,7 @@ test('personal calendar view hides legacy Google rows without verified participa
   const strict = loadModule('../lib/workload.ts', {
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
     './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
   }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
   assert.equal(strict.length, 0)
 })

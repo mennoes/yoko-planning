@@ -7,6 +7,7 @@ import teamData from '@/data/team.json'
 import { isVrijTitle } from './workloadCategory'
 import { isAcceptedCalendarResponse, loadMeetingPlacement, nestedMeetingId, resolveMeetingBoard, routeGoogleMeeting, syncedOccurrenceOwners } from './googleMeetingRouting'
 import { mergeGoogleMeetingHistory, pastBillableOccurrences, historicalOccurrencesOnly } from './googleMeetingHistory'
+import { RECURRING_MEETING_FUTURE_DAYS } from './recurringMeetingWindow'
 
 // Map @studioyoko.nl emails → member-id, opgebouwd uit een unie van
 // team.json (statische seed) ÉN public.team_members (live tabel) zodat
@@ -66,7 +67,7 @@ function resolveAttendeeEmailWith(memberKeys: MemberKey[], email: string): strin
 const WINDOW_DAYS_FUTURE = 180
 // Voor doorlopende reeksen is acht weken vooruit voldoende. Losse afspraken
 // blijven wel over het ruimere venster beschikbaar.
-const RECURRING_DAYS_FUTURE = 56
+const RECURRING_DAYS_FUTURE = RECURRING_MEETING_FUTURE_DAYS
 const WINDOW_DAYS_PAST   = 730  // Twee jaar terug: oude recurring instances
                                  // worden opnieuw ingelezen en blijven als
                                  // Done-subitems met hun uren beschikbaar.
