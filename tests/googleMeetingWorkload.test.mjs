@@ -111,6 +111,8 @@ test('recurring Google meetings are limited to eight weeks ahead', () => {
   const sync = readFileSync(new URL('../lib/googleSync.ts', import.meta.url), 'utf8')
   assert.match(sync, /const RECURRING_DAYS_FUTURE = RECURRING_MEETING_FUTURE_DAYS\b/)
   assert.match(sync, /est_hours:\s+0,/)
+  assert.match(sync, /prev\?\.hoursOverride/)
+  assert.match(sync, /eventHours\(ev\) \* occurrenceOwners\.length/)
 })
 test('personal calendar view ignores a manually retained owner who is not an accepted Google participant', () => {
   const google = {

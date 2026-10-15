@@ -1106,17 +1106,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         start_date:         finalStart,
         end_date:           finalEnd,
         deadline:           exExtraSingle.deadlineOverride === true ? (existingRow?.deadline ?? null) : null,
-        // Bestaande est_hours behouden — gebruiker mag uren bijstellen
-        // via de planning-detail-popup (radial chart / Est Time veld).
-        // Sync zou anders elke 5 min terugzetten naar de Google-default.
-        // Oude syncversies hebben bij sommige Google-items 0u opgeslagen.
-        // Google-uren zijn in de UI read-only, dus 0 was geen bewuste
-        // gebruikerskeuze: herstel die vanuit de actuele eventduur.
+        // Alleen een aantoonbaar handmatig aangepaste waarde behouden.
+        // Zonder override is Google-duur × deelnemers de autoritatieve bron;
+        // zo repareren we ook oude rijen met 1,5u totaal voor 3 deelnemers.
         est_hours:          exExtraSingle.hoursOverride === true
           ? (existingRow?.est_hours ?? 0)
-          : ((existingRow?.est_hours ?? 0) > 0
-              ? existingRow!.est_hours
-              : (eventOwners.perPerson * finalOwners.length)),
+          : (eventOwners.perPerson * finalOwners.length),
         dagen:              0,
         notes:              exExtraSingle.notesOverride === true ? (existingRow?.notes ?? null) : (ev.description ?? null),
         contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
@@ -1280,15 +1275,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         ...(prev?.datesOverride ? { datesOverride: true } : {}),
         startTime,
         endTime,
-        // estHours: door-gebruiker-ingevulde waarde bewaren. Anders
-        // overschrijft elke sync de handmatig gezette uren (bv. 24u op
-        // 'n boekomslag-subitem) met de event-duur * owners. Alleen
-        // berekenen als er nog niks stond.
+        // Alleen expliciet in Yoko aangepaste uren bewaren. Oude positieve
+        // waarden zonder vlag kunnen een fout serietotaal zijn en worden
+        // daarom opnieuw uit duur × deelnemers opgebouwd.
         estHours:  prev?.hoursOverride
                      ? (Number(prev.estHours) || 0)
-                     : ((typeof prev?.estHours === 'number' && prev.estHours > 0)
-                         ? prev.estHours
-                         : eventHours(ev) * occurrenceOwners.length),
+                     : eventHours(ev) * occurrenceOwners.length,
         ...(prev?.hoursOverride ? { hoursOverride: true } : {}),
         // Per-instance Meet-link — sommige reeksen verschillen per moment.
         meetLink:  ev.hangoutLink ?? prev?.meetLink ?? null,
