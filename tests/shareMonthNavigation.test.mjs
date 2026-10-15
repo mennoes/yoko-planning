@@ -15,3 +15,10 @@ test('clicking any visible month filters to that exact calendar month', () => {
   assert.match(share, /setPreset\('custom'\); setFrom\(monthFrom\); setUntil\(monthUntil\)/)
   assert.match(share, /date\.toLocaleDateString\('nl-NL', \{ month: 'long', year: 'numeric' \}\)/)
 })
+
+test('relative month wording is only used for the actual adjacent calendar months', () => {
+  assert.match(share, /function relativeMonthLabel/)
+  assert.match(share, /relativeMonthLabel\(m\.key\) \?\? m\.label/)
+  assert.doesNotMatch(share, /idx === 0 \? 'Vorige maand'/)
+  assert.doesNotMatch(share, /Geselecteerde maand/)
+})

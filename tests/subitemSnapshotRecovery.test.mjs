@@ -26,3 +26,10 @@ test('subitem recovery deduplicates recurring occurrences and respects intention
   assert.match(route, /dismissed\.has\(sub\.id\)/)
   assert.match(route, /dismissed\.has\(sub\.sourceItemId\)/)
 })
+
+test('recovery also follows earlier parents of the same recurring meeting series', () => {
+  assert.match(route, /historicalItemsByTitle/)
+  assert.match(route, /normalizedTitle\(cur\.name\)/)
+  assert.match(route, /ownersOverlap\(cur, alias\)/)
+  assert.match(route, /< earliestCurrentDate/)
+})
