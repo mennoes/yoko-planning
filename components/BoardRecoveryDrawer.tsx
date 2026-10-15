@@ -197,6 +197,31 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
     }
   }
 
+  async function volledigTerugzetten(snap: Snapshot) {
+    if (!supabase) return
+    if (!window.confirm(
+      `Hele bord '${boardTitle}' terugzetten naar ${fmtDate(snap.snapshot_at)}?\n\n` +
+      `Gebruik dit alleen om een mislukte herstelactie terug te draaien. De huidige staat wordt eerst opnieuw veilig opgeslagen.`,
+    )) return
+    const sess = await supabase.auth.getSession()
+    const token = sess.data.session?.access_token
+    if (!token) { window.alert('Niet ingelogd.'); return }
+    setBusy(`full:${snap.id}`); setMsg(null)
+    try {
+      const res = await fetch('/api/snapshots/restore', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshotId: snap.id }),
+      })
+      const json = await res.json() as { ok: boolean; error?: string; groupsRestored?: number; itemsRestored?: number }
+      if (!json.ok) { setMsg(`Volledige restore mislukt: ${json.error ?? 'onbekend'}`); return }
+      await pullBoardFromRemote(boardId).catch(() => {})
+      setMsg(`✓ Bord teruggezet: ${json.groupsRestored ?? 0} groepen en ${json.itemsRestored ?? 0} items.`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function herstelItemUren(item: BoardItem) {
     if (!supabase) return
     const sess = await supabase.auth.getSession()
@@ -354,6 +379,15 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
                 fontSize: 12, fontWeight: 700, cursor: busy === s.id ? 'wait' : 'pointer', flexShrink: 0 }}>
               Herstel uren
             </button>
+            {s.trigger === 'restore' && (
+              <button onClick={() => void volledigTerugzetten(s)} disabled={busy !== null}
+                title="Zet het volledige bord terug naar deze automatisch gemaakte pre-restoreversie."
+                style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--red)',
+                  background: 'transparent', color: 'var(--red)', fontSize: 12, fontWeight: 700,
+                  cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}>
+                {busy === `full:${s.id}` ? 'Terugzetten…' : 'Draai restore terug'}
+              </button>
+            )}
           </div>
         ))}
       </div>
