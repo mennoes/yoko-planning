@@ -34,6 +34,7 @@ type ShareGroup = {
   items: ShareItem[]
 }
 type MonthlyHours = { key: string; label: string; hours: number; isCurrent: boolean }
+type ShareComment = { id: string; author: string; body: string; createdAt: string }
 
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 function fmtDate(iso: string | null): string {
@@ -91,6 +92,11 @@ export default function ShareBoardPage() {
   const [, setMonthlyHours] = useState<MonthlyHours[]>([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
+  const [comments, setComments]         = useState<ShareComment[]>([])
+  const [commentAuthor, setCommentAuthor] = useState('')
+  const [commentBody, setCommentBody]   = useState('')
+  const [commentSaving, setCommentSaving] = useState(false)
+  const [commentError, setCommentError] = useState<string | null>(null)
 
   const [preset, setPreset]     = useState<Preset>('month')
   const [monthCursor, setMonthCursor] = useState(0)
@@ -110,6 +116,7 @@ export default function ShareBoardPage() {
         if (!r.ok || !j?.ok) { setError(j?.error ?? 'Kon bord niet laden'); setGroups([]); return }
         const loadedGroups = (j.groups ?? []) as ShareGroup[]
         setGroups(loadedGroups)
+        setComments((j.comments ?? []) as ShareComment[])
         setSelectedGroupIds(new Set(loadedGroups.map(group => group.id)))
         setMonthlyHours((j.monthlyHours ?? []) as MonthlyHours[])
       })
@@ -212,6 +219,28 @@ export default function ShareBoardPage() {
     const done  = workRows.filter(i => i.status === 'Done').length
     return { total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
   }, [workRows])
+
+  async function submitComment() {
+    const text = commentBody.trim()
+    if (!text || commentSaving) return
+    setCommentSaving(true); setCommentError(null)
+    try {
+      const search = new URLSearchParams(window.location.search)
+      const response = await fetch(`/api/share/${board}?${search.toString()}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: commentAuthor, body: text }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result?.comment) throw new Error(result?.error ?? 'Reactie opslaan mislukt.')
+      setComments(current => [...current, result.comment as ShareComment])
+      setCommentBody('')
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : 'Reactie opslaan mislukt.')
+    } finally {
+      setCommentSaving(false)
+    }
+  }
 
   if (loading) {
     return <main style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Laden…</main>
@@ -393,6 +422,45 @@ export default function ShareBoardPage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="Vragen en opmerkingen" style={{ marginTop: 32 }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Vragen over de uren</h2>
+        <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--text-muted)' }}>
+          Klopt iets volgens jou niet? Laat hier precies weten om welk werk of welke datum het gaat.
+        </p>
+        {comments.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border-light)', marginBottom: 18 }}>
+            {comments.map(comment => (
+              <article key={comment.id} style={{ padding: '12px 2px', borderBottom: '1px solid var(--border-light)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 5 }}>
+                  <strong style={{ fontSize: 12, color: 'var(--text-primary)' }}>{comment.author}</strong>
+                  <time style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {new Date(comment.createdAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </time>
+                </div>
+                <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, color: 'var(--text-secondary)' }}>{comment.body}</p>
+              </article>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 220px) 1fr', gap: 10, alignItems: 'start' }}>
+          <input value={commentAuthor} onChange={event => setCommentAuthor(event.target.value)} maxLength={80}
+            placeholder="Naam (optioneel)" aria-label="Naam"
+            style={{ width: '100%', padding: '10px 11px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: 12 }} />
+          <div>
+            <textarea value={commentBody} onChange={event => setCommentBody(event.target.value)} maxLength={2000}
+              placeholder="Bijvoorbeeld: kloppen de uren van 14 oktober?" aria-label="Vraag of opmerking"
+              style={{ width: '100%', minHeight: 86, resize: 'vertical', padding: '10px 11px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: 12, lineHeight: 1.45 }} />
+            {commentError && <div role="alert" style={{ marginTop: 6, fontSize: 11, color: 'var(--danger)' }}>{commentError}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+              <button onClick={submitComment} disabled={!commentBody.trim() || commentSaving}
+                style={{ padding: '8px 14px', border: 0, borderRadius: 6, background: color, color: '#fff', fontSize: 12, fontWeight: 700, cursor: commentBody.trim() && !commentSaving ? 'pointer' : 'default', opacity: commentBody.trim() && !commentSaving ? 1 : 0.5 }}>
+                {commentSaving ? 'Opslaan…' : 'Reactie plaatsen'}
+              </button>
+            </div>
           </div>
         </div>
       </section>

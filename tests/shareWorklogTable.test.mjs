@@ -18,3 +18,11 @@ test('share page is one concise work-accountability table', () => {
 test('share API exposes subitem owners for accurate accountability', () => {
   assert.match(api, /ownerIds:\s+s\.ownerIds \?\? r\.owner_ids \?\? \[\]/)
 })
+
+test('producers can leave a persisted question on the share page', () => {
+  assert.match(page, /Vragen over de uren/)
+  assert.match(page, /method: 'PUT'/)
+  assert.match(api, /export async function PUT/)
+  assert.match(api, /context_id: shareContext\(board, req\)/)
+  assert.match(api, /from\('comments'\)\.insert/)
+})

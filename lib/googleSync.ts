@@ -235,8 +235,8 @@ type GoogleCalRow = {
 }
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
-type SubItemSnapshot = { id: string; sourceItemId?: string; name?: string; ownerIds?: string[]; ownerIdsLocked?: boolean; googlePlacementLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
-type ItemRow  = { id: string; group_id: string; board_id: string; name?: string | null; source?: string | null; external_id: string | null; external_link?: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
+type SubItemSnapshot = { id: string; sourceItemId?: string; name?: string; nameOverride?: boolean; datesOverride?: boolean; hoursOverride?: boolean; ownerIds?: string[]; ownerIdsLocked?: boolean; googlePlacementLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; name?: string | null; source?: string | null; external_id: string | null; external_link?: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; deadline?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
 
 // Oude snapshots en vroege Calendar-imports hadden niet altijd
 // `source = 'google'`, terwijl hun Calendar-identiteit nog gewoon aanwezig
@@ -796,7 +796,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // overschrijven bij de volgende Google-sync.
   const { data: existingRows, error: existingError } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, name, external_id, external_link, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at')
+    .select('id, group_id, board_id, name, external_id, external_link, ical_uid, status, journal, notes, deadline, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
@@ -899,7 +899,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   {
     const { data: legacyRows, error: legacyError } = await admin
       .from('board_items')
-      .select('id, group_id, board_id, external_id, ical_uid, status, journal, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, name, start_date')
+      .select('id, group_id, board_id, external_id, ical_uid, status, journal, notes, deadline, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, name, start_date, end_date')
       .eq('source', 'google')
       .eq('external_user_id', cal.user_id)
       .is('ical_uid', null)
@@ -1025,6 +1025,12 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       const existingRow = lookup.row
       const id          = lookup.id
       const exExtraSingle = (existingRow?.extra ?? {}) as Record<string, unknown>
+      const savedName = typeof existingRow?.name === 'string' ? existingRow.name : null
+      const finalName = exExtraSingle.nameOverride === true && savedName ? savedName : name
+      const finalStart = exExtraSingle.datesOverride === true && existingRow?.start_date
+        ? existingRow.start_date : start
+      const finalEnd = exExtraSingle.datesOverride === true && existingRow?.end_date
+        ? existingRow.end_date : (end ?? start)
       seenIds.add(id)
       // Item is door gebruiker als subitem ergens ingenest — niet opnieuw
       // top-level aanmaken. seenIds is al gemarkeerd zodat de cleanup-pass
@@ -1040,7 +1046,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // afwezigheid meteen herkenbaar is in het bord. Done heeft daarna
       // voorrang (events kunnen oud-en-afgehandeld zijn). Anders volgen we
       // bestaande logica: gebruiker-keuze respecteren, anders targetGroup.
-      const isVrij = isVrijTitle(name)
+      const isVrij = isVrijTitle(finalName)
       // existingRow.group_id ALTIJD respecteren — ook wanneer status nu
       // Done is. Zonder die respect schoof een sync de gebruiker z'n
       // handmatige verplaatsing terug naar de Done-groep (klassiek probleem:
@@ -1094,23 +1100,25 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         id,
         group_id:           keepGroup,
         board_id:           keepBoard,
-        name,
+        name:               finalName,
         owner_ids:          finalOwners,
         status:             newStatus,
-        start_date:         start,
-        end_date:           end ?? start,
-        deadline:           null,
+        start_date:         finalStart,
+        end_date:           finalEnd,
+        deadline:           exExtraSingle.deadlineOverride === true ? (existingRow?.deadline ?? null) : null,
         // Bestaande est_hours behouden — gebruiker mag uren bijstellen
         // via de planning-detail-popup (radial chart / Est Time veld).
         // Sync zou anders elke 5 min terugzetten naar de Google-default.
         // Oude syncversies hebben bij sommige Google-items 0u opgeslagen.
         // Google-uren zijn in de UI read-only, dus 0 was geen bewuste
         // gebruikerskeuze: herstel die vanuit de actuele eventduur.
-        est_hours:          (existingRow?.est_hours ?? 0) > 0
-          ? existingRow!.est_hours
-          : (eventOwners.perPerson * finalOwners.length),
+        est_hours:          exExtraSingle.hoursOverride === true
+          ? (existingRow?.est_hours ?? 0)
+          : ((existingRow?.est_hours ?? 0) > 0
+              ? existingRow!.est_hours
+              : (eventOwners.perPerson * finalOwners.length)),
         dagen:              0,
-        notes:              ev.description ?? null,
+        notes:              exExtraSingle.notesOverride === true ? (existingRow?.notes ?? null) : (ev.description ?? null),
         contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
         subitems:           [],
         journal:            existingRow?.journal ?? [],
@@ -1249,7 +1257,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // ervaart 't als "verkeerde naam". Recurring instances erven nu de
       // master-naam (parent.name). De datum-kolom toont 't moment al, dus
       // dubbele info in de naam is niet nodig.
-      const subitemName = instanceRenamedInGoogle
+      const subitemName = prev?.nameOverride === true && prev.name
+        ? prev.name
+        : instanceRenamedInGoogle
         ? evTitle
         : (prev?.name && prev.name !== '—' && !/^[a-z]{2,3}\s+\d/i.test(prev.name)
             ? prev.name
@@ -1257,6 +1267,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       return {
         id:        sid,
         name:      subitemName,
+        ...(prev?.nameOverride ? { nameOverride: true } : {}),
         ownerIds:  occurrenceOwners,
         googleParticipantIds: currentOwners.owners,
         googleCalendarMemberIds: memberId ? [memberId] : [],
@@ -1264,17 +1275,21 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         ...(prev?.ownerHours && prev.ownerIdsLocked ? { ownerHours: prev.ownerHours } : {}),
         status:    resolveStatus(prev?.status, end ?? start, undefined, prev?.statusOverride),
         ...(prev?.statusOverride ? { statusOverride: prev.statusOverride } : {}),
-        startDate: start,
-        endDate:   end ?? start,
+        startDate: prev?.datesOverride ? (prev.startDate ?? null) : start,
+        endDate:   prev?.datesOverride ? (prev.endDate ?? prev.startDate ?? null) : (end ?? start),
+        ...(prev?.datesOverride ? { datesOverride: true } : {}),
         startTime,
         endTime,
         // estHours: door-gebruiker-ingevulde waarde bewaren. Anders
         // overschrijft elke sync de handmatig gezette uren (bv. 24u op
         // 'n boekomslag-subitem) met de event-duur * owners. Alleen
         // berekenen als er nog niks stond.
-        estHours:  (typeof prev?.estHours === 'number' && prev.estHours > 0)
-                     ? prev.estHours
-                     : eventHours(ev) * occurrenceOwners.length,
+        estHours:  prev?.hoursOverride
+                     ? (Number(prev.estHours) || 0)
+                     : ((typeof prev?.estHours === 'number' && prev.estHours > 0)
+                         ? prev.estHours
+                         : eventHours(ev) * occurrenceOwners.length),
+        ...(prev?.hoursOverride ? { hoursOverride: true } : {}),
         // Per-instance Meet-link — sommige reeksen verschillen per moment.
         meetLink:  ev.hangoutLink ?? prev?.meetLink ?? null,
         // Per-instance Google-Calendar-link — zo kan de UI naar de juiste
@@ -1359,18 +1374,18 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       // signaal in de naam maakt het visueel rommelig. Bij volgende
       // sync overschrijven we automatisch ook bestaande rijen met
       // suffix.
-      name:               baseName,
+      name:               exExtraRec.nameOverride === true && existingRow?.name ? existingRow.name : baseName,
       owner_ids:          finalOwners,
       status:             newStatus,
-      start_date:         minStart,
-      end_date:           maxEnd ?? minStart,
-      deadline:           null,
+      start_date:         exExtraRec.datesOverride === true && existingRow?.start_date ? existingRow.start_date : minStart,
+      end_date:           exExtraRec.datesOverride === true && existingRow?.end_date ? existingRow.end_date : (maxEnd ?? minStart),
+      deadline:           exExtraRec.deadlineOverride === true ? (existingRow?.deadline ?? null) : null,
       // De recurring hoofdrij is alleen een container. Iedere occurrence
       // heeft hieronder al zijn eigen uren; een serietotaal op de parent
       // werd in andere schermen als extra werk meegerekend.
       est_hours:          0,
       dagen:              0,
-      notes:              sorted[0].description ?? null,
+      notes:              exExtraRec.notesOverride === true ? (existingRow?.notes ?? null) : (sorted[0].description ?? null),
       contactpersoon:     null, uitzenddag: null, framelink: null, nummers: null,
       subitems:           mergedSubitems,
       journal:            existingRow?.journal ?? [],

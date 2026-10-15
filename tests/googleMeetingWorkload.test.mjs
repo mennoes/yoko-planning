@@ -83,6 +83,22 @@ test('a recurring Google parent never duplicates the hours of its dated occurren
   assert.equal(output.reduce((sum, project) => sum + project.estHours, 0), 1.5)
 })
 
+test('a Google meeting in a wrongly named Vrij group stays a meeting, not an 8-hour day', () => {
+  const api = loadModule('../lib/workload.ts', {
+    './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
+    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
+  })
+  const project = {
+    id: 'weekstart', name: 'Weekstart', group: 'Vrij', source: 'google',
+    ownerIds: ['menno'], startDate: '2026-10-12', endDate: '2026-10-12',
+    estHours: 1.5, status: 'active',
+  }
+  const week = new Date('2026-10-12T00:00:00')
+  assert.equal(api.projectHoursInWeek(project, 'menno', week), 1.5)
+  assert.equal(api.projectHoursInWeek(project, 'menno', week, 'meeting'), 1.5)
+})
+
 test('the agenda ignores a recurring Google container total as well', () => {
   const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
   const helperStart = board.indexOf('export function effectiveHours')

@@ -50,7 +50,8 @@ test('parent rollup uses the stored distribution of relevant subitems', () => {
 test('agenda UI persists pie metadata and supports custom columns', () => {
   const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
   const registry = readFileSync(new URL('../lib/boardsRegistry.ts', import.meta.url), 'utf8')
-  assert.match(board, /k === 'ownerHours'/)
+  assert.match(board, /ownerHours: distribution/)
+  assert.match(board, /nameOverride: true/)
   assert.match(board, /!\('ownerHours' in updates\)/)
   assert.match(board, /quickMembers = sortedTeam\.slice\(0, 6\)/)
   assert.match(board, /Eigen kolom/)

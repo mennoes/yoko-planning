@@ -676,9 +676,11 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
         dismissed,
       )
     }
-    const { error: iErr } = safeRows.length > 0
+    const writeResult = safeRows.length > 0
       ? await supabase.from('board_items').upsert(safeRows, { onConflict: 'id' })
-      : { error: null }
+          .select('id, name, owner_ids, status, start_date, end_date, deadline, est_hours, notes, extra')
+      : { data: [] as Record<string, unknown>[], error: null }
+    const { error: iErr } = writeResult
     if (iErr) {
       // eslint-disable-next-line no-console
       console.error(`[boardStore] item upsert FAILED voor '${boardName}':`, iErr.message, iErr.details, iErr.hint)
@@ -688,6 +690,27 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
       return fail(isPermission
         ? 'Geen rechten om dit item te wijzigen. De wijziging blijft lokaal bewaard en wordt opnieuw geprobeerd.'
         : `Opslaan mislukt: ${iErr.message}`)
+    }
+    // Een geslaagde HTTP-write is niet voldoende: bevestig de velden die de
+    // gebruiker kan wijzigen met de waarden die Supabase daadwerkelijk
+    // terugleest. Zo wissen we de dirty-vlag nooit op een stille no-op.
+    const confirmed = new Map(((writeResult.data ?? []) as Array<Record<string, unknown>>)
+      .map(row => [String(row.id), row]))
+    const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+    for (const expected of safeRows) {
+      const actual = confirmed.get(String(expected.id))
+      if (!actual) return fail(`Opslaan van '${String(expected.name ?? 'item')}' kon niet worden bevestigd.`)
+      const fields = ['name', 'owner_ids', 'status', 'start_date', 'end_date', 'deadline', 'est_hours', 'notes'] as const
+      if (fields.some(field => !same(actual[field], expected[field]))) {
+        return fail(`Opslaan van '${String(expected.name ?? 'item')}' week af van de gevraagde wijziging.`)
+      }
+      const expectedExtra = (expected.extra ?? {}) as Record<string, unknown>
+      const actualExtra = (actual.extra ?? {}) as Record<string, unknown>
+      for (const flag of ['nameOverride', 'datesOverride', 'hoursOverride', 'notesOverride', 'deadlineOverride', 'statusOverride'] as const) {
+        if (flag in expectedExtra && !same(actualExtra[flag], expectedExtra[flag])) {
+          return fail(`Opslaan van '${String(expected.name ?? 'item')}' is niet volledig bevestigd.`)
+        }
+      }
     }
   }
 

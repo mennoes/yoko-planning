@@ -274,7 +274,12 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // duwt in de werkdruk-cellen.
   // Naast naam-patroon ook de groepsnaam en expliciete categorie gebruiken
   // voor vakantieblokken met een neutrale titel (bv. 'Zwitserland').
-  const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
+  // Een expliciete categorie wint altijd van de groepsnaam. Meetings die
+  // ooit per ongeluk in de groep 'Vrij' zijn beland mogen nooit als 8u
+  // afwezigheid tellen wanneer ze als Meeting zijn geclassificeerd.
+  const isVrij = categoryOverride
+    ? categoryOverride === 'vrij'
+    : isVrijTitle(project.name) || (project.source !== 'google' && (project.group ?? '').toLowerCase().includes('vrij'))
   // Gebruik voor de noemer exact dezelfde werkdagen als voor de overlap.
   const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime())
   if (totalWork === 0) return 0
@@ -328,8 +333,10 @@ function contributionsPerCell(
     const pSms = pS.getTime(), pEms = pE.getTime()
     const totalWork = countWorkdaysMs(pSms, pEms)
     if (totalWork === 0) continue
-    const isVrij = overrides[project.id] === 'vrij' || isVrijTitle(project.name)
-      || (project.group ?? '').toLowerCase().includes('vrij')
+    const explicitCategory = overrides[project.id]
+    const isVrij = explicitCategory
+      ? explicitCategory === 'vrij'
+      : isVrijTitle(project.name) || (project.source !== 'google' && (project.group ?? '').toLowerCase().includes('vrij'))
 
     // Eerste kolom die op of ná de projectstart eindigt; daarna doorlopen tot
     // een kolom voorbij het projecteinde begint.

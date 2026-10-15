@@ -456,7 +456,9 @@ export function projectHoursInWeek(
   //
   // Dezelfde categoriedetectie geldt voor naam, override en groepsnaam;
   // een vakantieblok met een neutrale titel telt daardoor eveneens mee.
-  const isVrij = categoryOverride === 'vrij' || isVrijTitle(project.name) || (project.group ?? '').toLowerCase().includes('vrij')
+  const isVrij = categoryOverride
+    ? categoryOverride === 'vrij'
+    : isVrijTitle(project.name) || (project.source !== 'google' && (project.group ?? '').toLowerCase().includes('vrij'))
   const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime())
   if (totalWork === 0) return 0
   const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime())

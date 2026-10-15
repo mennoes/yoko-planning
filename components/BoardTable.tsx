@@ -1771,7 +1771,10 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           })} />
         </div>
       case 'timeline':
-        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({ startDate: s, endDate: e })} /></div>
+        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({
+          startDate: s, endDate: e,
+          ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')) ? { datesOverride: true } : {}),
+        })} /></div>
       case 'estHours': {
         // Pro-rated mode: cel toont eerlijk-verdeelde uren (subitem.estHours
         // is dan al pro-rated door de filter-map). Bij klik krijgt de
@@ -1785,7 +1788,10 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
               displayValue={subitem.estHours ?? 0}
               editValue={isProrated ? orig! : (subitem.estHours ?? 0)}
               isProrated={isProrated}
-              onChange={v => onUpdate({ estHours: Number(v) || 0 })}
+              onChange={v => onUpdate({
+                estHours: Number(v) || 0,
+                ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')) ? { hoursOverride: true } : {}),
+              })}
             />
           </div>
         )
@@ -1933,9 +1939,15 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         {editName ? (
           <input autoFocus value={nameDraft}
             onChange={e => setNameDraft(e.target.value)}
-            onBlur={() => { onUpdate({ name: nameDraft }); setEditName(false) }}
+            onBlur={() => { onUpdate({
+              name: nameDraft,
+              ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')) ? { nameOverride: true } : {}),
+            }); setEditName(false) }}
             onKeyDown={e => {
-              if (e.key === 'Enter') { onUpdate({ name: nameDraft }); setEditName(false) }
+              if (e.key === 'Enter') { onUpdate({
+                name: nameDraft,
+                ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')) ? { nameOverride: true } : {}),
+              }); setEditName(false) }
               if (e.key === 'Escape') setEditName(false)
             }}
             style={{ ...editInput, flex: 1 }} />
@@ -3493,26 +3505,6 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     // wijziging op alle geselecteerde items binnen deze groep toe. Cross-
     // group bulk (zelden gebruikt) blijft per-groep.
     const bulk = selectedIds.size > 1 && selectedIds.has(itemId)
-    // Google-items zijn grotendeels read-only: bij elke sync worden naam,
-    // timeline, uren, deadline etc. overschreven dus lokale edits daarop
-    // verdwijnen toch. Subitem-edits en status zijn wél toegestaan — de
-    // sync's resolveStatus respecteert door de gebruiker gezette Done/Stuck/
-    // Working etc., en subitem-state bewaren we expliciet.
-    const sourceItem = group.items.find(i => i.id === itemId)
-    if (sourceItem?.source === 'google') {
-      const keys = Object.keys(updates)
-      // Planningmetadata (owners + urenverdeling) is van YOKO en wordt door
-      // googleSync expliciet uit extra behouden. Die velden mogen dus wél
-      // lokaal aangepast worden; titel/tijdlijn blijven Google-owned.
-      const allowed = keys.every(k =>
-        k === 'subitems' || k === 'status' || k === 'statusOverride'
-        || k === 'ownerIds' || k === 'ownerHours' || k === 'ownerIdsLocked'
-      )
-      if (!allowed) {
-        showToast('Bewerk dit item in Google Calendar — wijzigingen hier worden bij de volgende sync overschreven')
-        return
-      }
-    }
     // Snapshot voor undo — alleen bij geen-bulk en als er daadwerkelijk
     // iets verandert. Subitem-edits (onUpdate met subitems-array) doen we
     // ook mee, anders is een uren-correctie niet terug te draaien.
@@ -3527,6 +3519,13 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
           ...(i.source === 'google' && 'status' in updates
             ? { statusOverride: updates.status === 'Done' ? 'done' : 'active' }
             : {}),
+          ...(i.source === 'google' && 'name' in updates ? { nameOverride: true } : {}),
+          ...(i.source === 'google' && ('startDate' in updates || 'endDate' in updates)
+            ? { datesOverride: updates.datesOverride === false ? false : true }
+            : {}),
+          ...(i.source === 'google' && 'estHours' in updates ? { hoursOverride: true } : {}),
+          ...(i.source === 'google' && 'notes' in updates ? { notesOverride: true } : {}),
+          ...(i.source === 'google' && 'deadline' in updates ? { deadlineOverride: true } : {}),
         }
         // estHours veranderd én item heeft ownerHours? Schaal de
         // verdeling proportioneel zodat de verhoudingen kloppen

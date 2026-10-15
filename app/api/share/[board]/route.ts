@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { signShare, validShare } from '@/lib/shareToken'
+import { randomUUID } from 'node:crypto'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -11,6 +12,18 @@ export const dynamic = 'force-dynamic'
 // andere borden ook publiek wilt delen. Zelfde lijst staat in
 // components/BoardTable.tsx voor de Deel-knop — houd ze synchroon.
 const SHAREABLE_BOARDS = new Set(['nederland', 'vlaanderen', 'pnp'])
+const commentRate = new Map<string, number[]>()
+
+function normalizedScope(req: NextRequest): string {
+  return (req.nextUrl.searchParams.get('groups') ?? '').split(',').map(v => v.trim()).filter(Boolean).sort().join(',')
+}
+function mayReadShare(board: string, req: NextRequest): boolean {
+  const groups = req.nextUrl.searchParams.get('groups') ?? ''
+  return SHAREABLE_BOARDS.has(board) || validShare(board, groups, req.nextUrl.searchParams.get('token') ?? '')
+}
+function shareContext(board: string, req: NextRequest): string {
+  return `share:${board}:${normalizedScope(req) || 'all'}`
+}
 
 // Velden die GEEN externe lezer zou moeten zien:
 //   - notes / journal: interne aantekeningen en discussies.
@@ -131,7 +144,7 @@ function computeMonthlyHours(itemRows: ItemRow[], isHidden: (extra: Record<strin
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ board: string }> }) {
   const { board } = await params
-  if (!SHAREABLE_BOARDS.has(board) && !validShare(board, req.nextUrl.searchParams.get('groups') ?? '', req.nextUrl.searchParams.get('token') ?? '')) {
+  if (!mayReadShare(board, req)) {
     return Response.json({ ok: false, error: 'Bord niet gedeeld' }, { status: 404 })
   }
   if (!supabaseAdmin) {
@@ -212,7 +225,56 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
 
   const monthlyHours = computeMonthlyHours(scopedItemRows, isHidden)
 
-  return Response.json({ ok: true, board, groups, monthlyHours })
+  const { data: commentRows } = await supabaseAdmin.from('comments')
+    .select('id, thread, created_at')
+    .eq('context_kind', 'page')
+    .eq('context_id', shareContext(board, req))
+    .eq('resolved', false)
+    .order('created_at', { ascending: true })
+    .limit(200)
+  const comments = ((commentRows ?? []) as Array<{ id: string; thread: Array<{ author?: string; body?: string; createdAt?: string }>; created_at: string }>)
+    .flatMap(row => (row.thread ?? []).slice(0, 1).map(reply => ({
+      id: row.id,
+      author: String(reply.author ?? 'Producer'),
+      body: String(reply.body ?? ''),
+      createdAt: String(reply.createdAt ?? row.created_at),
+    })))
+
+  return Response.json({ ok: true, board, groups, monthlyHours, comments })
+}
+
+// Publieke share-reactie. Alleen tekst + een zelfgekozen naam; geen account,
+// e-mailadres of interne data is nodig.
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ board: string }> }) {
+  const { board } = await params
+  if (!mayReadShare(board, req)) return Response.json({ ok: false, error: 'Deellink is ongeldig' }, { status: 404 })
+  if (!supabaseAdmin) return Response.json({ ok: false, error: 'Niet geconfigureerd' }, { status: 503 })
+  const body = await req.json().catch(() => ({})) as { author?: unknown; body?: unknown }
+  const author = String(body.author ?? '').trim().slice(0, 80) || 'Producer'
+  const text = String(body.body ?? '').trim().slice(0, 2000)
+  if (text.length < 2) return Response.json({ ok: false, error: 'Schrijf eerst een vraag of opmerking.' }, { status: 400 })
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const rateKey = `${ip}:${board}`
+  const now = Date.now()
+  const recent = (commentRate.get(rateKey) ?? []).filter(ts => now - ts < 10 * 60_000)
+  if (recent.length >= 8) return Response.json({ ok: false, error: 'Te veel reacties achter elkaar. Probeer het later opnieuw.' }, { status: 429 })
+  recent.push(now); commentRate.set(rateKey, recent)
+
+  const id = `share-${randomUUID()}`
+  const createdAt = new Date().toISOString()
+  const row = {
+    id,
+    context_kind: 'page',
+    context_id: shareContext(board, req),
+    quote: 'Vraag over werkverantwoording',
+    thread: [{ id: `reply-${randomUUID()}`, author, body: text, createdAt }],
+    resolved: false,
+    author_id: null,
+    created_at: createdAt,
+  }
+  const { error } = await supabaseAdmin.from('comments').insert(row)
+  if (error) return Response.json({ ok: false, error: 'Reactie opslaan mislukt.' }, { status: 500 })
+  return Response.json({ ok: true, comment: { id, author, body: text, createdAt } })
 }
 
 // New boards are private until an authenticated team member creates a link.
