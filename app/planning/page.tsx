@@ -49,6 +49,7 @@ import { ItemHistory } from '@/components/ItemHistory'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useTeam } from '@/components/TeamContext'
+import { upsertTeamMember } from '@/lib/teamStore'
 import { DistributionPie } from '@/components/DistributionPie'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
@@ -4640,7 +4641,7 @@ function ZoomDropdown({ zoom, colWZoom, setZoomLevel }: {
 export default function PlanningPage() {
   const { pushUndo, showToast } = useUndo()
   const { profile }    = useProfile()
-  const { members: liveTeam } = useTeam()
+  const { members: liveTeam, refresh: refreshTeam } = useTeam()
   const { groups: teamGroups, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup, moveGroup: moveTeamGroup } = useTeamGroups()
   // Helper: classificeer een memberId als 'yoko' op basis van de live
   // team_members tabel; valt terug op de hardcoded YOKO_IDS voor leden
@@ -4798,27 +4799,32 @@ export default function PlanningPage() {
     groupId: string | null
     label: string
     baseKind?: 'yoko' | 'freelancer'
+    inactive?: boolean
   }
   const [draggingTeamMemberId, setDraggingTeamMemberId] = useState<string | null>(null)
+  // React-state kan tijdens de eerste dragover nog één render achterlopen.
+  // Bewaar het id daarom ook synchroon; anders lijkt de greep te werken,
+  // maar weigert de eerste (en vaak enige) dropzone de drop.
+  const draggingTeamMemberIdRef = useRef<string | null>(null)
   const [teamDropTargetKey, setTeamDropTargetKey] = useState<string | null>(null)
-  function isValidPlanningTeamDrop(target: PlanningTeamDropTarget, memberId = draggingTeamMemberId): boolean {
-    if (!memberId || memberId === 'unassigned' || isMemberInactive(memberId)) return false
-    if (!target.baseKind) return true
-    return target.baseKind === (isYokoCrew(memberId) ? 'yoko' : 'freelancer')
+  function isValidPlanningTeamDrop(_target: PlanningTeamDropTarget, memberId = draggingTeamMemberIdRef.current): boolean {
+    return !!memberId && memberId !== 'unassigned'
   }
   function startPlanningTeamDrag(event: React.DragEvent, member: TeamMember) {
     event.stopPropagation()
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('application/x-yoko-team-member', member.id)
     event.dataTransfer.setData('text/plain', member.id)
+    draggingTeamMemberIdRef.current = member.id
     setDraggingTeamMemberId(member.id)
   }
   function finishPlanningTeamDrag() {
+    draggingTeamMemberIdRef.current = null
     setDraggingTeamMemberId(null)
     setTeamDropTargetKey(null)
   }
   function planningTeamDragHandle(member: TeamMember) {
-    if (member.id === 'unassigned' || isMemberInactive(member.id)) return null
+    if (member.id === 'unassigned') return null
     return (
       <span
         draggable
@@ -4829,8 +4835,8 @@ export default function PlanningPage() {
         onDragStart={event => startPlanningTeamDrag(event, member)}
         onDragEnd={finishPlanningTeamDrag}
         style={{
-          width: 14, flexShrink: 0, cursor: 'grab', color: 'var(--text-muted)',
-          fontSize: 15, lineHeight: 1, textAlign: 'center', userSelect: 'none',
+          width: 22, height: 30, flexShrink: 0, cursor: 'grab', color: 'var(--text-muted)',
+          fontSize: 16, lineHeight: '30px', textAlign: 'center', userSelect: 'none', touchAction: 'none',
         }}>
         ⠿
       </span>
@@ -4862,10 +4868,38 @@ export default function PlanningPage() {
           return
         }
         finishPlanningTeamDrag()
-        void assignMemberToTeamGroup(memberId, target.groupId)
-          .then(() => showToast(`${team.find(member => member.id === memberId)?.name ?? 'Persoon'} verplaatst naar ${target.label}.`))
-          .catch(() => showToast('Verplaatsen is niet gelukt. Probeer het opnieuw.'))
+        void movePlanningTeamMember(memberId, target)
       },
+    }
+  }
+  async function movePlanningTeamMember(memberId: string, target: PlanningTeamDropTarget) {
+    const member = liveTeam.find(candidate => candidate.id === memberId)
+    if (!member) {
+      showToast('Verplaatsen is niet gelukt: teamlid niet gevonden.')
+      return
+    }
+    try {
+      // Een vaste sectie is meer dan alleen een visuele groep: kind en
+      // actief-status bepalen waar het lid na een refresh thuishoort.
+      const nextMember = {
+        ...member,
+        kind: target.baseKind === 'freelancer' ? 'freelance' as const
+          : target.baseKind === 'yoko' ? 'yoko' as const
+          : member.kind,
+        inactive: target.inactive === true,
+      }
+      if (nextMember.kind !== member.kind || nextMember.inactive !== member.inactive) {
+        const result = await upsertTeamMember(nextMember)
+        if (!result.ok) throw new Error(result.error ?? 'team_member_update_failed')
+      }
+      // Vaste secties en Inactief staan buiten zelfgemaakte groepen.
+      // Een custom groep behoudt iemands Yoko/freelance-type, maar activeert
+      // een eerder inactief lid wel opnieuw.
+      await assignMemberToTeamGroup(memberId, target.groupId)
+      await refreshTeam()
+      showToast(`${member.name} verplaatst naar ${target.label}.`)
+    } catch {
+      showToast('Verplaatsen is niet gelukt. Probeer het opnieuw.')
     }
   }
   // Bij een nieuw bezoek altijd ingeklapt, ook wanneer een eerdere sessie
@@ -6959,7 +6993,7 @@ export default function PlanningPage() {
 
             return (
               <>
-                {(yokoVisible.length > 0 || (draggingTeamMemberId && isYokoCrew(draggingTeamMemberId))) && sectionLabel(
+                {(yokoVisible.length > 0 || draggingTeamMemberId) && sectionLabel(
                   'Studio Yoko',
                   yokoVisible.length,
                   yokoVisible,
@@ -6983,16 +7017,17 @@ export default function PlanningPage() {
                 ))}
                 {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length, unassignedVisible)}
                 {unassignedVisible.map(renderPerson)}
-                {(freelancersVisible.length > 0 || (draggingTeamMemberId && !isYokoCrew(draggingTeamMemberId))) && (
+                {(freelancersVisible.length > 0 || draggingTeamMemberId) && (
                   <>
                     {sectionLabel('Freelancers', freelancersVisible.length, freelancersVisible, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0,
                       { key: 'base-freelancers-day', groupId: null, label: 'Freelancers', baseKind: 'freelancer' })}
                     {freelancersPos !== 0 && freelancersVisible.map(renderPerson)}
                   </>
                 )}
-                {inactiveVisible.length > 0 && (
+                {(inactiveVisible.length > 0 || draggingTeamMemberId) && (
                   <>
-                    {sectionLabel('Inactief team', inactiveVisible.length, inactiveVisible, () => setInactiveTeamPos(o => o !== 0 ? 0 : 1), inactiveTeamPos !== 0)}
+                    {sectionLabel('Inactief team', inactiveVisible.length, inactiveVisible, () => setInactiveTeamPos(o => o !== 0 ? 0 : 1), inactiveTeamPos !== 0,
+                      { key: 'base-inactive-day', groupId: null, label: 'Inactief team', inactive: true })}
                     {inactiveTeamPos !== 0 && inactiveVisible.map(renderPerson)}
                   </>
                 )}
@@ -7212,7 +7247,7 @@ export default function PlanningPage() {
                 }}>{renderMember(m, i)}</div>
               )
             }
-            if (yokoTeam.length > 0 || (draggingTeamMemberId && isYokoCrew(draggingTeamMemberId))) {
+            if (yokoTeam.length > 0 || draggingTeamMemberId) {
               out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, members: yokoTeam, dropTarget: { key: 'base-yoko', groupId: null, label: 'Team Yoko', baseKind: 'yoko' } })}</div>)
               if (yokoTeamPos !== 0) {
                 yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
@@ -7232,7 +7267,7 @@ export default function PlanningPage() {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
             }
-            if (freelancers.length > 0 || (draggingTeamMemberId && !isYokoCrew(draggingTeamMemberId))) {
+            if (freelancers.length > 0 || draggingTeamMemberId) {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos, members: freelancers, dropTarget: { key: 'base-freelancers', groupId: null, label: 'Freelancers', baseKind: 'freelancer' } })}</div>)
               if (freelancersPos !== 0) {
                 freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
@@ -7242,8 +7277,12 @@ export default function PlanningPage() {
               // je de sectie nooit volledig dichtklappen. Wil je een
               // freelancer altijd zien, klap de sectie open.
             }
-            if (inactiveTeam.length > 0) {
-              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, { onClick: () => cycleSectionArrow(inactiveTeamPos, setInactiveTeamPos, inactiveTeam), arrowPos: inactiveTeamPos })}</div>)
+            if (inactiveTeam.length > 0 || draggingTeamMemberId) {
+              out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, {
+                onClick: () => cycleSectionArrow(inactiveTeamPos, setInactiveTeamPos, inactiveTeam),
+                arrowPos: inactiveTeamPos,
+                dropTarget: { key: 'base-inactive', groupId: null, label: 'Inactief team', inactive: true },
+              })}</div>)
               if (inactiveTeamPos !== 0) {
                 inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i)))
               }

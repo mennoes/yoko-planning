@@ -24,9 +24,17 @@ test('empty custom teams remain visible as drop targets', () => {
   assert.doesNotMatch(planning, /\}\)\)\.filter\(entry => entry\.members\.length > 0\)/)
 })
 
-test('base sections only accept members of their existing profile kind', () => {
+test('fixed sections update the persisted member classification', () => {
   assert.match(planning, /baseKind\?: 'yoko' \| 'freelancer'/)
-  assert.match(planning, /target\.baseKind === \(isYokoCrew\(memberId\) \? 'yoko' : 'freelancer'\)/)
+  assert.match(planning, /upsertTeamMember\(nextMember\)/)
+  assert.match(planning, /target\.baseKind === 'freelancer' \? 'freelance'/)
   assert.match(planning, /groupId: null, label: 'Team Yoko', baseKind: 'yoko'/)
   assert.match(planning, /groupId: null, label: 'Freelancers', baseKind: 'freelancer'/)
+  assert.match(planning, /label: 'Inactief team', inactive: true/)
+})
+
+test('drag validation uses a synchronous ref so the first dragover accepts the member', () => {
+  assert.match(planning, /const draggingTeamMemberIdRef = useRef<string \| null>\(null\)/)
+  assert.match(planning, /draggingTeamMemberIdRef\.current = member\.id/)
+  assert.match(planning, /memberId = draggingTeamMemberIdRef\.current/)
 })
