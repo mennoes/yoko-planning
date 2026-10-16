@@ -11,6 +11,7 @@
 import { NextRequest } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireTeamAdmin } from '@/lib/teamAdminServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,10 +26,8 @@ type ItemRow = Record<string, unknown> & { id: string; board_id: string; group_i
 export async function POST(req: NextRequest) {
   if (!supabase || !supabaseAdmin) return Response.json({ ok: false, error: 'not_configured' }, { status: 500 })
 
-  const auth = req.headers.get('authorization')
-  if (!auth?.startsWith('Bearer ')) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const { data: userData, error: userErr } = await supabase.auth.getUser(auth.slice(7))
-  if (userErr || !userData.user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const denied = await requireTeamAdmin(req)
+  if (denied) return denied
 
   let body: { snapshotId?: string; boardId?: string; latestPreRestore?: boolean }
   try { body = await req.json() } catch { return Response.json({ ok: false, error: 'invalid_body' }, { status: 400 }) }

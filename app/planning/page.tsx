@@ -788,7 +788,7 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
       <div ref={lineRef} aria-hidden style={{
         position: 'absolute', top: 0, bottom: 0,
         left: nowOffset ?? 0,
-        width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 70,
+        width: 0, borderLeft: '2px solid var(--yellow)', zIndex: 19,
         pointerEvents: 'none', boxShadow: '0 0 0 0.5px rgba(216,182,46,0.4)',
       }} />
       {/* Eén gedeelde overlay voor de normale en geklemde variant. Zo
@@ -1461,11 +1461,13 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
     allDay.push(p)
   }
 
-  const gridStart = cols[0]?.rangeStart
-  if (!gridStart) return null
+  const hasGrid = cols.length > 0
+  // Hooks below must run on every render. Keep harmless fallback geometry
+  // while columns are temporarily empty and return only after all hooks.
+  const gridStart = cols[0]?.rangeStart ?? new Date(0)
   const gridStartMs = gridStart.getTime()
-  const gridEndMs   = cols[cols.length - 1].rangeEnd.getTime()
-  const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
+  const gridEndMs   = cols[cols.length - 1]?.rangeEnd.getTime() ?? gridStartMs
+  const msPerPx     = Math.max(1, gridEndMs - gridStartMs) / Math.max(1, totalWidth)
 
   // All-day lane-pack
   type AllDayBar = { p: Project; left: number; width: number; lane: number }
@@ -1756,6 +1758,8 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
   }, [createSel])
 
   const timeGridH = (HOUR_END - HOUR_START) * HOUR_H
+
+  if (!hasGrid) return null
 
   return (
     <div>
@@ -2481,7 +2485,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
       // ze in dezelfde lane. Voorkomt lane-explosie op drukke dagen.
       const e = b.left + (b.packWidth ?? b.width)
       // Probeer een lane zonder enige overlap
-      let lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
+      const lane = lanes.findIndex(intervals => fitsLane(intervals, s, e))
       if (lane >= 0) {
         lanes[lane].push({ start: s, end: e })
         return { ...b, lane }
@@ -4969,19 +4973,6 @@ export default function PlanningPage() {
     try { localStorage.removeItem('planning-hide-google') } catch {}
   }, [])
 
-  // Keyboard shortcuts: +/= zooms in, - zooms out, N opent nieuw-item-popup
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
-      if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => z + 10) }
-      else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => z - 10) }
-      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setNewItemOpen(true) }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
   const [newItemOpen, setNewItemOpen] = useState(false)
   // Pre-fill voor click-to-create vanuit het tijdlijn-grid. Wanneer
   // de user op een lege cel klikt vullen we datum/tijd/owner in zodat
@@ -5057,7 +5048,13 @@ export default function PlanningPage() {
       // 't ook werkt na zoom-level switch waar colW én aantal cols
       // wijzigen — de useEffect hieronder zet die index terug op de
       // juiste scroll-positie.
-      const idx = colW > 0 ? Math.round(el.scrollLeft / colW) : 0
+      const anchorBaseColW = zoom === 'dag'
+        ? ZOOM_COL_W.dag
+        : zoom === 'maand'
+          ? ZOOM_COL_W.maand
+          : (viewSize === 'large' ? 130 : 104)
+      const anchorColW = Math.round(anchorBaseColW * (colWZoom / 100))
+      const idx = anchorColW > 0 ? Math.round(el.scrollLeft / anchorColW) : 0
       pendingAnchorRef.current = { colIdx: idx }
     }
     if (zoom === 'maand') {
@@ -5081,6 +5078,24 @@ export default function PlanningPage() {
       setColWZoom(Math.max(50, Math.min(300, clamped - 250)))
     }
   }
+
+  // Keyboard shortcuts: +/= zooms in, - zooms out, N opent nieuw-item-popup.
+  // Deze effect staat ná de state en zoom-helper zodat React nooit een
+  // verouderde of nog niet geïnitialiseerde closure registreert.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); anchoredColWZoom(z => z + 10) }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); anchoredColWZoom(z => z - 10) }
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setNewItemOpen(true) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  // anchoredColWZoom intentionally reads the current zoom/grid values.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, colWZoom])
 
   function setZoomLevel(level: ZoomLevel, colW = 100) {
     const daysPerCol = { dag: 1, week: 7, maand: 30 } as const

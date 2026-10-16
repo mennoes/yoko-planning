@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { requireTeamAdmin } from '@/lib/teamAdminServer'
 import { BOARD_NAMES } from '@/lib/boardStore'
 import yokoRaw       from '@/data/boards/yoko.json'
 import pnpRaw        from '@/data/boards/pnp.json'
@@ -30,10 +31,8 @@ type ImportGroup = { id?: string; name: string; color?: string; collapsed?: bool
 // synced rows (source='google') are preserved.
 export async function POST(req: NextRequest) {
   if (!supabase || !supabaseAdmin) return new Response('not configured', { status: 500 })
-  const auth = req.headers.get('authorization')
-  if (!auth?.startsWith('Bearer ')) return new Response('unauthorized', { status: 401 })
-  const { data: u, error } = await supabase.auth.getUser(auth.slice(7))
-  if (error || !u.user) return new Response('unauthorized', { status: 401 })
+  const denied = await requireTeamAdmin(req)
+  if (denied) return denied
 
   const stats: Record<string, { groups: number; items: number; subitems: number }> = {}
 

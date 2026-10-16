@@ -15,6 +15,7 @@ function workload(overrides = {}) {
       './boardsRegistry': { getBoardColor: () => '#579bfc' },
       './workloadCategory': { isVrijTitle: name => /vakantie|vrij/i.test(name), loadCategoryOverrides: () => overrides },
       './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+      './recurringMeetingWindow': { visibleRecurringSubitems: (_source, subitems) => subitems },
     }
     if (!(id in mocks)) throw new Error(`Unexpected dependency ${id}`)
     return mocks[id]

@@ -7,10 +7,10 @@ const start = source.indexOf('function BoardGroupSection')
 const end = source.indexOf('// ─── BoardTable', start)
 const groupSection = source.slice(start, end > start ? end : undefined)
 
-test('agenda group header exposes the item order control directly', () => {
-  assert.match(groupSection, /onToggleReorder/)
-  assert.match(groupSection, /reorderMode \? 'Klaar' : 'Volgorde'/)
-  assert.match(groupSection, /aria-pressed=\{reorderMode\}/)
+test('agenda columns can be dragged directly and reveal their grip on press', () => {
+  assert.match(groupSection, /draggable=\{!isMobile\}/)
+  assert.match(groupSection, /onMoveColumn\(sourceKey, col\.key, side\)/)
+  assert.match(groupSection, /pressedColumnKey === col\.key \? 1 : 0/)
 })
 
 test('agenda group no longer offers select-all controls', () => {

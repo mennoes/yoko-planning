@@ -5241,7 +5241,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const movedSub = sub.source === 'google' ? { ...sub, googlePlacementLocked: true } : sub
     const seriesId = sub.source === 'google' ? sub.sourceItemId : undefined
     onChange(groups.map(g => {
-      let items = g.items.map(i => {
+      const items = g.items.map(i => {
         if (i.id === fromParentId) {
           const currentSeries = Array.isArray(i.googleMeetingSeriesIds) ? i.googleMeetingSeriesIds.filter((id): id is string => typeof id === 'string') : []
           return {
@@ -6061,7 +6061,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       </div>
 
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-        Klik op tekst/cijfers om te bewerken · Sleep tussen rijen om te herordenen · Sleep óp een rij maakt 't een subitem · Klik op tijdlijn om datums in te stellen
+        Klik op tekst/cijfers om te bewerken · Sleep tussen rijen om te herordenen · Sleep óp een rij maakt het een subitem · Klik op tijdlijn om datums in te stellen
       </p>
 
       {/* Bulk action bar */}

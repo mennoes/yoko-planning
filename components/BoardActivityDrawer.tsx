@@ -145,7 +145,11 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
       setLoading(false)
     }
     refresh()
-    return onAnyItemActivityChange(refresh)
+    const unsubscribe = onAnyItemActivityChange(refresh)
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [open, boardId])
 
   useEffect(() => {

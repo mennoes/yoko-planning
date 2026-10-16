@@ -49,7 +49,7 @@ export default function DynamicBoardPage() {
         <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px' }}>Bord niet gevonden</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
           Het bord <code style={{ background: 'var(--bg-hover)', padding: '2px 6px', borderRadius: 4 }}>{slug}</code> bestaat (nog) niet.
-          Voeg 'm aan via de + bij Agenda's in de sidebar.
+          Voeg hem toe via de + bij Agenda&apos;s in de sidebar.
         </p>
       </div>
     )
