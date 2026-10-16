@@ -211,3 +211,15 @@ test('project discovery pages past 500 rows and fails safely on read errors', as
   assert.equal(await placement.place('series', 'De Vooruitblik', { boardId: 'vlaanderen', reason: 'participants' }, true, [sub()]), true)
   await assert.rejects(loadMeetingPlacement(fakeDb([], { failRead: true })), /laden/)
 })
+
+test('een weggegooid genest subitem blijft pas weg als de Google-id in de tombstone staat', () => {
+  const moved = sub({ id: 'si_nested_event-1_123', sourceItemId: 'event-1' })
+  // Alleen het subitem-id onthouden hielp niet: de verse sync levert de
+  // Google-id aan, de merge herkende de tombstone niet en zette het item
+  // bij de eerstvolgende sync gewoon terug. Dat voelde als "verwijderen
+  // werkt niet".
+  const onlySubId = parent({ extra: { dismissedInstanceIds: [moved.id], googleMeetingSeriesIds: ['event-1'] } })
+  assert.equal(mergeNestedMeetings(onlySubId, [sub({ id: 'event-1' })], 'event-1').subitems.length, 1)
+  const bothIds = parent({ extra: { dismissedInstanceIds: [moved.id, 'event-1'], googleMeetingSeriesIds: ['event-1'] } })
+  assert.equal(mergeNestedMeetings(bothIds, [sub({ id: 'event-1' })], 'event-1').subitems.length, 0)
+})

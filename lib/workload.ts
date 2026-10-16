@@ -487,11 +487,33 @@ export function memberContributions(
   // item zou nodeloos vaak herhalen.
   const overrides = loadCategoryOverrides()
   return projects
-    .filter(project => !options?.acceptedGoogleOnly || project.source !== 'google' ||
-      (Array.isArray(project.googleCalendarMemberIds) && project.googleCalendarMemberIds.includes(memberId) &&
-       Array.isArray(project.googleParticipantIds) && project.googleParticipantIds.includes(memberId)))
+    .filter(project => countsAsAcceptedWork(project, memberId, options?.acceptedGoogleOnly))
     .map(p => ({ project: p, hours: projectHoursInWeek(p, memberId, weekStart, overrides[p.id]) }))
     .filter(c => c.hours > 0)
+}
+
+/** Telt deze afspraak mee als werk van dit teamlid?
+ *
+ *  Alleen Google-rijen worden gefilterd: die tellen pas wanneer de sync
+ *  heeft vastgelegd dát dit lid de uitnodiging heeft geaccepteerd. Een
+ *  handmatig behouden eigenaar die geen deelnemer (meer) is telt dus niet,
+ *  en een oude rij zonder deelnemersdata evenmin.
+ *
+ *  Vroeger eiste deze check óók dat de afspraak uit de eigen gekoppelde
+ *  agenda van dit lid kwam (`googleCalendarMemberIds`). Dat veld houdt
+ *  alleen de kalender bij die als laatste synchroniseerde, dus een
+ *  meeting die via de agenda van een collega binnenkwam verdween uit je
+ *  eigen week terwijl 'ie in het teamoverzicht wél meetelde — precies het
+ *  verschil tussen "37.7 uur" op je eigen kaart en "39u" in Overbelast.
+ */
+export function countsAsAcceptedWork(
+  project: Pick<Project, 'source' | 'googleParticipantIds'>,
+  memberId: string,
+  acceptedGoogleOnly?: boolean,
+): boolean {
+  if (!acceptedGoogleOnly) return true
+  if (project.source !== 'google') return true
+  return Array.isArray(project.googleParticipantIds) && project.googleParticipantIds.includes(memberId)
 }
 
 /** Total hours for one member in one week */

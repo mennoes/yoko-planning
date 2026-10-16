@@ -4939,6 +4939,29 @@ export default function PlanningPage() {
     const v = localStorage.getItem('planning-viewSize') as ViewSize
     return (v === 'compact' || v === 'large') ? v : 'compact'
   })
+  const [nameColW, setNameColW] = useState<number>(() => {
+    if (typeof window === 'undefined') return NAME_W
+    const stored = parseFloat(localStorage.getItem('planning-name-w') ?? '')
+    return Number.isFinite(stored) ? Math.max(140, Math.min(460, stored)) : NAME_W
+  })
+  useEffect(() => { localStorage.setItem('planning-name-w', String(nameColW)) }, [nameColW])
+  function startNameColResize(event: React.MouseEvent) {
+    event.preventDefault(); event.stopPropagation()
+    const startX = event.clientX
+    const startWidth = nameColW
+    const onMove = (move: MouseEvent) => {
+      setNameColW(Math.max(140, Math.min(460, Math.round(startWidth + (move.clientX - startX)))))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   const [colWZoom, setColWZoom] = useState<number>(() => {
     if (typeof window === 'undefined') return 100
     const v = parseFloat(localStorage.getItem('planning-colW-zoom') ?? '100')
@@ -5319,6 +5342,24 @@ export default function PlanningPage() {
     if (next < 0 || next >= team.length) return
     const updated = [...team]
     updated[idx] = updated[next]; updated[next] = team[idx]
+    setTeam(updated)
+    localStorage.setItem('planning-team-order', JSON.stringify(updated.map(m => m.id)))
+  }
+  // Verplaatsen binnen de zichtbare sectie. De pijltjes verschoven iemand
+  // eerder één plek in de onderliggende team-array; die array staat door
+  // elkaar heen met Team Yoko, freelancers, eigen teams en inactieve
+  // mensen. Je wisselde dus vaak met iemand uit een andere sectie en zag
+  // precies niets gebeuren. Nu zoeken we de buurman in dezelfde sectie op
+  // en wisselen we díe twee in de array — dan verschuift de rij wel echt.
+  function moveTeamMemberWithin(memberId: string, dir: -1 | 1, section: TeamMember[]) {
+    const here = section.findIndex(m => m.id === memberId)
+    const neighbour = here < 0 ? undefined : section[here + dir]
+    if (!neighbour) return
+    const from = team.findIndex(t => t.id === memberId)
+    const to   = team.findIndex(t => t.id === neighbour.id)
+    if (from < 0 || to < 0) return
+    const updated = [...team]
+    updated[from] = team[to]; updated[to] = team[from]
     setTeam(updated)
     localStorage.setItem('planning-team-order', JSON.stringify(updated.map(m => m.id)))
   }
@@ -6017,7 +6058,10 @@ export default function PlanningPage() {
     }, `'${cloneName}' gedupliceerd`)
   }
 
-  const nameW       = isMobile ? 70  : NAME_W
+  // Breedte van de namenkolom is instelbaar: lange namen en de extra
+  // knoppen (sleepgreep, capaciteit, sorteerpijltjes) passen anders niet.
+  // Sleep de rand in de kopregel; de keuze is persoonlijk, dus localStorage.
+  const nameW       = isMobile ? 70  : nameColW
   const namePad     = isMobile ? 6   : NAME_PAD
   const totalWidth  = nameW + namePad + cols.reduce((s, c) => s + c.widthPx, 0)
   // In het weekoverzicht is de maandregel dubbelop: iedere kolom toont de
@@ -6772,6 +6816,13 @@ export default function PlanningPage() {
           {/* Column header row */}
           <div style={{ display: 'flex', position: 'sticky', top: monthGroups ? 30 : 0, zIndex: 24, background: stickyBg, borderBottom: '1px solid var(--border-strong)' }}>
             <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 21, background: stickyBg, borderRight: '1px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 4, paddingLeft: monthGroups && !isMobile ? 40 : 4, paddingRight: 8, paddingTop: 0, paddingBottom: 4 }}>
+              {!isMobile && (
+                <div onMouseDown={startNameColResize}
+                  onDoubleClick={() => setNameColW(NAME_W)}
+                  title="Sleep om de namenkolom breder of smaller te maken (dubbelklik = standaard)"
+                  style={{ position: 'absolute', top: 0, right: -3, width: 7, height: '100%',
+                    cursor: 'col-resize', zIndex: 25 }} />
+              )}
               {!isMobile && !monthGroups && (
                 <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: 28,
                   borderRadius: 8, overflow: 'hidden',
@@ -6874,12 +6925,15 @@ export default function PlanningPage() {
             // is uitgeklapt dempen we de andere rijen zodat de uitgevouwen
             // persoon visueel naar voren springt.
             const dagFocusMode = expanded.size > 0
-            const renderPerson = (m: TeamMember) => {
+            // De derde parameter komt gratis uit Array.map: dat is precies
+            // de sectie waarin deze rij staat, en die bepaalt waar de
+            // sorteerpijltjes naartoe mogen.
+            const renderPerson = (m: TeamMember, _idx = 0, section: TeamMember[] = team) => {
               const isExp = expanded.has(m.id)
               const dim = dagFocusMode && !isExp
-              const realIdx = team.findIndex(t => t.id === m.id)
-              const isFirst = realIdx === 0
-              const isLast  = realIdx === team.length - 1
+              const here    = section.findIndex(t => t.id === m.id)
+              const isFirst = here <= 0
+              const isLast  = here === section.length - 1
               // Op mobiel naam ONDER de avatar — bespaart horizontale
               // ruimte zodat de timeline meer kolommen kwijt kan. Avatar
               // ietsje kleiner zodat-ie + naam onder elkaar passen.
@@ -6911,13 +6965,13 @@ export default function PlanningPage() {
                   {!isMobile && capacityControl(m)}
                   {editOrder && (
                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                      <button onClick={() => moveTeamMember(realIdx, -1)} disabled={isFirst} title="Omhoog"
+                      <button onClick={() => moveTeamMemberWithin(m.id, -1, section)} disabled={isFirst} title="Omhoog"
                         style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
                           color: isFirst ? 'var(--text-muted)' : 'var(--text-primary)',
                           cursor: isFirst ? 'not-allowed' : 'pointer',
                           fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
                           opacity: isFirst ? 0.4 : 1, minHeight: 22, minWidth: 22 }}>↑</button>
-                      <button onClick={() => moveTeamMember(realIdx, 1)} disabled={isLast} title="Omlaag"
+                      <button onClick={() => moveTeamMemberWithin(m.id, 1, section)} disabled={isLast} title="Omlaag"
                         style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
                           color: isLast ? 'var(--text-muted)' : 'var(--text-primary)',
                           cursor: isLast ? 'not-allowed' : 'pointer',
@@ -7156,7 +7210,7 @@ export default function PlanningPage() {
               </div>
             )
 
-            const renderMember = (member: TeamMember, mIdx: number) => {
+            const renderMember = (member: TeamMember, mIdx: number, section: TeamMember[] = team) => {
             const isExp = expanded.has(member.id)
             const cap   = colCapacity(member.weeklyCapacity, member.id)
             const memberProjects = datedProjectsByMember.get(member.id) ?? []
@@ -7198,18 +7252,18 @@ export default function PlanningPage() {
                       </button>
                       {capacityControl(member)}
                       {editOrder && (() => {
-                        const realIdx  = team.findIndex(t => t.id === member.id)
-                        const isFirst  = realIdx === 0
-                        const isLast   = realIdx === team.length - 1
+                        const here     = section.findIndex(t => t.id === member.id)
+                        const isFirst  = here <= 0
+                        const isLast   = here === section.length - 1
                         return (
                           <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                            <button onClick={() => moveTeamMember(realIdx, -1)} disabled={isFirst} title="Omhoog"
+                            <button onClick={() => moveTeamMemberWithin(member.id, -1, section)} disabled={isFirst} title="Omhoog"
                               style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
                                 color: isFirst ? 'var(--text-muted)' : 'var(--text-primary)',
                                 cursor: isFirst ? 'not-allowed' : 'pointer',
                                 fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
                                 opacity: isFirst ? 0.4 : 1, minHeight: 24, minWidth: 24 }}>↑</button>
-                            <button onClick={() => moveTeamMember(realIdx, 1)} disabled={isLast} title="Omlaag"
+                            <button onClick={() => moveTeamMemberWithin(member.id, 1, section)} disabled={isLast} title="Omlaag"
                               style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)',
                                 color: isLast ? 'var(--text-muted)' : 'var(--text-primary)',
                                 cursor: isLast ? 'not-allowed' : 'pointer',
@@ -7275,20 +7329,20 @@ export default function PlanningPage() {
             // pop't. Headers blijven op volle sterkte zodat de structuur
             // herkenbaar blijft.
             const focusMode = expanded.size > 0
-            const wrap = (m: TeamMember, key: string, i: number) => {
+            const wrap = (m: TeamMember, key: string, i: number, section: TeamMember[]) => {
               const dim = focusMode && !expanded.has(m.id)
               return (
                 <div key={key} style={{
                   opacity: dim ? 0.55 : 1,
                   filter:  dim ? 'saturate(0.85)' : 'none',
                   transition: 'opacity 0.18s, filter 0.18s',
-                }}>{renderMember(m, i)}</div>
+                }}>{renderMember(m, i, section)}</div>
               )
             }
             if (yokoTeam.length > 0 || draggingTeamMemberId) {
               out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, members: yokoTeam, dropTarget: { key: 'base-yoko', groupId: null, label: 'Team Yoko', baseKind: 'yoko' } })}</div>)
               if (yokoTeamPos !== 0) {
-                yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i)))
+                yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i, yokoTeam)))
               }
             }
             groupedVisible.forEach(({ group, members }) => {
@@ -7299,16 +7353,16 @@ export default function PlanningPage() {
                 arrowPos: isOpen ? 1 : 0,
                 dropTarget: { key: `group-${group.id}`, groupId: group.id, label: group.name },
               })}</div>)
-              if (isOpen) members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i)))
+              if (isOpen) members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i, members)))
             })
             if (unassigned.length > 0) {
               out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
-              unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i)))
+              unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i, unassigned)))
             }
             if (freelancers.length > 0 || draggingTeamMemberId) {
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos, members: freelancers, dropTarget: { key: 'base-freelancers', groupId: null, label: 'Freelancers', baseKind: 'freelancer' } })}</div>)
               if (freelancersPos !== 0) {
-                freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i)))
+                freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i, freelancers)))
               }
               // Ingeklapt = écht ingeklapt. Voorheen toonden we 'actieve'
               // freelancers (met ownership op iets) altijd door — dan kon
@@ -7322,7 +7376,7 @@ export default function PlanningPage() {
                 dropTarget: { key: 'base-inactive', groupId: null, label: 'Inactief team', inactive: true },
               })}</div>)
               if (inactiveTeamPos !== 0) {
-                inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i)))
+                inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i, inactiveTeam)))
               }
             }
             return out

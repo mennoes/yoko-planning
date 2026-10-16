@@ -168,3 +168,35 @@ test('a completed attached meeting does not hide the parent task or change its d
   assert.equal(todos[0].projectRef.itemId, 'project')
   assert.equal(todos[0].projectRef.startDate, '2099-09-01')
 })
+test('a meeting that synced through a colleague calendar still counts for the accepted participant', () => {
+  // googleCalendarMemberIds houdt alleen de agenda bij die als laatste
+  // synchroniseerde. Toen die check meetelde, verdween een geaccepteerde
+  // meeting uit je eigen week terwijl 'ie in het teamoverzicht wel
+  // meetelde — 37.7u op de ene kaart, 39u op de andere, zelfde persoon.
+  const google = {
+    ...meeting,
+    ownerIds: ['menno', 'odette'],
+    googleParticipantIds: ['menno', 'odette'],
+    googleCalendarMemberIds: ['odette'],
+    startDate: '2026-10-13', endDate: '2026-10-13',
+  }
+  const projects = groupsToProjects('yoko', [{ id: 'meetings', name: 'Meetings', items: [google] }])
+  const week = new Date('2026-10-12T00:00:00')
+  const workload = loadModule('../lib/workload.ts', {
+    './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
+    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
+    './itemHours': itemHours,
+  })
+  const strict = workload.memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
+  const loose = workload.memberContributions(projects, 'menno', week)
+  assert.equal(strict.length, 1)
+  assert.equal(strict[0].hours, loose[0].hours)
+})
+
+test('home telt je eigen week en het teamoverzicht op dezelfde manier', () => {
+  const home = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
+  const calls = home.match(/memberContributions\([^)]*\)/g) ?? []
+  assert.ok(calls.length >= 4)
+  for (const call of calls) assert.match(call, /acceptedGoogleOnly: true/)
+})
