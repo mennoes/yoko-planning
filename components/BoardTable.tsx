@@ -2128,20 +2128,19 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   function deleteOne(id: string) {
     const deleted  = subitems.find(s => s.id === id)
     const filtered = subitems.filter(s => s.id !== id)
-    // Google-instances (recurring events) worden bij elke sync opnieuw
-    // opgebouwd uit de events die Google nog teruggeeft — zonder dit
-    // 'onthoud wat ik verwijderde' lijstje kwam een handmatig verwijderde
-    // instance bij de volgende sync gewoon weer terug (leek alsof
-    // verwijderen niet werkte). Alleen relevant voor source==='google';
-    // handmatige subitems verdwijnen gewoon, geen tombstone nodig.
-    const isGoogleInstance = deleted?.source === 'google'
-      || !!deleted?.externalLink
-      || id.startsWith('si_g_')
-    if (isGoogleInstance) {
-      onUpdate(filtered, { dismissedInstanceIds: dismissTombstones(dismissedInstanceIds, deleted, id) })
-    } else {
-      onUpdate(filtered)
-    }
+    // ALTIJD een tombstone, ook voor handmatige subitems. Twee kanten
+    // zetten een verwijderd subitem anders terug:
+    //   1. de Google-sync bouwt instances opnieuw op uit de events die
+    //      Google nog teruggeeft;
+    //   2. preserveStoredHistory (lib/googleMeetingHistory) plakt bij
+    //      ÉLKE bord-save elk al opgeslagen subitem met een datum in het
+    //      verleden terug op de rij. Dat beschermt gemaakte uren tegen een
+    //      stale tab of een sync-rebuild, en de tombstone-lijst is de
+    //      enige uitweg die die regel kent.
+    // Alleen Google-subitems van een tombstone voorzien betekende dus dat
+    // een handmatig subitem met een datum in het verleden niet weg te
+    // krijgen was: weg uit beeld, en na een refresh gewoon weer terug.
+    onUpdate(filtered, { dismissedInstanceIds: dismissTombstones(dismissedInstanceIds, deleted, id) })
   }
   const [justCreatedSubId, setJustCreatedSubId] = useState<string | null>(null)
   function addOne() {
@@ -5617,11 +5616,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           )
           for (const sub of i.subitems) {
             if (!selectedIds.has(sub.id)) continue
-            if (sub.source === 'google' || !!sub.externalLink || sub.id.startsWith('si_g_')) {
-              // Zelfde tombstones als de losse ×: ook de Google-id van een
-              // handmatig genest item, anders zet de volgende sync 'm terug.
-              for (const tombstone of dismissTombstones(undefined, sub, sub.id)) dismissed.add(tombstone)
-            }
+            // Zelfde tombstones als de losse ×, voor élk subitem: ook een
+            // handmatig subitem komt anders via preserveStoredHistory terug.
+            for (const tombstone of dismissTombstones(undefined, sub, sub.id)) dismissed.add(tombstone)
           }
 
           return {
