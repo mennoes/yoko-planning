@@ -33,3 +33,13 @@ test('desktop puts every person in a narrow column with additions underneath', (
   const desktopColumn = page.slice(page.indexOf('data-personal-todo-column'))
   assert.ok(desktopColumn.indexOf('<MemberWeeklyTodos compact') < desktopColumn.indexOf('displayTitle="Aanvullingen"'))
 })
+
+test('people can filter the todo columns by one or more planning groups', () => {
+  assert.match(page, /useTeamGroups\(\)/)
+  assert.match(page, /data-todo-team-group-filter/)
+  assert.match(page, /aria-pressed=\{selected\}/)
+  assert.match(page, /todos-visible-team-groups/)
+  assert.match(page, /selectedTeamGroupSet\.has\(teamGroupIdForMember\(section\.id\)\)/)
+  assert.match(page, /if \(next\.size === 1\) return/)
+  assert.match(page, />\s*Alles\s*</)
+})

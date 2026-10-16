@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useProfile } from '@/components/ProfileContext'
 import { useTeam } from '@/components/TeamContext'
+import { useTeamGroups } from '@/components/useTeamGroups'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useUndo } from '@/components/UndoContext'
@@ -1125,6 +1126,7 @@ export default function TodosPage() {
   const isMobile     = useIsMobile()
   const { profile: currentProfile } = useProfile()
   const { members: liveTeam } = useTeam()
+  const { groups: teamGroups } = useTeamGroups()
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [syncReady, setSyncReady] = useState(false)
@@ -1137,11 +1139,24 @@ export default function TodosPage() {
   const [editOrder, setEditOrder] = useState(false)
   const [memberVisibility, setMemberVisibility] = useState<Record<string, boolean>>({})
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [selectedTeamGroupIds, setSelectedTeamGroupIds] = useState<string[]>([])
+  const [groupFilterReady, setGroupFilterReady] = useState(false)
+  const groupFilterChosen = useRef(false)
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('todos-member-visibility') ?? '{}')
       if (saved && typeof saved === 'object' && !Array.isArray(saved)) setMemberVisibility(saved)
     } catch {}
+  }, [])
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('todos-visible-team-groups') ?? 'null')
+      if (Array.isArray(saved) && saved.length > 0 && saved.every(id => typeof id === 'string')) {
+        groupFilterChosen.current = true
+        setSelectedTeamGroupIds(saved)
+      }
+    } catch {}
+    setGroupFilterReady(true)
   }, [])
   function toggleMember(id: string, visible: boolean) {
     const next = { ...memberVisibility, [id]: visible }
@@ -1459,7 +1474,8 @@ export default function TodosPage() {
   // werk hebben. Yoko-crew (kind 'yoko' of nog niet gezet) tonen we
   // altijd. Sectie met items > 0 tonen we sowieso (gebruiker heeft er
   // actief iets in zitten).
-  const personal = sections.filter(isPersonalSection)
+  const personalSections = sections.filter(isPersonalSection)
+  const personalBase = personalSections
     .map(s => ({ ...s, items: mergeMemberTodoItems(s.items, s.id) }))
     .filter(s => {
       if (typeof memberVisibility[s.id] === 'boolean') return memberVisibility[s.id]
@@ -1469,6 +1485,67 @@ export default function TodosPage() {
       if (m.kind !== 'freelance') return true
       return loadMyOpenProjects(s.id).length > 0
     })
+
+  const customGroupByMember = new Map<string, string>()
+  for (const group of [...teamGroups].sort((a, b) => a.position - b.position)) {
+    for (const memberId of group.memberIds) {
+      if (!customGroupByMember.has(memberId)) customGroupByMember.set(memberId, `custom:${group.id}`)
+    }
+  }
+  function teamGroupIdForMember(memberId: string): string {
+    const custom = customGroupByMember.get(memberId)
+    if (custom) return custom
+    const member = liveTeam.find(candidate => candidate.id === memberId)
+    if (member?.inactive) return 'base:inactive'
+    if (member?.kind === 'freelance') return 'base:freelance'
+    if (member?.kind === 'unassigned') return 'base:unassigned'
+    return 'base:yoko'
+  }
+
+  const personalMemberIds = new Set(personalSections.map(section => section.id))
+  const usedTeamGroupIds = new Set([...personalMemberIds].map(teamGroupIdForMember))
+  const teamFilterOptions = [
+    ...[...teamGroups]
+      .sort((a, b) => a.position - b.position)
+      .filter(group => usedTeamGroupIds.has(`custom:${group.id}`))
+      .map(group => ({ id: `custom:${group.id}`, name: group.name, color: group.color })),
+    ...([
+      { id: 'base:yoko', name: 'Studio Yoko', color: '#579bfc' },
+      { id: 'base:freelance', name: 'Freelancers', color: '#9c7ee8' },
+      { id: 'base:inactive', name: 'Inactief', color: '#8d95a2' },
+      { id: 'base:unassigned', name: 'Niet toegewezen', color: '#9aadbd' },
+    ].filter(group => usedTeamGroupIds.has(group.id))),
+  ]
+
+  useEffect(() => {
+    if (!groupFilterReady || groupFilterChosen.current || teamFilterOptions.length === 0) return
+    const ownGroup = currentProfile?.memberId ? teamGroupIdForMember(currentProfile.memberId) : null
+    const initial = ownGroup && teamFilterOptions.some(group => group.id === ownGroup)
+      ? [ownGroup]
+      : [teamFilterOptions[0].id]
+    setSelectedTeamGroupIds(initial)
+  }, [groupFilterReady, currentProfile?.memberId, teamFilterOptions.map(group => group.id).join('|')])
+
+  const selectedTeamGroupSet = new Set(selectedTeamGroupIds)
+  const personal = groupFilterReady
+    ? personalBase.filter(section => selectedTeamGroupSet.has(teamGroupIdForMember(section.id)))
+    : []
+
+  function updateTeamGroupFilter(next: string[]) {
+    groupFilterChosen.current = true
+    setSelectedTeamGroupIds(next)
+    localStorage.setItem('todos-visible-team-groups', JSON.stringify(next))
+  }
+
+  function toggleTeamGroupFilter(groupId: string) {
+    const next = new Set(selectedTeamGroupIds)
+    if (next.has(groupId)) {
+      if (next.size === 1) return
+      next.delete(groupId)
+    }
+    else next.add(groupId)
+    updateTeamGroupFilter([...next])
+  }
 
   const visibleWeekStart = new Date(getWeekStart(new Date()))
   visibleWeekStart.setDate(visibleWeekStart.getDate() + weekOffset * 7)
@@ -1495,11 +1572,32 @@ export default function TodosPage() {
     updateSection({ ...original, items: [...linked, ...updated.items] }, previousFull)
   }
 
+  const teamGroupPicker = (
+    <div data-todo-team-group-filter style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
+      <span style={{ marginRight: 2, fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Groepen</span>
+      {teamFilterOptions.map(group => {
+        const selected = selectedTeamGroupSet.has(group.id)
+        const count = personalBase.filter(section => teamGroupIdForMember(section.id) === group.id).length
+        return <button key={group.id} type="button" aria-pressed={selected} onClick={() => toggleTeamGroupFilter(group.id)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 9px', border: 0, borderRadius: 8,
+            background: selected ? 'var(--text-primary)' : 'var(--bg-hover)', color: selected ? 'var(--bg-card)' : 'var(--text-secondary)',
+            fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: group.color }} />
+          {group.name}<span style={{ opacity: 0.58 }}>{count}</span>
+        </button>
+      })}
+      <button type="button" onClick={() => updateTeamGroupFilter(teamFilterOptions.map(group => group.id))}
+        style={{ padding: '6px 9px', border: 0, borderRadius: 8, background: 'transparent', color: 'var(--text-muted)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+        Alles
+      </button>
+    </div>
+  )
+
   const peoplePicker = (
 <details open={peopleOpen} onToggle={e => setPeopleOpen(e.currentTarget.open)} style={{ marginBottom: 18 }}>
         <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Personen tonen / verbergen</summary>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 0' }}>
-          {sections.filter(isPersonalSection).map(s => (
+          {personalSections.filter(section => selectedTeamGroupSet.has(teamGroupIdForMember(section.id))).map(s => (
             <label key={s.id} style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
               <input type="checkbox" checked={personal.some(p => p.id === s.id)} onChange={e => toggleMember(s.id, e.target.checked)} />
               <MemberAvatar memberId={s.id} size={30} /> {liveTeam.find(m => m.id === s.id)?.name ?? s.title}
@@ -1557,6 +1655,7 @@ export default function TodosPage() {
         return (
           <>
             <h2 style={{ fontSize: 16 }}>Persoonlijk</h2>
+            {teamGroupPicker}
             {peoplePicker}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 22, marginBottom: 28 }}>
               {personal.map((section, index) => {
@@ -1661,6 +1760,7 @@ export default function TodosPage() {
               </div>
             )}
 
+            {teamGroupPicker}
             {peoplePicker}
             <div
               data-personal-todo-grid
