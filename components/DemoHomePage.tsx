@@ -924,11 +924,9 @@ export default function DemoHomePage() {
     : []
 
   const meetingHours  = r1(myThisContribs.filter(c => cat(c) === 'meeting').reduce((s, c) => s + c.hours, 0))
-  const overheadHours = r1(myThisContribs.filter(c => cat(c) === 'overhead').reduce((s, c) => s + c.hours, 0))
 
   const otherSegments: string[] = []
   if (meetingHours  >= 0.5) otherSegments.push(`${meetingHours}u aan meetings`)
-  if (overheadHours >= 0.5) otherSegments.push(`${overheadHours}u overhead`)
   const otherInfo = otherSegments.length > 0 ? joinAnd(otherSegments) : ''
 
   const hasAnyWeekProject = pastProjects.length + todayProjects.length + futureProjects.length + weekendProjects.length > 0
@@ -1111,10 +1109,16 @@ export default function DemoHomePage() {
               ) : (() => {
                 const catOf = (i: WorkloadItem) => effectiveCategory(i, categoryOverrides[i.id])
                 const meetingHours  = weekItems.filter(i => catOf(i) === 'meeting').reduce((s, i) => s + i.hours, 0)
-                const overheadHours = weekItems.filter(i => catOf(i) === 'overhead').reduce((s, i) => s + i.hours, 0)
-                const makenHours    = weekItems.filter(i => catOf(i) === 'maken').reduce((s, i) => s + i.hours, 0)
+                // 'overhead' heet in de rest van de app 'Overige maken' en
+                // stond hier als losse, meestal lege balk 'overhead' — dat zei
+                // niemand iets. De uren tellen gewoon bij maken, zodat het
+                // totaal blijft kloppen; de categorie zelf blijft bestaan voor
+                // de bestaande data en de popovers in de planning.
+                const makenHours    = weekItems
+                  .filter(i => catOf(i) === 'maken' || catOf(i) === 'overhead')
+                  .reduce((s, i) => s + i.hours, 0)
                 const vrijHours     = weekItems.filter(i => catOf(i) === 'vrij').reduce((s, i) => s + i.hours, 0)
-                const total = meetingHours + overheadHours + makenHours + vrijHours
+                const total = meetingHours + makenHours + vrijHours
                 const r = (n: number) => Math.round(n * 10) / 10
                 const cap = Math.max(weekCapacity, total)  // bar is at least the total so overflow stays visible
                 return (
@@ -1123,7 +1127,6 @@ export default function DemoHomePage() {
                   <div>
                     <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: 'var(--border)', marginBottom: 8 }}>
                       <div style={{ width: cap > 0 ? `${(makenHours/cap)*100}%` : 0, background: '#5fa06e', transition: 'width 0.4s ease' }} />
-                      <div style={{ width: cap > 0 ? `${(overheadHours/cap)*100}%` : 0, background: '#9aadbd', transition: 'width 0.4s ease' }} />
                       <div style={{ width: cap > 0 ? `${(meetingHours/cap)*100}%` : 0, background: '#D8B62E', transition: 'width 0.4s ease' }} />
                       <div style={{ width: cap > 0 ? `${(vrijHours/cap)*100}%` : 0, background: '#3db883', transition: 'width 0.4s ease' }} />
                     </div>
@@ -1131,10 +1134,6 @@ export default function DemoHomePage() {
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5fa06e' }} />
                         <strong style={{ color: 'var(--text-primary)' }}>{r(makenHours)}u</strong> maken
-                      </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9aadbd' }} />
-                        <strong style={{ color: 'var(--text-primary)' }}>{r(overheadHours)}u</strong> overhead
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#D8B62E' }} />
