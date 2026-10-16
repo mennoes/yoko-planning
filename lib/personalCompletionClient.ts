@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 import { cacheComment, loadAllComments, notifyCommentsUpdate, onCommentsUpdate, pullCommentsAll, type CommentThread } from './commentsStore'
 import { completionContext, type CompletionState, type PersonalTaskStatus, type CompletionTarget } from './personalCompletion'
 import { loadGroups } from './boardStore'
+import type { BoardItem } from './boards'
 
 function completionKey(target: CompletionTarget, memberId: string) {
   return JSON.stringify([target.parentItemId, target.subitemId, memberId])
@@ -45,11 +46,39 @@ export function loadPersonalCompletion(target: CompletionTarget, memberId: strin
   return loadCompletionIndex().get(key)
 }
 
+// Dezelfde truc als loadCompletionIndex hierboven, maar dan voor de
+// board-items zelf. completionTargetForProject deed per aanroep een
+// loadGroups(): localStorage lezen, het hele bord JSON-parsen, klonen en
+// alle subitems dedupliceren. De planning roept 'm honderden keren per
+// render aan (één keer per agenda-afspraak), dus één persoon uitklappen
+// parseerde het bord honderden keren — seconden werk. Nu één index per
+// bord, weggegooid zodra er iets aan een bord verandert.
+const parentItemsByBoard = new Map<string, Map<string, BoardItem>>()
+if (typeof window !== 'undefined') {
+  const invalidate = () => { parentItemsByBoard.clear() }
+  window.addEventListener('yoko-board-update', invalidate)
+  window.addEventListener('yoko-boards-registry-update', invalidate)
+  // Een andere tab die hetzelfde bord schrijft telt ook.
+  window.addEventListener('storage', event => {
+    if (!event.key || event.key.startsWith('yoko-board-')) invalidate()
+  })
+}
+function parentItemsFor(board: string): Map<string, BoardItem> {
+  const cached = parentItemsByBoard.get(board)
+  if (cached) return cached
+  const items = new Map<string, BoardItem>()
+  for (const group of loadGroups(board, [])) {
+    for (const item of group.items) items.set(item.id, item)
+  }
+  parentItemsByBoard.set(board, items)
+  return items
+}
+
 /** Resolve index-based legacy task references to the actual stable subitem ID. */
 export function completionTargetForProject(ref: { board: string; itemId: string }) {
   const match = ref.itemId.match(/^(.+)__si(\d+)$/)
   const parentItemId = match ? match[1] : ref.itemId.replace(/__vrij_\d{4}-\d{2}-\d{2}$/, '')
-  const parent = loadGroups(ref.board, []).flatMap(g => g.items).find(i => i.id === parentItemId)
+  const parent = parentItemsFor(ref.board).get(parentItemId)
   if (!parent) return null
   const sub = match ? parent.subitems?.[Number(match[2])] : undefined
   if (match && !sub) return null

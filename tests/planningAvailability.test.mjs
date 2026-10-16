@@ -46,3 +46,13 @@ test('planning and shared workload totals both use blocked vrij hours', () => {
   assert.match(planning, /const overlapWork = countWorkdaysMs\(oS\.getTime\(\), oE\.getTime\(\)\)/)
   assert.doesNotMatch(planning, /if \(isVrijDayForMember\(memberId, d\)\) continue/)
 })
+
+test('profielfoto-metadata kan nooit als teamlid verschijnen', () => {
+  // De foto-API bewaart elke foto als rij `__team_photo__:<lid>` met naam
+  // 'Profielfoto'. Die stond eerder gewoon tussen de teamleden op Home.
+  const { isTeamMetadataId } = load('../lib/teamMemberIdentity.ts')
+  assert.equal(isTeamMetadataId('__team_photo__:menno'), true)
+  assert.equal(isTeamMetadataId('__team_group__:producers'), true)
+  assert.equal(isTeamMetadataId('menno'), false)
+  assert.equal(isTeamMetadataId('anne-fleur'), false)
+})

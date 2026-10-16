@@ -236,7 +236,7 @@ type GoogleCalRow = {
 
 type GroupRow = { id: string; board_id: string; name: string; color: string; collapsed: boolean; position: number }
 type SubItemSnapshot = { id: string; sourceItemId?: string; name?: string; nameOverride?: boolean; datesOverride?: boolean; hoursOverride?: boolean; ownerIds?: string[]; ownerIdsLocked?: boolean; googlePlacementLocked?: boolean; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; ownerHours?: Record<string, number>; status?: string; statusOverride?: 'active' | 'done'; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; estHours?: number; meetLink?: string | null; externalLink?: string | null }
-type ItemRow  = { id: string; group_id: string; board_id: string; name?: string | null; source?: string | null; external_id: string | null; external_link?: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; deadline?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null }
+type ItemRow  = { id: string; group_id: string; board_id: string; name?: string | null; source?: string | null; external_id: string | null; external_link?: string | null; ical_uid?: string | null; status?: string | null; journal?: unknown; notes?: string | null; deadline?: string | null; owner_ids?: string[] | null; external_user_id?: string | null; calendar_id?: string | null; subitems?: SubItemSnapshot[] | null; position?: number | null; est_hours?: number | null; extra?: Record<string, unknown> | null; start_date?: string | null; end_date?: string | null; deleted_at?: string | null; deleted_by?: string | null }
 
 // Oude snapshots en vroege Calendar-imports hadden niet altijd
 // `source = 'google'`, terwijl hun Calendar-identiteit nog gewoon aanwezig
@@ -276,6 +276,22 @@ function historicalSubitemsForRow(row: Pick<ItemRow, 'id' | 'name' | 'owner_ids'
     meetLink: typeof extra.meetLink === 'string' ? extra.meetLink : null,
     externalLink: row.external_link ?? null,
   }]
+}
+
+/** Wat de sync met `deleted_at` mag doen bij een upsert.
+ *
+ *  De sync zette `deleted_at` altijd op null ("revive"), zodat een rij die
+ *  per ongeluk automatisch verstopt was weer terugkwam. Maar daarmee kwam
+ *  ook élk item terug dat iemand zélf had weggegooid: weghalen in de
+ *  agenda, pagina verversen, en de eerstvolgende sync zette 'm er weer
+ *  neer. Een handmatige verwijdering is te herkennen aan `deleted_by` —
+ *  alleen softDeleteItem (de prullenbak-actie in de UI) vult die; de
+ *  automatische opruimpaden zetten uitsluitend `deleted_at`. Die
+ *  verwijdering respecteren we dus, en herstellen gaat via de papierbak.
+ */
+function deletionFieldsForUpsert(row?: Pick<ItemRow, 'deleted_at' | 'deleted_by'> | null) {
+  if (row?.deleted_at && row.deleted_by) return { deleted_at: row.deleted_at, deleted_by: row.deleted_by }
+  return { deleted_at: null }
 }
 
 // Occurrences die al voorbij zijn én uren dragen. `deleted_at` haalt een rij
@@ -796,7 +812,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
   // overschrijven bij de volgende Google-sync.
   const { data: existingRows, error: existingError } = await admin
     .from('board_items')
-    .select('id, group_id, board_id, name, external_id, external_link, ical_uid, status, journal, notes, deadline, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at')
+    .select('id, group_id, board_id, name, external_id, external_link, ical_uid, status, journal, notes, deadline, owner_ids, subitems, external_user_id, calendar_id, position, est_hours, extra, start_date, end_date, deleted_at, deleted_by')
     .eq('source',           'google')
     .eq('external_user_id', cal.user_id)
     .eq('calendar_id',      cal.calendar_id)
@@ -1150,9 +1166,9 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         external_synced_at:  new Date().toISOString(),
         external_user_id:    existingRow?.external_user_id ?? cal.user_id,
         calendar_id:         existingRow?.calendar_id ?? cal.calendar_id,
-        // Revive soft-deleted rijen — als een eerdere bug 'm verstopt heeft,
-        // moet 'ie weer terugkomen zodra Google z'n update binnenpakt.
-        deleted_at:          null,
+        // Automatisch verstopte rijen komen terug zodra Google een update
+        // stuurt; een door de gebruiker weggegooide rij blijft weg.
+        ...deletionFieldsForUpsert(existingRow),
         updated_at:          new Date().toISOString(),
       })
       continue
@@ -1413,7 +1429,7 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
       external_synced_at:  new Date().toISOString(),
       external_user_id:    existingRow?.external_user_id ?? cal.user_id,
       calendar_id:         existingRow?.calendar_id ?? cal.calendar_id,
-      deleted_at:          null,
+      ...deletionFieldsForUpsert(existingRow),
       updated_at:          new Date().toISOString(),
     })
   }

@@ -58,3 +58,53 @@ test('agenda UI persists pie metadata and supports custom columns', () => {
   assert.match(registry, /id === 'omdenken'/)
   assert.match(registry, /key: 'dagen'/)
 })
+
+test('een afgerond hoofditem toont de eigenaren van zijn subitems', () => {
+  // Alle subitems op Done: stap 1 van de terugval levert niemand op, en
+  // het hoofditem heeft zelf geen eigenaren. De rij stond daardoor leeg
+  // terwijl je juist wil zien wie 't gedaan heeft.
+  const item = {
+    ownerIds: [],
+    subitems: [
+      sub({ ownerIds: ['menno'], status: 'Done', estHours: 4 }),
+      sub({ ownerIds: ['menno', 'odette'], status: 'Done', estHours: 6 }),
+    ],
+  }
+  const result = exports.relevantOwnerRollup(item, new Set(['menno', 'odette']), new Date('2026-10-08T10:00:00'), 35)
+  assert.deepEqual(Array.from(result.relevantOwnerIds), [])
+  assert.deepEqual(Array.from(result.displayOwnerIds), ['menno', 'odette'])
+  assert.equal(result.displaySubitems.length, 2)
+  assert.deepEqual(Array.from(result.historicalOwnerIds), [])
+  // De uren van die afgeronde subitems blijven zo ook leesbaar.
+  assert.deepEqual(JSON.parse(JSON.stringify(exports.relevantOwnerHours(result.displaySubitems))), { menno: 7, odette: 3 })
+})
+
+test('eigen eigenaren van het hoofditem gaan voor op afgeronde subitem-eigenaren', () => {
+  const item = {
+    ownerIds: ['anne-fleur'],
+    subitems: [sub({ ownerIds: ['odette'], status: 'Done' })],
+  }
+  const result = exports.relevantOwnerRollup(item, new Set(['anne-fleur', 'odette']), new Date('2026-10-08T10:00:00'), 35)
+  assert.deepEqual(Array.from(result.displayOwnerIds), ['anne-fleur'])
+  // Geen subitem-verdeling: de hoofdregel houdt z'n eigen urenverdeling.
+  assert.equal(result.displaySubitems.length, 0)
+  assert.deepEqual(Array.from(result.historicalOwnerIds), ['odette'])
+})
+
+test('lopende subitems blijven de bron zolang die er zijn', () => {
+  const item = {
+    ownerIds: ['anne-fleur'],
+    subitems: [sub({ ownerIds: ['menno'] }), sub({ ownerIds: ['odette'], status: 'Done' })],
+  }
+  const result = exports.relevantOwnerRollup(item, new Set(['menno', 'odette', 'anne-fleur']), new Date('2026-10-08T10:00:00'), 35)
+  assert.deepEqual(Array.from(result.displayOwnerIds), ['menno'])
+  assert.deepEqual(Array.from(result.historicalOwnerIds), ['odette'])
+})
+
+test('de agenda-rij gebruikt de terugval, niet alleen de lopende subitems', () => {
+  const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
+  assert.match(board, /updates\.ownerIds = ownerRollup\.displayOwnerIds/)
+  assert.match(board, /relevantOwnerHours\(ownerRollup\.displaySubitems\)/)
+  // Zonder subitem-verdeling niet de handmatige verdeling weggooien.
+  assert.match(board, /updates\.ownerHours = Object\.keys\(rolled\)\.length > 0 \? rolled : item\.ownerHours/)
+})

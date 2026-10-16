@@ -2,11 +2,11 @@ import { NextRequest } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { isTeamAdmin } from '@/lib/teamAdmin'
+import { TEAM_PHOTO_META_PREFIX as TEAM_PHOTO_PREFIX } from '@/lib/teamMemberIdentity'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const TEAM_PHOTO_PREFIX = '__team_photo__:'
 
 export async function POST(req: NextRequest) {
   if (!supabase || !supabaseAdmin) return Response.json({ error: 'not_configured' }, { status: 500 })

@@ -6,8 +6,8 @@ import { getAllTeamPhotos, setTeamPhoto as storeSetPhoto } from '@/lib/teamPhoto
 import { isDemoPath, DEMO_PHOTOS } from '@/lib/demoFixtures'
 import { supabase } from '@/lib/supabase'
 import { pinnedStaticAvatarUrl, staticAvatarUrl } from '@/lib/avatarAssets'
+import { TEAM_PHOTO_META_PREFIX as TEAM_PHOTO_PREFIX } from '@/lib/teamMemberIdentity'
 
-const TEAM_PHOTO_PREFIX = '__team_photo__:'
 
 type Ctx = {
   photos:   Record<string, string>
