@@ -1662,20 +1662,29 @@ export default function TodosPage() {
             )}
 
             {peoplePicker}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+            <div
+              data-personal-todo-grid
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${personal.length}, minmax(270px, 1fr))`,
+                gap: 12,
+                alignItems: 'start',
+                overflowX: 'auto',
+                paddingBottom: 8,
+              }}>
               {personal.map((section, index) => {
                 const member = liveTeam.find(item => item.id === section.id)
                 const additions = extrasOnly(section)
-                return <section key={section.id}>
+                return <section key={section.id} data-personal-todo-column style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <MemberAvatar memberId={section.id} size={36} />
+                    <MemberAvatar memberId={section.id} size={32} />
                     <div style={{ minWidth: 0 }}>
-                      <strong style={{ color: 'var(--text-primary)', fontSize: 17 }}>{member?.name ?? section.title}</strong>
-                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 1 }}>{memberCapacity(section.id)}u per week</div>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: 15, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member?.name ?? section.title}</strong>
+                      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 1 }}>{memberCapacity(section.id)}u per week</div>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.65fr) minmax(300px, .85fr)', gap: 12, alignItems: 'start' }}>
-                    <MemberWeeklyTodos memberId={section.id} projects={workloadProjects} capacity={memberCapacity(section.id)} weekOffset={weekOffset} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <MemberWeeklyTodos compact memberId={section.id} projects={workloadProjects} capacity={memberCapacity(section.id)} weekOffset={weekOffset} />
                     <TodoCard section={additions} isMember={true}
                       displayTitle="Aanvullingen" hideAvatar
                       onUpdate={(updated, previous) => updateExtras(section, updated, previous)}

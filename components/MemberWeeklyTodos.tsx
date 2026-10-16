@@ -32,12 +32,13 @@ type Row = {
 const DAYS = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag']
 
 export function MemberWeeklyTodos({
-  memberId, projects, capacity, weekOffset,
+  memberId, projects, capacity, weekOffset, compact = false,
 }: {
   memberId: string
   projects: Project[]
   capacity: number
   weekOffset: number
+  compact?: boolean
 }) {
   const router = useRouter()
   const [categories, setCategories] = useState<Record<string, WorkloadCategory>>(() => loadCategoryOverrides())
@@ -134,22 +135,24 @@ export function MemberWeeklyTodos({
 
   return (
     <div style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden', height: '100%' }}>
-      <div style={{ padding: '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <IconHourglass size={16} />
-        <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>To do&apos;s</strong>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>uit Agenda &amp; Planning</span>
+      <div style={{ padding: compact ? '10px 12px 9px' : '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: compact ? 6 : 8 }}>
+        <IconHourglass size={compact ? 14 : 16} />
+        <strong style={{ fontSize: compact ? 13 : 14, color: 'var(--text-primary)' }}>To do&apos;s</strong>
+        <span style={{ marginLeft: 'auto', minWidth: 0, fontSize: compact ? 9.5 : 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          {compact ? <>Agenda + Planning</> : <>uit Agenda &amp; Planning</>}
+        </span>
       </div>
-      <div style={{ padding: '16px 18px 18px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 10 }}>
-          <span style={{ fontSize: 36, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>{total}</span>
-          <span style={{ fontSize: 15, color: 'var(--text-muted)' }}>/ {capacity} uur</span>
-          {capacity > 0 && total > capacity && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#C4453A', background: 'rgba(196,69,58,0.15)', padding: '2px 8px', borderRadius: 10 }}>⚠ Overbelast</span>}
+      <div style={{ padding: compact ? '12px 12px 14px' : '16px 18px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: compact ? 5 : 7, marginBottom: compact ? 8 : 10, flexWrap: compact ? 'wrap' : 'nowrap' }}>
+          <span style={{ fontSize: compact ? 28 : 36, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>{total}</span>
+          <span style={{ fontSize: compact ? 12 : 15, color: 'var(--text-muted)' }}>/ {capacity} uur</span>
+          {capacity > 0 && total > capacity && <span style={{ marginLeft: 'auto', fontSize: compact ? 9.5 : 11, fontWeight: 700, color: '#C4453A', background: 'rgba(196,69,58,0.15)', padding: compact ? '2px 6px' : '2px 8px', borderRadius: 10 }}>⚠ Overbelast</span>}
         </div>
 
         {rows.length === 0 ? (
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen gepland werk</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 9 : 12 }}>
             <div>
               <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: 'var(--border)', marginBottom: 8 }}>
                 <div style={{ width: `${maken / scale * 100}%`, background: '#5fa06e' }} />
@@ -157,7 +160,7 @@ export function MemberWeeklyTodos({
                 <div style={{ width: `${meetings / scale * 100}%`, background: '#D8B62E' }} />
                 <div style={{ width: `${vrij / scale * 100}%`, background: '#3db883' }} />
               </div>
-              <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: compact ? 8 : 14, fontSize: compact ? 10 : 11.5, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                 {([['maken', maken], ['overhead', overhead], ['meeting', meetings], ['vrij', vrij]] as [WorkloadCategory, number][])
                   .filter(([, hours]) => hours > 0)
                   .map(([category, hours]) => <span key={category} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -178,24 +181,24 @@ export function MemberWeeklyTodos({
               const dayTotal = Math.round(dayRows.reduce((sum, row) => sum + row.hours, 0) * 10) / 10
               const past = weekOffset === 0 && day < currentDay
               return <div key={label} style={{ opacity: past ? 0.5 : 1 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: compact ? 9.5 : 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: compact ? 4 : 6, display: 'flex', justifyContent: 'space-between' }}>
                   <span>{label}{past ? ' · geweest' : ''}</span><span>{dayTotal}u</span>
                 </div>
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {dayRows.map(row => {
                     const category = categoryOf(row)
-                    return <li key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 24 }}>
+                    return <li key={row.id} style={{ display: 'flex', alignItems: 'center', gap: compact ? 4 : 8, minHeight: compact ? 22 : 24 }}>
                       <input type="checkbox" checked={row.done} onChange={event => void toggle(row, event.target.checked)} style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
                       <button type="button" onClick={() => router.push(`/projects/${row.board}?focus=${encodeURIComponent(row.rawItemId)}&drawer=${encodeURIComponent(row.rawItemId)}`)}
-                        style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '3px 4px', border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
+                        style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: compact ? 4 : 8, padding: compact ? '2px' : '3px 4px', border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
                         <span title={CAT_LABEL[category]} style={{ width: 8, height: 8, borderRadius: '50%', background: CAT_COLOR[category], flexShrink: 0 }} />
-                        {row.startTime && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', minWidth: 36 }}>{row.startTime.slice(0, 5)}</span>}
-                        <span style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: category === 'maken' ? 500 : 400, color: category === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', textDecoration: row.done ? 'line-through' : 'none' }}>
+                        {row.startTime && <span style={{ fontSize: compact ? 9.5 : 11, fontWeight: 600, color: 'var(--text-muted)', minWidth: compact ? 29 : 36 }}>{row.startTime.slice(0, 5)}</span>}
+                        <span style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: compact ? 11.5 : 13, fontWeight: category === 'maken' ? 500 : 400, color: category === 'maken' ? 'var(--text-primary)' : 'var(--text-muted)', textDecoration: row.done ? 'line-through' : 'none' }}>
                           {row.name}{row.parentName && row.parentName !== row.name && <small style={{ marginLeft: 6, color: 'var(--text-muted)' }}>↳ {row.parentName}</small>}
                         </span>
                         {row.meetLink && <a href={row.meetLink} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()} style={{ padding: '1px 6px', borderRadius: 4, background: '#00ac47', color: '#fff', fontSize: 9.5, fontWeight: 700, textDecoration: 'none' }}>Meet↗</a>}
                         {row.source === 'google' && row.externalLink && <a href={row.externalLink} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()} style={{ width: 14, height: 14, borderRadius: 3, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>G</a>}
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 34, textAlign: 'right' }}>{row.hours}u</span>
+                        <span style={{ fontSize: compact ? 10.5 : 12, color: 'var(--text-muted)', minWidth: compact ? 27 : 34, textAlign: 'right' }}>{row.hours}u</span>
                       </button>
                     </li>
                   })}

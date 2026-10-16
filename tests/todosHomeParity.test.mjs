@@ -24,3 +24,12 @@ test('the week selector controls every personal list together', () => {
   assert.match(page, /setWeekOffset\(offset => offset \+ 1\)/)
   assert.match(page, /weekOffset=\{weekOffset\}/)
 })
+
+test('desktop puts every person in a narrow column with additions underneath', () => {
+  assert.match(page, /data-personal-todo-grid/)
+  assert.match(page, /gridTemplateColumns: `repeat\(\$\{personal\.length\}, minmax\(270px, 1fr\)\)`/)
+  assert.match(page, /data-personal-todo-column/)
+  assert.match(page, /<MemberWeeklyTodos compact memberId=\{section\.id\}/)
+  const desktopColumn = page.slice(page.indexOf('data-personal-todo-column'))
+  assert.ok(desktopColumn.indexOf('<MemberWeeklyTodos compact') < desktopColumn.indexOf('displayTitle="Aanvullingen"'))
+})
