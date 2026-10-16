@@ -2850,8 +2850,11 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               <button onClick={onMoveDown} disabled={isLast} title="Omlaag"
                 style={{ background: isLast ? 'transparent' : 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 4, color: isLast ? 'var(--text-muted)' : 'var(--text-primary)', cursor: isLast ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700, padding: '1px 4px', opacity: isLast ? 0.4 : 1 }}>↓</button>
             </>
-          ) : hover && item.source !== 'google' ? (
-            <button onClick={onDelete} title="Verwijderen" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 17, lineHeight: 1, padding: '2px 6px', borderRadius: 3 }}>×</button>
+          ) : (hover || isMobile) && item.source !== 'google' ? (
+            // Op touch bestaat hover niet; zonder deze uitzondering was het
+            // kruisje op telefoon en tablet nooit te zien.
+            <button onClick={onDelete} title="Verwijderen" aria-label={`${item.name || 'Item'} verwijderen`}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: isMobile ? 20 : 17, lineHeight: 1, padding: isMobile ? '6px 10px' : '2px 6px', borderRadius: 3 }}>×</button>
           ) : null}
         </div>
       </div>
@@ -3614,6 +3617,18 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   function deleteItem(itemId: string) {
     const removed = group.items.find(i => i.id === itemId)
     const idx = group.items.findIndex(i => i.id === itemId)
+    // Even bevestigen. Het kruisje zit vlak naast de rij-inhoud en een
+    // misklik kostte eerder meteen een item (terug te halen uit de
+    // papierbak, maar dat moet je dan wel weten). Lege 'Nieuw item'-
+    // placeholders slaan we over: daar valt niets aan kwijt te raken.
+    if (removed && !isEmptyPlaceholder(removed)) {
+      const subs = removed.subitems?.length ?? 0
+      const extra = subs > 0 ? ` Inclusief ${subs} subitem${subs === 1 ? '' : 's'}.` : ''
+      const confirmed = window.confirm(
+        `'${removed.name || 'Naamloos item'}' verwijderen?${extra}\n\nJe kunt 'm terughalen uit de papierbak.`,
+      )
+      if (!confirmed) return
+    }
     const snapshot = { ...group, items: [...group.items] }
     onUpdateGroup({ ...group, items: group.items.filter(i => i.id !== itemId) })
     // Lege 'Nieuw item' placeholders: hard-delete (atomair, geen prullenbak —
