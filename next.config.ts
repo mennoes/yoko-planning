@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Bewaar Turbopack-resultaten ook tussen productiebuilds. Dit verandert
+    // niets aan de gegenereerde app, maar voorkomt dat lokale/CI-validaties
+    // na iedere kleine wijziging al het onveranderde werk opnieuw doen.
+    turbopackFileSystemCacheForBuild: true,
+  },
   // Dit project staat naast een los package-lock.json in de Windows-home.
   // Zonder expliciete root kiest Turbopack daardoor C:\Users\menno en kan
   // de productiebuild onnodig buiten het project proberen te lezen.

@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "check": "tsc --noEmit --incremental --tsBuildInfoFile .next/cache/tsconfig.check.tsbuildinfo",
+    "verify:fast": "npm run check",
     "start": "next start",
     "lint": "eslint"
   },
