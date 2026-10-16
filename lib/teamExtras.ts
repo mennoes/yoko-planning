@@ -82,6 +82,11 @@ export function addExtra(m: TeamMemberExtra): boolean {
 }
 
 export function removeExtra(id: string): boolean {
+  // Metadata-rijen (profielfoto's, startdatums, groepen) liften mee op
+  // dezelfde tabel. Ze horen niet in de ledenlijst thuis en mogen al
+  // helemaal niet via 'teamlid verwijderen' gewist worden — dat kostte
+  // eerder de profielfoto's van een paar collega's.
+  if (isTeamMetadataId(id)) return false
   const next = readExtras().filter(x => x.id !== id)
   writeExtras(next)
   // We muteren teamData niet bij verwijdering — een runtime member die

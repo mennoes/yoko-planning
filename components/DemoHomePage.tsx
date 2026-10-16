@@ -810,7 +810,8 @@ export default function DemoHomePage() {
   const weekStartTeam = getWeekStart(new Date())
   const memberHoursThisWeek: Record<string, number> = {}
   for (const m of yokoMembers) {
-    const contribs = memberContributions(allProjects, m.id, weekStartTeam)
+    // Zelfde telling als de persoonlijke week-kaart, zie app/page.tsx.
+    const contribs = memberContributions(allProjects, m.id, weekStartTeam, { acceptedGoogleOnly: true })
     memberHoursThisWeek[m.id] = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
   }
   // Geen extra cap-schaling op days_off — weeklyCapacity is al wat de

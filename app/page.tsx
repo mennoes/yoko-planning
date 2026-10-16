@@ -847,7 +847,11 @@ export default function HomePage() {
   const weekStartTeam = getWeekStart(new Date())
   const memberHoursThisWeek: Record<string, number> = {}
   for (const m of yokoMembers) {
-    const contribs = memberContributions(allProjects, m.id, weekStartTeam)
+    // Exact dezelfde telling als je eigen week-kaart hierboven. Zonder
+    // `acceptedGoogleOnly` telde dit overzicht ook afspraken mee die de
+    // persoonlijke kaart juist wegliet, en stond er op één scherm 37.7u
+    // naast 39u voor dezelfde persoon in dezelfde week.
+    const contribs = memberContributions(allProjects, m.id, weekStartTeam, { acceptedGoogleOnly: true })
     memberHoursThisWeek[m.id] = Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10
   }
   // Geen extra cap-schaling op days_off — weeklyCapacity is al wat de

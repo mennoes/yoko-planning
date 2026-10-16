@@ -2048,6 +2048,24 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
 }
 
 // ─── Subitems sectie ──────────────────────────────────────────────────────────
+// Welke id's moeten we onthouden wanneer iemand een Google-subitem
+// weggooit? Niet alleen die van het subitem zelf.
+//
+// Een meeting die je handmatig onder een project nestte krijgt een eigen
+// subitem-id; de Google-kant bewaart z'n oorspronkelijke id in
+// `sourceItemId`. De server bouwt de verse subitems op uit Google en
+// vergelijkt die met de tombstone-lijst op de Google-id — dus een
+// tombstone met alléén het subitem-id herkende hij niet, en het subitem
+// kwam bij de eerstvolgende sync gewoon weer terug. Voor de gebruiker
+// zag dat eruit als "verwijderen werkt niet".
+function dismissTombstones(
+  existing: string[] | undefined,
+  subitem: { id?: string; sourceItemId?: string } | undefined,
+  id: string,
+): string[] {
+  return [...new Set([...(existing ?? []), id, ...(subitem?.sourceItemId ? [subitem.sourceItemId] : [])])]
+}
+
 function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
@@ -2120,8 +2138,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
       || !!deleted?.externalLink
       || id.startsWith('si_g_')
     if (isGoogleInstance) {
-      const next = [...new Set([...(dismissedInstanceIds ?? []), id])]
-      onUpdate(filtered, { dismissedInstanceIds: next })
+      onUpdate(filtered, { dismissedInstanceIds: dismissTombstones(dismissedInstanceIds, deleted, id) })
     } else {
       onUpdate(filtered)
     }
@@ -5601,7 +5618,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           for (const sub of i.subitems) {
             if (!selectedIds.has(sub.id)) continue
             if (sub.source === 'google' || !!sub.externalLink || sub.id.startsWith('si_g_')) {
-              dismissed.add(sub.id)
+              // Zelfde tombstones als de losse ×: ook de Google-id van een
+              // handmatig genest item, anders zet de volgende sync 'm terug.
+              for (const tombstone of dismissTombstones(undefined, sub, sub.id)) dismissed.add(tombstone)
             }
           }
 
