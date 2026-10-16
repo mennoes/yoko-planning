@@ -3622,10 +3622,17 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     // soft-delete heeft een korte async-window waarin een realtime-pull de
     // rij kan terughalen voor deleted_at gezet is; voor 'Nieuw item'-rijen
     // was dat de oorzaak van 'blijft terugkomen'.
+    // Mislukt de opslag, dan zetten we de rij meteen terug. Eerder bleef
+    // 'ie uit beeld tot de volgende refresh 'm alsnog terughaalde — dan
+    // lijkt verwijderen te werken terwijl er niets is opgeslagen.
+    const restoreOnFailure = (ok: boolean) => {
+      if (ok) return
+      onUpdateGroup(snapshot)
+    }
     if (removed && isEmptyPlaceholder(removed)) {
-      hardDeleteItems([itemId]).catch(() => {})
+      hardDeleteItems([itemId]).then(restoreOnFailure).catch(() => restoreOnFailure(false))
     } else {
-      softDeleteItem(itemId).catch(() => {})
+      softDeleteItem(itemId, boardId).then(restoreOnFailure).catch(() => restoreOnFailure(false))
     }
     pushUndo(() => onUpdateGroup(snapshot), removed ? `'${removed.name}' verwijderd` : 'Item verwijderd')
     void idx
@@ -5679,7 +5686,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         }),
     })))
     for (const id of topLevelIdsToDelete) {
-      softDeleteItem(id).catch(() => {})
+      // Zelfde regel als de losse verwijderknop: mislukt 't, zet alles terug.
+      softDeleteItem(id, boardId).then(ok => { if (!ok) onChange(snapshot) }).catch(() => onChange(snapshot))
     }
     pushUndo(() => onChange(snapshot), `${count} item${count === 1 ? '' : 's'} verwijderd`)
     clearSelection()

@@ -6032,7 +6032,7 @@ export default function PlanningPage() {
     // een tijdelijk gefilterde/stale lokale array) — dus zonder deze
     // expliciete soft-delete blijft de rij in Supabase bestaan en komt
     // 'ie bij de volgende pull terug. Zie lib/boardStore.ts.
-    if (isTopLevelRemoval) softDeleteItem(origItemId).catch(() => {})
+    if (isTopLevelRemoval) softDeleteItem(origItemId, boardName).catch(() => {})
     logActivity('Project verwijderd', project.name)
     setDetailProject(null)
     pushUndo(() => {

@@ -988,29 +988,63 @@ export async function softDeleteGroup(groupId: string): Promise<boolean> {
 }
 
 let deletedByColumnSupported = true
-export async function softDeleteItem(itemId: string): Promise<boolean> {
-  if (!supabase) return false
+
+function reportDeleteFailure(boardName: string, message: string): false {
+  // Zelfde kanaal als een mislukte bord-save, zodat de bestaande rode
+  // 'Niet online opgeslagen'-balk (met Opnieuw-knop) 't gewoon toont.
+  emitBoardSaveStatus({ boardName, state: 'error', message })
+  return false
+}
+
+/** Verwijdert één item (soft-delete, dus terug te halen via de papierbak).
+ *
+ *  Belangrijk: een PostgREST-update zonder matchende rij geeft GEEN error.
+ *  Deze functie gaf daardoor `true` terug terwijl er niets gebeurde — het
+ *  item verdween uit beeld, kwam na een refresh terug en er stond nergens
+ *  een spoor van. Daarom bevestigen we nu met `.select()` dát er een rij
+ *  is bijgewerkt, en zeggen we het eerlijk als dat niet zo is.
+ */
+export async function softDeleteItem(itemId: string, boardName = ''): Promise<boolean> {
+  if (!supabase) return reportDeleteFailure(boardName, 'Verwijderen is niet opgeslagen: geen databaseverbinding.')
   const uid = await getCurrentUserId()
-  if (!uid) return false
+  if (!uid) return reportDeleteFailure(boardName, 'Verwijderen is niet opgeslagen: je sessie is verlopen. Log opnieuw in.')
   const stamp = new Date().toISOString()
+
+  let updated: { id: string }[] | null = null
   if (deletedByColumnSupported) {
-    const { error } = await supabase.from('board_items')
+    const { data, error } = await supabase.from('board_items')
       .update({ deleted_at: stamp, deleted_by: uid })
       .eq('id', itemId)
+      .select('id')
     if (error) {
-      if (/column .*deleted_by.*does not exist|PGRST204|schema cache|cannot find/i.test(error.message ?? '')) {
+      // Oudere installaties missen migratie 0032. Elke foutmelding die
+      // over deze kolom gaat telt; de exacte tekst verschilt per versie.
+      if (/deleted_by|PGRST204|schema cache|cannot find/i.test(error.message ?? '')) {
         deletedByColumnSupported = false
       } else {
-        return false
+        return reportDeleteFailure(boardName, `Verwijderen is niet opgeslagen: ${error.message}`)
       }
     } else {
-      return true
+      updated = data as { id: string }[] | null
     }
   }
-  const { error } = await supabase.from('board_items')
-    .update({ deleted_at: stamp })
-    .eq('id', itemId)
-  return !error
+  if (!deletedByColumnSupported) {
+    const { data, error } = await supabase.from('board_items')
+      .update({ deleted_at: stamp })
+      .eq('id', itemId)
+      .select('id')
+    if (error) return reportDeleteFailure(boardName, `Verwijderen is niet opgeslagen: ${error.message}`)
+    updated = data as { id: string }[] | null
+  }
+  if (updated && updated.length > 0) return true
+
+  // Niets bijgewerkt. Bestaat de rij überhaupt? Zo niet, dan stond dit
+  // item alleen lokaal en is 't nu echt weg — dat is geen fout.
+  const { data: existing } = await supabase.from('board_items')
+    .select('id, deleted_at').eq('id', itemId).maybeSingle()
+  if (!existing) return true
+  if ((existing as { deleted_at: string | null }).deleted_at) return true
+  return reportDeleteFailure(boardName, 'Verwijderen is niet opgeslagen: de database accepteerde de wijziging niet.')
 }
 
 // Sla item→subitem-nesting in de veilige volgorde op: eerst de target-parent
