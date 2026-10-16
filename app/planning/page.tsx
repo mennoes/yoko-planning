@@ -13,7 +13,7 @@ import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
 import dienjaarRaw       from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscribeRemoteBoard, pullBoardFromRemote, softDeleteItem, restoreTrashItem } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
-import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, type Project, type TeamMember } from '@/lib/workload'
+import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, countsAsAcceptedWork, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
 import { blockedHoursForWorkdays } from '@/lib/freeCapacity'
 import { planningBarHeightRatio, planningBarPixelHeight } from '@/lib/planningBarHeight'
@@ -326,7 +326,11 @@ function contributionsPerCell(
 
   for (const project of projects) {
     if (!project.startDate || !project.endDate) continue
-    const owners = project.ownerIds.filter(id => memberIds.has(id))
+    // Zelfde regel als Home en je eigen week-kaart: een Google-afspraak
+    // telt alleen mee voor wie 'm heeft geaccepteerd. Zonder deze filter
+    // stond er in de planning een ander urentotaal dan in To do's — voor
+    // dezelfde persoon in dezelfde week.
+    const owners = project.ownerIds.filter(id => memberIds.has(id) && countsAsAcceptedWork(project, id, true))
     if (owners.length === 0) continue
 
     const pS = new Date(project.startDate)
@@ -5993,7 +5997,18 @@ export default function PlanningPage() {
           const subs = i.subitems ?? []
           if (subIdx < 0 || subIdx >= subs.length) return i
           removedSomething = true
-          return { ...i, subitems: subs.filter((_, idx) => idx !== subIdx) }
+          // Tombstone, net als de × in de agenda. preserveStoredHistory
+          // plakt bij élke bord-save een al opgeslagen subitem met een
+          // datum in het verleden terug op de rij; zonder deze lijst is
+          // zo'n subitem dus niet weg te krijgen. De Google-id (als die
+          // er is) gaat mee, want de sync vergelijkt daarop.
+          const removedSub = subs[subIdx]
+          const tombstones = [...new Set([
+            ...(Array.isArray(i.dismissedInstanceIds) ? i.dismissedInstanceIds as string[] : []),
+            removedSub.id,
+            ...(removedSub.sourceItemId ? [removedSub.sourceItemId] : []),
+          ])]
+          return { ...i, subitems: subs.filter((_, idx) => idx !== subIdx), dismissedInstanceIds: tombstones }
         }),
       }))
     } else {
@@ -6110,6 +6125,8 @@ export default function PlanningPage() {
       let memberHours = 0
       for (const p of effectiveProjects) {
         if (!p.ownerIds.includes(m.id)) continue
+        // Zelfde accepted-regel als de cellen hierboven en als Home.
+        if (!countsAsAcceptedWork(p, m.id, true)) continue
         if (!p.startDate || !p.endDate) continue
         const hours = hoursInRange(p, m.id, weekStart, workloadWeekEnd, overrides[p.id])
         if (hours <= 0) continue

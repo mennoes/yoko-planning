@@ -200,3 +200,11 @@ test('home telt je eigen week en het teamoverzicht op dezelfde manier', () => {
   assert.ok(calls.length >= 4)
   for (const call of calls) assert.match(call, /acceptedGoogleOnly: true/)
 })
+test('planning rekent met dezelfde accepted-regel als to do’s en home', () => {
+  const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
+  // Eén definitie van "telt dit mee", gedeeld via lib/workload. Anders
+  // staat er in de planning een ander urentotaal dan in To do's.
+  assert.match(planning, /countsAsAcceptedWork/)
+  assert.match(planning, /memberIds\.has\(id\) && countsAsAcceptedWork\(project, id, true\)/)
+  assert.match(planning, /if \(!countsAsAcceptedWork\(p, m\.id, true\)\) continue/)
+})
