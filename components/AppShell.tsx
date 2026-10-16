@@ -16,6 +16,7 @@ import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
 import { IconMenu } from './Icon'
 import { FeedbackBubble } from './FeedbackBubble'
+import BoardSaveIndicator from './BoardSaveIndicator'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
@@ -434,6 +435,7 @@ function Inner({ children }: { children: ReactNode }) {
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
       <TimerIndicator />
       <FeedbackBubble />
+      <BoardSaveIndicator />
 
       {avatarReminderOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9900,

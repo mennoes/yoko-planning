@@ -19,6 +19,11 @@ test('share API exposes subitem owners for accurate accountability', () => {
   assert.match(api, /ownerIds:\s+s\.ownerIds \?\? r\.owner_ids \?\? \[\]/)
 })
 
+test('share monthly totals use the same project materialization as Home and Planning', () => {
+  assert.match(api, /groupsToProjects\(board, workloadGroups\)/)
+  assert.doesNotMatch(api, /function collectHourSources/)
+})
+
 test('producers can leave a persisted question on the share page', () => {
   assert.match(page, /Vragen over de uren/)
   assert.match(page, /method: 'PUT'/)

@@ -4,6 +4,7 @@ import { getCurrentUserId } from './sync'
 import { getBoardIds, getBoardConfig, isCoreBoardId, upsertBoard, defaultColumnsForNewBoard } from './boardsRegistry'
 import { normalizeTitle } from './subitemRules'
 import { preserveStoredHistory } from './googleMeetingHistory'
+import { emitBoardSaveStatus } from './boardSaveStatus'
 
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
 // migraties van Google-id-vormen (it_g_{ev.id} → it_g_{iCalUID}) konden
@@ -181,18 +182,25 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
     // Zelfde UI-state, maar een eerdere databasewrite kan zijn mislukt.
     // Dan is dit geen echte no-op: probeer de nog dirty wijziging opnieuw.
     if (localStorage.getItem(dirtyKey(boardName))) {
+      emitBoardSaveStatus({ boardName, state: 'saving' })
       pushBoardToRemote(boardName, groups).then(ok => {
         if (ok && localStorage.getItem(key(boardName)) === next) {
           localStorage.setItem(pulledKey(boardName), next)
           localStorage.removeItem(dirtyKey(boardName))
+          emitBoardSaveStatus({ boardName, state: 'saved' })
         }
-      }).catch(() => {})
+      }).catch(error => emitBoardSaveStatus({
+        boardName,
+        state: 'error',
+        message: error instanceof Error ? error.message : 'Onbekende opslagfout',
+      }))
     }
     return
   }
   localStorage.setItem(key(boardName), next)
   localStorage.setItem(dirtyKey(boardName), Date.now().toString())
   lastLocalWriteAt[boardName] = Date.now()
+  emitBoardSaveStatus({ boardName, state: 'saving' })
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
   pushBoardToRemote(boardName, groups).then(ok => {
     if (!ok) return
@@ -202,8 +210,13 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
     if (localStorage.getItem(key(boardName)) === next) {
       localStorage.setItem(pulledKey(boardName), next)
       localStorage.removeItem(dirtyKey(boardName))
+      emitBoardSaveStatus({ boardName, state: 'saved' })
     }
-  }).catch(() => {})
+  }).catch(error => emitBoardSaveStatus({
+    boardName,
+    state: 'error',
+    message: error instanceof Error ? error.message : 'Onbekende opslagfout',
+  }))
 }
 
 // ─── Remote sync ─────────────────────────────────────────────────────────────
@@ -520,6 +533,7 @@ function discardRetiredBoardCache(boardName: string): void {
 async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promise<boolean> {
   const fail = (message: string): false => {
     if (typeof window !== 'undefined') {
+      emitBoardSaveStatus({ boardName, state: 'error', message })
       window.dispatchEvent(new CustomEvent('yoko-push-failed', {
         detail: { boardName, message },
       }))

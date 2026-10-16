@@ -43,6 +43,7 @@ import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 import { blockedHoursForWorkdays } from './freeCapacity'
 import { visibleRecurringSubitems } from './recurringMeetingWindow'
+import { itemRollupHours } from './itemHours'
 
 function normalizeProjectOwnerHours(
   ownerIds: string[],
@@ -221,18 +222,10 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           }, ...datedProjects]
         }
         const activeSubs = subs.filter(si => (si.status ?? '') !== 'Done')
-        const activeManualHours = activeSubs
-          .filter(si => si.source !== 'google')
-          .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
-        const activeGoogleHours = activeSubs
-          .filter(si => si.source === 'google')
-          .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
         // Zodra subitems echte uren bevatten zijn zij de bron. De waarde op
         // de hoofdregel is dan het rollup-totaal en mag niet nogmaals worden
         // toegevoegd. Alleen 0u-placeholder-subs vallen terug op de parent.
-        const hours = (i.source as string) === 'google'
-          ? activeManualHours + activeGoogleHours
-          : (activeManualHours > 0 ? activeManualHours : (Number(i.estHours) || 0)) + activeGoogleHours
+        const hours = itemRollupHours(i, activeSubs)
         // Owners zonder eigenaar landen op 'unassigned' zodat ze in de
         // planning onder de Unassigned-rij verschijnen i.p.v. uit beeld
         // te verdwijnen.

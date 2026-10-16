@@ -17,10 +17,12 @@ function loadModule(file, mocks, globals = {}) {
   return exports
 }
 const category = { isVrijTitle: () => false, loadCategoryOverrides: () => ({}) }
+const itemHours = loadModule('../lib/itemHours.ts', {})
 const { groupsToProjects } = loadModule('../lib/workload.ts', {
   './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
   './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
   './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
+  './itemHours': itemHours,
 })
 const meeting = {
   id: 'meeting', name: 'Project overleg', ownerIds: ['menno'], status: '',
@@ -88,6 +90,7 @@ test('a Google meeting in a wrongly named Vrij group stays a meeting, not an 8-h
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
     './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
     './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
+    './itemHours': itemHours,
   })
   const project = {
     id: 'weekstart', name: 'Weekstart', group: 'Vrij', source: 'google',
@@ -99,12 +102,12 @@ test('a Google meeting in a wrongly named Vrij group stays a meeting, not an 8-h
   assert.equal(api.projectHoursInWeek(project, 'menno', week, 'meeting'), 1.5)
 })
 
-test('the agenda ignores a recurring Google container total as well', () => {
+test('agenda and workload use the same canonical item roll-up', () => {
   const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
   const helperStart = board.indexOf('export function effectiveHours')
   const helper = board.slice(helperStart, board.indexOf('export function effectiveDays', helperStart))
-  assert.match(helper, /item\.source === 'google'/)
-  assert.match(helper, /return manualSubs \+ googleSubs/)
+  assert.match(board, /import \{ itemRollupHours \} from '@\/lib\/itemHours'/)
+  assert.match(helper, /return itemRollupHours\(item, visibleSubs\)/)
 })
 
 test('recurring Google meetings are limited to eight weeks ahead', () => {
@@ -128,6 +131,7 @@ test('personal calendar view ignores a manually retained owner who is not an acc
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
     './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
     './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
+    './itemHours': itemHours,
   }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
   assert.equal(strict.length, 0)
 })
@@ -143,6 +147,7 @@ test('personal calendar view hides legacy Google rows without verified participa
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
     './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
     './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
+    './itemHours': itemHours,
   }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
   assert.equal(strict.length, 0)
 })

@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { signShare, validShare } from '@/lib/shareToken'
 import { randomUUID } from 'node:crypto'
+import { groupsToProjects, type Project } from '@/lib/workload'
+import type { BoardGroup, BoardItem, SubItem } from '@/lib/boards'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -62,10 +64,11 @@ type ShareGroup = {
 
 type ItemRow = {
   id: string; group_id: string; name: string | null;
+  source: string | null;
   owner_ids: string[] | null; status: string | null;
   start_date: string | null; end_date: string | null;
   est_hours: number | null;
-  subitems: Array<{ id?: string; name?: string; startDate?: string | null; endDate?: string | null; status?: string; hiddenFromPlanning?: boolean; estHours?: number; ownerIds?: string[] }> | null;
+  subitems: Array<{ id?: string; name?: string; startDate?: string | null; endDate?: string | null; status?: string; source?: string; hiddenFromPlanning?: boolean; estHours?: number; ownerIds?: string[] }> | null;
   position: number | null;
   extra: Record<string, unknown> | null;
 }
@@ -109,32 +112,12 @@ function monthBounds(offset: number): { from: Date; to: Date; key: string; label
   }
 }
 
-// Bouwt dezelfde 'subitems-met-datum vervangen de parent-balk'-regel als
-// groupsToProjects (lib/workload.ts) zodat de uren-telling hier niet
-// dubbel telt: een item met gedateerde subitems levert uren per subitem,
-// een item zonder (of met dateloze) subitems levert de eigen uren.
-function collectHourSources(itemRows: ItemRow[], isHidden: (extra: Record<string, unknown> | null) => boolean): { start: string; end: string; hours: number }[] {
-  const out: { start: string; end: string; hours: number }[] = []
-  for (const r of itemRows) {
-    if (isHidden(r.extra)) continue
-    const subs = (r.subitems ?? []).filter(s => !s?.hiddenFromPlanning)
-    const subsWithDates = subs.filter(s => s.startDate || s.endDate)
-    if (subsWithDates.length > 0) {
-      for (const s of subsWithDates) {
-        const start = s.startDate ?? s.endDate!
-        const end   = s.endDate   ?? s.startDate!
-        out.push({ start, end, hours: Number((s as { estHours?: number }).estHours) || 0 })
-      }
-      continue
-    }
-    if (!r.start_date) continue
-    out.push({ start: r.start_date, end: r.end_date ?? r.start_date, hours: Number(r.est_hours) || 0 })
-  }
-  return out
-}
-
-function computeMonthlyHours(itemRows: ItemRow[], isHidden: (extra: Record<string, unknown> | null) => boolean): MonthlyHours[] {
-  const sources = collectHourSources(itemRows, isHidden)
+function computeMonthlyHours(projects: Project[]): MonthlyHours[] {
+  const sources = projects.flatMap(project => {
+    const start = project.startDate ?? project.endDate
+    if (!start) return []
+    return [{ start, end: project.endDate ?? start, hours: project.estHours }]
+  })
   return [-1, 0, 1].map(offset => {
     const { from, to, key, label, isCurrent } = monthBounds(offset)
     const hours = sources.reduce((sum, src) => sum + hoursInRange(src.start, src.end, src.hours, from, to), 0)
@@ -161,7 +144,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
 
   const { data: itemRows, error: iErr } = await supabaseAdmin
     .from('board_items')
-    .select('id, group_id, name, owner_ids, status, start_date, end_date, est_hours, subitems, position, extra')
+    .select('id, group_id, name, source, owner_ids, status, start_date, end_date, est_hours, subitems, position, extra')
     .eq('board_id', board)
     .is('deleted_at', null)
     .order('position', { ascending: true })
@@ -223,7 +206,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
     items: itemsByGroup.get(g.id) ?? [],
   }))
 
-  const monthlyHours = computeMonthlyHours(scopedItemRows, isHidden)
+  // Gebruik exact dezelfde projectmaterialisatie als Home, Planning en To
+  // do's. Daardoor kan Share nooit meer een parent én diens subitems dubbel
+  // tellen of een Google-serietotaal als extra uren meenemen.
+  const workloadGroups: BoardGroup[] = scopedGroupRows.map(group => ({
+    id: group.id,
+    name: group.name ?? '',
+    color: group.color ?? '#9aadbd',
+    items: scopedItemRows
+      .filter(row => row.group_id === group.id && !isHidden(row.extra))
+      .map((row): BoardItem => ({
+        id: row.id,
+        name: row.name ?? '',
+        ownerIds: row.owner_ids ?? [],
+        status: row.status ?? '',
+        startDate: row.start_date,
+        endDate: row.end_date,
+        deadline: null,
+        estHours: Number(row.est_hours) || 0,
+        dagen: (Number(row.est_hours) || 0) / 8,
+        source: row.source === 'google' ? 'google' : 'manual',
+        subitems: (row.subitems ?? [])
+          .filter(subitem => !subitem.hiddenFromPlanning)
+          .map((subitem): SubItem => ({
+            id: String(subitem.id ?? ''),
+            name: subitem.name ?? '',
+            ownerIds: subitem.ownerIds ?? row.owner_ids ?? [],
+            status: subitem.status ?? '',
+            startDate: subitem.startDate ?? null,
+            endDate: subitem.endDate ?? null,
+            estHours: Number(subitem.estHours) || 0,
+            source: subitem.source === 'google' ? 'google' : 'manual',
+          })),
+      })),
+  }))
+  const monthlyHours = computeMonthlyHours(groupsToProjects(board, workloadGroups))
 
   const { data: commentRows } = await supabaseAdmin.from('comments')
     .select('id, thread, created_at')

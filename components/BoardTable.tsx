@@ -45,6 +45,7 @@ import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
 import { boardItemToNestedSubitem } from '@/lib/nestBoardItem'
 import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
 import { visibleRecurringSubitems } from '@/lib/recurringMeetingWindow'
+import { itemRollupHours } from '@/lib/itemHours'
 
 const OwnerUsageCtx = createContext<Record<string, number>>({})
 const PERSONAL_STATUS_KEY = '__personalStatus'
@@ -1492,19 +1493,8 @@ export function effectiveHours(item: BoardItem): number {
   // Subitems zijn de uitsplitsing van het hoofdtotaal. Een parent van 88u
   // met subitems van 80u en 8u blijft dus 88u, geen 176u. Een parentwaarde
   // blijft alleen de fallback voor lege/0u-placeholder-subitems.
-  const own  = Number(item.estHours) || 0
   const visibleSubs = visibleRecurringSubitems(item.source, item.subitems ?? [])
-  const manualSubs = visibleSubs
-    .filter(si => si.source !== 'google')
-    .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
-  const googleSubs = visibleSubs
-    .filter(si => si.source === 'google')
-    .reduce((s, si) => s + (Number(si.estHours) || 0), 0)
-  // Bij een terugkerend Google-item is de hoofdrij een container. `estHours`
-  // daarop is een (vaak oud) serietotaal en de occurrences staan al volledig
-  // in subitems. Parent + subitems optellen verdubbelt de meetinguren.
-  if (item.source === 'google' && (item.subitems?.length ?? 0) > 0) return manualSubs + googleSubs
-  return (manualSubs > 0 ? manualSubs : own) + googleSubs
+  return itemRollupHours(item, visibleSubs)
 }
 export function effectiveDays(item: BoardItem): number {
   return Math.round((effectiveHours(item) / 8) * 10) / 10

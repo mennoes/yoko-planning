@@ -10,12 +10,17 @@ process.env.TZ = 'Europe/Amsterdam'
 
 const source = readFileSync(new URL('../lib/workload.ts', import.meta.url), 'utf8')
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+const itemHoursSource = readFileSync(new URL('../lib/itemHours.ts', import.meta.url), 'utf8')
+const itemHoursJs = ts.transpileModule(itemHoursSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+const itemHours = {}
+runInNewContext(itemHoursJs, { exports: itemHours })
 const exports = {}
 runInNewContext(js, { exports, URL, require(id) {
   if (id === './boardsRegistry') return { getBoardColor: () => '#000' }
   if (id === './workloadCategory') return { isVrijTitle: () => false, loadCategoryOverrides: () => ({}) }
   if (id === './freeCapacity') return { blockedHoursForWorkdays: days => days * 8 }
   if (id === './recurringMeetingWindow') return { visibleRecurringSubitems: (_source, rows) => rows }
+  if (id === './itemHours') return itemHours
   throw new Error(`Unexpected dependency ${id}`)
 } })
 

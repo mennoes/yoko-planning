@@ -16,6 +16,7 @@ function workload(overrides = {}) {
       './workloadCategory': { isVrijTitle: name => /vakantie|vrij/i.test(name), loadCategoryOverrides: () => overrides },
       './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
       './recurringMeetingWindow': { visibleRecurringSubitems: (_source, subitems) => subitems },
+      './itemHours': { itemRollupHours: item => Math.max(0, Number(item.estHours) || 0) },
     }
     if (!(id in mocks)) throw new Error(`Unexpected dependency ${id}`)
     return mocks[id]
