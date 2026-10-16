@@ -44,6 +44,7 @@ import { materializeFilteredBoardItem } from '@/lib/materializeFilteredBoardItem
 import { boardItemMatchesPeriod } from '@/lib/boardPeriodFilter'
 import { boardItemToNestedSubitem } from '@/lib/nestBoardItem'
 import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
+import { startTouchItemDrag } from '@/lib/touchItemDrag'
 import { visibleRecurringSubitems } from '@/lib/recurringMeetingWindow'
 import { itemRollupHours } from '@/lib/itemHours'
 
@@ -3434,7 +3435,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
+function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onMoveItemToGroup, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
@@ -3449,6 +3450,7 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   onMoveColumn: (sourceKey: string, targetKey: string, side: 'before' | 'after') => void
   onUpdateGroup: (g: BoardGroup) => void
   onMoveItemHere: (itemId: string, fromGroupId: string) => void
+  onMoveItemToGroup: (itemId: string, fromGroupId: string, toGroupId: string) => void
   onMoveItemsHere: (itemIds: string[]) => void
   onNestItem:     (sourceId: string, fromGroupId: string, targetId: string) => void
   onReparentSubitem: (subitemId: string, fromParentId: string, fromGroupId: string, toParentId: string) => void
@@ -3457,6 +3459,8 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   onResizeCol: (key: string, width: number) => void
 }) {
   const isMobile = useIsMobile()
+  // Vasthouden-om-te-slepen op touch; zie lib/touchItemDrag.
+  const longPressTimer = useRef<number | undefined>(undefined)
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
   const [dropHover, setDropHover] = useState(false)
   const [columnDrop, setColumnDrop] = useState<{ key: string; side: 'before' | 'after' } | null>(null)
@@ -4283,14 +4287,60 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                     border: '1px solid var(--border-strong)',
                     pointerEvents: 'auto',
                   }
+                  // Touch kent geen HTML5-drag: houd de greep even vast en
+                  // sleep dan met je vinger. Midden op een andere rij =
+                  // subitem worden, ergens in een andere groep = verhuizen.
+                  const startTouchDrag = (event: React.PointerEvent) => {
+                    if (event.pointerType === 'mouse') return
+                    const native = event.nativeEvent
+                    const startX = event.clientX, startY = event.clientY
+                    const stopWatching = () => {
+                      window.clearTimeout(longPressTimer.current)
+                      window.removeEventListener('pointermove', watch)
+                      window.removeEventListener('pointerup', stopWatching)
+                      window.removeEventListener('pointercancel', stopWatching)
+                    }
+                    // Scrollen mag gewoon: beweeg je voor de tijd om, dan
+                    // was het geen sleepactie.
+                    const watch = (move: PointerEvent) => {
+                      if (Math.abs(move.clientX - startX) > 10 || Math.abs(move.clientY - startY) > 10) stopWatching()
+                    }
+                    window.addEventListener('pointermove', watch)
+                    window.addEventListener('pointerup', stopWatching)
+                    window.addEventListener('pointercancel', stopWatching)
+                    longPressTimer.current = window.setTimeout(() => {
+                      stopWatching()
+                      navigator.vibrate?.(12)
+                      startTouchItemDrag(native, {
+                        label: item.name,
+                        sourceItemId: item.id,
+                        sourceGroupId: group.id,
+                        onDrop: target => {
+                          if (target.kind === 'nest') onNestItem(item.id, group.id, target.itemId)
+                          else onMoveItemToGroup(item.id, group.id, target.groupId)
+                        },
+                      })
+                    }, 280)
+                  }
                   return (
                     <span draggable
                       className="row-grip"
                       title={item.source === 'google'
                         ? 'Sleep deze Google-meeting naar een andere agenda links'
                         : 'Sleep om te verplaatsen tussen groepen of agenda’s'}
+                      aria-label={`Sleep ${item.name} naar een andere groep of onder een ander item`}
                       onDragStart={startDrag}
-                      style={{ ...gripBase, left: 4 }}>⠿</span>
+                      onPointerDown={startTouchDrag}
+                      onContextMenu={event => { if (isMobile) event.preventDefault() }}
+                      style={{
+                        ...gripBase,
+                        left: 4,
+                        // Op touch is de greep altijd zichtbaar (er is geen
+                        // hover) en groter, zodat je 'm met een vinger raakt.
+                        ...(isMobile
+                          ? { opacity: 1, width: 24, height: 34, fontSize: 16, touchAction: 'none' as const }
+                          : {}),
+                      }}>⠿</span>
                   )
                 })()}
                 <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
@@ -6018,6 +6068,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onMoveColumn={moveColumn}
               onUpdateGroup={handleUpdateGroup} onResizeCol={resizeCol}
               onMoveItemHere={(itemId, fromGroupId) => moveItemBetweenGroups(itemId, fromGroupId, group.id)}
+              onMoveItemToGroup={moveItemBetweenGroups}
               onMoveItemsHere={(itemIds) => moveItemsBetweenGroups(itemIds, group.id)}
               onNestItem={nestItemUnder}
               onReparentSubitem={reparentSubitem}
