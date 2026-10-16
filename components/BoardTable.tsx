@@ -2142,6 +2142,11 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     // een handmatig subitem met een datum in het verleden niet weg te
     // krijgen was: weg uit beeld, en na een refresh gewoon weer terug.
     onUpdate(filtered, { dismissedInstanceIds: dismissTombstones(dismissedInstanceIds, deleted, id) })
+    // Vastleggen in de geschiedenis van het hoofditem. Een subitem is geen
+    // eigen rij in board_items, dus het belandt nooit in de prullenbak —
+    // zonder deze regel is er achteraf geen enkel spoor van wie 't wanneer
+    // heeft weggegooid.
+    if (parentItemId) void logItemActivity(parentItemId, 'verwijderde subitem', deleted?.name || id)
   }
   const [justCreatedSubId, setJustCreatedSubId] = useState<string | null>(null)
   function addOne() {
@@ -5688,6 +5693,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           )
           for (const sub of i.subitems) {
             if (!selectedIds.has(sub.id)) continue
+            void logItemActivity(i.id, 'verwijderde subitem', sub.name || sub.id)
             // Zelfde tombstones als de losse ×, voor élk subitem: ook een
             // handmatig subitem komt anders via preserveStoredHistory terug.
             for (const tombstone of dismissTombstones(undefined, sub, sub.id)) dismissed.add(tombstone)

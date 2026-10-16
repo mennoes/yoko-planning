@@ -378,7 +378,16 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
             type Ev = { kind: 'delete'; ts: string; t: TrashItem } | { kind: 'change'; ts: string; e: ItemActivity }
             const events: Ev[] = []
             if (filter !== 'changes') for (const t of items) events.push({ kind: 'delete', ts: t.deletedAt, t })
-            if (filter !== 'deleted') for (const a of activity) events.push({ kind: 'change', ts: a.ts, e: a })
+            // Een verwijderd subitem is geen eigen rij in board_items en komt
+            // dus nooit in de prullenbak terecht. Het wordt wél als actie
+            // gelogd; laat die log-regels ook onder 'Verwijderd' zien, anders
+            // lijkt zo'n verwijdering nergens te zijn vastgelegd.
+            const isDeletionEntry = (entry: ItemActivity) => /^verwijderde\b/i.test(entry.action)
+            for (const a of activity) {
+              if (filter === 'deleted' && !isDeletionEntry(a)) continue
+              if (filter === 'changes' && isDeletionEntry(a)) continue
+              events.push({ kind: 'change', ts: a.ts, e: a })
+            }
             if (events.length === 0) {
               return <p style={{ padding: 20, color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic' }}>Geen geschiedenis te tonen.</p>
             }

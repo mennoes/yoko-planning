@@ -36,3 +36,17 @@ test('ook de planning zet een tombstone bij het verwijderen van een subitem', ()
   assert.match(planning, /removedSub\.sourceItemId \? \[removedSub\.sourceItemId\] : \[\]/)
   assert.match(planning, /subitems: subs\.filter\(\(_, idx\) => idx !== subIdx\), dismissedInstanceIds: tombstones/)
 })
+
+test('een verwijderd subitem wordt vastgelegd in de geschiedenis', () => {
+  // Een subitem is geen eigen rij in board_items en komt dus nooit in de
+  // prullenbak terecht. Zonder log is er achteraf geen enkel spoor.
+  assert.match(board, /if \(parentItemId\) void logItemActivity\(parentItemId, 'verwijderde subitem', deleted\?\.name \|\| id\)/)
+  assert.match(board, /void logItemActivity\(i\.id, 'verwijderde subitem', sub\.name \|\| sub\.id\)/)
+})
+
+test('de Verwijderd-tab toont die log-regels ook', () => {
+  const drawer = readFileSync(new URL('../components/BoardTrashDrawer.tsx', import.meta.url), 'utf8')
+  assert.match(drawer, /const isDeletionEntry = \(entry: ItemActivity\) => \/\^verwijderde\\b\/i\.test\(entry\.action\)/)
+  assert.match(drawer, /if \(filter === 'deleted' && !isDeletionEntry\(a\)\) continue/)
+  assert.match(drawer, /if \(filter === 'changes' && isDeletionEntry\(a\)\) continue/)
+})
