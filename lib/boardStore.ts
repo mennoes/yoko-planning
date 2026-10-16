@@ -252,6 +252,18 @@ function isGoogleDbRow(r: GoogleDbRow): boolean {
   })())
 }
 
+/** `dagen` is uren ÷ 8 en dus vaak gebroken (60u = 7.5). Op installaties
+ *  waar de kolom nog `integer` is slaan we afgerond op en zetten we de
+ *  precieze waarde in extra (zie pushBoardSnapshot). Die mag de kolom
+ *  alleen vervangen wanneer 'ie er ook echt naar afrondt — zo kan een oude
+ *  legacy-kopie in extra nooit een later opgeslagen waarde terugdraaien. */
+function dagenFromRow(column: unknown, fromExtra: unknown): number {
+  const stored = Number(column ?? 0)
+  const exact = Number(fromExtra)
+  if (Number.isFinite(exact) && Math.round(exact) === stored) return exact
+  return Number.isFinite(stored) ? stored : 0
+}
+
 function rowToItem(r: Record<string, unknown>): BoardItem {
   const googleBacked = isGoogleDbRow(r as GoogleDbRow)
   const extra = ((r.extra as Record<string, unknown>) ?? {})
@@ -268,7 +280,7 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     endDate:   (r.end_date as string | null) ?? null,
     deadline:  (r.deadline as string | null) ?? null,
     estHours:  Number(r.est_hours ?? 0),
-    dagen:     Number(r.dagen ?? 0),
+    dagen:     dagenFromRow(r.dagen, extra.dagen),
     notes:     (r.notes as string | undefined) ?? undefined,
     contactpersoon: (r.contactpersoon as string | undefined) ?? undefined,
     uitzenddag:     (r.uitzenddag as string | null) ?? null,
@@ -694,10 +706,31 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
         dismissed,
       )
     }
-    const writeResult = safeRows.length > 0
+    const columns = 'id, name, owner_ids, status, start_date, end_date, deadline, est_hours, notes, extra'
+    let writeResult = safeRows.length > 0
       ? await supabase.from('board_items').upsert(safeRows, { onConflict: 'id' })
-          .select('id, name, owner_ids, status, start_date, end_date, deadline, est_hours, notes, extra')
+          .select(columns)
       : { data: [] as Record<string, unknown>[], error: null }
+    // `dagen` wordt berekend als uren ÷ 8 en is dus vaak gebroken (60u =
+    // 7.5 dagen), maar de kolom staat in oudere installaties nog op
+    // `integer`. Postgres weigert dan de hele bord-save met 'invalid input
+    // syntax for type integer: "7.5"' — één item met halve dagen blokkeert
+    // zo al je andere wijzigingen. Migratie 0045 maakt de kolom numeric;
+    // zolang die niet gedraaid is slaan we afgerond op en bewaren we de
+    // precieze waarde in `extra`, waar rowToItem 'm weer vandaan haalt.
+    if (writeResult.error && /invalid input syntax for type integer/i.test(writeResult.error.message ?? '')) {
+      const roundedRows = safeRows.map(row => {
+        const exact = Number(row.dagen)
+        if (!Number.isFinite(exact) || Number.isInteger(exact)) return row
+        const extra = { ...(row.extra as Record<string, unknown> | undefined ?? {}), dagen: exact }
+        return { ...row, dagen: Math.round(exact), extra }
+      })
+      writeResult = await supabase.from('board_items').upsert(roundedRows, { onConflict: 'id' }).select(columns)
+      if (!writeResult.error) {
+        safeRows.length = 0
+        safeRows.push(...roundedRows)
+      }
+    }
     const { error: iErr } = writeResult
     if (iErr) {
       // eslint-disable-next-line no-console
