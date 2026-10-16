@@ -23,7 +23,8 @@ test('handmatig verwijderen zet de vlag waar de sync op kijkt', () => {
   // softDeleteItem is het enige pad dat deleted_by vult; de automatische
   // opschoonpaden zetten alleen deleted_at.
   assert.match(store, /\.update\(\{ deleted_at: stamp, deleted_by: uid \}\)/)
-  assert.match(board, /softDeleteItem\(itemId\)\.catch/)
+  // De aanroep geeft nu ook het bord mee en kijkt naar het resultaat.
+  assert.match(board, /softDeleteItem\(itemId, boardId\)\.then\(restoreOnFailure\)/)
 })
 
 test('herstellen uit de papierbak wist de handmatige-verwijdervlag', () => {
