@@ -1184,8 +1184,9 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           pointerEvents: 'auto',
           border: multiOwnerBorder,
           boxShadow: hoverBar ? '0 4px 12px rgba(0,0,0,0.4)' : '0 1px 2px rgba(0,0,0,0.18)',
-          // Done-items faden naar 45% zodat actief werk visueel pop't.
-          opacity: project.status === 'done' ? 0.45 : 1,
+          // Done-items faden ver terug zodat actief werk visueel pop't. Bij
+          // hover komen ze weer op zodat je ze nog kunt lezen en pakken.
+          opacity: project.status === 'done' ? (hoverBar ? 0.8 : 0.22) : 1,
           // Hover-bar én actieve-drag krijgen hoge z-index zodat 'ie ALTIJD
           // bovenop overlappende balken zichtbaar is. Anders kan een short
           // event onder een langere balk verstopt blijven.
@@ -2214,7 +2215,7 @@ function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: 
           whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'pointer', zIndex: 5000,
           pointerEvents: 'auto', appearance: 'none', WebkitAppearance: 'none',
           outline: 'none', boxShadow: open ? '0 2px 7px rgba(216,182,46,0.32)' : 'none',
-          opacity: allDone ? 0.62 : 1,
+          opacity: allDone ? 0.4 : 1,
         }}>
         <span aria-hidden style={{ fontSize: 9, fontWeight: 950 }}>{allDone ? '✓' : 'G'}</span>
         <span>{activeCount || meetings.length}</span>
@@ -2235,7 +2236,7 @@ function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: 
               <div key={meeting.id}
                 onPointerEnter={ev => { ev.currentTarget.style.background = 'var(--bg-hover)' }}
                 onPointerLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7, opacity: isDone ? 0.52 : 1 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 3px 2px 9px', borderRadius: 7, opacity: isDone ? 0.4 : 1 }}>
                 <span style={{ minWidth: 43, color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 700 }}>
                   {meeting.startTime ?? 'Hele dag'}
                 </span>

@@ -835,7 +835,10 @@ export async function restoreRecentTrash(sinceMinutes: number): Promise<number> 
     await supabase.from('board_groups').update({ deleted_at: null }).in('id', groupIds).not('deleted_at', 'is', null)
   }
   const itemIds = (items as { id: string }[]).map(r => r.id)
-  const { error } = await supabase.from('board_items').update({ deleted_at: null }).in('id', itemIds)
+  let { error } = await supabase.from('board_items').update({ deleted_at: null, deleted_by: null }).in('id', itemIds)
+  if (error && /deleted_by/.test(error.message ?? '')) {
+    ;({ error } = await supabase.from('board_items').update({ deleted_at: null }).in('id', itemIds))
+  }
   if (error) return 0
   // Triggert reload op de relevante borden
   const boardIds = Array.from(new Set((items as { board_id: string }[]).map(r => r.board_id)))
@@ -898,9 +901,17 @@ export async function restoreTrashItem(itemId: string): Promise<boolean> {
         .eq('id', orig.id)
     }
   }
+  // `deleted_by` ook wissen: die vlag markeert 'door een mens weggegooid'
+  // (de Google-sync laat zulke rijen met rust). Een hersteld item dat 'm
+  // zou houden, zou bij een latere automatische opschoning onterecht als
+  // handmatige verwijdering tellen.
   const { error } = await supabase.from('board_items')
-    .update({ deleted_at: null })
+    .update({ deleted_at: null, deleted_by: null })
     .eq('id', itemId)
+  if (error && /deleted_by/.test(error.message ?? '')) {
+    const retry = await supabase.from('board_items').update({ deleted_at: null }).eq('id', itemId)
+    return !retry.error
+  }
   return !error
 }
 

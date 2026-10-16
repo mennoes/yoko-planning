@@ -2596,20 +2596,26 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     // naar de parent's ownerIds, subitem-owners blijven onaangeraakt.
     const activeMemberIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
     const ownerRollup = relevantOwnerRollup(item, activeMemberIds, new Date(), 35)
-    // De hoofdregel toont uitsluitend owners van actuele/relevante subitems.
-    // Historische/done owners blijven als metadata beschikbaar, maar mogen
-    // de zichtbare avatars en taart niet meer vervuilen.
-    updates.ownerIds = ownerRollup.relevantOwnerIds
-    updates.__relevantOwnerIds = ownerRollup.relevantOwnerIds
+    // De hoofdregel toont owners van actuele/relevante subitems. Staat daar
+    // niemand (bv. alles op Done), dan de eigen owners van het hoofditem en
+    // anders alsnog die van de subitems — een lege owner-cel terwijl de
+    // subitems wél eigenaren hebben, helpt niemand. Historische owners
+    // blijven als metadata beschikbaar.
+    updates.ownerIds = ownerRollup.displayOwnerIds
+    updates.__relevantOwnerIds = ownerRollup.displayOwnerIds
     updates.__historicalOwnerIds = ownerRollup.historicalOwnerIds
     // Subitems zijn altijd de bron voor de parent-verdeling. Een oude,
     // handmatig opgeslagen ownerHours-map op het hoofditem mag de rollup
     // nooit overrulen. Expliciete subitem-ownerHours blijven behouden;
     // alleen subitems zonder verdeling vallen terug op gelijke shares.
-    const rolled = relevantOwnerHours(ownerRollup.relevantSubitems)
-    updates.ownerHours = Object.keys(rolled).length > 0 ? rolled : undefined
-    updates.__relevantOwnerHoursTotal = ownerRollup.relevantSubitems
-      .reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+    const rolled = relevantOwnerHours(ownerRollup.displaySubitems)
+    // Geen subitem-verdeling (de hoofdregel valt terug op z'n eigen
+    // eigenaren)? Dan blijft de handmatige verdeling van het hoofditem
+    // staan in plaats van 'm weg te gooien.
+    updates.ownerHours = Object.keys(rolled).length > 0 ? rolled : item.ownerHours
+    updates.__relevantOwnerHoursTotal = ownerRollup.displaySubitems.length > 0
+      ? ownerRollup.displaySubitems.reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
+      : undefined
     // Status NIET auto-rollen. Done subitems blijven gewoon in het
     // parent-item zichtbaar; pas wanneer jij het item zelf op Done zet
     // verhuist 't naar de Done-groep. Voorkomt dat een item ongewenst

@@ -74,3 +74,16 @@ test('personal completion client only persists personal status', () => {
   assert.doesNotMatch(client, /timelineStart|timelineEnd/)
   assert.match(client, /parentItemId: target\.parentItemId, subitemId: target\.subitemId, memberId, done, status/)
 })
+
+test('board lookups are indexed instead of reparsing the board per call', () => {
+  // completionTargetForProject deed per aanroep een loadGroups(): hele
+  // bord uit localStorage parsen, klonen en subitems dedupliceren. De
+  // planning roept 'm één keer per agenda-afspraak aan, dus één persoon
+  // uitklappen parseerde hetzelfde bord honderden keren.
+  assert.match(client, /const parentItemsByBoard = new Map<string, Map<string, BoardItem>>\(\)/)
+  assert.match(client, /const parent = parentItemsFor\(ref\.board\)\.get\(parentItemId\)/)
+  assert.doesNotMatch(client, /loadGroups\(ref\.board, \[\]\)\.flatMap/)
+  // En de index moet weg zodra een bord wijzigt, anders lees je stale data.
+  assert.match(client, /window\.addEventListener\('yoko-board-update', invalidate\)/)
+  assert.match(client, /event\.key\.startsWith\('yoko-board-'\)/)
+})

@@ -36,6 +36,12 @@ export type RelevantOwnerRollup = {
   relevantOwnerIds: string[]
   historicalOwnerIds: string[]
   relevantSubitems: SubItem[]
+  /** Wat de hoofdregel laat zien. Zie de terugvalvolgorde in
+   *  relevantOwnerRollup — nooit leeg zolang iemand ergens eigenaar is. */
+  displayOwnerIds: string[]
+  /** De subitems waar de urenverdeling van de hoofdregel op slaat. Leeg
+   *  wanneer de hoofdregel op z'n eigen eigenaren terugvalt. */
+  displaySubitems: SubItem[]
 }
 
 export function relevantOwnerRollup(
@@ -52,11 +58,27 @@ export function relevantOwnerRollup(
   // parent-rollup. Oude owners die alleen nog op het hoofditem zelf staan
   // mogen dus niet opnieuw in de avatar- of urenverdeling verschijnen.
   const all = orderedUnique(subitems.flatMap(sub => sub.ownerIds ?? [])).filter(allowed)
-  const current = new Set(relevantOwnerIds)
+  const own = orderedUnique(item.ownerIds ?? []).filter(allowed)
+  // Terugvalvolgorde voor de hoofdregel:
+  //   1. eigenaren van lopende subitems — die doen het werk nú;
+  //   2. staat daar niemand, dan de eigenaren van het hoofditem zelf;
+  //   3. en anders alsnog iedereen uit de subitems. Dat laatste is het
+  //      geval bij een afgerond item: alle subitems staan op Done, dus
+  //      stap 1 levert niets op en de rij stond leeg terwijl je er juist
+  //      wil zien wie 't gedaan heeft (en wiens uren eronder hangen).
+  const displayOwnerIds = relevantOwnerIds.length > 0 ? relevantOwnerIds
+    : own.length > 0 ? own
+    : all
+  const displaySubitems = relevantOwnerIds.length > 0 ? relevantSubitems
+    : own.length > 0 ? []
+    : subitems
+  const shown = new Set(displayOwnerIds)
   return {
     relevantOwnerIds,
-    historicalOwnerIds: all.filter(id => !current.has(id)),
+    historicalOwnerIds: all.filter(id => !shown.has(id)),
     relevantSubitems,
+    displayOwnerIds,
+    displaySubitems,
   }
 }
 
