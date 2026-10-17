@@ -170,7 +170,7 @@ const MoveTodoContext = createContext<(item: TodoItem, from: string, to: string)
 function TodoCard({
   section, isMember, onUpdate, allProjects, doneProjectKeys,
   editOrder, isFirstCard, isLastCard, onMoveCard,
-  onDeleteSection, onDragStartCard, onDropOnCard, displayTitle, hideAvatar,
+  onDeleteSection, onDragStartCard, onDropOnCard, displayTitle, hideAvatar, compact,
 }: {
   section: Section
   isMember: boolean
@@ -191,6 +191,9 @@ function TodoCard({
   onDropOnCard?: () => void
   displayTitle?: string
   hideAvatar?: boolean
+  /** Smalle kolom: kleinere kop, minder lucht. Naast elkaar op de
+   *  To do's-pagina telt elke pixel hoogte voor alle kolommen tegelijk. */
+  compact?: boolean
 }) {
   const { profile: actingProfile } = useProfile()
   const moveTodo = useContext(MoveTodoContext)
@@ -524,7 +527,7 @@ function TodoCard({
       <div
         onMouseEnter={() => setHeaderHover(true)}
         onMouseLeave={() => setHeaderHover(false)}
-        style={{ padding: '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 9 }}>
+        style={{ padding: compact ? '8px 12px 7px' : '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: compact ? 7 : 9 }}>
         {/* Drag-handle voor section-reorder — verschijnt bij hover op
             de header zodat 't een rustige standaard-view blijft. */}
         {onDragStartCard && (
@@ -552,11 +555,11 @@ function TodoCard({
         ) : (
           <span onClick={() => { setEmojiDraft(section.emoji); setEditEmoji(true) }}
             title="Klik om emoji aan te passen"
-            style={{ fontSize: 17, cursor: 'pointer', padding: '0 4px', borderRadius: 4 }}>
+            style={{ fontSize: compact ? 13 : 17, cursor: 'pointer', padding: '0 4px', borderRadius: 4 }}>
             {section.emoji || '📋'}
           </span>
         )}
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.01em', minWidth: 0 }}>
+        <h2 style={{ fontSize: compact ? 12.5 : 18, fontWeight: 700, color: compact ? 'var(--text-secondary)' : 'var(--text-primary)', margin: 0, flex: 1, letterSpacing: '-0.01em', minWidth: 0, textTransform: compact ? 'uppercase' : 'none' }}>
           {displayTitle ? (
             <span>{displayTitle}</span>
           ) : isMember && member ? (
@@ -1707,15 +1710,18 @@ export default function TodosPage() {
         // Desktop: ALLE algemene kaarten samen in één grid boven personal,
         // zodat Socials/Reminders/Kansen direct naast Komend/Ideeën staan.
         // Wat niet in de eerste regel past wrapt vanzelf naar de tweede.
-        const cols = Math.max(1, personal.length)
-        // Breder + horizontaal scrollen: explicit één-rij grid met
-        // vaste min-breedte per kolom. Passen ze samen in 't scherm dan
-        // rekken ze tot 1fr; passen ze niet → horizontale scrollbar
-        // zodat je doorheen kunt swipen zonder dat kaarten te smal worden.
-        const COL_MIN = 340
+        // De algemene rij telde zijn kolommen op basis van het AANTAL
+        // PERSONEN. Stonden er meer algemene secties dan personen, dan
+        // wrapte de rest naar een tweede regel. Nu bepaalt het aantal
+        // secties zelf de kolommen: altijd één regel, en past 't niet op
+        // 't scherm dan scroll je horizontaal.
+        const generalCols = Math.max(1, general.length)
+        // Smaller dan de 340px van hiervoor: zo passen er meer naast
+        // elkaar vóór de scrollbar nodig is.
+        const COL_MIN = 250
         const rowStyle = {
           display: 'grid',
-          gridTemplateColumns: `repeat(${cols}, minmax(${COL_MIN}px, 1fr))`,
+          gridTemplateColumns: `repeat(${generalCols}, minmax(${COL_MIN}px, 1fr))`,
           gap: 12,
           alignItems: 'start',
           overflowX: 'auto' as const,
@@ -1725,7 +1731,7 @@ export default function TodosPage() {
           <>
             <div style={{ ...rowStyle, marginBottom: 28 }}>
               {general.map((s, i) => (
-                <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
+                <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection} compact
                   allProjects={allProjects}
                   doneProjectKeys={doneProjectKeys}
                   editOrder={editOrder}
@@ -1736,20 +1742,6 @@ export default function TodosPage() {
                   onDragStartCard={() => { dragSectionRef.current = s.id }}
                   onDropOnCard={() => dropSectionOn(s.id)} />
               ))}
-              {/* Persistente '+ sectie'-knop aan 't einde van de rij —
-                  geen apart knopje boven nodig om te ontdekken. */}
-              <button onClick={addSection}
-                title="Nieuwe sectie aanmaken"
-                style={{ minWidth: 200, alignSelf: 'stretch',
-                  background: 'var(--bg-card)', border: '1.5px dashed var(--border)',
-                  borderRadius: 12, color: 'var(--text-muted)',
-                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  padding: 20, transition: 'all 0.12s' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}>
-                + Nieuwe sectie
-              </button>
             </div>
 
             {general.length > 0 && personal.length > 0 && (
@@ -1785,7 +1777,7 @@ export default function TodosPage() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <MemberWeeklyTodos compact memberId={section.id} projects={workloadProjects} capacity={memberCapacity(section.id)} weekOffset={weekOffset} />
-                    <TodoCard section={additions} isMember={true}
+                    <TodoCard section={additions} isMember={true} compact
                       displayTitle="Aanvullingen" hideAvatar
                       onUpdate={(updated, previous) => updateExtras(section, updated, previous)}
                       allProjects={allProjects} doneProjectKeys={doneProjectKeys}
