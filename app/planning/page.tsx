@@ -315,6 +315,32 @@ type CellContribution = { project: Project; hours: number }
  * De uitkomst is identiek aan de oude cel-variant, inclusief de vololgorde
  * binnen een cel: projecten worden in dezelfde volgorde doorlopen.
  */
+// Freelancers die in de komende twee weken met ons werken. De sectie
+// 'Freelancers' staat standaard dicht — handig tegen een lange lijst,
+// maar daardoor zag je ook niet wie er nú meedraait. Deze set houden we
+// zichtbaar terwijl de rest ingeklapt blijft.
+const ACTIVE_FREELANCER_DAYS = 14
+
+function membersWithWorkSoon(projects: Project[], days = ACTIVE_FREELANCER_DAYS, now = new Date()): Set<string> {
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const until = from + days * 86400000 + 86399999
+  const ids = new Set<string>()
+  for (const project of projects) {
+    if (project.status === 'done') continue
+    const startIso = project.startDate ?? project.endDate
+    const endIso = project.endDate ?? project.startDate
+    if (!startIso || !endIso) continue
+    const start = new Date(startIso).getTime()
+    const end = new Date(endIso).getTime() + 86399999
+    if (Number.isNaN(start) || Number.isNaN(end)) continue
+    // Overlapt het werk het venster? Dus ook iets dat vorige week begon
+    // en nog doorloopt telt mee — dat is werk dat nú gebeurt.
+    if (end < from || start > until) continue
+    for (const ownerId of project.ownerIds) ids.add(ownerId)
+  }
+  return ids
+}
+
 function contributionsPerCell(
   team: TeamMember[], cols: Col[], projects: Project[], overrides: Record<string, string>,
 ): Map<string, CellContribution[]> {
@@ -5627,6 +5653,11 @@ export default function PlanningPage() {
   // teamleden × kolommen). Voorheen gebeurde dit opnieuw bij iedere gewone
   // scroll-render. Cache de matrix totdat data, kolommen, team of categorieën
   // daadwerkelijk veranderen.
+  const freelancersWithWorkSoon = useMemo(
+    () => membersWithWorkSoon(effectiveProjects),
+    [effectiveProjects],
+  )
+
   const contributionsByCell = useMemo(
     () => contributionsPerCell(team, cols, effectiveProjects, loadCategoryOverrides()),
     [effectiveProjects, team, cols, categoryRevision],
@@ -7130,7 +7161,12 @@ export default function PlanningPage() {
                   <>
                     {sectionLabel('Freelancers', freelancersVisible.length, freelancersVisible, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0,
                       { key: 'base-freelancers-day', groupId: null, label: 'Freelancers', baseKind: 'freelancer' })}
-                    {freelancersPos !== 0 && freelancersVisible.map(renderPerson)}
+                    {/* Zelfde regel als in Overzicht: ingeklapt blijven de
+                        freelancers met werk in de komende twee weken staan. */}
+                    {(freelancersPos !== 0
+                      ? freelancersVisible
+                      : freelancersVisible.filter(m => freelancersWithWorkSoon.has(m.id))
+                    ).map(renderPerson)}
                   </>
                 )}
                 {(inactiveVisible.length > 0 || draggingTeamMemberId) && (
@@ -7172,7 +7208,7 @@ export default function PlanningPage() {
             const inactiveTeam  = visible.filter(m => isMemberInactive(m.id))
             const freelancers   = visible.filter(m => !isYokoCrew(m.id) && m.id !== 'unassigned' && !isMemberInactive(m.id) && !groupedIds.has(m.id))
 
-            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; members?: TeamMember[]; dropTarget?: PlanningTeamDropTarget }) => (
+            const sectionHeader = (label: string, count: number, opts?: { onClick?: () => void; arrowPos?: number; members?: TeamMember[]; note?: string; dropTarget?: PlanningTeamDropTarget }) => (
               <div onClick={opts?.onClick} {...planningTeamDropProps(opts?.dropTarget)}
                 style={{ borderBottom: '1px solid var(--border-light)',
                   background: teamDropTargetKey === opts?.dropTarget?.key ? 'var(--accent-light)' : 'var(--overlay-faint)',
@@ -7203,6 +7239,12 @@ export default function PlanningPage() {
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>· {count}</span>
                   {!!opts?.members?.length && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>· {Math.round(opts.members.reduce((sum, member) => sum + member.weeklyCapacity, 0) * 10) / 10}u/w</span>}
+                  {opts?.note && (
+                    <span title="Deze freelancers blijven zichtbaar zolang ze werk hebben; klik om de hele lijst te openen"
+                      style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap' }}>
+                      {opts.note}
+                    </span>
+                  )}
                   {teamDropTargetKey === opts?.dropTarget?.key && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>Laat los</span>}
                 </div>
                 {opts?.members?.length ? cols.map(col => {
@@ -7377,14 +7419,24 @@ export default function PlanningPage() {
               unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i, unassigned)))
             }
             if (freelancers.length > 0 || draggingTeamMemberId) {
-              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, { onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers), arrowPos: freelancersPos, members: freelancers, dropTarget: { key: 'base-freelancers', groupId: null, label: 'Freelancers', baseKind: 'freelancer' } })}</div>)
-              if (freelancersPos !== 0) {
-                freelancers.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i, freelancers)))
-              }
-              // Ingeklapt = écht ingeklapt. Voorheen toonden we 'actieve'
-              // freelancers (met ownership op iets) altijd door — dan kon
-              // je de sectie nooit volledig dichtklappen. Wil je een
-              // freelancer altijd zien, klap de sectie open.
+              // Ingeklapt tonen we wél de freelancers die binnen twee weken
+              // met ons werken. Eerder gold 'ingeklapt = écht leeg', maar
+              // dan zag je niet wie er nú meedraait en moest je elke keer
+              // de hele lijst openklappen. Het verschil met toen: dit is
+              // geen 'heeft ergens ownership', maar werk dat het komende
+              // venster raakt — in de praktijk een handjevol mensen.
+              const activeFreelancers = freelancers.filter(m => freelancersWithWorkSoon.has(m.id))
+              const shown = freelancersPos !== 0 ? freelancers : activeFreelancers
+              out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, {
+                onClick: () => cycleSectionArrow(freelancersPos, setFreelancersPos, freelancers),
+                arrowPos: freelancersPos,
+                members: freelancers,
+                note: freelancersPos === 0 && activeFreelancers.length > 0
+                  ? `${activeFreelancers.length} met werk deze 2 weken`
+                  : undefined,
+                dropTarget: { key: 'base-freelancers', groupId: null, label: 'Freelancers', baseKind: 'freelancer' },
+              })}</div>)
+              shown.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i, shown)))
             }
             if (inactiveTeam.length > 0 || draggingTeamMemberId) {
               out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, {
