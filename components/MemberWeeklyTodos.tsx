@@ -135,13 +135,20 @@ export function MemberWeeklyTodos({
 
   return (
     <div style={{ background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden', height: '100%' }}>
-      <div style={{ padding: compact ? '10px 12px 9px' : '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: compact ? 6 : 8 }}>
-        <IconHourglass size={compact ? 14 : 16} />
-        <strong style={{ fontSize: compact ? 13 : 14, color: 'var(--text-primary)' }}>To do&apos;s</strong>
-        <span style={{ marginLeft: 'auto', minWidth: 0, fontSize: compact ? 9.5 : 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-          {compact ? <>Agenda + Planning</> : <>uit Agenda &amp; Planning</>}
-        </span>
-      </div>
+      {/* Naast elkaar herhaalde deze kop 'To do's · uit Agenda & Planning'
+          zich bij élke collega, terwijl de pagina zelf al To do's heet en
+          de naam van de persoon er direct boven staat. In de smalle
+          kolomweergave laten we 'm daarom weg; het grote urental is kop
+          genoeg. In de brede (mobiele) weergave blijft 'ie staan. */}
+      {!compact && (
+        <div style={{ padding: '13px 16px 11px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <IconHourglass size={16} />
+          <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>To do&apos;s</strong>
+          <span style={{ marginLeft: 'auto', minWidth: 0, fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            uit Agenda &amp; Planning
+          </span>
+        </div>
+      )}
       <div style={{ padding: compact ? '12px 12px 14px' : '16px 18px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: compact ? 5 : 7, marginBottom: compact ? 8 : 10, flexWrap: compact ? 'wrap' : 'nowrap' }}>
           <span style={{ fontSize: compact ? 28 : 36, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.04em' }}>{total}</span>
