@@ -25,8 +25,9 @@ test('de algemene rij telt zijn eigen kolommen en blijft op één regel', () => 
 
 test('de losse +-kolom is weg; de knop bovenaan blijft', () => {
   assert.doesNotMatch(page, /Persistente '\+ sectie'-knop/)
-  // Alleen nog de knop in de paginakop, die mobiel en desktop delen.
-  assert.equal((page.match(/\+ Nieuwe sectie/g) ?? []).length, 1)
+  // Nog twee keer: de knop in de desktopkop en het item in het mobiele
+  // ⋯-menu. De dashed kolom aan het eind van de rij is weg.
+  assert.equal((page.match(/\+ Nieuwe sectie/g) ?? []).length, 2)
 })
 
 test('kaarten naast elkaar krijgen een compacte kop', () => {
@@ -35,4 +36,33 @@ test('kaarten naast elkaar krijgen een compacte kop', () => {
   assert.match(page, /fontSize: compact \? 12\.5 : 18/)
   assert.match(page, /<TodoCard section=\{additions\} isMember=\{true\} compact/)
   assert.match(page, /<TodoCard key=\{s\.id\} section=\{s\} isMember=\{false\} onUpdate=\{updateSection\} compact/)
+})
+
+test('mobiel: geen paginatitel, knoppen in een menu', () => {
+  // De app-navigatie zegt al waar je bent; titel + losse knoppen kostten
+  // een kwart scherm. Alleen de weeknavigatie blijft in beeld.
+  assert.match(page, /\{isMobile \? \(/)
+  assert.match(page, /aria-label="Meer opties"/)
+  assert.match(page, /\{editOrder \? 'Klaar met sorteren' : 'Volgorde aanpassen'\}/)
+  assert.match(page, /data-todos-page-menu/)
+  // Sluiten via een document-listener: een overlay-div viel onder de
+  // kaarten door een stacking context verderop in de pagina.
+  assert.match(page, /document\.addEventListener\('pointerdown', close, true\)/)
+  assert.match(page, /window\.addEventListener\('scroll', close, true\)/)
+})
+
+test('mobiel: dezelfde herhaling weg als naast elkaar', () => {
+  assert.match(page, /<MemberWeeklyTodos compact memberId=\{section\.id\}/)
+  assert.match(page, /<TodoCard section=\{additions\} isMember=\{true\} compact/)
+  assert.doesNotMatch(page, /<h2 style=\{\{ fontSize: 16 \}\}>Persoonlijk<\/h2>/)
+  assert.match(page, /\{!isMobile && <span style=\{\{ marginRight: 2[^}]*\}\}>Groepen<\/span>\}/)
+})
+
+test('een kaart met vaste titel heeft geen losse emoji', () => {
+  assert.match(page, /\) : displayTitle \? \(/)
+})
+
+test('één week-bucket van deze week heeft geen label nodig', () => {
+  assert.match(page, /const hideLabel = weekBuckets\.length === 1 && weeksFromThis\(bucket\.iso\) <= 0/)
+  assert.match(page, /display: hideLabel \? 'none' : 'flex'/)
 })

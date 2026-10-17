@@ -546,6 +546,10 @@ function TodoCard({
         )}
         {isMember && member && !hideAvatar ? (
           <MemberAvatar memberId={section.id} size={28} />
+        ) : displayTitle ? (
+          // Een kaart met een vaste titel ('Aanvullingen') heeft geen
+          // eigen emoji; die stond er bij elke collega als los poppetje.
+          null
         ) : editEmoji ? (
           <input autoFocus value={emojiDraft}
             onChange={e => setEmojiDraft(e.target.value)}
@@ -626,6 +630,11 @@ function TodoCard({
         {showWeekSplit ? weekBuckets.map(bucket => {
           const collapsible = weeksFromThis(bucket.iso) >= 2
           const expanded    = isBucketExpanded(bucket.iso)
+          // Is dit de énige bucket en gaat 'ie over de huidige week, dan
+          // zegt 'Deze week · W42' niets extra's: de weekkiezer bovenaan
+          // staat al op die week. Pas zodra er meerdere weken in de kaart
+          // zitten heb je het label nodig om ze uit elkaar te houden.
+          const hideLabel = weekBuckets.length === 1 && weeksFromThis(bucket.iso) <= 0
           return (
             <li key={bucket.iso || 'now'} style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               <div
@@ -633,7 +642,7 @@ function TodoCard({
                 style={{
                   ...weekHeaderStyle,
                   cursor: collapsible ? 'pointer' : 'default',
-                  display: 'flex', alignItems: 'center', gap: 5,
+                  display: hideLabel ? 'none' : 'flex', alignItems: 'center', gap: 5,
                 }}
               >
                 {collapsible && (
@@ -1142,6 +1151,24 @@ export default function TodosPage() {
   const [editOrder, setEditOrder] = useState(false)
   const [memberVisibility, setMemberVisibility] = useState<Record<string, boolean>>({})
   const [peopleOpen, setPeopleOpen] = useState(false)
+  // Mobiel: paginatitel en knoppen vreten verticale ruimte. Alles wat
+  // geen weeknavigatie is, verhuist naar dit menu.
+  const [pageMenuOpen, setPageMenuOpen] = useState(false)
+  useEffect(() => {
+    if (!pageMenuOpen) return
+    // Eén tik of scroll buiten het menu sluit 'm weer.
+    const close = (event: Event) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[data-todos-page-menu]')) return
+      setPageMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', close, true)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('pointerdown', close, true)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [pageMenuOpen])
   const [selectedTeamGroupIds, setSelectedTeamGroupIds] = useState<string[]>([])
   const [groupFilterReady, setGroupFilterReady] = useState(false)
   const groupFilterChosen = useRef(false)
@@ -1577,7 +1604,7 @@ export default function TodosPage() {
 
   const teamGroupPicker = (
     <div data-todo-team-group-filter style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
-      <span style={{ marginRight: 2, fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Groepen</span>
+      {!isMobile && <span style={{ marginRight: 2, fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Groepen</span>}
       {teamFilterOptions.map(group => {
         const selected = selectedTeamGroupSet.has(group.id)
         const count = personalBase.filter(section => teamGroupIdForMember(section.id) === group.id).length
@@ -1614,7 +1641,46 @@ export default function TodosPage() {
   return (
     <MoveTodoContext.Provider value={moveTodo}>
     <div style={{ maxWidth: 1900, padding: isMobile ? '60px 16px 60px' : '44px 36px 80px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isMobile ? 20 : 32 }}>
+      {/* Mobiel: geen paginakop. Het menu zegt al waar je bent, en de
+          titel + losse knoppen kostten een kwart scherm. Alleen de
+          weeknavigatie blijft staan; de rest zit achter '…'. */}
+      {isMobile ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+          <button onClick={() => setWeekOffset(offset => offset - 1)} aria-label="Vorige week"
+            style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17, flexShrink: 0 }}>‹</button>
+          <button onClick={() => setWeekOffset(0)}
+            style={{ flex: 1, minWidth: 0, height: 34, padding: '0 8px', borderRadius: 8, border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', background: weekOffset === 0 ? 'var(--accent-light)' : 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {weekRange}
+          </button>
+          <button onClick={() => setWeekOffset(offset => offset + 1)} aria-label="Volgende week"
+            style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17, flexShrink: 0 }}>›</button>
+          <div data-todos-page-menu style={{ position: 'relative', flexShrink: 0 }}>
+            <button onClick={() => setPageMenuOpen(open => !open)} aria-label="Meer opties" aria-expanded={pageMenuOpen}
+              style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border-light)', background: editOrder ? 'var(--accent)' : 'var(--bg-card)', color: editOrder ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontSize: 17, lineHeight: 1 }}>⋯</button>
+            {pageMenuOpen && (
+              <>
+                {/* Een los overlay-div bleek onder de kaarten te vallen
+                    (stacking context verderop in de pagina), dus sluiten
+                    doen we met een document-listener — werkt ongeacht
+                    waar je tikt en ook bij scrollen. */}
+                <div style={{ position: 'absolute', top: 38, right: 0, zIndex: 41, minWidth: 190,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+                  <button onClick={() => { setPageMenuOpen(false); addSection() }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '11px 14px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13.5, cursor: 'pointer' }}>
+                    + Nieuwe sectie
+                  </button>
+                  <button onClick={() => { setPageMenuOpen(false); setEditOrder(order => !order) }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '11px 14px', background: 'none', border: 'none', borderTop: '1px solid var(--border-light)', color: 'var(--text-primary)', fontSize: 13.5, cursor: 'pointer' }}>
+                    {editOrder ? 'Klaar met sorteren' : 'Volgorde aanpassen'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
         <h1 style={{ fontSize: isMobile ? 24 : 32, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
           <IconCheckList size={isMobile ? 22 : 28} />
           To do&apos;s
@@ -1646,6 +1712,7 @@ export default function TodosPage() {
           {editOrder ? 'Klaar' : 'Volgorde'}
         </button>
       </div>
+      )}
 
       {syncError && <p role="alert">Wijzigingen zijn nog niet online opgeslagen. We proberen het opnieuw zodra verbinding mogelijk is.</p>}
       {isMobile ? (() => {
@@ -1657,7 +1724,8 @@ export default function TodosPage() {
         // gedrag dichter.
         return (
           <>
-            <h2 style={{ fontSize: 16 }}>Persoonlijk</h2>
+            {/* Geen 'Persoonlijk'-kop: er staat niets boven om van te
+                scheiden, en de namen zeggen 't al. */}
             {teamGroupPicker}
             {peoplePicker}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 22, marginBottom: 28 }}>
@@ -1670,8 +1738,10 @@ export default function TodosPage() {
                     <div><strong style={{ color: 'var(--text-primary)', fontSize: 16 }}>{member?.name ?? section.title}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{memberCapacity(section.id)}u per week</div></div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-                    <MemberWeeklyTodos memberId={section.id} projects={workloadProjects} capacity={memberCapacity(section.id)} weekOffset={weekOffset} />
-                    <TodoCard section={additions} isMember={true}
+                    {/* compact: zonder de kop 'To do's · uit Agenda &
+                        Planning', die bij elke collega opnieuw stond. */}
+                    <MemberWeeklyTodos compact memberId={section.id} projects={workloadProjects} capacity={memberCapacity(section.id)} weekOffset={weekOffset} />
+                    <TodoCard section={additions} isMember={true} compact
                       displayTitle="Aanvullingen" hideAvatar
                       onUpdate={(updated, previous) => updateExtras(section, updated, previous)}
                       allProjects={allProjects} doneProjectKeys={doneProjectKeys}
@@ -1692,7 +1762,7 @@ export default function TodosPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
               {general.map((s, i) => (
-                <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection}
+                <TodoCard key={s.id} section={s} isMember={false} onUpdate={updateSection} compact
                   allProjects={allProjects}
                   doneProjectKeys={doneProjectKeys}
                   editOrder={editOrder}

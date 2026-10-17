@@ -6,7 +6,9 @@ const page = readFileSync(new URL('../app/todos/page.tsx', import.meta.url), 'ut
 const weekly = readFileSync(new URL('../components/MemberWeeklyTodos.tsx', import.meta.url), 'utf8')
 
 test("To do's uses the Home workload list for every visible person", () => {
-  assert.match(page, /<MemberWeeklyTodos memberId=\{section\.id\}/)
+  // `compact` schakelt alleen de herhaalde kaartkop uit; de lijst zelf
+  // is dezelfde als op Home.
+  assert.match(page, /<MemberWeeklyTodos (compact )?memberId=\{section\.id\}/)
   assert.match(weekly, /memberContributions\(projects, memberId, week/)
   assert.match(weekly, /uit Agenda &amp; Planning/)
   assert.match(weekly, /\/ \{capacity\} uur/)
