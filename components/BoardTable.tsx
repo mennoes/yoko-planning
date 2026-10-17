@@ -5771,17 +5771,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           )}
         </h1>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          {/* Eén Geschiedenis-knop voor zowel wijzigingen-logboek als
+          {/* Eén Activiteit-knop voor zowel wijzigingen-logboek als
               papierbak. Opent de trash-drawer; binnenin staat een knop
               naar het volledige wijzigingen-logboek voor wie meer
               detail wil. */}
           {!isMobile && <button onClick={() => setTrashOpen(true)} className="yoko-control-button"
-            title={`Geschiedenis van bord '${title}'`}
+            title={`Activiteit van bord '${title}' — wie wat wanneer wijzigde of verwijderde`}
             style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
               background: 'var(--bg-card)', border: '1px solid var(--border)',
               color: 'var(--text-secondary)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <IconHistory size={13} /> {isMobile ? '' : 'Geschiedenis'}
+            <IconHistory size={13} /> {isMobile ? '' : 'Activiteit'}
           </button>}
           {/* Recovery: haalt verdwenen subitems uit de laatste snapshot terug
               op de HUIDIGE items. Top-level edits blijven staan. Per-bord
@@ -5856,7 +5856,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                     color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left', borderRadius: 6 }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                  <IconHistory size={15} /> Geschiedenis
+                  <IconHistory size={15} /> Activiteit
                 </button>
                 <button onClick={() => { setRecoveryOpen(true); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,

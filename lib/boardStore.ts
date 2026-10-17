@@ -5,6 +5,7 @@ import { getBoardIds, getBoardConfig, isCoreBoardId, upsertBoard, defaultColumns
 import { normalizeTitle } from './subitemRules'
 import { preserveStoredHistory } from './googleMeetingHistory'
 import { emitBoardSaveStatus } from './boardSaveStatus'
+import { logItemActivity } from './itemActivity'
 
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
 // migraties van Google-id-vormen (it_g_{ev.id} → it_g_{iCalUID}) konden
@@ -789,6 +790,8 @@ export type TrashItem = {
   deletedAt:  string
   groupName:  string | null
   deletedByName: string | null
+  /** Voor de avatar in het activiteitenoverzicht. */
+  deletedByMemberId: string | null
 }
 
 export async function loadTrash(): Promise<TrashItem[]> {
@@ -827,6 +830,7 @@ export async function loadTrash(): Promise<TrashItem[]> {
   // Map deleted_by (auth uid) -> member-name via de profiles-tabel.
   const uniqUids = Array.from(new Set(rows.map(r => r.deleted_by).filter((x): x is string => !!x)))
   const nameByUid = new Map<string, string>()
+  const memberByUid = new Map<string, string>()
   if (uniqUids.length > 0) {
     const { data: profs } = await supabase
       .from('profiles')
@@ -835,6 +839,7 @@ export async function loadTrash(): Promise<TrashItem[]> {
     for (const p of (profs as { user_id: string; name: string | null; member_id: string | null }[] | null) ?? []) {
       const label = p.name ?? p.member_id ?? null
       if (label) nameByUid.set(p.user_id, label)
+      if (p.member_id) memberByUid.set(p.user_id, p.member_id)
     }
   }
   return rows.map(r => ({
@@ -845,6 +850,7 @@ export async function loadTrash(): Promise<TrashItem[]> {
     deletedAt: r.deleted_at,
     groupName: Array.isArray(r.board_groups) ? (r.board_groups[0]?.name ?? null) : (r.board_groups?.name ?? null),
     deletedByName: r.deleted_by ? (nameByUid.get(r.deleted_by) ?? null) : null,
+    deletedByMemberId: r.deleted_by ? (memberByUid.get(r.deleted_by) ?? null) : null,
   }))
 }
 
@@ -1463,6 +1469,16 @@ export async function moveItemToBoard(
     window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
   }
   if (movedItem.source === 'google') learnBoardRoutingRule(movedItem.name, targetBoard).catch(() => {})
+  // Vastleggen in het activiteitenoverzicht. Een verhuizing tussen
+  // agenda's was nergens terug te zien: het item was simpelweg weg uit de
+  // ene lijst en dook op in de andere, zonder wie of wanneer.
+  const boardLabel = (id: string) => getBoardConfig(id)?.name ?? id
+  void logItemActivity(itemId, 'verplaatste naar een andere agenda', `${boardLabel(sourceBoard)} → ${boardLabel(targetBoard)}`, {
+    boardId: targetBoard,
+    itemName: movedItem.name,
+    before: boardLabel(sourceBoard),
+    after: boardLabel(targetBoard),
+  })
   return { ok: true }
 }
 

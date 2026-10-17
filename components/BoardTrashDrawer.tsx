@@ -206,6 +206,9 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
   // meta.itemName ontbreekt op oude entries. Wordt opnieuw geladen bij
   // open en wanneer de board-state lokaal verandert (na undo).
   const [itemNameById, setItemNameById] = useState<Record<string, string>>({})
+  // Waar hoort deze regel bij: welke groep, en bij een subitem ook het
+  // hoofditem. Zonder die context zegt een losse naam in het logboek weinig.
+  const [itemContextById, setItemContextById] = useState<Record<string, ItemContext>>({})
   useEffect(() => {
     if (!open) return
     const groups = loadGroups(boardId, [])
@@ -222,6 +225,15 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
       })
     }
     setItemNameById(map)
+    const context: Record<string, ItemContext> = {}
+    for (const g of groups) for (const i of g.items) {
+      if (i?.id) context[i.id] = { groupName: g.name ?? null, parentName: null }
+      const subs = (i?.subitems as Array<{ name?: string }> | undefined) ?? []
+      subs.forEach((_sub, idx) => {
+        context[`${i.id}__si${idx}`] = { groupName: g.name ?? null, parentName: (i.name as string) ?? null }
+      })
+    }
+    setItemContextById(context)
     // Aanvullen vanuit Supabase voor 't geval localStorage leeg is OF
     // entries verwijzen naar items die we niet meer lokaal hebben.
     if (supabase) {
@@ -317,7 +329,7 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
   return createPortal(
     <>
       {/* Geen modale backdrop — bord-items moeten klikbaar/bewerkbaar
-          blijven terwijl de Geschiedenis open staat. Sluiten via × of Esc. */}
+          blijven terwijl het activiteitenoverzicht open staat. Sluiten via × of Esc. */}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(640px, 100vw)', zIndex: 9001,
@@ -331,7 +343,7 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {boardTitle}
               </div>
-              <h2 style={{ margin: '3px 0 0', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Geschiedenis</h2>
+              <h2 style={{ margin: '3px 0 0', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Activiteit</h2>
             </div>
             <button onClick={onClose} title="Sluiten (Esc)"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
@@ -406,6 +418,8 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
                 profiles={profiles}
                 getPhoto={getPhoto}
                 itemNameById={itemNameById}
+                itemContextById={itemContextById}
+                boardTitle={boardTitle}
                 onPickItem={setDetailItem}
                 onRestore={onRestore} onPurge={onPurge}
                 onRestoreAll={() => onRestoreAll(dayEvents.filter(ev => ev.kind === 'delete').map(ev => (ev as { t: TrashItem }).t))}
@@ -444,9 +458,101 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
   )
 }
 
-// Eén dag-groep in de Geschiedenis. Inklapbare header met telling +
+type ItemContext = { groupName: string | null; parentName: string | null }
+
+/** Eén regel in het activiteitenoverzicht, met vaste kolommen zodat je
+ *  oog ze kan volgen: wát er veranderde links, daarnaast wie, dan
+ *  wanneer, en helemaal rechts wat je ermee kunt. */
+function LogRow({ tone, icon, title, titleNote, body, context, actor, ts, actions, onClick }: {
+  tone: 'delete' | 'change'
+  icon: React.ReactNode
+  title: React.ReactNode
+  /** Klein label vóór de titel, bv. 'subitem'. */
+  titleNote?: string | null
+  /** Wat er veranderde: actie-tekst en eventueel van → naar. */
+  body?: React.ReactNode
+  /** Waar het stond: agenda · groep · onder welk hoofditem. */
+  context?: string | null
+  actor?: { name: string; photo: string | null; color: string; initials: string } | null
+  ts: string
+  actions?: React.ReactNode
+  onClick?: () => void
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 10,
+        padding: '10px 18px', borderTop: '1px solid var(--border-light)',
+        background: 'var(--bg-base)', transition: 'background 0.1s',
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-base)' }}>
+      <span style={{
+        width: 24, height: 24, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: tone === 'delete' ? '#fce7e6' : 'var(--overlay-faint)',
+        color: tone === 'delete' ? '#C9483D' : 'var(--text-secondary)',
+      }}>{icon}</span>
+
+      {/* Kolom 1 — wát er veranderde */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          {titleNote && (
+            <span style={{
+              flexShrink: 0, fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em',
+              textTransform: 'uppercase', color: 'var(--text-muted)',
+              border: '1px solid var(--border)', borderRadius: 4, padding: '1px 4px',
+            }}>{titleNote}</span>
+          )}
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {title}
+          </span>
+        </div>
+        {body && <div style={{ marginTop: 3 }}>{body}</div>}
+        {context && (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {context}
+          </div>
+        )}
+      </div>
+
+      {/* Kolom 2 — door wie */}
+      <div style={{ width: 30, flexShrink: 0, display: 'flex', justifyContent: 'center', paddingTop: 1 }}>
+        {actor ? (actor.photo ? (
+          <img src={actor.photo} alt={actor.name} title={actor.name}
+            style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <span title={actor.name} style={{
+            width: 26, height: 26, borderRadius: '50%', display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center',
+            background: actor.color + '22', color: actor.color, fontSize: 10, fontWeight: 700,
+          }}>{actor.initials}</span>
+        )) : (
+          <span title="Onbekend" style={{
+            width: 26, height: 26, borderRadius: '50%', display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center',
+            background: 'var(--overlay-faint)', color: 'var(--text-muted)', fontSize: 11,
+          }}>?</span>
+        )}
+      </div>
+
+      {/* Kolom 3 — wanneer. De exacte tijd staat in de tooltip; in een
+          logboek wil je af en toe precies weten hoe laat iets gebeurde. */}
+      <div title={fmtDate(ts)} style={{ width: 74, flexShrink: 0, textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', paddingTop: 2 }}>
+        {relTime(ts)}
+      </div>
+
+      {/* Kolom 4 — wat je ermee kunt */}
+      {actions && <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>{actions}</div>}
+    </div>
+  )
+}
+
+// Eén dag-groep in het activiteitenoverzicht. Inklapbare header met telling +
 // 'Herstel alle' bulk-knop; daaronder de individuele items.
-function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, itemNameById, onPickItem, onRestore, onPurge, onRestoreAll, onUndo }: {
+function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, itemNameById, itemContextById, boardTitle, onPickItem, onRestore, onPurge, onRestoreAll, onUndo }: {
   day: string
   dayEvents: ({ kind: 'delete'; ts: string; t: TrashItem } | { kind: 'change'; ts: string; e: ItemActivity })[]
   busyId: string | null
@@ -454,6 +560,8 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
   profiles: Record<string, Profile>
   getPhoto: (memberId: string) => string | null
   itemNameById: Record<string, string>
+  itemContextById: Record<string, ItemContext>
+  boardTitle: string
   onPickItem: (t: TrashItem) => void
   onRestore: (t: TrashItem) => void
   onPurge:   (t: TrashItem) => void
@@ -492,31 +600,36 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
       {open && dayEvents.map((ev, i) => {
         if (ev.kind === 'delete') {
           const t = ev.t
+          const actorName = t.deletedByName ?? null
+          const actorMember = t.deletedByMemberId ?? null
           return (
-            <div key={`d_${t.id}_${i}`} style={{ padding: '10px 18px', borderTop: '1px solid var(--border-light)', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#fce7e6', color: '#C9483D',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <ActionIcon type="delete" />
-              </span>
-              <button onClick={() => onPickItem(t)}
-                title="Klik voor meer info"
-                style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.name}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  Verwijderd · {t.groupName ?? '—'} · {fmtDate(t.deletedAt)} · door {t.deletedByName ?? '— (oude entry)'}
-                </div>
-              </button>
-              <button onClick={() => onRestore(t)} disabled={busyId === t.id}
-                style={{ padding: '6px 11px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent-light)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 700, cursor: busyId === t.id ? 'wait' : 'pointer', flexShrink: 0 }}>
-                Herstel
-              </button>
-              <button onClick={() => onPurge(t)} disabled={busyId === t.id}
-                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--red, #C9483D)', fontSize: 12, fontWeight: 600, cursor: busyId === t.id ? 'wait' : 'pointer', flexShrink: 0 }}>
-                Voorgoed
-              </button>
-            </div>
+            <LogRow key={`d_${t.id}_${i}`}
+              tone="delete"
+              icon={<ActionIcon type="delete" />}
+              title={t.name}
+              body={<span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {actorName ? <><strong style={{ color: 'var(--text-primary)' }}>{actorName.split(' ')[0]}</strong> verwijderde dit item</> : 'Verwijderd'}
+              </span>}
+              context={[boardTitle, t.groupName ?? null].filter(Boolean).join(' · ')}
+              actor={actorName ? {
+                name: actorName,
+                photo: actorMember ? getPhoto(actorMember) : null,
+                color: memberColor(actorMember ?? ''),
+                initials: actorName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase(),
+              } : null}
+              ts={t.deletedAt}
+              onClick={() => onPickItem(t)}
+              actions={<>
+                <button onClick={e => { e.stopPropagation(); onRestore(t) }} disabled={busyId === t.id}
+                  style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent-light)', color: 'var(--text-primary)', fontSize: 11.5, fontWeight: 700, cursor: busyId === t.id ? 'wait' : 'pointer' }}>
+                  Herstel
+                </button>
+                <button onClick={e => { e.stopPropagation(); onPurge(t) }} disabled={busyId === t.id}
+                  title="Definitief verwijderen"
+                  style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--red, #C9483D)', fontSize: 11.5, fontWeight: 600, cursor: busyId === t.id ? 'wait' : 'pointer' }}>
+                  Voorgoed
+                </button>
+              </>} />
           )
         }
         // Change-event — compacte 2-regel layout:
@@ -561,61 +674,32 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
           const url = `/projects/${boardForLink}?focus=${encodeURIComponent(itemId)}&drawer=${encodeURIComponent(itemId)}`
           window.location.href = url
         }
+        const isSubitem = !!(itemId && itemContextById[itemId]?.parentName)
+        const ctx = itemId ? itemContextById[itemId] : undefined
+        const contextLine = [
+          boardTitle,
+          ctx?.groupName ?? null,
+          ctx?.parentName ? `onder '${ctx.parentName}'` : null,
+        ].filter(Boolean).join(' · ')
         return (
-          <div key={`a_${e.id}`}
-            onClick={openItem}
-            style={{ padding: '8px 18px', borderTop: '1px solid var(--border-light)',
-              display: 'flex', gap: 10, alignItems: 'center',
-              cursor: itemId ? 'pointer' : 'default',
-              background: 'var(--bg-base)',
-              transition: 'background 0.1s' }}
-            onMouseEnter={ev2 => { if (itemId) (ev2.currentTarget as HTMLElement).style.background = 'var(--bg-hover)' }}
-            onMouseLeave={ev2 => { (ev2.currentTarget as HTMLElement).style.background = 'var(--bg-base)' }}>
-            {/* Actor-avatar met action-icoon-badge */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              {photo ? (
-                <img src={photo} alt={name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{ width: 28, height: 28, borderRadius: '50%',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  background: actorColor + '22', color: actorColor, fontSize: 10.5, fontWeight: 700 }}>
-                  {initials}
-                </span>
-              )}
-              <span style={{ position: 'absolute', right: -2, bottom: -2,
-                width: 14, height: 14, borderRadius: '50%',
-                background: 'var(--bg-card)', border: '1.5px solid var(--bg-base)',
-                color: 'var(--text-primary)',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ transform: 'scale(0.72)' }}><ActionIcon type={iconKind} /></span>
-              </span>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Lijn 1: Itemnaam dik + tijd ernaast (Monday-stijl). */}
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                  {itemName && itemName.trim().length > 0
-                    ? itemName
-                    : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 500 }}>(naamloos)</span>}
-                </span>
-                <span style={{ fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>
-                  {relTime(e.ts)}
-                </span>
-              </div>
-              {/* Lijn 2: 'Wie + actie' — voor owner-changes mergen we
-                  de assignee-naam(en) in de actie zodat 'iemand' weg is. */}
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <LogRow key={`a_${e.id}`}
+            tone="change"
+            icon={<ActionIcon type={iconKind} />}
+            titleNote={isSubitem ? 'subitem' : null}
+            title={itemName && itemName.trim().length > 0
+              ? itemName
+              : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 500 }}>(naamloos)</span>}
+            body={<>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>
                 {' '}
                 {isOwnerChange ? renderOwnerActionText(e) : e.action}
+                {e.action?.startsWith('verwijderde subitem') && e.detail ? <> <strong style={{ color: 'var(--text-primary)' }}>{e.detail}</strong></> : null}
               </div>
-              {/* Lijn 3: change-pills. meta.before/after ontbreken op elke
-                  entry zolang migratie 0020 (activity.meta) niet gedraaid
-                  is — val dan terug op e.detail (de platte 'van → naar'-
-                  tekst, bv. '72u → 24u'), die WEL altijd wordt opgeslagen.
-                  Zonder deze fallback toonde zo'n regel alleen wie iets
-                  deed, zonder te zeggen wát er precies veranderde. */}
+              {/* Van → naar. Dit is waar een logboek om draait: niet alleen
+                  dát er iets veranderde, maar wat het was en wat het werd.
+                  meta.before/after ontbreken zolang migratie 0020 niet
+                  gedraaid is; dan valt 'ie terug op de platte detail-tekst. */}
               {(e.meta?.before !== undefined || e.meta?.after !== undefined) ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                   {isOwnerChange ? (
@@ -628,20 +712,23 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
                     </>
                   )}
                 </div>
-              ) : e.detail ? (
+              ) : e.detail && !e.action?.startsWith('verwijderde subitem') ? (
                 <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{e.detail}</div>
               ) : null}
-            </div>
-            {canUndo && (
+            </>}
+            context={contextLine}
+            actor={{ name, photo, color: actorColor, initials }}
+            ts={e.ts}
+            onClick={itemId ? openItem : undefined}
+            actions={canUndo ? (
               <button onClick={ev2 => { ev2.stopPropagation(); onUndo(e) }}
                 title="Zet terug naar de vorige waarde"
-                style={{ padding: '4px 9px', borderRadius: 6, border: '1px solid var(--border)',
+                style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--border)',
                   background: 'var(--bg-card)', color: 'var(--text-primary)',
-                  fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>
                 ↩ Ongedaan
               </button>
-            )}
-          </div>
+            ) : undefined} />
         )
       })}
     </div>
