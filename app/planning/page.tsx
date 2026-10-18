@@ -53,12 +53,11 @@ import { upsertTeamMember } from '@/lib/teamStore'
 import { DistributionPie } from '@/components/DistributionPie'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
-import { startTimer, stopTimer, getActiveTimer, totalMinutesForProject, onTimerUpdate, fmtMinutes } from '@/lib/timerStore'
 import { logActivity }   from '@/lib/activityLog'
 import {
   IconMore, IconUsers, IconBoard, IconRange, IconShare,
   IconDownload, IconSort, IconChevronLeft, IconChevronRight,
-  IconPlay, IconStop, IconClose, IconEye, IconEyeOff,
+  IconEye, IconEyeOff,
 } from '@/components/Icon'
 import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -3383,12 +3382,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     (rawItem?.subitems as import('@/lib/boards').SubItem[] | undefined) ?? [],
     ownerHours,
   )
-  const [timerTick, setTimerTick] = useState(0)
-  useEffect(() => onTimerUpdate(() => setTimerTick(t => t + 1)), [])
-  const activeTimer = getActiveTimer()
-  const isTimingThis = activeTimer?.projectId === project.id
-  const workedMin    = totalMinutesForProject(project.id) // re-evaluated each render
-  void timerTick // touch state so the value is recomputed
 
   useEffect(() => {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
@@ -3556,6 +3549,15 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800
   const isMobile = vw < 740
+  // Achtergrond vastzetten zolang het venster open staat. Samen met
+  // overscroll-behavior houdt dit de browser-refresh tegen die opdook
+  // zodra je in het venster naar boven veegde.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
+  }, [])
   const POP_W = isMobile ? Math.min(vw - 16, 420) : 460
   const POP_H_MAX = Math.min(700, vh * (isMobile ? 0.9 : 0.85))
   const MARGIN = 12
@@ -3580,15 +3582,37 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         rest van de planning zichtbaar (geen blur, geen donkere overlay) zodat
         je live ziet wat een wijziging met de workload doet. */}
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'transparent', zIndex: 299 }} />
-    <div style={{
+      style={{ position: 'fixed', inset: 0, zIndex: 299,
+        background: isMobile ? 'rgba(0,0,0,0.45)' : 'transparent',
+        overscrollBehavior: 'contain', touchAction: 'none' }} />
+    {/* Mobiel is dit een bottom sheet: volle breedte, onderaan vast, zodat
+        je 'm met je duim kunt bedienen. Desktop blijft een popup naast de
+        balk waar je op klikte. */}
+    <div style={isMobile ? {
+      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 300,
+      maxHeight: '92vh',
+      background: 'var(--bg-card)', borderRadius: '18px 18px 0 0', borderTop: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column',
+      boxShadow: '0 -10px 40px rgba(0,0,0,0.4)',
+      overflow: 'hidden',
+      // Zonder dit ketent een swipe aan de bovenkant van de lijst door
+      // naar de pagina eronder, en trekt de browser 'pull to refresh'
+      // open — midden in het bewerken van een item.
+      overscrollBehavior: 'contain' as const,
+    } : {
       position: 'fixed', left: popLeft, top: popTop,
       width: POP_W, maxHeight: POP_H_MAX, zIndex: 300,
       background: 'var(--bg-card)', borderRadius: 14, border: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column',
       boxShadow: '0 14px 36px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.04)',
       overflow: 'hidden',
+      overscrollBehavior: 'contain' as const,
     }}>
+      {isMobile && (
+        <div aria-hidden style={{ padding: '8px 0 2px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+          <span style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--border-strong)' }} />
+        </div>
+      )}
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
           <div>
@@ -3635,7 +3659,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         </div>
       )}
       {isMerged && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[...project.mergedFrom!]
             .sort((a, b) => (a.startDate ?? '').localeCompare(b.startDate ?? ''))
             .map(sub => {
@@ -3685,7 +3709,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           </div>
         )
       })()}
-      {!isMerged && <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+      {!isMerged && <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: isMobile ? '16px 16px 28px' : '16px 18px' }}>
         <Row label="Owner">
           <div ref={ownerPickerRef} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
             {ownerIds.length > 0 && ownerIds.map(oid => {
@@ -3989,25 +4013,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             />
           </Row>
         )}
-        <Row label="Tijd">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {isTimingThis ? (
-              <button onClick={() => stopTimer()}
-                style={{ ...cancelBtn, background: '#e2445c', color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <IconStop size={13} /> Stop timer
-              </button>
-            ) : (
-              <button onClick={() => startTimer(project.id, project.name)}
-                style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <IconPlay size={13} /> Start timer
-              </button>
-            )}
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Gewerkt: <strong style={{ color: 'var(--text-secondary)' }}>{fmtMinutes(workedMin)}</strong>
-              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{effectiveDetailHours.total}u</strong>
-            </span>
-          </div>
-        </Row>
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
             onChange={e => setNotes(e.target.value)}
@@ -4555,9 +4560,17 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  const isMobile = useIsMobile()
+  // Op een telefoon hield de 90px-labelkolom nog geen 200px over voor de
+  // inhoud: datums, knoppen en selects stonden daar op elkaar geperst.
+  // Label boven de waarde geeft de volle breedte terug.
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, alignItems: 'start', marginBottom: 14 }}>
-      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, paddingTop: 3 }}>{label}</span>
+    <div style={isMobile
+      ? { display: 'block', marginBottom: 16 }
+      : { display: 'grid', gridTemplateColumns: '90px 1fr', gap: 8, alignItems: 'start', marginBottom: 14 }}>
+      <span style={{ display: 'block', fontSize: isMobile ? 11 : 12, color: 'var(--text-muted)', fontWeight: 600,
+        paddingTop: isMobile ? 0 : 3, marginBottom: isMobile ? 5 : 0,
+        textTransform: isMobile ? 'uppercase' : 'none', letterSpacing: isMobile ? '0.05em' : 0 }}>{label}</span>
       <div>{children}</div>
     </div>
   )
@@ -6107,7 +6120,10 @@ export default function PlanningPage() {
   // Breedte van de namenkolom is instelbaar: lange namen en de extra
   // knoppen (sleepgreep, capaciteit, sorteerpijltjes) passen anders niet.
   // Sleep de rand in de kopregel; de keuze is persoonlijk, dus localStorage.
-  const nameW       = isMobile ? 70  : nameColW
+  // Mobiel stond de namenkolom op 70px: net te smal voor een naam naast
+  // het avatar. Verslepen kan daar niet (geen muis), dus een ruimere
+  // vaste maat. Desktop blijft instelbaar via de greep in de kopregel.
+  const nameW       = isMobile ? 104 : nameColW
   const namePad     = isMobile ? 6   : NAME_PAD
   const totalWidth  = nameW + namePad + cols.reduce((s, c) => s + c.widthPx, 0)
   // In het weekoverzicht is de maandregel dubbelop: iedere kolom toont de
@@ -6988,7 +7004,6 @@ export default function PlanningPage() {
               const mobileAv = Math.min(av, 36)
               const header = (
                 <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', minWidth: 0, paddingLeft: editOrder ? namePad - 4 : namePad, paddingRight: 6, gap: 6 }}>
-                  {!editOrder && planningTeamDragHandle(m)}
                   <button onClick={() => { if (!editOrder) toggleExpand(m.id) }}
                     title={editOrder ? '' : (isExp ? 'Inklappen' : 'Uitvouwen')}
                     style={{ display: 'flex', alignItems: 'center',
@@ -7284,7 +7299,6 @@ export default function PlanningPage() {
                     display: 'flex', alignItems: 'center',
                     padding: `0 12px 0 ${namePad}px`, height: hh, borderRight: '1px solid var(--border-light)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, width: '100%' }}>
-                      {!editOrder && planningTeamDragHandle(member)}
                       {!editOrder && (
                         <button onClick={() => toggleExpand(member.id)} title={isExp ? 'Inklappen' : 'Uitvouwen'}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 7, color: isExp ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '2px', flexShrink: 0, transition: 'transform 0.15s', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</button>
