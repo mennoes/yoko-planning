@@ -4514,9 +4514,16 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
 
 /** Personal status now lives inside the shared Status menu. Strip the retired
  * personal columns from older layouts without touching their status data. */
+// Kolommen die in de praktijk leeg bleven (geteld over alle agenda's:
+// uitzenddag 0 items, frame link 2, nummers 1). Ze stonden wel in elke
+// rij en in elk itemvenster ruimte in te nemen. De waarden blijven in de
+// database staan; wie zo'n veld tóch nodig heeft maakt een eigen kolom.
+const RETIRED_COLUMN_KEYS = new Set(['uitzenddag', 'framelink', 'nummers'])
+
 function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
   return columns
     .filter(column => column.key !== '__personalTimeline' && column.key !== PERSONAL_STATUS_KEY)
+    .filter(column => !RETIRED_COLUMN_KEYS.has(column.key))
     .map(column => column.key === 'status'
       ? { ...column, label: 'Status' }
       : column.key === 'timeline'
