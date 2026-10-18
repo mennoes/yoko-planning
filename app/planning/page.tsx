@@ -6,11 +6,6 @@ import Link from 'next/link'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useUndo } from '@/components/UndoContext'
 import teamData          from '@/data/team.json'
-import yokoRaw           from '@/data/boards/yoko.json'
-import pnpRaw            from '@/data/boards/pnp.json'
-import nederlandRaw      from '@/data/boards/nederland.json'
-import vlaanderenRaw     from '@/data/boards/vlaanderen.json'
-import dienjaarRaw       from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscribeRemoteBoard, pullBoardFromRemote, softDeleteItem, restoreTrashItem } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
 import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, countsAsAcceptedWork, type Project, type TeamMember } from '@/lib/workload'
@@ -66,11 +61,6 @@ import { completionContext, type CompletionTarget } from '@/lib/personalCompleti
 import type { BoardGroup, ColumnDef } from '@/lib/boards'
 import { getBoardConfig } from '@/lib/boardsRegistry'
 import { planningDetailHours } from '@/lib/planningDetailHours'
-
-const RAW: Record<string, { groups: unknown[] }> = {
-  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
-  vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
-}
 
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
@@ -5172,13 +5162,14 @@ export default function PlanningPage() {
   useEffect(() => {
     function refresh() {
       const loaded: Record<string, BoardGroup[]> = {}
-      // Dynamische bord-lijst (uit registry) + fallback-seed waar
-      // beschikbaar voor de bekende 5 borden zodat een verse install
-      // niet leeg start.
-      for (const name of BOARD_NAMES) {
-        const seed = (RAW[name]?.groups as BoardGroup[] | undefined) ?? []
-        loaded[name] = loadGroups(name, seed)
-      }
+      // Dynamische bord-lijst uit de registry. Vroeger hing hier een
+      // fallback op data/boards/*.json, maar die seed is van vóór de
+      // Supabase-migratie: hij liet oude inhoud zien die een paar honderd
+      // ms later alweer werd overschreven door de echte pull, en kostte
+      // ~200 KB in elke browserbundel. Leeg starten en wachten op de pull
+      // is korter én eerlijker. De seed leeft nog in
+      // /api/admin/import-boards voor een echte herinstallatie.
+      for (const name of BOARD_NAMES) loaded[name] = loadGroups(name, [])
       setAllGroups(loaded)
     }
     refresh()

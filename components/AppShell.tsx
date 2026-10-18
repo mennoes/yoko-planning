@@ -36,17 +36,7 @@ import { routeOmdenkenNow, syncGoogleNow } from '@/lib/googleClient'
 import { applySubitemRules } from '@/lib/subitemRules'
 import { applyAutoStatus, notifyOverdueItems } from '@/lib/autoStatus'
 import { pullExtrasFromRemote, subscribeRemoteExtras } from '@/lib/teamExtras'
-import yokoRaw       from '@/data/boards/yoko.json'
-import pnpRaw        from '@/data/boards/pnp.json'
-import nederlandRaw  from '@/data/boards/nederland.json'
-import vlaanderenRaw from '@/data/boards/vlaanderen.json'
-import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import type { BoardGroup } from '@/lib/boards'
-
-const BOARD_INITIALS: Record<string, { groups: unknown[] }> = {
-  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
-  vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
-}
 
 function Inner({ children }: { children: ReactNode }) {
   const { needsSetup, editOpen, isAuthenticated, authChecked, profile, openEdit } = useProfile()
@@ -233,7 +223,7 @@ function Inner({ children }: { children: ReactNode }) {
         const ok = await pullBoardFromRemote(b)
         if (!ok) {
           // Remote empty — push current local snapshot so other devices can pull it
-          const local = loadGroups(b, (BOARD_INITIALS[b]?.groups ?? []) as BoardGroup[])
+          const local = loadGroups(b, [] as BoardGroup[])
           if (local.length > 0) await pushBoardToRemote(b, local)
         }
         unsubs.push(subscribeRemoteBoard(b))

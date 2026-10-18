@@ -23,11 +23,6 @@ import { BOARD_COLORS } from '@/lib/workload'
 import { getWeekStart, groupsToProjects, type Project } from '@/lib/workload'
 import { loadCapacities, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import type { BoardGroup } from '@/lib/boards'
-import yokoRaw from '@/data/boards/yoko.json'
-import pnpRaw from '@/data/boards/pnp.json'
-import nederlandRaw from '@/data/boards/nederland.json'
-import vlaanderenRaw from '@/data/boards/vlaanderen.json'
-import dienjaarRaw from '@/data/boards/dienjaar.json'
 import { TextWithItemRefs } from '@/components/ItemRefChip'
 import {
   loadAllTodoProjects,
@@ -61,18 +56,12 @@ import {
 // goedkoop genoeg.
 const memberIdSet = () => new Set(teamData.members.map(m => m.id))
 
-const RAW_BOARDS: Record<string, { groups: BoardGroup[] }> = {
-  yoko: yokoRaw as { groups: BoardGroup[] },
-  pnp: pnpRaw as { groups: BoardGroup[] },
-  nederland: nederlandRaw as { groups: BoardGroup[] },
-  vlaanderen: vlaanderenRaw as { groups: BoardGroup[] },
-  dienjaar: dienjaarRaw as { groups: BoardGroup[] },
-}
-
 function loadWorkloadProjects(): Project[] {
+  // Geen seed-fallback meer: data/boards/*.json stond in de browserbundel
+  // (~200 KB) terwijl de echte inhoud toch uit Supabase komt.
   return getBoardIds().flatMap(boardId => groupsToProjects(
     boardId,
-    loadGroups(boardId, RAW_BOARDS[boardId]?.groups ?? []),
+    loadGroups(boardId, []),
   ))
 }
 
