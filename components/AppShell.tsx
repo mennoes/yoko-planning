@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { ProfileProvider, useProfile } from './ProfileContext'
 import { TeamPhotosProvider } from './TeamPhotosContext'
 import { TeamProvider } from './TeamContext'
@@ -14,7 +15,6 @@ import { hasStaticAvatar } from './UserAvatar'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import ThemeApply from './ThemeApply'
-import { IconMenu } from './Icon'
 import { FeedbackBubble } from './FeedbackBubble'
 import BoardSaveIndicator from './BoardSaveIndicator'
 import { requiresAuth } from '@/lib/supabase'
@@ -415,7 +415,7 @@ function Inner({ children }: { children: ReactNode }) {
       )}
 
       {isMobile && !drawerOpen && (
-        /* Alleen de hamburger blijft in de mobiele header. Zoeken en
+        /* Het kleine Yoko-handje opent het menu in de mobiele header. Zoeken en
            meldingen staan in het uitklapmenu, zodat paginaknoppen ernaast
            op dezelfde compacte regel kunnen staan. */
         <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 70, display: 'flex', alignItems: 'center' }}>
@@ -427,7 +427,7 @@ function Inner({ children }: { children: ReactNode }) {
               cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
               color: 'var(--text-primary)', padding: 0,
             }}>
-            <IconMenu size={20} />
+            <Image src="/yoko-logo.png" alt="" width={26} height={26} unoptimized style={{ display: 'block' }} />
           </button>
         </div>
       )}
