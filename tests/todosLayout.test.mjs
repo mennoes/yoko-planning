@@ -66,3 +66,15 @@ test('één week-bucket van deze week heeft geen label nodig', () => {
   assert.match(page, /const hideLabel = weekBuckets\.length === 1 && weeksFromThis\(bucket\.iso\) <= 0/)
   assert.match(page, /display: hideLabel \? 'none' : 'flex'/)
 })
+
+test('de weekkiezer staat bij de persoonlijke sectie, niet in de paginakop', () => {
+  // Alleen de persoonlijke kolommen veranderen met de week; bovenin stond
+  // de keuzeknop los van waar je 'm voor gebruikt, met de algemene
+  // secties ertussen.
+  assert.match(page, /const weekNav = \(/)
+  const header = page.slice(page.indexOf('<h1 style='), page.indexOf('{syncError &&'))
+  assert.doesNotMatch(header, /Naar deze week/)
+  // De sectiekop toont 'm, en blijft ook staan zonder algemene secties —
+  // anders verdwijnt de weekkiezer mee.
+  assert.match(page, /\{personal\.length > 0 && \(\n[\s\S]{0,400}?\{weekNav\}/)
+})
