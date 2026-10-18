@@ -14,9 +14,13 @@ test('sorteren op timeline gebruikt dezelfde datum als de kolom toont', () => {
   assert.doesNotMatch(board, /if \(!v && \(dKey === 'startDate' \|\| dKey === 'endDate'\)\)/)
 })
 
-test('een agenda hernoemen werkt ook als de rij nog niet bestond', () => {
-  assert.match(registry, /if \(result\.error === 'board_not_found'\)/)
-  assert.match(registry, /const created = await upsertBoard\(\{ \.\.\.existing, name: clean \}, index\)/)
+test('een agenda hernoemen gaat rechtstreeks naar de database', () => {
+  // De API-route was de enige weg en weigert zonder profiel-rij of als
+  // de agenda nog geen rij in 'boards' had — in beide gevallen sprong de
+  // naam terug. Nu eerst zelf schrijven, route als laatste redmiddel.
+  assert.match(registry, /\.update\(\{ name: clean, updated_at: new Date\(\)\.toISOString\(\) \}\)/)
+  assert.match(registry, /if \(await upsertBoard\(\{ \.\.\.existing, name: clean \}, index\)\) return null/)
+  assert.match(registry, /export async function renameBoard\(boardId: string, name: string\): Promise<string \| null>/)
 })
 
 test('het itemvenster toont alleen nog wat we gebruiken', () => {

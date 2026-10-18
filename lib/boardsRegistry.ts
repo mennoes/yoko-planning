@@ -173,44 +173,65 @@ export function getBoardColor(id: string): string {
   return readCache().find(b => b.id === id)?.color ?? '#888'
 }
 
-export async function renameBoard(boardId: string, name: string): Promise<boolean> {
+/** Hernoemt een agenda. Geeft null terug bij succes, anders de reden —
+ *  die toont de sidebar, zodat 'hij springt terug' niet langer een
+ *  raadsel is.
+ *
+ *  Het liep eerder uitsluitend via /api/boards/rename, en die route
+ *  weigert zodra de ingelogde gebruiker geen profiel-rij heeft of de
+ *  agenda nog geen rij in 'boards' had. Beide gevallen zagen er aan de
+ *  voorkant hetzelfde uit: naam verandert, naam springt terug. De
+ *  boards-tabel staat gewoon open voor ingelogde gebruikers (policy
+ *  'Boards bewerken'), dus we schrijven nu eerst rechtstreeks en houden
+ *  de route alleen als laatste redmiddel.
+ */
+export async function renameBoard(boardId: string, name: string): Promise<string | null> {
   const clean = name.trim()
   const current = readCache()
   const existing = current.find(board => board.id === boardId)
-  if (!existing || !clean) return false
+  if (!existing) return 'Deze agenda staat niet in de lijst.'
+  if (!clean) return 'Geef een naam op.'
   localRevision++
   writeCache(current.map(board => board.id === boardId ? { ...board, name: clean } : board))
   const rollback = () => writeCache(readCache().map(board => board.id === boardId ? existing : board))
-  if (!supabase) { rollback(); return false }
+  if (!supabase) { rollback(); return 'Geen databaseverbinding.' }
+  if (!await getCurrentUserId()) { rollback(); return 'Je sessie is verlopen. Log opnieuw in.' }
+
+  // 1. Rechtstreeks alleen de naam bijwerken — raakt kolommen, kleur en
+  //    positie niet aan, ook niet als een collega die net wijzigde.
+  const direct = await supabase.from('boards')
+    .update({ name: clean, updated_at: new Date().toISOString() })
+    .eq('id', boardId)
+    .select('id')
+  if (!direct.error && (direct.data?.length ?? 0) > 0) return null
+
+  // 2. Nul rijen geraakt? Dan bestond de rij nog niet (een agenda die
+  //    nooit gedeeld is). Alsnog aanmaken, mét de nieuwe naam.
+  if (!direct.error) {
+    const index = Math.max(0, current.findIndex(board => board.id === boardId))
+    if (await upsertBoard({ ...existing, name: clean }, index)) return null
+  }
+
+  // 3. Laatste redmiddel: de server-route met admin-rechten.
   const session = await supabase.auth.getSession()
   const token = session.data.session?.access_token
-  if (!token) { rollback(); return false }
-  try {
-    const response = await fetch('/api/boards/rename', {
-      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ boardId, name: clean }),
-    })
-    const result = await response.json() as { ok?: boolean; error?: string; board?: { id: string; name: string } }
-    if (result.error === 'board_not_found') {
-      // Het bord bestond alleen lokaal: de rij in 'boards' was er nooit
-      // gekomen (bv. een agenda uit de meegeleverde set die nog nooit
-      // gedeeld is). Hernoemen gaf dan een 404 en de naam sprong meteen
-      // terug. Maak de rij alsnog aan, mét de nieuwe naam.
-      const index = Math.max(0, current.findIndex(board => board.id === boardId))
-      const created = await upsertBoard({ ...existing, name: clean }, index)
-      if (created) return true
+  if (token) {
+    try {
+      const response = await fetch('/api/boards/rename', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId, name: clean }),
+      })
+      const result = await response.json() as { ok?: boolean; error?: string; board?: { id: string; name: string } }
+      if (response.ok && result.ok && result.board?.name === clean) return null
       rollback()
-      return false
-    }
-    if (!response.ok || !result.ok || result.board?.name !== clean) {
+      return result.error ? `Opslaan geweigerd (${result.error}).` : 'Opslaan is geweigerd.'
+    } catch {
       rollback()
-      return false
+      return 'Geen verbinding met de server.'
     }
-    return true
-  } catch {
-    rollback()
-    return false
   }
+  rollback()
+  return direct.error ? `Opslaan mislukt: ${direct.error.message}` : 'Opslaan is niet bevestigd.'
 }
 
 export function onBoardsRegistryUpdate(handler: () => void): () => void {

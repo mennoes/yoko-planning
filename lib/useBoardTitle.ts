@@ -45,8 +45,9 @@ export function useBoardTitle(key: string, fallback: string) {
     // bevestigde database-route lopen als hernoemen in de sidebar. Voorheen
     // wijzigde dit pad alleen localStorage en zette een refresh de oude naam
     // terug. Bij een fout rollen we de optimistische UI-wijziging terug.
-    const saved = await renameBoard(key, clean)
-    if (saved) {
+    // renameBoard geeft null bij succes, anders de reden.
+    const reason = await renameBoard(key, clean)
+    if (!reason) {
       await pullBoardsFromRemote()
       return
     }
@@ -54,7 +55,7 @@ export function useBoardTitle(key: string, fallback: string) {
     saveSections(sections)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('yoko-push-failed', {
-        detail: { boardName: key, message: `Naam '${clean}' kon niet worden opgeslagen. De oude naam is hersteld.` },
+        detail: { boardName: key, message: `Naam '${clean}' is niet opgeslagen. ${reason}` },
       }))
     }
   }
