@@ -5,10 +5,12 @@ import { readFileSync } from 'node:fs'
 const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
 const teamGroups = readFileSync(new URL('../lib/teamGroups.ts', import.meta.url), 'utf8')
 
-test('planning people expose a dedicated team drag handle in both views', () => {
+test('de sleepgreep leeft nog in Mensen & capaciteit, niet meer in het raster', () => {
+  // In de rijen zelf was 'ie ruis naast elke naam; verplaatsen doe je in
+  // het mensenbeheer, waar de greep gewoon blijft werken.
   assert.match(planning, /function planningTeamDragHandle\(member: TeamMember\)/)
   assert.match(planning, /aria-label=\{`Sleep \$\{member\.name\} naar een ander team`\}/)
-  assert.equal((planning.match(/planningTeamDragHandle\((?:m|member)\)/g) ?? []).length, 3)
+  assert.equal((planning.match(/planningTeamDragHandle\((?:m|member)\)/g) ?? []).length, 1)
   assert.match(planning, /application\/x-yoko-team-member/)
 })
 
