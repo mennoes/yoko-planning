@@ -3443,7 +3443,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onMoveItemToGroup, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
+function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onMoveItemToGroup, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
   boardId: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
@@ -3452,6 +3452,10 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
   onResizeSubCol?:  (key: string, width: number) => void
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
+  /** Alle kolommen van dit bord (ook verborgen) — voor het plusje dat
+   *  de kolommenlijst opent. */
+  allColumns: ColumnDef[]
+  accentColor: string
   sortBy: { key: string; dir: 'asc' | 'desc' } | null
   onToggleSort: (key: string) => void
   reorderMode: boolean
@@ -4179,7 +4183,12 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
                   />
                 </div>
               ))}
-              <div style={{ borderLeft: '1px solid var(--border)' }} />
+              {/* De lege kolom rechts was ongebruikte ruimte; daar zit nu het
+                  plusje om een kolom toe te voegen, op de plek waar je 'm
+                  zoekt. */}
+              <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch' }}>
+                <ColumnManagerButton boardId={boardId} columns={allColumns} color={accentColor} plus />
+              </div>
             </div>
 
             {(() => {
@@ -4536,11 +4545,14 @@ function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
         : column)
 }
 
-function ColumnManagerButton({ boardId, columns, color, menu = false }: {
+function ColumnManagerButton({ boardId, columns, color, menu = false, plus = false }: {
   boardId: string
   columns: ColumnDef[]
   color:   string
   menu?:   boolean
+  /** Het plusje in de lege kolom rechts in de tabel: opent dezelfde
+   *  kolommenlijst, maar meteen op 'toevoegen'. */
+  plus?:   boolean
 }) {
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -4592,6 +4604,23 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
 
   return (
     <>
+      {plus ? (
+        <button ref={btnRef}
+          onClick={() => { setOpen(open => !open); setAdding(true) }}
+          title="Kolom toevoegen"
+          aria-label="Kolom toevoegen"
+          style={{
+            width: '100%', height: '100%', minHeight: 28,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: open ? 'var(--text-primary)' : 'var(--text-muted)',
+            fontSize: 16, lineHeight: 1, padding: 0,
+          }}
+          onMouseEnter={event => { event.currentTarget.style.color = 'var(--text-primary)' }}
+          onMouseLeave={event => { event.currentTarget.style.color = open ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+          +
+        </button>
+      ) : (
       <button ref={btnRef} onClick={() => setOpen(o => !o)} className={open ? 'yoko-primary-button' : 'yoko-control-button'}
         title="Kolommen beheren en de volgorde van Status, Timeline en andere kolommen wijzigen"
         style={{
@@ -4609,6 +4638,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false }: {
         </svg>
         Kolomvolgorde
       </button>
+      )}
       {open && (
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <div style={{
@@ -6097,6 +6127,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               }} />
             )}
             <BoardGroupSection boardId={boardId} group={group} cols={tableColumns}
+              allColumns={columns} accentColor={color}
               openRequest={openRequest} onCloseRequest={() => setOpenRequest(null)}
               colWidths={colWidths} gridTemplate={gridTemplate}
               subGridTemplate={subGridTemplate}

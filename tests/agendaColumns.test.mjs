@@ -29,3 +29,14 @@ test('een eigen kolom is ook in het planning-venster in te vullen', () => {
   assert.match(planning, /type Patch = Record<string, unknown> & Partial<\{/)
   assert.equal((planning.match(/hiddenFromPlanning: boolean \}> & Record<string, unknown>/g) ?? []).length, 2)
 })
+
+test('de lege kolom rechts heeft een plusje om een kolom toe te voegen', () => {
+  assert.match(board, /aria-label="Kolom toevoegen"/)
+  // Opent dezelfde kolommenlijst, maar meteen op toevoegen.
+  assert.match(board, /onClick=\{\(\) => \{ setOpen\(open => !open\); setAdding\(true\) \}\}/)
+  // Staat in de voorheen lege kop-cel rechts in de tabel.
+  assert.match(board, /<ColumnManagerButton boardId=\{boardId\} columns=\{allColumns\} color=\{accentColor\} plus \/>/)
+  // De lijst krijgt álle kolommen mee, ook de verborgen — anders zou
+  // zichtbaar maken van een verborgen kolom niet meer kunnen.
+  assert.match(board, /allColumns=\{columns\} accentColor=\{color\}/)
+})
