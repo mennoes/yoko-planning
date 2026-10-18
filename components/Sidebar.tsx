@@ -388,10 +388,12 @@ function SectionBlock({
     if (section.type === 'projects') {
       const item = section.items.find(i => i.id === id)
       const boardId = item?.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : ''
-      if (boardId) void renameBoard(boardId, label).then(async saved => {
-        if (saved) { await pullBoardsFromRemote(); showToast(`Agenda hernoemd naar '${label}'.`); return }
+      if (boardId) void renameBoard(boardId, label).then(async reason => {
+        if (!reason) { await pullBoardsFromRemote(); showToast(`Agenda hernoemd naar '${label}'.`); return }
         updateItems(section.items.map(i => i.id === id ? { ...i, label: previousLabel } : i))
-        showToast('Naam opslaan is mislukt. De oude naam is hersteld; probeer opnieuw.')
+        // De reden erbij: 'hij springt terug' zonder uitleg kostte
+        // eerder een hoop zoekwerk.
+        showToast(`Naam niet opgeslagen. ${reason}`)
       })
     }
   }
