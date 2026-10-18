@@ -1624,7 +1624,21 @@ export default function TodosPage() {
       {teamFilterOptions.map(group => {
         const selected = selectedTeamGroupSet.has(group.id)
         const count = personalBase.filter(section => teamGroupIdForMember(section.id) === group.id).length
-        return <button key={group.id} type="button" aria-pressed={selected} onClick={() => toggleTeamGroupFilter(group.id)}
+        return <button key={group.id} type="button" aria-pressed={selected}
+          title={selected && selectedTeamGroupSet.size === 1
+            ? `Klik om alle groepen weer te tonen · shift-klik om '${group.name}' los te zetten`
+            : `Klik om alleen '${group.name}' te tonen · shift-klik om 'm erbij te zetten`}
+          onClick={event => {
+            // Klikken = springen naar één groep; dat is wat je meestal
+            // bedoelt. Erbij zetten doe je met shift (of cmd/ctrl).
+            if (event.shiftKey || event.metaKey || event.ctrlKey) { toggleTeamGroupFilter(group.id); return }
+            // Nog een keer op de enige actieve groep = weer alles tonen.
+            if (selected && selectedTeamGroupSet.size === 1) {
+              updateTeamGroupFilter(teamFilterOptions.map(option => option.id))
+              return
+            }
+            updateTeamGroupFilter([group.id])
+          }}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 9px', border: 0, borderRadius: 8,
             background: selected ? 'var(--text-primary)' : 'var(--bg-hover)', color: selected ? 'var(--bg-card)' : 'var(--text-secondary)',
             fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
