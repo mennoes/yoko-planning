@@ -144,11 +144,13 @@ type Category = WorkloadCategory
 // Workload row. Click → opens the detail popover (with a category picker
 // and an explicit "Open agenda" link). Hover on desktop also previews the
 // popover. The row never navigates by itself — only the link inside does.
-function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
+function WorkloadItemRow({ item, override, onSetCategory, onToggleDone, readOnly }: {
   item: WorkloadItem
   override: Category | null
   onSetCategory: (id: string, cat: Category | null) => void
   onToggleDone: (item: WorkloadItem, next: boolean) => void
+  /** Je kijkt bij een collega: afvinken hoort dan niet te kunnen. */
+  readOnly?: boolean
 }) {
   const router = useRouter()
   const [hoverRow, setHoverRow] = useState(false)
@@ -264,8 +266,11 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
           stopPropagation zodat de row-klik niet ook navigeert. */}
       <input type="checkbox" checked={item.done}
         onClick={e => e.stopPropagation()}
-        onChange={e => { e.stopPropagation(); onToggleDone(item, e.target.checked) }}
-        title={item.done ? 'Markeer als nog niet klaar' : 'Markeer als Done'}
+        disabled={readOnly}
+        onChange={e => { e.stopPropagation(); if (!readOnly) onToggleDone(item, e.target.checked) }}
+        title={readOnly
+          ? 'Je bekijkt de week van een collega'
+          : item.done ? 'Markeer als nog niet klaar' : 'Markeer als Done'}
         style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
       <button type="button" onClick={openDetail} style={rowVisualStyle}>
         {rowContent}
@@ -379,6 +384,19 @@ export default function HomePage() {
   const [weekCapacity, setWeekCapacity] = useState(40)
   const [weekItems,    setWeekItems]    = useState<{ id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean }[]>([])
   const [weekOffset,   setWeekOffset]   = useState(0)
+  // Wiens week toont de To do's-kaart? Standaard die van jezelf; via de
+  // avatars in de kop kijk je snel bij een collega mee.
+  const [viewMemberId, setViewMemberId] = useState<string>('')
+  const [weekPersonOpen, setWeekPersonOpen] = useState(false)
+  useEffect(() => {
+    if (!weekPersonOpen) return
+    const close = (event: Event) => {
+      if ((event.target as HTMLElement | null)?.closest('[data-home-week-person]')) return
+      setWeekPersonOpen(false)
+    }
+    document.addEventListener('pointerdown', close, true)
+    return () => document.removeEventListener('pointerdown', close, true)
+  }, [weekPersonOpen])
   const [hydrated,     setHydrated]     = useState(false)
   const [editOrder,    setEditOrder]    = useState(false)
   const [homeMenuOpen, setHomeMenuOpen] = useState(false)
@@ -488,15 +506,16 @@ export default function HomePage() {
     // Workload data per week is recomputed in a separate effect on weekOffset
     // Capacity: prefer the override the user set in the planning tool
     // (localStorage 'yoko-capacities'), fall back to teamData default.
+    const capMemberId = viewMemberId || memberId
     let cap =
-      liveTeam.find(m => m.id === memberId)?.weeklyCapacity
-      ?? teamData.members.find(m => m.id === memberId)?.weeklyCapacity
+      liveTeam.find(m => m.id === capMemberId)?.weeklyCapacity
+      ?? teamData.members.find(m => m.id === capMemberId)?.weeklyCapacity
       ?? 40
     try {
       const raw = localStorage.getItem('yoko-capacities')
       if (raw) {
         const map = JSON.parse(raw) as Record<string, number>
-        if (memberId in map) cap = map[memberId]
+        if (capMemberId in map) cap = map[capMemberId]
       }
     } catch {}
     // Géén extra schaling op days_off — weeklyCapacity is al wat de user
@@ -518,15 +537,16 @@ export default function HomePage() {
     setHydrated(true)
 
     return () => { offTodos(); offComments() }
-  }, [memberId])
+  }, [memberId, viewMemberId])
 
   // Recompute the workload list whenever the week offset (or the project list
   // / member changes). Lets the user step through previous/next weeks.
   useEffect(() => {
-    if (!memberId) { setWeekItems([]); setWeekHours(0); return }
+    const shownMemberId = viewMemberId || memberId
+    if (!shownMemberId) { setWeekItems([]); setWeekHours(0); return }
     const base = getWeekStart(new Date())
     const week = new Date(base); week.setDate(week.getDate() + weekOffset * 7)
-    const contribs = memberContributions(allProjects, memberId, week, { acceptedGoogleOnly: true })
+    const contribs = memberContributions(allProjects, shownMemberId, week, { acceptedGoogleOnly: true })
     setWeekHours(Math.round(contribs.reduce((s, c) => s + c.hours, 0) * 10) / 10)
     // Items blijven op hun start-dag staan. Eerdere variant schoof
     // ongoing items naar 'vandaag', waardoor afgelopen dagen leeg
@@ -594,7 +614,7 @@ export default function HomePage() {
         parentName: c.project.parentName,
       }
     }))
-  }, [memberId, weekOffset, allProjects, completionTick])
+  }, [memberId, viewMemberId, weekOffset, allProjects, completionTick])
 
   // Re-load category overrides if another view changes them.
   useEffect(() => {
@@ -844,7 +864,35 @@ export default function HomePage() {
     return out
   })()
   const yokoMembers = allMembersForHome.filter(m => isYokoCrew(m.id))
-  const weekStartTeam = getWeekStart(new Date())
+  // Eén weekkeuze voor de hele pagina: de To do's-kaart en het
+  // Overbelast-overzicht gingen eerder uit elkaar lopen zodra je op
+  // ‹ of › klikte — de eerste schoof mee, de tweede bleef op deze week.
+  const weekStartTeam = (() => {
+    const monday = getWeekStart(new Date())
+    monday.setDate(monday.getDate() + weekOffset * 7)
+    return monday
+  })()
+  // Wie toont de To do's-kaart, en uit wie kun je kiezen? De lijst volgt
+  // dezelfde roster als de rest van Home, met jezelf bovenaan.
+  const shownWeekMemberId = viewMemberId || memberId
+  const weekPeopleOptions = (() => {
+    const options = allMembersForHome
+      .filter(m => m.id !== 'unassigned')
+      .map(m => ({ id: m.id, name: m.name }))
+    const mine = options.filter(m => m.id === memberId)
+    const others = options.filter(m => m.id !== memberId).sort((a, b) => a.name.localeCompare(b.name))
+    return [...mine, ...others]
+  })()
+  const shownWeekName = weekPeopleOptions.find(m => m.id === shownWeekMemberId)?.name ?? 'je collega'
+
+  const weekRangeLabel = (() => {
+    const monday = new Date(weekStartTeam)
+    const friday = new Date(monday); friday.setDate(friday.getDate() + 4)
+    const sameMonth = monday.getMonth() === friday.getMonth()
+    const from = monday.toLocaleDateString('nl-NL', sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' })
+    const to = friday.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+    return `${from} – ${to}`
+  })()
   const memberHoursThisWeek: Record<string, number> = {}
   for (const m of yokoMembers) {
     // Exact dezelfde telling als je eigen week-kaart hierboven. Zonder
@@ -1102,19 +1150,39 @@ export default function HomePage() {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <IconHourglass size={isMobile ? 17 : 15} />
               To do&apos;s
+              {/* Snel bij een collega kijken: avatar aanklikken en je ziet
+                  diens week. Afvinken blijft voorbehouden aan je eigen
+                  lijst — andermans taken wegstrepen hoort niet hier. */}
+              <span style={{ position: 'relative', display: 'inline-flex' }} data-home-week-person>
+                <button onClick={() => setWeekPersonOpen(open => !open)}
+                  title={shownWeekMemberId === memberId ? 'Bekijk de week van een collega' : `Je kijkt bij ${shownWeekName} · klik om te wisselen`}
+                  aria-label="Kies wiens week je ziet"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                  <UserAvatar memberId={shownWeekMemberId} size={20} />
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>▾</span>
+                </button>
+                {weekPersonOpen && (
+                  <div style={{ position: 'absolute', top: 26, left: 0, zIndex: 60, minWidth: 180, maxHeight: 280, overflowY: 'auto',
+                    background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.3)', padding: 4 }}>
+                    {weekPeopleOptions.map(person => (
+                      <button key={person.id}
+                        onClick={() => { setViewMemberId(person.id === memberId ? '' : person.id); setWeekPersonOpen(false) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                          padding: '7px 9px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                          background: person.id === shownWeekMemberId ? 'var(--accent-light)' : 'transparent',
+                          color: 'var(--text-primary)', fontSize: 13, fontWeight: person.id === shownWeekMemberId ? 700 : 500 }}>
+                        <UserAvatar memberId={person.id} size={22} />
+                        {person.name}{person.id === memberId ? ' (jij)' : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </span>
             </span>
             {/* Kleine datumlabel zodat je in één oogopslag ziet om welke week
                 het gaat — vooral handig na een paar klikken op </>. */}
             {!isMobile && <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', letterSpacing: 0 }}>
-              {(() => {
-                const base = getWeekStart(new Date())
-                const monday = new Date(base); monday.setDate(monday.getDate() + weekOffset * 7)
-                const friday = new Date(monday); friday.setDate(friday.getDate() + 4)
-                const sameMonth = monday.getMonth() === friday.getMonth()
-                const monStr = monday.toLocaleDateString('nl-NL', sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' })
-                const friStr = friday.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-                return `${monStr} – ${friStr}`
-              })()}
+              {weekRangeLabel}
             </span>}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8, marginLeft: 'auto' }}>
@@ -1212,6 +1280,7 @@ export default function HomePage() {
                             <WorkloadItemRow key={i} item={item}
                               override={categoryOverrides[item.id] ?? null}
                               onSetCategory={setItemCategory}
+                              readOnly={shownWeekMemberId !== memberId}
                               onToggleDone={toggleWorkloadDone} />
                           ))}
                         </ul>
@@ -1356,7 +1425,23 @@ export default function HomePage() {
     overload: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}><IconAlert size={isMobile ? 17 : 15} />Overbelast deze week</h2>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <IconAlert size={isMobile ? 17 : 15} />
+            Overbelast
+            {/* Zonder de datums zeggen de pijltjes niets; met het bereik
+                erbij zie je meteen welke week je bekijkt. */}
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{weekRangeLabel}</span>
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => setWeekOffset(o => o - 1)} title="Vorige week"
+              style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>‹</button>
+            <button onClick={() => setWeekOffset(0)} title="Naar deze week"
+              style={{ background: weekOffset === 0 ? 'var(--accent-light)' : 'transparent', border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 6, color: weekOffset === 0 ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', padding: '3px 7px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {weekOffset === 0 ? 'Deze week' : weekOffset === -1 ? 'Vorige week' : weekOffset === 1 ? 'Volgende week' : `${weekOffset > 0 ? '+' : ''}${weekOffset} weken`}
+            </button>
+            <button onClick={() => setWeekOffset(o => o + 1)} title="Volgende week"
+              style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>›</button>
+          </div>
           {/* Team-totaal KPI bij de Overbelast-widget zodat je in 1 oogopslag
               ziet hoe het team ervoor staat, niet alleen wie 't drukst heeft. */}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
