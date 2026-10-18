@@ -67,7 +67,8 @@ import { completionTargetForProject, completeLinkedTask, loadPersonalCompletion 
 import { onCommentsUpdate } from '@/lib/commentsStore'
 import { useCompletedOwners } from '@/components/useCompletedOwners'
 import { completionContext, type CompletionTarget } from '@/lib/personalCompletion'
-import type { BoardGroup } from '@/lib/boards'
+import type { BoardGroup, ColumnDef } from '@/lib/boards'
+import { getBoardConfig } from '@/lib/boardsRegistry'
 import { planningDetailHours } from '@/lib/planningDetailHours'
 
 const RAW: Record<string, { groups: unknown[] }> = {
@@ -3279,7 +3280,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   allGroups: Record<string, BoardGroup[]>
   anchor?: { x: number; y: number } | null
   onClose: () => void
-  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) => void
+  onUpdate: (p: Project, s: string | null, e: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }> & Record<string, unknown>) => void
   onDuplicate?: () => void
   onDelete?: () => void
 }) {
@@ -3406,7 +3407,9 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 
   // Instant-save: elke veldwijziging in de popup roept commit() aan.
   // Geen Opslaan-knop nodig — Cmd+Z draait de laatste wijziging terug.
-  type Patch = Partial<{
+  // Eigen kolommen uit de agenda komen als losse sleutels mee; die
+  // landen via handleDetailUpdate gewoon op het item.
+  type Patch = Record<string, unknown> & Partial<{
     startDate: string | null
     endDate:   string | null
     startTime: string | null
@@ -3549,6 +3552,10 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800
   const isMobile = vw < 740
+  // Eigen kolommen van het bord waar dit item op staat ('custom_…',
+  // aangemaakt via Kolomvolgorde → + Kolom toevoegen in de agenda).
+  const customColumns = (getBoardConfig(project.board)?.columns ?? [])
+    .filter((col: ColumnDef) => col.key.startsWith('custom_') && !col.hidden)
   // Achtergrond vastzetten zolang het venster open staat. Samen met
   // overscroll-behavior houdt dit de browser-refresh tegen die opdook
   // zodra je in het venster naar boven veegde.
@@ -4020,6 +4027,34 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             rows={3} placeholder={isGoogle ? '' : 'Notities…'}
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
         </Row>
+        {/* Eigen kolommen uit de agenda. Voeg je daar een kolom toe, dan
+            kun je 'm hier meteen invullen — eerder moest je daarvoor
+            terug naar de agenda. */}
+        {customColumns.map((col: ColumnDef) => {
+          const current = (rawItem as Record<string, unknown> | undefined)?.[col.key]
+          const asText = current === undefined || current === null ? '' : String(current)
+          const inputType = col.type === 'date' ? 'date' : col.type === 'number' || col.type === 'currency' ? 'number' : 'text'
+          return (
+            <Row key={col.key} label={col.label}>
+              <input
+                type={inputType}
+                defaultValue={asText}
+                disabled={isGoogle}
+                placeholder={isGoogle ? '' : col.type === 'url' ? 'https://…' : ''}
+                onBlur={event => {
+                  const raw = event.target.value
+                  if (raw === asText) return
+                  const value = inputType === 'number'
+                    ? (raw === '' ? null : Number(raw.replace(',', '.')))
+                    : (raw === '' ? null : raw)
+                  commit({ [col.key]: value })
+                }}
+                style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6,
+                  padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                  opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+            </Row>
+          )
+        })}
         <Row label="Bestanden">
           <LinksRow links={links} onChange={next => { setLinks(next); commit({ links: next }) }} readonly={isGoogle} />
         </Row>
@@ -5915,7 +5950,7 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
-  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }>) {
+  function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }> & Record<string, unknown>) {
     const boardName  = project.board
     let rawIdPart    = project.id.slice(boardName.length + 2)
     // Vrij-events worden per-dag gesynthetiseerd met suffix '__vrij_YYYY-

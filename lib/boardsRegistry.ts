@@ -73,7 +73,6 @@ const FALLBACK: BoardConfig[] = [
     { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
     { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 175 },
     { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
-    { key: 'uitzenddag',     label: 'Uitzenddag',     type: 'date',      width: 105 },
     { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
   ] },
   { id: 'vlaanderen', name: 'Vlaanderen', emoji: '📋', color: '#ff7a00', columns: [
@@ -84,7 +83,6 @@ const FALLBACK: BoardConfig[] = [
     { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
     { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
     { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
-    { key: 'framelink',      label: 'Frame link',     type: 'url',       width: 110 },
   ] },
   // Omdenken was oorspronkelijk alleen lokaal aangemaakt. Daardoor kon het
   // na een remote pull uit de registry verdwijnen en bestond de parent-row
@@ -106,7 +104,6 @@ const FALLBACK: BoardConfig[] = [
     { key: 'estHours', label: 'Uren',     type: 'number',    width: 80  },
     { key: 'dagen',    label: 'Dagen',    type: 'number',    width: 70  },
     { key: 'deadline', label: 'Deadline', type: 'date',      width: 105 },
-    { key: 'nummers',  label: 'Nummers',  type: 'currency',  width: 110 },
   ] },
 ]
 
