@@ -1583,6 +1583,22 @@ export default function TodosPage() {
   visibleWeekEnd.setDate(visibleWeekEnd.getDate() + 4)
   const weekRange = `${visibleWeekStart.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${visibleWeekEnd.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`
 
+  // De week hoort bij de persoonlijke kolommen: alleen die veranderen
+  // mee. Boven in de paginakop stond 'ie los van waar je 'm voor
+  // gebruikt, met de algemene secties ertussen.
+  const weekNav = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+      <button onClick={() => setWeekOffset(offset => offset - 1)} title="Vorige week"
+        style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17 }}>‹</button>
+      <button onClick={() => setWeekOffset(0)} title="Naar deze week"
+        style={{ minWidth: 138, height: 32, padding: '0 10px', borderRadius: 7, border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', background: weekOffset === 0 ? 'var(--accent-light)' : 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}>
+        {weekOffset === 0 ? `Deze week · ${weekRange}` : weekOffset === -1 ? `Vorige week · ${weekRange}` : weekOffset === 1 ? `Volgende week · ${weekRange}` : weekRange}
+      </button>
+      <button onClick={() => setWeekOffset(offset => offset + 1)} title="Volgende week"
+        style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17 }}>›</button>
+    </div>
+  )
+
   function memberCapacity(memberId: string): number {
     return capacities[memberId]
       ?? liveTeam.find(member => member.id === memberId)?.weeklyCapacity
@@ -1685,16 +1701,6 @@ export default function TodosPage() {
           <IconCheckList size={isMobile ? 22 : 28} />
           To do&apos;s
         </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <button onClick={() => setWeekOffset(offset => offset - 1)} title="Vorige week"
-            style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17 }}>‹</button>
-          <button onClick={() => setWeekOffset(0)} title="Naar deze week"
-            style={{ minWidth: isMobile ? 92 : 138, height: 32, padding: '0 10px', borderRadius: 7, border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', background: weekOffset === 0 ? 'var(--accent-light)' : 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}>
-            {weekOffset === 0 ? `Deze week · ${weekRange}` : weekOffset === -1 ? `Vorige week · ${weekRange}` : weekOffset === 1 ? `Volgende week · ${weekRange}` : weekRange}
-          </button>
-          <button onClick={() => setWeekOffset(offset => offset + 1)} title="Volgende week"
-            style={{ width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 17 }}>›</button>
-        </div>
         <button onClick={addSection}
           title="Nieuwe sectie aanmaken"
           style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
@@ -1814,11 +1820,15 @@ export default function TodosPage() {
               ))}
             </div>
 
-            {general.length > 0 && personal.length > 0 && (
+            {/* Kop van de persoonlijke sectie: hier staat ook de week,
+                want alleen deze kolommen veranderen ermee. Altijd tonen
+                (ook zonder algemene secties) — anders verdwijnt de
+                weekkiezer mee. */}
+            {personal.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>Persoonlijk</span>
                 <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Persoonlijk</span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                {weekNav}
               </div>
             )}
 
