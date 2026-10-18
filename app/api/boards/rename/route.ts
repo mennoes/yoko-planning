@@ -20,9 +20,17 @@ export async function POST(req: NextRequest) {
   if (!/^[a-z0-9][a-z0-9_-]*$/i.test(boardId) || !name || name.length > 80) {
     return Response.json({ ok: false, error: 'invalid_body' }, { status: 400 })
   }
-  const { data, error } = await supabaseAdmin.from('boards')
+  // Niet elke installatie heeft de kolom `updated_at` op `boards`.
+  // PostgREST weigert de hele update dan met PGRST204; in dat geval
+  // proberen we 't gewoon zonder tijdstempel.
+  let { data, error } = await supabaseAdmin.from('boards')
     .update({ name, updated_at: new Date().toISOString() }).eq('id', boardId)
     .select('id, name').maybeSingle()
+  if (error && (error.code === 'PGRST204' || /updated_at/.test(error.message ?? ''))) {
+    ;({ data, error } = await supabaseAdmin.from('boards')
+      .update({ name }).eq('id', boardId)
+      .select('id, name').maybeSingle())
+  }
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 })
   if (!data) return Response.json({ ok: false, error: 'board_not_found' }, { status: 404 })
   return Response.json({ ok: true, board: data })

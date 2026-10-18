@@ -173,6 +173,25 @@ export function getBoardColor(id: string): string {
   return readCache().find(b => b.id === id)?.color ?? '#888'
 }
 
+// Niet elke installatie heeft de `updated_at`-kolom op `boards`: die
+// hoort bij de oorspronkelijke migratie, maar een tabel die ooit met de
+// hand is aangemaakt mist 'm. PostgREST weigert dan de hele schrijfactie
+// met "Could not find the 'updated_at' column of 'boards' in the schema
+// cache" — en dus mislukte élke hernoeming, ook via de server-route.
+// We proberen 't mét de kolom en onthouden het als 'ie niet bestaat.
+let boardsUpdatedAtSupported = true
+
+function isMissingUpdatedAt(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false
+  const message = error.message ?? ''
+  return error.code === 'PGRST204' || /updated_at/.test(message) && /schema cache|could not find/i.test(message)
+}
+
+/** Voegt `updated_at` toe zolang de kolom bestaat. */
+function withStamp<T extends Record<string, unknown>>(row: T): T & { updated_at?: string } {
+  return boardsUpdatedAtSupported ? { ...row, updated_at: new Date().toISOString() } : { ...row }
+}
+
 /** Hernoemt een agenda. Geeft null terug bij succes, anders de reden —
  *  die toont de sidebar, zodat 'hij springt terug' niet langer een
  *  raadsel is.
@@ -199,10 +218,14 @@ export async function renameBoard(boardId: string, name: string): Promise<string
 
   // 1. Rechtstreeks alleen de naam bijwerken — raakt kolommen, kleur en
   //    positie niet aan, ook niet als een collega die net wijzigde.
-  const direct = await supabase.from('boards')
-    .update({ name: clean, updated_at: new Date().toISOString() })
+  let direct = await supabase.from('boards')
+    .update(withStamp({ name: clean }))
     .eq('id', boardId)
     .select('id')
+  if (isMissingUpdatedAt(direct.error)) {
+    boardsUpdatedAtSupported = false
+    direct = await supabase.from('boards').update({ name: clean }).eq('id', boardId).select('id')
+  }
   if (!direct.error && (direct.data?.length ?? 0) > 0) return null
 
   // 2. Nul rijen geraakt? Dan bestond de rij nog niet (een agenda die
@@ -267,24 +290,25 @@ export async function pullBoardsFromRemote(): Promise<boolean> {
   const oldOmdenken = remoteRows.find(row => row.id === 'omdenken')
   if (oldOmdenken && !(oldOmdenken.columns ?? []).some(col => col.key === 'dagen')) {
     const columns = [...(oldOmdenken.columns ?? []), { key: 'dagen', label: 'Dagen', type: 'number' as const, width: 70 }]
-    const { error: migrationError } = await supabase.from('boards').update({ columns, updated_at: new Date().toISOString() }).eq('id', 'omdenken')
+    const { error: migrationError } = await supabase.from('boards').update(withStamp({ columns })).eq('id', 'omdenken')
     if (!migrationError) remoteRows = remoteRows.map(row => row.id === 'omdenken' ? { ...row, columns } : row)
   }
   const missing = FALLBACK.filter(f => !remoteRows.some(r => r.id === f.id))
   if (missing.length > 0) {
-    const { error: seedError } = await supabase.from('boards').upsert(
-      missing.map((cfg, index) => ({
-        id: cfg.id,
-        name: cfg.name,
-        emoji: cfg.emoji,
-        color: cfg.color,
-        columns: cfg.columns,
-        position: remoteRows.length + index,
-        updated_at: new Date().toISOString(),
-      })),
-      { onConflict: 'id' },
-    )
-    if (seedError) return false
+    const seedRows = () => missing.map((cfg, index) => withStamp({
+      id: cfg.id,
+      name: cfg.name,
+      emoji: cfg.emoji,
+      color: cfg.color,
+      columns: cfg.columns,
+      position: remoteRows.length + index,
+    }))
+    let seed = await supabase.from('boards').upsert(seedRows(), { onConflict: 'id' })
+    if (isMissingUpdatedAt(seed.error)) {
+      boardsUpdatedAtSupported = false
+      seed = await supabase.from('boards').upsert(seedRows(), { onConflict: 'id' })
+    }
+    if (seed.error) return false
   }
 
   const seededRows: Row[] = [
@@ -311,16 +335,20 @@ export async function upsertBoard(cfg: BoardConfig, position: number): Promise<b
   if (isOnDemoRoute()) { notifyDemoBlocked(); return false }
   if (!supabase) return false
   if (!await getCurrentUserId()) return false
-  const { error } = await supabase.from('boards').upsert({
-    id:        cfg.id,
-    name:      cfg.name,
-    emoji:     cfg.emoji,
-    color:     cfg.color,
-    columns:   cfg.columns,
+  const row = () => withStamp({
+    id:      cfg.id,
+    name:    cfg.name,
+    emoji:   cfg.emoji,
+    color:   cfg.color,
+    columns: cfg.columns,
     position,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' })
-  if (error) return false
+  })
+  let result = await supabase.from('boards').upsert(row(), { onConflict: 'id' })
+  if (isMissingUpdatedAt(result.error)) {
+    boardsUpdatedAtSupported = false
+    result = await supabase.from('boards').upsert(row(), { onConflict: 'id' })
+  }
+  if (result.error) return false
   localRevision++
   const current = readCache()
   writeCache(current.some(b => b.id === cfg.id) ? current.map(b => b.id === cfg.id ? cfg : b) : [...current, cfg])

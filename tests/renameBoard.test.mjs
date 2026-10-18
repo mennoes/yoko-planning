@@ -25,7 +25,10 @@ function load({ updateResult, upsertError = null }) {
         update(patch) {
           const chain = {
             eq() { return chain },
-            select() { calls.updates.push(patch); return Promise.resolve(updateResult) },
+            select() {
+              calls.updates.push(patch)
+              return Promise.resolve(Array.isArray(updateResult) ? (updateResult.shift() ?? { data: [], error: null }) : updateResult)
+            },
           }
           return chain
         },
@@ -95,4 +98,36 @@ test('een mislukte hernoeming blijft in beeld staan bij het invoerveld', () => {
   // Menu-items zonder agenda erachter zeggen dat meteen, in plaats van
   // stilletjes alleen lokaal te hernoemen.
   assert.match(sidebar, /Dit menu-item hoort niet bij een agenda\./)
+})
+
+test('een ontbrekende updated_at-kolom blokkeert het opslaan niet meer', () => {
+  const registry = readFileSync(new URL('../lib/boardsRegistry.ts', import.meta.url), 'utf8')
+  const route = readFileSync(new URL('../app/api/boards/rename/route.ts', import.meta.url), 'utf8')
+  const migration = readFileSync(new URL('../supabase/0040_boards_updated_at.sql', import.meta.url), 'utf8')
+  // Dit was de echte oorzaak: PostgREST weigert de hele schrijfactie als
+  // de kolom niet bestaat ("Could not find the 'updated_at' column of
+  // 'boards' in the schema cache"), dus ook de server-route faalde altijd.
+  assert.match(registry, /function isMissingUpdatedAt/)
+  assert.match(registry, /function withStamp/)
+  assert.match(registry, /boardsUpdatedAtSupported = false/)
+  // Alle drie de schrijfpaden vangen 'm op: hernoemen, upsert en seeden.
+  assert.equal((registry.match(/isMissingUpdatedAt\(/g) ?? []).length, 4)
+  assert.match(route, /error\.code === 'PGRST204' \|\| \/updated_at\/\.test\(error\.message \?\? ''\)/)
+  assert.match(migration, /add column if not exists updated_at timestamptz/)
+})
+
+test('zonder updated_at-kolom slaat hij alsnog op, zonder tijdstempel', async () => {
+  // Precies de melding uit de praktijk. De eerste poging bevat de kolom
+  // en wordt geweigerd; de tweede gaat zonder en slaagt.
+  const { registry, calls, nameNow } = load({
+    updateResult: [
+      { data: null, error: { code: 'PGRST204', message: "Could not find the 'updated_at' column of 'boards' in the schema cache" } },
+      { data: [{ id: 'vlaanderen' }], error: null },
+    ],
+  })
+  assert.equal(await registry.renameBoard('vlaanderen', 'Vlaanderen 2'), null)
+  assert.equal(calls.updates.length, 2)
+  assert.ok('updated_at' in calls.updates[0])
+  assert.deepEqual(Object.keys(calls.updates[1]), ['name'])
+  assert.equal(nameNow(), 'Vlaanderen 2')
 })
