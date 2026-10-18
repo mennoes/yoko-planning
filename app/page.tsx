@@ -1425,31 +1425,31 @@ export default function HomePage() {
     overload: (
       <div style={card}>
         <div style={cardHeader}>
-          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Krappe kop: titel, weekkeuze, percentage. Het losse
+              datumbereik stond ernaast te breken over drie regels en het
+              aantal uren stond er dubbelop naast het percentage — die
+              twee zitten nu in de weekknop en in de tooltip. */}
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
             <IconAlert size={isMobile ? 17 : 15} />
             Overbelast
-            {/* Zonder de datums zeggen de pijltjes niets; met het bereik
-                erbij zie je meteen welke week je bekijkt. */}
-            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{weekRangeLabel}</span>
           </h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
             <button onClick={() => setWeekOffset(o => o - 1)} title="Vorige week"
               style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>‹</button>
-            <button onClick={() => setWeekOffset(0)} title="Naar deze week"
+            {/* Deze week in woorden, elke andere week als datumbereik —
+                dan weet je waar de pijltjes je gebracht hebben zonder een
+                tweede label ernaast. */}
+            <button onClick={() => setWeekOffset(0)} title={weekOffset === 0 ? `Deze week · ${weekRangeLabel}` : `${weekRangeLabel} · klik voor deze week`}
               style={{ background: weekOffset === 0 ? 'var(--accent-light)' : 'transparent', border: weekOffset === 0 ? '1px solid var(--accent)' : '1px solid var(--border-light)', borderRadius: 6, color: weekOffset === 0 ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer', padding: '3px 7px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {weekOffset === 0 ? 'Deze week' : weekOffset === -1 ? 'Vorige week' : weekOffset === 1 ? 'Volgende week' : `${weekOffset > 0 ? '+' : ''}${weekOffset} weken`}
+              {weekOffset === 0 ? 'Deze week' : weekRangeLabel}
             </button>
             <button onClick={() => setWeekOffset(o => o + 1)} title="Volgende week"
               style={{ background: 'none', border: '1px solid var(--border-light)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer', width: 24, height: 24, padding: 0, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>›</button>
           </div>
-          {/* Team-totaal KPI bij de Overbelast-widget zodat je in 1 oogopslag
-              ziet hoe het team ervoor staat, niet alleen wie 't drukst heeft. */}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
-            <strong style={{ color: teamKpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 14, fontWeight: 800 }}>
-              {teamKpis.pctUsed}%
-            </strong>
-            <span style={{ color: 'var(--text-muted)' }}>{teamKpis.totalHours}/{teamKpis.totalCap}u</span>
-          </span>
+          <strong title={`${teamKpis.totalHours} van ${teamKpis.totalCap} uur ingepland`}
+            style={{ color: teamKpis.pctUsed > 100 ? '#C4453A' : 'var(--text-primary)', fontSize: 14, fontWeight: 800, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {teamKpis.pctUsed}%
+          </strong>
         </div>
         <div style={{ padding: '6px 0 10px' }}>
           {overloaded.length === 0 ? (

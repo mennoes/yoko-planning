@@ -5,13 +5,18 @@ import { readFileSync } from 'node:fs'
 const home = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
 const todos = readFileSync(new URL('../app/todos/page.tsx', import.meta.url), 'utf8')
 
-test('het Overbelast-overzicht heeft weekpijlen met het bereik erbij', () => {
-  // Zonder de datums zeggen de pijltjes niets.
-  const card = home.slice(home.indexOf('overload: ('), home.indexOf('overload: (') + 3000)
-  assert.match(card, /Overbelast\n/)
-  assert.match(card, /\{weekRangeLabel\}/)
+test('de kop van Overbelast blijft één regel: titel, week, percentage', () => {
+  const card = home.slice(home.indexOf('overload: ('), home.indexOf('overload: (') + 3500)
   assert.match(card, /title="Vorige week"/)
   assert.match(card, /title="Volgende week"/)
+  // Deze week in woorden, andere weken als datumbereik — geen tweede
+  // datumlabel ernaast dat over drie regels brak.
+  assert.match(card, /\{weekOffset === 0 \? 'Deze week' : weekRangeLabel\}/)
+  assert.doesNotMatch(card, /fontWeight: 500, color: 'var\(--text-muted\)' \}\}>\{weekRangeLabel\}/)
+  // Het urentotaal zit in de tooltip; het percentage blijft in beeld.
+  assert.match(card, /title=\{`\$\{teamKpis\.totalHours\} van \$\{teamKpis\.totalCap\} uur ingepland`\}/)
+  assert.doesNotMatch(card, /\{teamKpis\.totalHours\}\/\{teamKpis\.totalCap\}u/)
+  assert.match(card, /whiteSpace: 'nowrap'/)
 })
 
 test('beide kaarten volgen dezelfde weekkeuze', () => {
