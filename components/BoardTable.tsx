@@ -4192,11 +4192,23 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
             </div>
 
             {(() => {
+              // De rijen zijn verdeeld over drie emmers (lopend, opkomend,
+              // done), dus de index in zo'n emmer is niet de index in
+              // group.items — en die laatste heeft de drag & drop nodig.
+              // Dit was een findIndex per rij: O(n²) over de groep bij élke
+              // render. Eén map per groep is O(n).
+              const itemIndexById = new Map(group.items.map((i, idx) => [i.id, idx]))
               const renderRow = (item: BoardItem) => {
-              const realIdx = group.items.findIndex(i => i.id === item.id)
+              const realIdx = itemIndexById.get(item.id) ?? -1
               return (
               <div key={item.id} data-item-id={item.id}
-                style={{ position: 'relative' }}
+                // Rijen buiten beeld niet laten doorrekenen door de browser.
+                // Van de 176 rijen op dit bord staan er 17 in beeld; de rest
+                // kostte wel volledige layout bij elke wijziging. De browser
+                // onthoudt per rij de echt gemeten hoogte ('auto'), 45px is
+                // alleen de schatting tot een rij één keer in beeld is
+                // geweest — dat is de rijhoogte (minHeight 44 + rand).
+                style={{ position: 'relative', contentVisibility: 'auto', containIntrinsicSize: 'auto 45px' }}
                 onMouseEnter={e => {
                   const hs = e.currentTarget.querySelectorAll<HTMLElement>('.row-grip')
                   hs.forEach(h => { h.style.opacity = '1' })
