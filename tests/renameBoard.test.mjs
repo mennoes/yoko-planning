@@ -83,3 +83,16 @@ test('mislukt alles, dan komt de oude naam terug mét reden', async () => {
   assert.match(reason ?? '', /permission denied|geweigerd|server/i)
   assert.equal(nameNow(), 'Vlaanderen')
 })
+
+test('een mislukte hernoeming blijft in beeld staan bij het invoerveld', () => {
+  const sidebar = readFileSync(new URL('../components/Sidebar.tsx', import.meta.url), 'utf8')
+  // Een toast is te makkelijk te missen: je ziet de naam terugspringen
+  // zonder te weten waarom. De reden blijft nu onder het veld staan en
+  // het veld blijft open met wat je typte.
+  assert.match(sidebar, /const \[renameError, setRenameError\] = useState<\{ id: string; message: string \} \| null>\(null\)/)
+  assert.match(sidebar, /setRenameError\(\{ id, message: reason \}\)\n\s+setEditingItemId\(id\)/)
+  assert.match(sidebar, /role="alert"/)
+  // Menu-items zonder agenda erachter zeggen dat meteen, in plaats van
+  // stilletjes alleen lokaal te hernoemen.
+  assert.match(sidebar, /Dit menu-item hoort niet bij een agenda\./)
+})

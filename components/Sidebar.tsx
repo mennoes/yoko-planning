@@ -296,6 +296,7 @@ function SectionBlock({
       return v
     })
   }
+  const [renameError, setRenameError] = useState<{ id: string; message: string } | null>(null)
   const [boardItemDragging, setBoardItemDragging] = useState(false)
   const [boardDropTarget, setBoardDropTarget] = useState<string | null>(null)
   useEffect(() => {
@@ -388,11 +389,21 @@ function SectionBlock({
     if (section.type === 'projects') {
       const item = section.items.find(i => i.id === id)
       const boardId = item?.href.startsWith('/projects/') ? item.href.slice('/projects/'.length) : ''
-      if (boardId) void renameBoard(boardId, label).then(async reason => {
+      if (!boardId) {
+        // Geen bord achter dit menu-item: dan valt er ook niets te
+        // bewaren in de database en zou de naam na een refresh terugkomen.
+        setRenameError({ id, message: 'Dit menu-item hoort niet bij een agenda.' })
+        setEditingItemId(id)
+        return
+      }
+      setRenameError(null)
+      void renameBoard(boardId, label).then(async reason => {
         if (!reason) { await pullBoardsFromRemote(); showToast(`Agenda hernoemd naar '${label}'.`); return }
         updateItems(section.items.map(i => i.id === id ? { ...i, label: previousLabel } : i))
-        // De reden erbij: 'hij springt terug' zonder uitleg kostte
-        // eerder een hoop zoekwerk.
+        // De reden blijft staan onder het invoerveld. Een toast was te
+        // makkelijk te missen: je zag de naam terugspringen zonder uitleg.
+        setRenameError({ id, message: reason })
+        setEditingItemId(id)
         showToast(`Naam niet opgeslagen. ${reason}`)
       })
     }
@@ -642,11 +653,18 @@ function SectionBlock({
                 onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.row-action').forEach(b => (b.style.opacity = '0')) }}
               >
                 {editing ? (
-                  <input autoFocus defaultValue={item.label}
-                    onBlur={e => { const v = e.target.value.trim(); if (v) renameItem(item.id, v); setEditingItemId(null) }}
-                    onKeyDown={e => { if (e.key === 'Enter') { const v = e.currentTarget.value.trim(); if (v) renameItem(item.id, v); setEditingItemId(null) } if (e.key === 'Escape') setEditingItemId(null) }}
-                    style={{ flex: 1, margin: '2px 4px 2px 14px', background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '3px 7px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
-                  />
+                  <div style={{ flex: 1, margin: '2px 4px 2px 14px', minWidth: 0 }}>
+                    <input autoFocus defaultValue={item.label}
+                      onBlur={e => { const v = e.target.value.trim(); if (v) renameItem(item.id, v); setEditingItemId(null) }}
+                      onKeyDown={e => { if (e.key === 'Enter') { const v = e.currentTarget.value.trim(); if (v) renameItem(item.id, v); setEditingItemId(null) } if (e.key === 'Escape') { setRenameError(null); setEditingItemId(null) } }}
+                      style={{ width: '100%', background: 'var(--bg-base)', border: `1px solid ${renameError?.id === item.id ? 'var(--red, #C9483D)' : 'var(--accent)'}`, borderRadius: 4, padding: '3px 7px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                    {renameError?.id === item.id && (
+                      <div role="alert" style={{ marginTop: 3, fontSize: 11, lineHeight: 1.35, color: 'var(--red, #C9483D)' }}>
+                        {renameError.message}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <Link href={item.href}
                     onClick={e => { if (editOrder) e.preventDefault() }}
