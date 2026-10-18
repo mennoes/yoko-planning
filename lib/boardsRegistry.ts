@@ -190,7 +190,18 @@ export async function renameBoard(boardId: string, name: string): Promise<boolea
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ boardId, name: clean }),
     })
-    const result = await response.json() as { ok?: boolean; board?: { id: string; name: string } }
+    const result = await response.json() as { ok?: boolean; error?: string; board?: { id: string; name: string } }
+    if (result.error === 'board_not_found') {
+      // Het bord bestond alleen lokaal: de rij in 'boards' was er nooit
+      // gekomen (bv. een agenda uit de meegeleverde set die nog nooit
+      // gedeeld is). Hernoemen gaf dan een 404 en de naam sprong meteen
+      // terug. Maak de rij alsnog aan, mét de nieuwe naam.
+      const index = Math.max(0, current.findIndex(board => board.id === boardId))
+      const created = await upsertBoard({ ...existing, name: clean }, index)
+      if (created) return true
+      rollback()
+      return false
+    }
     if (!response.ok || !result.ok || result.board?.name !== clean) {
       rollback()
       return false

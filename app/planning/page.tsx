@@ -41,10 +41,6 @@ import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange }
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity } from '@/lib/itemActivity'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
-import { MentionTextarea } from '@/components/MentionTextarea'
-import { TextWithItemRefs } from '@/components/ItemRefChip'
-import { ReactionRow } from '@/components/ReactionRow'
-import { LinksRow } from '@/components/LinksRow'
 import { ItemHistory } from '@/components/ItemHistory'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
@@ -3343,6 +3339,8 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const [notes,     setNotes]     = useState((rawItem?.notes as string) ?? '')
   const [contactpersoon, setContactpersoon] = useState((rawItem?.contactpersoon as string) ?? '')
   const [journal,   setJournal]   = useState<import('@/lib/boards').JournalEntry[]>((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft,   setNameDraft]   = useState(project.name)
   const [links,     setLinks]     = useState<import('@/lib/boards').ItemLink[]>((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
   const [newEntry,  setNewEntry]  = useState('')
   const [ownerHours, setOwnerHours] = useState<Record<string, number>>(
@@ -3470,6 +3468,17 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     if (patch.status             !== undefined) extra.status             = patch.status
     if (patch.hiddenFromPlanning !== undefined) extra.hiddenFromPlanning = patch.hiddenFromPlanning
     if (!hasSubitems) extra.estHours = nextEst
+    // Alles wat hierboven niet expliciet genoemd staat — de naam en de
+    // eigen kolommen van de agenda — ging verloren: deze functie bouwde
+    // een vast object op en liet losse sleutels vallen. Nu reizen ze mee.
+    const HANDLED = new Set([
+      'startDate', 'endDate', 'estHours', 'notes', 'contactpersoon', 'journal',
+      'ownerHours', 'ownerIds', 'links', 'startTime', 'endTime', 'status', 'hiddenFromPlanning',
+    ])
+    for (const [key, value] of Object.entries(patch)) {
+      if (HANDLED.has(key)) continue
+      extra[key] = value
+    }
     onUpdate(project, nextStart, nextEnd, extra)
 
     // Geschiedenis + notificaties per soort wijziging (alleen wat écht veranderde).
@@ -3623,9 +3632,36 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)', background: color + '18' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}>
               {rawItem?.source === 'google' && <GoogleBadge href={rawItem?.externalLink as string | undefined} size={15} />}
-              {project.name}
+              {/* Klik de titel om te hernoemen — daarvoor moest je terug
+                  naar de agenda. Google-items houden hun naam uit de
+                  agenda-afspraak, dus die blijven read-only. */}
+              {isGoogle || editingName ? (
+                editingName ? (
+                  <input autoFocus value={nameDraft}
+                    onChange={event => setNameDraft(event.target.value)}
+                    onBlur={() => {
+                      const next = nameDraft.trim()
+                      setEditingName(false)
+                      if (next && next !== project.name) commit({ name: next })
+                      else setNameDraft(project.name)
+                    }}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') event.currentTarget.blur()
+                      if (event.key === 'Escape') { setNameDraft(project.name); setEditingName(false) }
+                    }}
+                    style={{ flex: 1, minWidth: 0, font: 'inherit', color: 'var(--text-primary)',
+                      background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 6,
+                      padding: '2px 6px', outline: 'none' }} />
+                ) : project.name
+              ) : (
+                <span onClick={() => { setNameDraft(project.name); setEditingName(true) }}
+                  title="Klik om de naam te wijzigen"
+                  style={{ cursor: 'text', borderRadius: 4, padding: '1px 3px', margin: '-1px -3px' }}>
+                  {project.name}
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
               in → <Link
@@ -3717,6 +3753,22 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         )
       })()}
       {!isMerged && <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: isMobile ? '16px 16px 28px' : '16px 18px' }}>
+        {!isGoogle && ownerIds.filter(id => id !== 'unassigned').length > 1 && (
+          <Row label="Verdeling">
+            <DistributionEditor
+              owners={ownerIds.filter(id => id !== 'unassigned')}
+              total={effectiveDetailHours.total}
+              values={ownerHours}
+              onLive={next => setOwnerHours(next)}
+              onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
+              teamLookup={oid => team.find(t => t.id === oid) ?? null}
+              completionTarget={personalCompletion ? {
+                parentItemId: personalCompletion.parentItemId,
+                ...(personalCompletion.subitemId ? { subitemId: personalCompletion.subitemId } : {}),
+              } : null}
+            />
+          </Row>
+        )}
         <Row label="Owner">
           <div ref={ownerPickerRef} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
             {ownerIds.length > 0 && ownerIds.map(oid => {
@@ -3890,49 +3942,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
-        <Row label="Categorie">
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {ALL_CATEGORIES.map(c => {
-              const active = currentCategory === c
-              const colorC = CAT_COLOR[c]
-              return (
-                <button key={c} type="button" onClick={() => changeCategory(c)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '4px 10px', borderRadius: 16,
-                    border: active ? `1.5px solid ${colorC}` : '1px solid var(--border)',
-                    background: active ? `${colorC}22` : 'var(--bg-card)',
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: 12, fontWeight: active ? 700 : 500,
-                    cursor: 'pointer',
-                  }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: colorC }} />
-                  {CAT_LABEL[c]}
-                </button>
-              )
-            })}
-            {categoryOverride && (
-              <button type="button" onClick={() => changeCategory(null)}
-                title="Reset naar automatisch"
-                style={{ padding: '4px 8px', borderRadius: 16, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
-                ↺ auto
-              </button>
-            )}
-          </div>
-        </Row>
-        <Row label="Contactpersoon">
-          <input
-            type="text"
-            value={contactpersoon}
-            disabled={isGoogle}
-            onChange={e => setContactpersoon(e.target.value)}
-            onBlur={() => {
-              if (contactpersoon !== ((rawItem?.contactpersoon as string) ?? '')) commit({ contactpersoon })
-            }}
-            placeholder={isGoogle ? '' : 'Naam of contactgegevens…'}
-            style={{ ...dateInput, width: '100%', maxWidth: 360, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }}
-          />
-        </Row>
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <input type="date" value={startDate} disabled={isGoogle}
@@ -4004,22 +4013,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             )}
           </div>
         </Row>
-        {!isGoogle && ownerIds.filter(id => id !== 'unassigned').length > 1 && (
-          <Row label="Verdeling">
-            <DistributionEditor
-              owners={ownerIds.filter(id => id !== 'unassigned')}
-              total={effectiveDetailHours.total}
-              values={ownerHours}
-              onLive={next => setOwnerHours(next)}
-              onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
-              teamLookup={oid => team.find(t => t.id === oid) ?? null}
-              completionTarget={personalCompletion ? {
-                parentItemId: personalCompletion.parentItemId,
-                ...(personalCompletion.subitemId ? { subitemId: personalCompletion.subitemId } : {}),
-              } : null}
-            />
-          </Row>
-        )}
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
             onChange={e => setNotes(e.target.value)}
@@ -4055,69 +4048,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })}
-        <Row label="Bestanden">
-          <LinksRow links={links} onChange={next => { setLinks(next); commit({ links: next }) }} readonly={isGoogle} />
-        </Row>
-        <Row label="Journaal">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {journal.length === 0 && (
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Nog geen entries.</span>
-            )}
-            {journal.slice().reverse().map(e => {
-              const d = new Date(e.ts)
-              return (
-                <div key={e.id} style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '6px 8px', position: 'relative' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
-                    {d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} · {d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    <TextWithItemRefs text={e.text} compact />
-                  </div>
-                  {profile?.memberId && (
-                    <ReactionRow
-                      reactions={e.reactions}
-                      currentMemberId={profile.memberId}
-                      onToggle={emoji => {
-                        const me = profile.memberId!
-                        const next = journal.map(x => {
-                          if (x.id !== e.id) return x
-                          const reactions = { ...(x.reactions ?? {}) }
-                          const set = new Set(reactions[emoji] ?? [])
-                          if (set.has(me)) set.delete(me); else set.add(me)
-                          if (set.size === 0) delete reactions[emoji]
-                          else                reactions[emoji] = [...set]
-                          return { ...x, reactions }
-                        })
-                        setJournal(next)
-                        commit({ journal: next })
-                      }}
-                    />
-                  )}
-                  <button onClick={() => deleteEntry(e.id)}
-                    style={{ position: 'absolute', top: 2, right: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', padding: '2px 4px' }}
-                    onMouseEnter={ev => (ev.currentTarget.style.color = '#e2445c')}
-                    onMouseLeave={ev => (ev.currentTarget.style.color = 'var(--text-muted)')}
-                    title="Verwijderen">×</button>
-                </div>
-              )
-            })}
-            <div style={{ display: 'flex', gap: 6 }}>
-              <MentionTextarea value={newEntry}
-                onChange={setNewEntry}
-                onMentionsChange={setEntryMentions}
-                onSubmit={addEntry}
-                placeholder="+ Voeg entry toe… (typ @ om te taggen, ⌘+Enter om te plaatsen)"
-                rows={1} />
-              <button onClick={addEntry} disabled={!newEntry.trim()}
-                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
-                  background: newEntry.trim() ? color : 'var(--bg-hover)',
-                  color: newEntry.trim() ? '#fff' : 'var(--text-muted)',
-                  fontSize: 12, fontWeight: 600, cursor: newEntry.trim() ? 'pointer' : 'not-allowed' }}>
-                +
-              </button>
-            </div>
-          </div>
-        </Row>
         <Row label="Geschiedenis">
           <ItemHistory itemId={project.id.slice(project.board.length + 2)} />
         </Row>

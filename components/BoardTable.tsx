@@ -3679,15 +3679,20 @@ function BoardGroupSection({ boardId, group, cols, colWidths, gridTemplate, subG
     if (key === 'startDate' || key === 'endDate' || key === 'deadline' || key === 'uitzenddag' || key === 'timeline') {
       const dKey = key === 'timeline' ? 'startDate' : key
       let v = item[dKey] as string | null
-      // Auto-rollup voor sortering: parent zonder eigen datum pakt 't
-      // vroegste subitem (voor start) of laatste (voor end), zodat 'ie
-      // op de juiste plek in de tijdlijn komt te staan.
-      if (!v && (dKey === 'startDate' || dKey === 'endDate')) {
+      // Sorteren op exact de datum die in de Timeline-kolom staat. Die
+      // kolom toont bij een item met subitems ALTIJD de rollup (vroegste
+      // start / laatste eind van de actieve subitems), tenzij de datums
+      // handmatig zijn overschreven. Hier werd de rollup alleen gebruikt
+      // als de parent zelf geen datum had — en een Google-serie heeft die
+      // wel, vaak een verouderde. Gevolg: die rijen stonden op een
+      // onnavolgbare plek, want je zag 21 okt staan terwijl er op een
+      // heel andere datum gesorteerd werd.
+      if (dKey === 'startDate' || dKey === 'endDate') {
         const allSubs = (item.subitems ?? []) as Array<{ status?: string; startDate?: string | null; endDate?: string | null }>
         const activeSubs = allSubs.filter(s => s.status !== 'Done')
         const subs = activeSubs.length > 0 ? activeSubs : allSubs
         const dates = subs.map(s => dKey === 'startDate' ? s.startDate : s.endDate).filter(Boolean) as string[]
-        if (dates.length > 0) {
+        if (dates.length > 0 && !item.datesOverride) {
           dates.sort()
           v = dKey === 'startDate' ? dates[0] : dates[dates.length - 1]
         }
