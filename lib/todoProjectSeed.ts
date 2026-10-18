@@ -18,11 +18,6 @@ import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
 import { loadSections, type TodoItem } from './todosStore'
 import { loadAllComments } from './commentsStore'
 import { completionState, type CompletionTarget } from './personalCompletion'
-import yokoRaw       from '@/data/boards/yoko.json'
-import pnpRaw        from '@/data/boards/pnp.json'
-import nederlandRaw  from '@/data/boards/nederland.json'
-import vlaanderenRaw from '@/data/boards/vlaanderen.json'
-import dienjaarRaw   from '@/data/boards/dienjaar.json'
 
 export type ProjectSeedLink = {
   board:  string
@@ -35,19 +30,11 @@ export type ProjectSeedLink = {
   completionTarget?: CompletionTarget
 }
 
-const RAW: Record<string, { groups: BoardGroup[] }> = {
-  yoko:       yokoRaw       as { groups: BoardGroup[] },
-  pnp:        pnpRaw        as { groups: BoardGroup[] },
-  nederland:  nederlandRaw  as { groups: BoardGroup[] },
-  vlaanderen: vlaanderenRaw as { groups: BoardGroup[] },
-  dienjaar:   dienjaarRaw   as { groups: BoardGroup[] },
-}
-
 export function loadAllTodoProjects(): ProjectSeedLink[] {
   if (typeof window === 'undefined') return []
   const out: ProjectSeedLink[] = []
   for (const board of getBoardIds()) {
-    const groups = loadGroups(board, RAW[board]?.groups ?? [])
+    const groups = loadGroups(board, [])
     for (const g of groups) for (const item of g.items) {
       if (!item.name) continue
       out.push({
@@ -81,7 +68,7 @@ export function loadMyOpenProjects(memberId: string): ProjectSeedLink[] {
   const out: ProjectSeedLink[] = []
   const catOverrides = loadCategoryOverrides()
   for (const board of getBoardIds()) {
-    const groups = loadGroups(board, RAW[board]?.groups ?? [])
+    const groups = loadGroups(board, [])
     for (const g of groups) {
       const groupName = (g.name ?? '').toLowerCase()
       if (groupName === 'done') continue
@@ -137,7 +124,7 @@ export function loadDoneTodoProjectKeys(): Set<string> {
   const out = new Set<string>()
   const today = new Date().toISOString().slice(0, 10)
   for (const board of getBoardIds()) {
-    const groups = loadGroups(board, RAW[board]?.groups ?? [])
+    const groups = loadGroups(board, [])
     for (const g of groups) {
       const groupIsDone = (g.name ?? '').toLowerCase() === 'done'
       for (const item of g.items) {

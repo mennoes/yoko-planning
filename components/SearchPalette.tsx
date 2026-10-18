@@ -7,24 +7,17 @@ import { useProfile } from './ProfileContext'
 import { loadRecentPages } from '@/lib/pagesStore'
 import { loadGroups, BOARD_NAMES } from '@/lib/boardStore'
 import { markAllRead } from '@/lib/notificationsStore'
-import yokoRaw       from '@/data/boards/yoko.json'
-import pnpRaw        from '@/data/boards/pnp.json'
-import nederlandRaw  from '@/data/boards/nederland.json'
-import vlaanderenRaw from '@/data/boards/vlaanderen.json'
-import dienjaarRaw   from '@/data/boards/dienjaar.json'
 import { pullAccounts } from '@/lib/accountsStore'
 import type { BoardGroup } from '@/lib/boards'
 import { isOnDemoRoute, buildDemoBoards, demoNavigate } from '@/lib/demoFixtures'
 import { setThemePreference } from '@/lib/theme'
 
-const REAL_BOARD_RAW: Record<string, { groups: unknown[] }> = {
-  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw,
-  vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
-}
-// /demo doorzoekt de verzonnen borden i.p.v. de echte 5 — anders zou
-// zoeken hier (via de fallback-seed) altijd echte klantdata tonen.
+// Op /demo zijn de verzonnen borden de fallback. Buiten /demo is er geen
+// fallback meer: de echte inhoud komt uit Supabase. Vroeger stond hier
+// data/boards/*.json, waardoor zoeken op /demo via de fallback alsnog
+// echte klantdata kon tonen — en elke bundel 200 KB zwaarder was.
 function boardRaw(): Record<string, { groups: unknown[] }> {
-  return isOnDemoRoute() ? buildDemoBoards() : REAL_BOARD_RAW
+  return isOnDemoRoute() ? buildDemoBoards() : {}
 }
 
 type Result = {

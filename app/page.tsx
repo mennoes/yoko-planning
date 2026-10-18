@@ -28,11 +28,6 @@ import {
 } from '@/lib/todosStore'
 import { mergeMemberTodoItems } from '@/lib/todoProjectSeed'
 import teamData  from '@/data/team.json'
-import yokoRaw        from '@/data/boards/yoko.json'
-import pnpRaw         from '@/data/boards/pnp.json'
-import nederlandRaw   from '@/data/boards/nederland.json'
-import vlaanderenRaw  from '@/data/boards/vlaanderen.json'
-import dienjaarRaw    from '@/data/boards/dienjaar.json'
 import { loadGroups, saveGroups, pushBoardToRemote } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
 import { homeWeekTone } from '@/lib/homeWeekTone'
@@ -48,10 +43,6 @@ import { loadProfileDaysOff, lookupDaysOff, onProfileDaysOffChange } from '@/lib
 import { loadCapacities, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import { supabase } from '@/lib/supabase'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
-
-const RAW: Record<string, { groups: unknown[] }> = {
-  yoko: yokoRaw, pnp: pnpRaw, nederland: nederlandRaw, vlaanderen: vlaanderenRaw, dienjaar: dienjaarRaw,
-}
 
 type TodoItem = { id: string; text: string; done: boolean }
 
@@ -486,7 +477,7 @@ export default function HomePage() {
     const allDeadlines: { board: string; item: BoardItem }[] = []
     const now = Date.now(); const weekAhead = now + 7 * 86400000
     for (const name of getBoardIds()) {
-      const groups = loadGroups(name, (RAW[name]?.groups ?? []) as BoardGroup[])
+      const groups = loadGroups(name, [] as BoardGroup[])
       projectList.push(...groupsToProjects(name, groups))
       for (const g of groups) for (const item of g.items) {
         if (!item.deadline) continue
