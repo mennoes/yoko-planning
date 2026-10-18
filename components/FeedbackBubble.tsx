@@ -47,6 +47,8 @@ export function FeedbackBubble() {
   const pathname = usePathname()
   const { profile } = useProfile()
   const isMobile = useIsMobile()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [filter, setFilter] = useState<FeedbackKind | 'all'>('all')
@@ -116,7 +118,13 @@ export function FeedbackBubble() {
     await deleteFeedback(id)
   }
 
-  if (typeof document === 'undefined') return null
+  // `typeof document === 'undefined'` stond hier als server-check, maar dat
+  // is precies de server/client-tak waar React op klapt: de server rendert
+  // niets, de eerste client-render een portal — hydration mismatch, en dan
+  // gooit React de hele server-HTML van élke pagina weg en tekent de boom
+  // opnieuw op de client. Met een mounted-vlag zijn de server-render en de
+  // eerste client-render allebei leeg, en komt de bubbel er daarna bij.
+  if (!mounted) return null
 
   const bubble = (
     <button
