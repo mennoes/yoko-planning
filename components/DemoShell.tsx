@@ -13,13 +13,14 @@
 //   2. een klein 'Live demo'-label + reset-knop.
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import Sidebar from './Sidebar'
 import SearchPalette from './SearchPalette'
 import TimerIndicator from './TimerIndicator'
 import { FeedbackBubble } from './FeedbackBubble'
 import ProfileSetup from './ProfileSetup'
 import { useIsMobile } from '@/lib/useIsMobile'
-import { IconMenu, IconSearch } from './Icon'
+import { IconSearch } from './Icon'
 import { NotificationBell } from './NotificationBell'
 import { UserAvatar } from './UserAvatar'
 import { useProfile } from './ProfileContext'
@@ -135,7 +136,7 @@ export default function DemoShell({ children }: { children: React.ReactNode }) {
               style={{ width: 38, height: 38, borderRadius: 9, background: 'var(--bg-card)', border: '1px solid var(--border-light)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.06)', color: 'var(--text-primary)', padding: 0 }}>
-              <IconMenu size={20} />
+              <Image src="/yoko-logo.png" alt="" width={26} height={26} unoptimized style={{ display: 'block' }} />
             </button>
           </div>
           <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 70, display: 'flex', gap: 6, alignItems: 'center' }}>
