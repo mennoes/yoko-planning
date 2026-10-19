@@ -2,13 +2,20 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
-  loadTeamGroups, pullTeamGroups, subscribeRemoteTeamGroups, onTeamGroupsChange,
+  loadCustomTeamGroups, loadTeamSections, pullTeamGroups, subscribeRemoteTeamGroups, onTeamGroupsChange,
   createTeamGroup, assignMemberToTeamGroup, moveTeamGroup, canMoveTeamGroup, type TeamGroup,
 } from '@/lib/teamGroups'
 
 export function useTeamGroups() {
-  const [groups, setGroups] = useState<TeamGroup[]>(() => loadTeamGroups())
-  const refresh = useCallback(() => setGroups(loadTeamGroups()), [])
+  // `groups` zijn alleen je eigen teams — die kun je leden toewijzen.
+  // `sections` is de volledige volgorde inclusief Studio Yoko, Freelancers
+  // en Inactief team; daar hoort geen handmatige ledenlijst bij.
+  const [groups, setGroups] = useState<TeamGroup[]>(() => loadCustomTeamGroups())
+  const [sections, setSections] = useState<TeamGroup[]>(() => loadTeamSections())
+  const refresh = useCallback(() => {
+    setGroups(loadCustomTeamGroups())
+    setSections(loadTeamSections())
+  }, [])
 
   useEffect(() => {
     refresh()
@@ -20,6 +27,7 @@ export function useTeamGroups() {
 
   return {
     groups,
+    sections,
     createGroup: createTeamGroup,
     assignMember: assignMemberToTeamGroup,
     moveGroup: moveTeamGroup,

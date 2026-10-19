@@ -24,8 +24,11 @@ test('all built-in people sections are real drop targets and dropdown options', 
   assert.match(planning, /peopleYokoTarget: PlanningTeamDropTarget/)
   assert.match(planning, /peopleFreelanceTarget: PlanningTeamDropTarget/)
   assert.match(planning, /peopleInactiveTarget: PlanningTeamDropTarget/)
-  assert.match(planning, /planningTeamDropProps\(peopleFreelanceTarget\)/)
-  assert.match(planning, /planningTeamDropProps\(peopleInactiveTarget\)/)
+  // De vaste blokken zijn secties in één gesorteerde lijst geworden, dus
+  // hun droptarget komt uit die lus in plaats van uit drie losse blokken.
+  assert.match(planning, /planningTeamDropProps\(basis\.target\)/)
+  assert.match(planning, /target: peopleFreelanceTarget/)
+  assert.match(planning, /target: peopleInactiveTarget/)
   assert.match(planning, /<option value="base:freelance">Freelancers<\/option>/)
   assert.match(planning, /<option value="base:inactive">Inactief team<\/option>/)
 })

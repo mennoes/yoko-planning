@@ -53,6 +53,7 @@ import {
 import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useTeamGroups } from '@/components/useTeamGroups'
+import { isBaseSectionId } from '@/lib/teamGroups'
 import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
 import { completionTargetForProject, completeLinkedTask, loadPersonalCompletion } from '@/lib/personalCompletionClient'
 import { onCommentsUpdate } from '@/lib/commentsStore'
@@ -61,6 +62,7 @@ import { completionContext, type CompletionTarget } from '@/lib/personalCompleti
 import type { BoardGroup, ColumnDef } from '@/lib/boards'
 import { getBoardConfig } from '@/lib/boardsRegistry'
 import { planningDetailHours } from '@/lib/planningDetailHours'
+import { membersWithWorkInWindow, FREELANCER_ACTIVE_DAYS } from '@/lib/freelancerActivity'
 
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
@@ -4645,7 +4647,7 @@ export default function PlanningPage() {
   const { pushUndo, showToast } = useUndo()
   const { profile }    = useProfile()
   const { members: liveTeam, refresh: refreshTeam } = useTeam()
-  const { groups: teamGroups, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup, moveGroup: moveTeamGroup, canMoveGroup: canMoveTeamGroup } = useTeamGroups()
+  const { groups: teamGroups, sections: teamSections, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup, moveGroup: moveTeamGroup, canMoveGroup: canMoveTeamGroup } = useTeamGroups()
   // Helper: classificeer een memberId als 'yoko' op basis van de live
   // team_members tabel; valt terug op de hardcoded YOKO_IDS voor leden
   // die nog niet in de DB staan (bv. extras of voor migratie 0018 is
@@ -4660,7 +4662,16 @@ export default function PlanningPage() {
   // Gestopt (bv. stage afgerond) — zelfde live-lookup-patroon als
   // isYokoCrew: 'team' bevat alleen de smalle workload.TeamMember-vorm
   // (id/name/color/weeklyCapacity), dus de vlag komt uit liveTeam.
+  // Eigen team: het handmatige vinkje beslist — iemand die weggaat is weg,
+  // ook in een week zonder geplande uren.
+  //
+  // Freelancers: het werk beslist. Heeft iemand in de afgelopen of komende
+  // drie weken werk bij ons staan, dan staat die in Freelancers; zo niet,
+  // dan in Inactief team. Dat vinkje liep altijd achter — een freelancer
+  // die een half jaar niets deed stond nog gewoon in de actieve lijst.
   function isMemberInactive(id: string): boolean {
+    if (id === 'unassigned') return false
+    if (!isYokoCrew(id)) return !activeFreelancerIds.has(id)
     return !!liveTeam.find(m => m.id === id)?.inactive
   }
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
@@ -4998,6 +5009,8 @@ export default function PlanningPage() {
   }, [])
 
   const [newItemOpen, setNewItemOpen] = useState(false)
+  // Welke dichtgeklapte secties in 'Mensen & capaciteit' openstaan.
+  const [openPeopleSections, setOpenPeopleSections] = useState<Set<string>>(new Set())
   // Pre-fill voor click-to-create vanuit het tijdlijn-grid. Wanneer
   // de user op een lege cel klikt vullen we datum/tijd/owner in zodat
   // 't NewItemPopup direct op die positie staat (Google-Calendar-stijl).
@@ -5626,6 +5639,18 @@ export default function PlanningPage() {
   // daadwerkelijk veranderen.
   const freelancersWithWorkSoon = useMemo(
     () => membersWithWorkSoon(effectiveProjects),
+    [effectiveProjects],
+  )
+
+  // Wie heeft er in de afgelopen of komende drie weken werk bij ons? Dat
+  // bepaalt of een freelancer onder 'Freelancers' of onder 'Inactief team'
+  // staat — zie isMemberInactive. Afgerond werk telt mee: net klaar is ook
+  // recent voor ons gewerkt.
+  const activeFreelancerIds = useMemo(
+    () => membersWithWorkInWindow(effectiveProjects, {
+      backDays: FREELANCER_ACTIVE_DAYS,
+      forwardDays: FREELANCER_ACTIVE_DAYS,
+    }),
     [effectiveProjects],
   )
 
@@ -6611,6 +6636,22 @@ export default function PlanningPage() {
             </div>
           )
         }
+        // Dezelfde pijltjes voor een eigen team en voor een vast blok:
+        // alles staat in één volgorde, dus ze doen precies hetzelfde.
+        const sectieKnoppen = (sectionId: string) => ([-1, 1] as const).map(richting => {
+          const kan = canMoveTeamGroup(sectionId, richting)
+          return (
+            <button key={richting} onClick={() => { if (kan) void moveTeamGroup(sectionId, richting) }}
+              disabled={!kan}
+              title={kan
+                ? (richting === -1 ? 'Omhoog' : 'Omlaag')
+                : (richting === -1 ? 'Staat al bovenaan' : 'Staat al onderaan')}
+              style={{ border: 0, background: 'transparent', cursor: kan ? 'pointer' : 'default',
+                color: kan ? 'var(--text-muted)' : 'var(--border-strong)', opacity: kan ? 1 : 0.6 }}>
+              {richting === -1 ? '↑' : '↓'}
+            </button>
+          )
+        })
         const groupZone = (group: typeof teamGroups[number]) => {
           const members = group.memberIds.map(id => team.find(member => member.id === id)).filter((member): member is TeamMember => !!member)
           const dropTarget = { key: `people-group-${group.id}`, groupId: group.id, label: group.name }
@@ -6623,24 +6664,7 @@ export default function PlanningPage() {
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
                 <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{group.name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-muted)' }}>{teamDropTargetKey === dropTarget.key ? 'Laat los' : members.length}</span>
-{/* Uitgezet als er niets te verschuiven valt — met één team deden
-                    deze pijlen niets en leek het kapot. */}
-                {([-1, 1] as const).map(richting => {
-                  const kan = canMoveTeamGroup(group.id, richting)
-                  return (
-                    <button key={richting} onClick={() => { if (kan) void moveTeamGroup(group.id, richting) }}
-                      disabled={!kan}
-                      title={kan
-                        ? (richting === -1 ? 'Team omhoog' : 'Team omlaag')
-                        : (teamGroups.length < 2
-                            ? 'Maak een tweede team om de volgorde te kunnen wijzigen'
-                            : richting === -1 ? 'Staat al bovenaan' : 'Staat al onderaan')}
-                      style={{ border: 0, background: 'transparent', cursor: kan ? 'pointer' : 'default',
-                        color: kan ? 'var(--text-muted)' : 'var(--border-strong)', opacity: kan ? 1 : 0.6 }}>
-                      {richting === -1 ? '↑' : '↓'}
-                    </button>
-                  )
-                })}
+                {sectieKnoppen(group.id)}
               </div>
               {members.length > 0 ? members.map(row) : (
                 <div style={{ padding: '10px 2px', fontSize: 12, color: 'var(--text-muted)' }}>Sleep mensen hierheen</div>
@@ -6665,20 +6689,57 @@ export default function PlanningPage() {
                 </button>
               )}
             </div>
-            {/* Zelfde volgorde als in het raster: Studio Yoko eerst, de
-                eigen teams daaronder. Hier stonden de teams erbóven,
-                dus wat je in dit venster zag kwam niet overeen met wat je
-                op de pagina erachter zag. */}
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 10, marginBottom: 2 }}>
-              Studio Yoko
-            </div>
-            <div {...planningTeamDropProps(peopleYokoTarget)}
-              style={{ minHeight: yokoTeam.length === 0 ? 42 : undefined, borderRadius: 8,
-                background: teamDropTargetKey === peopleYokoTarget.key ? 'var(--accent-light)' : 'transparent',
-                outline: teamDropTargetKey === peopleYokoTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
-              {yokoTeam.length > 0 ? yokoTeam.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Sleep hierheen om uit een groep te halen</div>}
-            </div>
-            {teamGroups.map(groupZone)}
+            {/* Eén lijst, één volgorde. Studio Yoko, Freelancers en
+                Inactief team zijn geen vaste blokken meer maar secties in
+                dezelfde rij als je eigen teams, dus je kunt ze allemaal met
+                de pijltjes verplaatsen. Eerder stonden de eigen teams altijd
+                tussen Studio Yoko en Freelancers geklemd — met één team viel
+                er dus niets te verschuiven. */}
+            {teamSections.map(section => {
+              if (!isBaseSectionId(section.id)) {
+                const custom = teamGroups.find(group => group.id === section.id)
+                return custom ? groupZone(custom) : null
+              }
+              const basis = section.id === '__yoko__'
+                ? { leden: yokoTeam, target: peopleYokoTarget, leeg: 'Sleep hierheen om uit een groep te halen', dicht: false }
+                : section.id === '__freelance__'
+                  ? { leden: freelancers, target: peopleFreelanceTarget, leeg: 'Niemand met werk in de afgelopen of komende drie weken', dicht: true }
+                  : { leden: inactiveTeam, target: peopleInactiveTarget, leeg: 'Geen inactieve teamleden', dicht: true }
+              const actief = teamDropTargetKey === basis.target.key
+              // Freelancers en Inactief team blijven dicht tot je ze opent:
+              // dat kunnen tientallen mensen zijn en dan is het venster niet
+              // meer te overzien. Studio Yoko staat altijd open.
+              const open = !basis.dicht || openPeopleSections.has(section.id)
+              return (
+                <div key={section.id} {...planningTeamDropProps(basis.target)}
+                  style={{ marginTop: 12, borderRadius: 8,
+                    background: actief ? 'var(--accent-light)' : 'transparent',
+                    outline: actief ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2,
+                    borderTop: '1px solid var(--border-light)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+                    fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase',
+                    letterSpacing: '0.07em', padding: '8px 0' }}>
+                    {basis.dicht ? (
+                      <button onClick={() => setOpenPeopleSections(prev => {
+                          const next = new Set(prev)
+                          if (next.has(section.id)) next.delete(section.id); else next.add(section.id)
+                          return next
+                        })}
+                        aria-expanded={open}
+                        style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 0,
+                          font: 'inherit', color: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}>
+                        {open ? '▾' : '▸'} {section.name} ({basis.leden.length})
+                      </button>
+                    ) : <span>{section.name}</span>}
+                    {actief && <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'none', letterSpacing: 'normal' }}>Laat los</span>}
+                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>{sectieKnoppen(section.id)}</span>
+                  </div>
+                  {open && (basis.leden.length > 0
+                    ? basis.leden.map(row)
+                    : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>{basis.leeg}</div>)}
+                </div>
+              )
+            })}
             {unassigned.length > 0 && (
               <>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 14, marginBottom: 2 }}>
@@ -6687,34 +6748,6 @@ export default function PlanningPage() {
                 {unassigned.map(row)}
               </>
             )}
-            <div {...planningTeamDropProps(peopleFreelanceTarget)} style={{ marginTop: 12, borderRadius: 8,
-              background: teamDropTargetKey === peopleFreelanceTarget.key ? 'var(--accent-light)' : 'transparent',
-              outline: teamDropTargetKey === peopleFreelanceTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
-              <details>
-                <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em',
-                  padding: '8px 0', borderTop: '1px solid var(--border-light)' }}>
-                  <span>▸ Freelancers ({freelancers.length})</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: teamDropTargetKey === peopleFreelanceTarget.key ? 800 : 500, textTransform: 'none', letterSpacing: 'normal', color: teamDropTargetKey === peopleFreelanceTarget.key ? 'var(--accent)' : 'var(--text-muted)' }}>
-                    {teamDropTargetKey === peopleFreelanceTarget.key ? 'Laat los' : 'klik om uit te klappen'}
-                  </span>
-                </summary>
-                {freelancers.length > 0 ? freelancers.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Nog geen freelancers</div>}
-              </details>
-            </div>
-            <div {...planningTeamDropProps(peopleInactiveTarget)} style={{ marginTop: 12, borderRadius: 8,
-              background: teamDropTargetKey === peopleInactiveTarget.key ? 'var(--accent-light)' : 'transparent',
-              outline: teamDropTargetKey === peopleInactiveTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
-              <details>
-                <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em',
-                  padding: '8px 0', borderTop: '1px solid var(--border-light)' }}>
-                  <span>▸ Inactief team ({inactiveTeam.length})</span>
-                  {teamDropTargetKey === peopleInactiveTarget.key && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: 'var(--accent)', textTransform: 'none', letterSpacing: 'normal' }}>Laat los</span>}
-                </summary>
-                {inactiveTeam.length > 0 ? inactiveTeam.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Geen inactieve teamleden</div>}
-              </details>
-            </div>
             <form onSubmit={e => {
               e.preventDefault()
               const name = newTeamGroupName.trim()
@@ -7124,35 +7157,28 @@ export default function PlanningPage() {
               </div>
             )
 
-            return (
-              <>
-                {(yokoVisible.length > 0 || draggingTeamMemberId) && sectionLabel(
-                  'Studio Yoko',
-                  yokoVisible.length,
-                  yokoVisible,
-                  () => setYokoTeamPos(current => current === 0 ? 1 : 0),
-                  yokoTeamPos !== 0,
-                  { key: 'base-yoko-day', groupId: null, label: 'Studio Yoko', baseKind: 'yoko' },
-                )}
-                {yokoTeamPos !== 0 && yokoVisible.map(renderPerson)}
-                {groupedVisible.map(({ group, members }) => (
-                  <div key={`group-day-${group.id}`}>
-                    {sectionLabel(
-                      group.name,
-                      members.length,
-                      members,
-                      () => toggleTeamGroup(group.id),
-                      !collapsedTeamGroups.has(group.id),
-                      { key: `group-${group.id}-day`, groupId: group.id, label: group.name },
-                    )}
-                    {!collapsedTeamGroups.has(group.id) && members.map(renderPerson)}
+            // Zelfde volgorde als in Overzicht en in 'Mensen & capaciteit':
+            // één lijst waarin ook Studio Yoko, Freelancers en Inactief team
+            // meedoen. Eerder stond die volgorde hier hard in de JSX, dus de
+            // dagweergave trok zich niets aan van wat je had ingesteld.
+            const dagSectie = (sectionId: string): React.ReactNode => {
+              if (sectionId === '__yoko__') {
+                if (yokoVisible.length === 0 && !draggingTeamMemberId) return null
+                return (
+                  <div key="day-yoko">
+                    {sectionLabel('Studio Yoko', yokoVisible.length, yokoVisible,
+                      () => setYokoTeamPos(current => current === 0 ? 1 : 0), yokoTeamPos !== 0,
+                      { key: 'base-yoko-day', groupId: null, label: 'Studio Yoko', baseKind: 'yoko' })}
+                    {yokoTeamPos !== 0 && yokoVisible.map(renderPerson)}
                   </div>
-                ))}
-                {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length, unassignedVisible)}
-                {unassignedVisible.map(renderPerson)}
-                {(freelancersVisible.length > 0 || draggingTeamMemberId) && (
-                  <>
-                    {sectionLabel('Freelancers', freelancersVisible.length, freelancersVisible, () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0,
+                )
+              }
+              if (sectionId === '__freelance__') {
+                if (freelancersVisible.length === 0 && !draggingTeamMemberId) return null
+                return (
+                  <div key="day-freelance">
+                    {sectionLabel('Freelancers', freelancersVisible.length, freelancersVisible,
+                      () => setFreelancersPos(o => o !== 0 ? 0 : 1), freelancersPos !== 0,
                       { key: 'base-freelancers-day', groupId: null, label: 'Freelancers', baseKind: 'freelancer' })}
                     {/* Zelfde regel als in Overzicht: ingeklapt blijven de
                         freelancers met werk in de komende twee weken staan. */}
@@ -7160,15 +7186,37 @@ export default function PlanningPage() {
                       ? freelancersVisible
                       : freelancersVisible.filter(m => freelancersWithWorkSoon.has(m.id))
                     ).map(renderPerson)}
-                  </>
-                )}
-                {(inactiveVisible.length > 0 || draggingTeamMemberId) && (
-                  <>
-                    {sectionLabel('Inactief team', inactiveVisible.length, inactiveVisible, () => setInactiveTeamPos(o => o !== 0 ? 0 : 1), inactiveTeamPos !== 0,
+                  </div>
+                )
+              }
+              if (sectionId === '__inactive__') {
+                if (inactiveVisible.length === 0 && !draggingTeamMemberId) return null
+                return (
+                  <div key="day-inactive">
+                    {sectionLabel('Inactief team', inactiveVisible.length, inactiveVisible,
+                      () => setInactiveTeamPos(o => o !== 0 ? 0 : 1), inactiveTeamPos !== 0,
                       { key: 'base-inactive-day', groupId: null, label: 'Inactief team', inactive: true })}
                     {inactiveTeamPos !== 0 && inactiveVisible.map(renderPerson)}
-                  </>
-                )}
+                  </div>
+                )
+              }
+              const eigen = groupedVisible.find(entry => entry.group.id === sectionId)
+              if (!eigen) return null
+              const { group, members } = eigen
+              return (
+                <div key={`group-day-${group.id}`}>
+                  {sectionLabel(group.name, members.length, members,
+                    () => toggleTeamGroup(group.id), !collapsedTeamGroups.has(group.id),
+                    { key: `group-${group.id}-day`, groupId: group.id, label: group.name })}
+                  {!collapsedTeamGroups.has(group.id) && members.map(renderPerson)}
+                </div>
+              )
+            }
+            return (
+              <>
+                {teamSections.map(section => dagSectie(section.id))}
+                {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length, unassignedVisible)}
+                {unassignedVisible.map(renderPerson)}
               </>
             )
           })() : (() => {
@@ -7390,13 +7438,16 @@ export default function PlanningPage() {
                 }}>{renderMember(m, i, section)}</div>
               )
             }
-            if (yokoTeam.length > 0 || draggingTeamMemberId) {
+            // Eén volgorde voor alles. Team Yoko, Freelancers en Inactief
+            // team zijn geen vaste plekken meer: ze staan in dezelfde
+            // gesorteerde lijst als je eigen teams, zoals je ze in
+            // 'Mensen & capaciteit' hebt neergezet.
+            const toonYoko = () => {
+              if (yokoTeam.length === 0 && !draggingTeamMemberId) return
               out.push(<div key="hdr-yoko">{sectionHeader('Team Yoko', yokoTeam.length, { onClick: () => cycleSectionArrow(yokoTeamPos, setYokoTeamPos, yokoTeam), arrowPos: yokoTeamPos, members: yokoTeam, dropTarget: { key: 'base-yoko', groupId: null, label: 'Team Yoko', baseKind: 'yoko' } })}</div>)
-              if (yokoTeamPos !== 0) {
-                yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i, yokoTeam)))
-              }
+              if (yokoTeamPos !== 0) yokoTeam.forEach((m, i) => out.push(wrap(m, `y-${m.id}`, i, yokoTeam)))
             }
-            groupedVisible.forEach(({ group, members }) => {
+            const toonTeam = (group: { id: string; name: string }, members: TeamMember[]) => {
               const isOpen = !collapsedTeamGroups.has(group.id)
               out.push(<div key={`hdr-group-${group.id}`}>{sectionHeader(group.name, members.length, {
                 members,
@@ -7405,18 +7456,14 @@ export default function PlanningPage() {
                 dropTarget: { key: `group-${group.id}`, groupId: group.id, label: group.name },
               })}</div>)
               if (isOpen) members.forEach((m, i) => out.push(wrap(m, `group-${group.id}-${m.id}`, i, members)))
-            })
-            if (unassigned.length > 0) {
-              out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
-              unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i, unassigned)))
             }
-            if (freelancers.length > 0 || draggingTeamMemberId) {
-              // Ingeklapt tonen we wél de freelancers die binnen twee weken
-              // met ons werken. Eerder gold 'ingeklapt = écht leeg', maar
-              // dan zag je niet wie er nú meedraait en moest je elke keer
-              // de hele lijst openklappen. Het verschil met toen: dit is
-              // geen 'heeft ergens ownership', maar werk dat het komende
-              // venster raakt — in de praktijk een handjevol mensen.
+            const toonFreelancers = () => {
+              if (freelancers.length === 0 && !draggingTeamMemberId) return
+              // Deze sectie bevat alleen nog freelancers met werk in de
+              // afgelopen of komende drie weken; wie dat niet heeft staat
+              // onder Inactief team. Ingeklapt tonen we nog steeds wie er
+              // de komende twee weken daadwerkelijk meedraait — ingeklapt
+              // mag nooit betekenen dat je niet ziet wie er nú werkt.
               const activeFreelancers = freelancers.filter(m => freelancersWithWorkSoon.has(m.id))
               const shown = freelancersPos !== 0 ? freelancers : activeFreelancers
               out.push(<div key="hdr-fl">{sectionHeader('Freelancers', freelancers.length, {
@@ -7430,15 +7477,28 @@ export default function PlanningPage() {
               })}</div>)
               shown.forEach((m, i) => out.push(wrap(m, `f-${m.id}`, i, shown)))
             }
-            if (inactiveTeam.length > 0 || draggingTeamMemberId) {
+            const toonInactief = () => {
+              if (inactiveTeam.length === 0 && !draggingTeamMemberId) return
               out.push(<div key="hdr-inactive">{sectionHeader('Inactief team', inactiveTeam.length, {
                 onClick: () => cycleSectionArrow(inactiveTeamPos, setInactiveTeamPos, inactiveTeam),
                 arrowPos: inactiveTeamPos,
                 dropTarget: { key: 'base-inactive', groupId: null, label: 'Inactief team', inactive: true },
               })}</div>)
-              if (inactiveTeamPos !== 0) {
-                inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i, inactiveTeam)))
+              if (inactiveTeamPos !== 0) inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i, inactiveTeam)))
+            }
+
+            for (const section of teamSections) {
+              if (section.id === '__yoko__') toonYoko()
+              else if (section.id === '__freelance__') toonFreelancers()
+              else if (section.id === '__inactive__') toonInactief()
+              else {
+                const eigen = groupedVisible.find(entry => entry.group.id === section.id)
+                if (eigen) toonTeam(eigen.group, eigen.members)
               }
+            }
+            if (unassigned.length > 0) {
+              out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
+              unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i, unassigned)))
             }
             return out
           })()}
