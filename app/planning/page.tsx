@@ -34,7 +34,7 @@ import {
 } from '@/lib/workloadCategory'
 import { openExclusivePopover, closeExclusivePopover, onExclusivePopoverChange } from '@/lib/popoverState'
 import { createNotification } from '@/lib/notificationsStore'
-import { logItemActivity } from '@/lib/itemActivity'
+import { logItemActivity, logItemCreated } from '@/lib/itemActivity'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { ItemHistory } from '@/components/ItemHistory'
 import { useProfile }    from '@/components/ProfileContext'
@@ -4038,7 +4038,9 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })}
-        <Row label="Geschiedenis">
+        {/* 'Activiteit' heet het ook op de agendapagina; twee namen voor
+            dezelfde lijst was alleen maar verwarrend. */}
+        <Row label="Activiteit">
           <ItemHistory itemId={project.id.slice(project.board.length + 2)} />
         </Row>
       </div>}
@@ -7488,6 +7490,9 @@ export default function PlanningPage() {
             saveGroups(boardName, next)
             setAllGroups(prev => ({ ...prev, [boardName]: next }))
             logActivity('Item toegevoegd', item.name, `in ${boardName}`)
+            // Ook op het item zelf, zodat je later in Activiteit ziet wie
+            // het heeft aangemaakt.
+            void logItemCreated(item.id, item.name, boardName)
           }} />
       )}
 

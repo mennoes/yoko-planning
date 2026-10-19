@@ -81,6 +81,26 @@ export async function loadItemActivity(itemId: string): Promise<ItemActivity[]> 
   return (data as ItemActivity[] | null) ?? []
 }
 
+/** Leg vast wie een item heeft aangemaakt.
+ *
+ *  Dit ontbrak: de activiteit van een item begon pas bij de eerste
+ *  wijziging, dus bij een item dat je niet herkent was er niets te zien
+ *  over waar het vandaan kwam. Alleen voor items die een mens aanmaakt —
+ *  wat de Google-sync binnenhaalt heeft geen maker en zou de lijst
+ *  alleen maar vol zetten. */
+export async function logItemCreated(itemId: string, name: string, boardId?: string): Promise<void> {
+  await logItemActivity(itemId, 'maakte dit item aan', createdDetail(name), { itemName: name, boardId })
+}
+
+/** Welke naam zetten we achter 'maakte dit item aan'? Een rij die je op
+ *  de agenda aanmaakt heet eerst 'Nieuw item' en krijgt daarna pas een
+ *  naam; die placeholder herhalen zegt niets, dus dan laten we 'm weg. */
+export function createdDetail(name: string | null | undefined): string | undefined {
+  const clean = (name ?? '').trim()
+  if (!clean || clean === 'Nieuw item') return undefined
+  return clean
+}
+
 /** Laad recente activiteit, eventueel beperkt tot één board via meta.boardId.
  *  Gebruikt door de board-activity-drawer. */
 export async function loadBoardActivity(boardId?: string, limit = 100): Promise<ItemActivity[]> {

@@ -19,7 +19,7 @@ import { GoogleBadge }    from './GoogleBadge'
 import { IconComment, IconSearch, IconActivity, IconHistory } from './Icon'
 import { BoardTrashDrawer } from './BoardTrashDrawer'
 import { createNotification } from '@/lib/notificationsStore'
-import { logItemActivity }    from '@/lib/itemActivity'
+import { logItemActivity, logItemCreated } from '@/lib/itemActivity'
 import {
   loadCommentsFor, saveComment, newCommentId, onCommentsUpdate,
   toggleReaction, type CommentThread,
@@ -3843,6 +3843,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
       id: newId, name: 'Nieuw item', ownerIds: [], status: '',
       startDate: null, endDate: null, deadline: null, estHours: 0, dagen: 0,
     }] })
+    void logItemCreated(newId, 'Nieuw item', boardId)
     setJustCreatedId(newId)
   }
 
@@ -3857,6 +3858,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
       estHours: values.estHours, dagen: Math.round(values.estHours / 8 * 10) / 10,
       ...(values.notes ? { notes: values.notes } : {}),
     }] })
+    void logItemCreated(newId, values.name, boardId)
     setMobileCreateOpen(false)
   }
 
