@@ -162,18 +162,37 @@ export async function assignMemberToTeamGroup(memberId: string, targetGroupId: s
   }
 }
 
-export async function moveTeamGroup(groupId: string, direction: -1 | 1): Promise<void> {
+/**
+ * Verschuif een sectie één plek. Geeft null terug als het gelukt is, en
+ * anders de reden.
+ *
+ * Die reden is er omdat dit eerder stil mislukte: de volgorde veranderde
+ * lokaal, de opslag naar Supabase ging fout, en de eerstvolgende pull zette
+ * alles terug. Je zag dan een lijst die niet bewoog, zonder uitleg.
+ */
+export async function moveTeamGroup(groupId: string, direction: -1 | 1): Promise<string | null> {
   // Over de volledige lijst, dus ook langs Studio Yoko, Freelancers en
   // Inactief team. Eerder ging dit alleen over je eigen teams, waardoor er
   // met één team niets te verschuiven viel en de pijlen niets deden.
+  const before = read()
   const sections = loadTeamSections()
   const index = sections.findIndex(group => group.id === groupId)
   const target = index + direction
-  if (index < 0 || target < 0 || target >= sections.length) return
+  if (index < 0 || target < 0 || target >= sections.length) {
+    return index < 0 ? 'Deze sectie staat niet in de lijst.' : null
+  }
   ;[sections[index], sections[target]] = [sections[target], sections[index]]
   const next = sections.map((group, position) => ({ ...group, position }))
   write(next)
-  await push(next)
+
+  const remoteExpected = !!supabase && !!await getCurrentUserId()
+  if (!remoteExpected) return null   // lokaal-only installatie: klaar
+  const persisted = await push(next)
+  if (persisted) return null
+  // Niet opgeslagen: zet terug, zodat je niet naar een volgorde kijkt die
+  // na een refresh weer anders is.
+  write(before)
+  return 'De nieuwe volgorde is niet opgeslagen. Probeer het opnieuw.'
 }
 
 export async function pullTeamGroups(): Promise<boolean> {

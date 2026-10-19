@@ -6,7 +6,7 @@ import ts from 'typescript'
 
 // De echte module draaien met localStorage en Supabase vervangen, zodat we
 // de volgorde kunnen uitproberen zonder browser of database.
-function laadStore(start = []) {
+function laadStore(start = [], opties = {}) {
   const source = readFileSync(new URL('../lib/teamGroups.ts', import.meta.url), 'utf8')
   const js = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -22,8 +22,8 @@ function laadStore(start = []) {
     window: { dispatchEvent() {}, localStorage: { getItem: k => opslag.get(k) ?? null, setItem: (k, v) => opslag.set(k, v) } },
     CustomEvent: class {},
     require(id) {
-      if (id === './supabase') return { supabase: null }
-      if (id === './sync') return { getCurrentUserId: async () => null }
+      if (id === './supabase') return { supabase: opties.supabase ?? null }
+      if (id === './sync') return { getCurrentUserId: async () => opties.uid ?? null }
       if (id === './teamMemberIdentity') return { TEAM_GROUP_META_PREFIX: '__team_group__:' }
       throw new Error(`Onverwachte afhankelijkheid ${id}`)
     },
@@ -81,10 +81,51 @@ test('eigen teams blijven los opvraagbaar van de vaste blokken', async () => {
   assert.deepEqual(namen(store.loadCustomTeamGroups()), ['onderzoek'])
 })
 
+test('zonder database blijft een verschuiving gewoon staan', async () => {
+  // Deze opstelling heeft geen Supabase; dan valt er niets te mislukken
+  // en hoort er geen reden terug te komen.
+  const store = laadStore([team('onderzoek', 0)])
+  const reden = await store.moveTeamGroup('__freelance__', -1)
+  assert.equal(reden, null)
+  assert.deepEqual(namen(store.loadTeamSections()),
+    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__'])
+})
+
+test('een onbekende sectie geeft een reden in plaats van stilte', async () => {
+  const store = laadStore([team('onderzoek', 0)])
+  assert.match(await store.moveTeamGroup('bestaat-niet', -1), /niet in de lijst/i)
+})
+
 test('een nieuw team komt bij de bestaande volgorde, niet ervoor', async () => {
   const store = laadStore([team('onderzoek', 0)])
   await store.moveTeamGroup('__freelance__', -1)
   const nieuw = await store.createTeamGroup('Editors')
   assert.ok(nieuw)
   assert.ok(namen(store.loadTeamSections()).includes('editors'))
+})
+
+test('een mislukte opslag zet de volgorde terug en zegt waarom', async () => {
+  // Dit is het scenario waarin het eruitziet alsof de pijlen niets doen:
+  // de lijst verspringt even, de opslag mislukt, en de eerstvolgende pull
+  // zet alles terug — zonder uitleg.
+  const store = laadStore([team('onderzoek', 0)], {
+    uid: 'user-1',
+    supabase: { from: () => ({ upsert: async () => ({ error: { message: 'kolom bestaat niet' } }) }) },
+  })
+  const voor = namen(store.loadTeamSections())
+
+  const reden = await store.moveTeamGroup('__freelance__', -1)
+  assert.match(reden ?? '', /niet opgeslagen/i, 'er komt een reden terug')
+  assert.deepEqual(namen(store.loadTeamSections()), voor,
+    'en de oude volgorde staat er weer, zodat je niet naar een leugen kijkt')
+})
+
+test('een gelukte opslag bewaart de nieuwe volgorde', async () => {
+  const store = laadStore([team('onderzoek', 0)], {
+    uid: 'user-1',
+    supabase: { from: () => ({ upsert: async () => ({ error: null }) }) },
+  })
+  assert.equal(await store.moveTeamGroup('__freelance__', -1), null)
+  assert.deepEqual(namen(store.loadTeamSections()),
+    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__'])
 })
