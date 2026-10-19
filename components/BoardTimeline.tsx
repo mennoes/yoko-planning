@@ -11,13 +11,27 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 import {
   buildCols, getMonthGroupsFromCols, rangeToPx,
-  ZOOM_COL_W, HISTORY_BACK, type ZoomLevel,
+  ZOOM_COL_W, type ZoomLevel,
 } from '@/lib/timelineCols'
 import { getWeekStart } from '@/lib/workload'
 
 const NAAM_W = 240
 const RIJ_H  = 30
 const BALK_H = 18
+
+/** Een groep die 'Done…' heet is een archief; daar staat per definitie
+ *  alleen afgerond werk in. Zelfde regel als in de lijst. */
+export function isArchiefGroep(naam: string): boolean {
+  return naam.toLowerCase().trim().startsWith('done')
+}
+
+/** Is dit item klaar? De lijst stopt deze in een ingeklapt 'Afgerond'-blok;
+ *  de tijdlijn laat ze standaard weg. Zonder dit stond een agenda met 81
+ *  afgeronde items vol met balken waar je niets meer aan hebt. */
+export function isAfgerond(item: BoardItem, groepsNaam: string): boolean {
+  if (isArchiefGroep(groepsNaam)) return true
+  return item.status === 'Done'
+}
 
 /** De getoonde periode van een item: subitems met datums winnen van het
  *  (vaak verouderde) veld op het item zelf — net als in de lijst. */
@@ -50,22 +64,56 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
   const scrollRef = useRef<HTMLDivElement>(null)
   const naarVandaagGescrold = useRef(false)
 
+  const [toonAfgerond, setToonAfgerond] = useState(false)
+
   const colW = ZOOM_COL_W[zoom]
+
+  // Afgerond werk hoort hier standaard niet thuis: de tijdlijn gaat over
+  // wat loopt en wat eraan komt. Je kunt het erbij zetten, en we laten
+  // altijd zien hoeveel er verborgen is — stilletjes minder tonen is hoe
+  // je denkt dat items verdwenen zijn.
+  const relevant = useMemo(() => groups.map(groep => ({
+    groep,
+    items: groep.items.filter(item => toonAfgerond || !isAfgerond(item, groep.name)),
+  })), [groups, toonAfgerond])
+
+  const afgerondAantal = useMemo(() => groups.reduce((som, groep) =>
+    som + groep.items.filter(item => isAfgerond(item, groep.name)).length, 0), [groups])
+
+  const zonderDatum = relevant.flatMap(({ groep, items }) =>
+    items.filter(item => itemPeriode(item) === null).map(item => ({ groep, item })))
+
   const cols = useMemo(() => {
+    // Het raster begint waar het vroegste zichtbare werk begint, maar
+    // hooguit een jaar terug en altijd minstens een paar weken historie.
+    //
+    // Vast op 26 weken terug (zoals de planning) opende de agenda op een
+    // half jaar lege kolommen. Vast op 3 weken terug zette afgerond werk
+    // van maanden geleden juist búiten het raster: je zette 'Afgerond' aan
+    // en kreeg lege rijen. Dus: laat het raster volgen wat je toont.
     const vandaag = new Date()
+    const vroegste = relevant
+      .flatMap(({ items }) => items.map(itemPeriode))
+      .filter((p): p is { van: Date; tot: Date } => p !== null)
+      .reduce<Date | null>((min, p) => (min === null || p.van < min ? p.van : min), null)
+
+    const jaarTerug = new Date(vandaag); jaarTerug.setFullYear(vandaag.getFullYear() - 1)
+    const minimaalTerug = new Date(vandaag); minimaalTerug.setDate(vandaag.getDate() - 21)
+    const gewenst = vroegste && vroegste < minimaalTerug
+      ? (vroegste < jaarTerug ? jaarTerug : vroegste)
+      : minimaalTerug
+
     const start = zoom === 'maand'
-      ? new Date(vandaag.getFullYear(), vandaag.getMonth() - HISTORY_BACK.maand, 1)
-      : new Date(getWeekStart(vandaag))
-    if (zoom === 'week')  start.setDate(start.getDate() - HISTORY_BACK.week * 7)
-    if (zoom === 'dag')   start.setDate(start.getDate() - HISTORY_BACK.dag)
+      ? new Date(gewenst.getFullYear(), gewenst.getMonth(), 1)
+      : new Date(getWeekStart(gewenst))
     return buildCols(zoom, start, colW)
-  }, [zoom, colW])
+  }, [zoom, colW, relevant])
 
   const totaleBreedte = cols.reduce((som, col) => som + col.widthPx, 0)
   const maandKoppen = useMemo(() => getMonthGroupsFromCols(cols), [cols])
 
   // Open op vandaag in plaats van op maanden geschiedenis.
-  useEffect(() => { naarVandaagGescrold.current = false }, [zoom])
+  useEffect(() => { naarVandaagGescrold.current = false }, [zoom, toonAfgerond])
   useEffect(() => {
     if (naarVandaagGescrold.current || !scrollRef.current) return
     const index = cols.findIndex(col => col.isCurrent)
@@ -75,8 +123,6 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
     naarVandaagGescrold.current = true
   }, [cols])
 
-  const zonderDatum = groups.flatMap(groep =>
-    groep.items.filter(item => itemPeriode(item) === null).map(item => ({ groep, item })))
 
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-card)' }}>
@@ -92,6 +138,18 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
             {niveau === 'dag' ? 'Dag' : niveau === 'week' ? 'Week' : 'Maand'}
           </button>
         ))}
+        {afgerondAantal > 0 && (
+          <button onClick={() => setToonAfgerond(v => !v)} aria-pressed={toonAfgerond}
+            title={toonAfgerond
+              ? 'Verberg afgerond werk weer'
+              : `${afgerondAantal} afgeronde item${afgerondAantal === 1 ? '' : 's'} staan nu niet in beeld`}
+            style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border)',
+              background: toonAfgerond ? 'var(--control-active)' : 'var(--bg-card)',
+              color: 'var(--text-secondary)', fontSize: 12, fontWeight: toonAfgerond ? 700 : 500 }}>
+            {toonAfgerond ? '✓ ' : ''}Afgerond ({afgerondAantal})
+          </button>
+        )}
       </div>
 
       <div ref={scrollRef} style={{ overflowX: 'auto', overflowY: 'visible' }}>
@@ -124,8 +182,8 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
             ))}
           </div>
 
-          {groups.map(groep => {
-            const metDatum = groep.items
+          {relevant.map(({ groep, items }) => {
+            const metDatum = items
               .map(item => ({ item, periode: itemPeriode(item) }))
               .filter((entry): entry is { item: BoardItem; periode: { van: Date; tot: Date } } => entry.periode !== null)
               .sort((a, b) => a.periode.van.getTime() - b.periode.van.getTime())

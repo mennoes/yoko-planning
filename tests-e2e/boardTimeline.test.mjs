@@ -27,6 +27,14 @@ const BORD = [
   { id: 'g2', name: 'Shorts', color: '#e2445c', items: [
     { id: 'i4', name: 'FTI Shorts x14', ownerIds: ['odette'], status: 'Working on it', estHours: 40,
       startDate: iso(7), endDate: iso(35), subitems: [] },
+    { id: 'i5', name: 'Allang klaar', ownerIds: ['odette'], status: 'Done', estHours: 8,
+      startDate: iso(-90), endDate: iso(-85), subitems: [] },
+  ] },
+  // Een groep die 'Done' heet is een archief: alles erin is per definitie
+  // afgerond, ook zonder dat elk item de status Done heeft.
+  { id: 'g3', name: 'Done', color: '#00c875', items: [
+    { id: 'i6', name: 'Archiefklus', ownerIds: ['menno'], status: '', estHours: 4,
+      startDate: iso(-120), endDate: iso(-110), subitems: [] },
   ] },
 ]
 
@@ -77,18 +85,64 @@ test('items zonder datum verdwijnen niet uit beeld', { skip: skip ?? false }, as
   assert.ok(doos && doos.x > 0, `het staat ook echt in beeld (x=${doos?.x})`)
 })
 
-test('klikken op een balk brengt je terug naar de lijst bij dat item', { skip: skip ?? false }, async () => {
+test('afgerond werk staat er standaard niet bij', { skip: skip ?? false }, async () => {
+  // De klacht: de tijdlijn toonde letterlijk alles, ook werk van maanden
+  // geleden waar je niets meer aan hebt. De lijst stopt dat al in een
+  // ingeklapt 'Afgerond'-blok; de tijdlijn volgt nu dezelfde regel.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const namen = await page.evaluate(() =>
+    [...document.querySelectorAll('button[title*="·"]')].map(b => b.title.split(' ·')[0]))
+  await page.close()
+
+  assert.ok(namen.includes('NL College S04 E33'), 'lopend werk staat er')
+  assert.ok(namen.includes('FTI Shorts x14'), 'en werk dat eraan komt ook')
+  assert.ok(!namen.includes('Allang klaar'), 'een afgerond item niet')
+  assert.ok(!namen.includes('Archiefklus'), 'en een item uit een Done-groep ook niet')
+})
+
+test('je kunt afgerond werk erbij zetten, en ziet hoeveel het er zijn', { skip: skip ?? false }, async () => {
+  // Stilletjes minder tonen is hoe je denkt dat items verdwenen zijn, dus
+  // de knop noemt het aantal.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const knop = page.getByRole('button', { name: /Afgerond \(/ })
+  assert.equal(await knop.count(), 1, 'er staat een knop met het aantal')
+  assert.match(await knop.first().textContent(), /Afgerond \(2\)/)
+
+  await knop.first().click()
+  await page.waitForTimeout(900)
+  const namen = await page.evaluate(() =>
+    [...document.querySelectorAll('button[title*="·"]')].map(b => b.title.split(' ·')[0]))
+  await page.close()
+
+  assert.ok(namen.includes('Allang klaar'), 'nu staat het afgeronde werk er wel')
+  assert.ok(namen.includes('Archiefklus'))
+})
+
+test('klikken op een balk opent de popup zonder van weergave te wisselen', { skip: skip ?? false }, async () => {
+  // Eerst schakelde dit terug naar de Lijst en lichtte daar de rij op.
+  // Dan ben je je plek in de tijd kwijt en moet je de popup alsnog zelf
+  // openen.
   const page = await openAgenda()
   await page.getByRole('button', { name: 'Tijdlijn' }).click()
   await page.waitForTimeout(900)
 
   await page.getByRole('button', { name: /NL College S04 E33/ }).first().click()
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(1000)
 
   const actief = await page.evaluate(() =>
     document.querySelector('[role="group"][aria-label="Weergave"] button[aria-pressed="true"]')?.textContent)
+  const popupOpen = await page.evaluate(() =>
+    /Activiteit|Notities/i.test(document.body.innerText) && /NL College S04 E33/.test(document.body.innerText))
   await page.close()
-  assert.equal(actief, 'Lijst', 'bewerken doe je in de lijst, dus daar land je')
+
+  assert.equal(actief, 'Tijdlijn', 'je blijft in de tijdlijn staan')
+  assert.ok(popupOpen, 'en de item-popup staat open')
 })
 
 test('de keuze wordt per agenda onthouden', { skip: skip ?? false }, async () => {
