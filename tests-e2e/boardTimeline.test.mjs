@@ -60,7 +60,9 @@ const SUB_BORD = [{ id: 'g1', name: 'Colleges', color: '#9c7ee8', items: [
     ] },
 ] }]
 
-async function openSubBord() {
+/** `uitklappen` klikt de ouder open; standaard staat hij dicht, net als
+ *  voor de gebruiker. */
+async function openSubBord({ uitklappen = false } = {}) {
   const page = await browser.newPage({ viewport: { width: 1500, height: 950 }, colorScheme: 'light' })
   await page.addInitScript(b => {
     localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
@@ -70,6 +72,10 @@ async function openSubBord() {
   await page.waitForTimeout(2000)
   await page.getByRole('button', { name: 'Tijdlijn' }).click()
   await page.waitForTimeout(900)
+  if (uitklappen) {
+    await page.locator('[data-board-timeline] div[title^="Aflevering 9 ·"]').first().click()
+    await page.waitForTimeout(600)
+  }
   return page
 }
 
@@ -459,10 +465,55 @@ test('de eigenaren staan rechts van de titel', { skip: skip ?? false }, async ()
   assert.ok(m.avatarX > m.naamX, `de avatar staat rechts van de titel (naam ${m.naamX}, avatar ${m.avatarX})`)
 })
 
-test('een item met subitems toont die subitems als eigen regels', { skip: skip ?? false }, async () => {
-  // Het werk zit in de subitems. Eerst zag je alleen de ouder, en die
-  // zegt niet veel meer dan 'ergens in deze twee maanden'.
+test('een item met subitems staat dicht, met een bolletje dat het aantal noemt', { skip: skip ?? false }, async () => {
+  // Alles meteen openklappen maakt van het overzicht weer een lange
+  // lijst. Maar aan een kale balk zie je niet dát er iets onder zit.
   const page = await openSubBord()
+  const regels = await namenInRaster(page)
+  const balk = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-board-timeline] div[title]')]
+      .find(d => (d.getAttribute('title') ?? '').startsWith('Aflevering 9 ·'))
+    return { titel: el?.getAttribute('title') ?? '', tekst: (el?.textContent ?? '').trim(),
+      hoogte: el ? Math.round(el.getBoundingClientRect().height) : 0 }
+  })
+  await page.close()
+
+  assert.ok(!regels.includes('Montage'), 'de subitems staan er nog niet')
+  assert.ok(regels.includes('Aflevering 9'), 'het item zelf wel')
+  assert.match(balk.tekst, /2$/, 'en op de balk staat het aantal subitems')
+  assert.ok(balk.hoogte > 10, `het is een gewone volle balk, geen streepje (${balk.hoogte}px)`)
+  assert.match(balk.titel, /2 subitems · klik om uit te klappen/)
+})
+
+test('klikken op de balk klapt de subitems uit en weer in', { skip: skip ?? false }, async () => {
+  const page = await openSubBord()
+  const balk = () => page.locator('[data-board-timeline] div[title^="Aflevering 9 ·"]').first()
+
+  await balk().click()
+  await page.waitForTimeout(600)
+  assert.ok((await namenInRaster(page)).includes('Montage'), 'uitgeklapt staan de subitems er')
+
+  await balk().click()
+  await page.waitForTimeout(600)
+  assert.ok(!(await namenInRaster(page)).includes('Montage'), 'nog een klik en hij is weer dicht')
+  await page.close()
+})
+
+test('het pijltje naast de naam klapt ook uit', { skip: skip ?? false }, async () => {
+  const page = await openSubBord()
+  await page.getByTitle(/Aflevering 9 uitklappen/).click()
+  await page.waitForTimeout(600)
+  const regels = await namenInRaster(page)
+  const dicht = await page.getByTitle('Aflevering 9 inklappen').count()
+  await page.close()
+  assert.ok(regels.includes('Research'), 'de subitems staan er')
+  assert.equal(dicht, 1, 'en het pijltje biedt nu inklappen aan')
+})
+
+test('uitgeklapt toont het item zijn subitems als eigen regels', { skip: skip ?? false }, async () => {
+  // Het werk zit in de subitems. De ouder zegt niet veel meer dan
+  // 'ergens in deze twee maanden'.
+  const page = await openSubBord({ uitklappen: true })
   const regels = await namenInRaster(page)
   await page.close()
 
@@ -473,7 +524,7 @@ test('een item met subitems toont die subitems als eigen regels', { skip: skip ?
 })
 
 test('de ouderbalk is dun en grijs, de subitems springen eruit', { skip: skip ?? false }, async () => {
-  const page = await openSubBord()
+  const page = await openSubBord({ uitklappen: true })
   const balken = await page.evaluate(() => {
     const meet = naam => {
       const el = [...document.querySelectorAll('[data-board-timeline] div[title]')]
@@ -494,7 +545,7 @@ test('de ouderbalk is dun en grijs, de subitems springen eruit', { skip: skip ??
 })
 
 test('een subitem verslepen verzet dat subitem, niet het hele item', { skip: skip ?? false }, async () => {
-  const page = await openSubBord()
+  const page = await openSubBord({ uitklappen: true })
   const opgeslagen = () => page.evaluate(() => {
     const item = JSON.parse(localStorage.getItem('yoko-board-nederland')).flatMap(g => g.items).find(i => i.id === 'p1')
     const sub = item.subitems.find(s => s.id === 's2')
@@ -517,16 +568,24 @@ test('een subitem verslepen verzet dat subitem, niet het hele item', { skip: ski
   assert.equal(na.item, voor.item, 'en de datums van het item zelf zijn niet aangeraakt')
 })
 
-test('de ouderbalk van een item met subitems is niet te verslepen', { skip: skip ?? false }, async () => {
+test('een item met subitems belooft geen slepen, dicht noch open', { skip: skip ?? false }, async () => {
   // Zijn periode is de optelsom van de subitems; schuiven zou meteen weer
-  // worden overschreven door de regels eronder.
-  const page = await openSubBord()
-  const titel = await page.evaluate(() => {
+  // worden overschreven. Klap 'm uit en versleep het subitem dat je
+  // bedoelt.
+  const lees = page => page.evaluate(() => {
     const el = [...document.querySelectorAll('[data-board-timeline] div[title]')]
       .find(d => (d.getAttribute('title') ?? '').startsWith('Aflevering 9 ·'))
     return el?.getAttribute('title') ?? ''
   })
-  await page.close()
-  assert.ok(!/sleep om te verzetten/.test(titel), `de ouderbalk belooft geen slepen, kreeg: ${titel}`)
-  assert.match(titel, /loopt mee met de subitems/, 'en legt uit waarom')
+  const dicht = await openSubBord()
+  const titelDicht = await lees(dicht)
+  await dicht.close()
+  const open = await openSubBord({ uitklappen: true })
+  const titelOpen = await lees(open)
+  await open.close()
+
+  for (const titel of [titelDicht, titelOpen]) {
+    assert.ok(!/sleep om te verzetten/.test(titel), `belooft geen slepen, kreeg: ${titel}`)
+    assert.match(titel, /klik om (uit|in) te klappen/, 'maar zegt wel wat klikken doet')
+  }
 })
