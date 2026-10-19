@@ -44,36 +44,43 @@ const TWEE = [
   { id: 'b', name: 'Editors',   color: '#e2445c', position: 1, memberIds: ['vincent'] },
 ]
 
-test('met één team zijn de pijlen uitgezet en leggen ze uit waarom', { skip: skip ?? false }, async () => {
+test('ook met één team valt er te schuiven, want Studio Yoko doet mee', { skip: skip ?? false }, async () => {
+  // Eerder waren Studio Yoko, Freelancers en Inactief team vaste blokken
+  // en kon alleen je eigen teams onderling wisselen — met één team deden
+  // de pijlen dus niets. Nu staat alles in dezelfde lijst.
   const page = await openPaneel(EEN)
-  const omhoog = page.getByTitle(/omhoog|bovenaan|tweede team/i).first()
-  const omlaag = page.getByTitle(/omlaag|onderaan|tweede team/i).first()
+  assert.deepEqual(await koppen(page), ['Studio Yoko', 'Onderzoek'])
 
-  assert.equal(await omhoog.isDisabled(), true, '↑ is uitgezet')
-  assert.equal(await omlaag.isDisabled(), true, '↓ is uitgezet')
-  assert.match(await omhoog.getAttribute('title'), /tweede team/i, 'en zegt wat je moet doen')
+  const omhoog = page.getByTitle('Omhoog').first()
+  assert.equal(await omhoog.isDisabled(), false, 'het team kan omhoog, langs Studio Yoko')
+  await omhoog.click()
+  await page.waitForTimeout(700)
+
+  assert.deepEqual(await koppen(page), ['Onderzoek', 'Studio Yoko'], 'de volgorde is om')
   await page.close()
 })
 
-test('met twee teams verschuift ↓ de volgorde en blijft dat bewaard', { skip: skip ?? false }, async () => {
+test('de nieuwe volgorde blijft bewaard, inclusief de vaste blokken', { skip: skip ?? false }, async () => {
   const page = await openPaneel(TWEE)
   assert.deepEqual(await koppen(page), ['Studio Yoko', 'Onderzoek', 'Editors'])
 
-  const omlaag = page.getByTitle('Team omlaag').first()
-  assert.equal(await omlaag.isDisabled(), false, 'het bovenste team kan omlaag')
-  await omlaag.click()
+  // Het eerste eigen team omlaag.
+  await page.getByTitle('Omlaag').nth(1).click()
   await page.waitForTimeout(700)
-
   assert.deepEqual(await koppen(page), ['Studio Yoko', 'Editors', 'Onderzoek'], 'de volgorde is om')
+
   const bewaard = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('yoko-team-groups')).map(g => `${g.name}@${g.position}`).sort())
-  assert.deepEqual(bewaard, ['Editors@0', 'Onderzoek@1'], 'en staat zo opgeslagen')
+    JSON.parse(localStorage.getItem('yoko-team-groups'))
+      .sort((a, b) => a.position - b.position).map(g => g.name))
   await page.close()
+  // De vaste blokken staan nu óók in de opslag, met hun eigen positie.
+  assert.deepEqual(bewaard, ['Studio Yoko', 'Editors', 'Onderzoek', 'Freelancers', 'Inactief team'])
 })
 
-test('het paneel zet de teams onder Studio Yoko, net als het raster', { skip: skip ?? false }, async () => {
+test('de bovenste sectie kan niet verder omhoog', { skip: skip ?? false }, async () => {
   const page = await openPaneel(TWEE)
-  const volgorde = await koppen(page)
-  assert.equal(volgorde[0], 'Studio Yoko', 'Studio Yoko staat eerst, zoals in het raster erachter')
+  const omhoog = page.getByTitle(/Omhoog|bovenaan/).first()
+  assert.equal(await omhoog.isDisabled(), true)
+  assert.match(await omhoog.getAttribute('title'), /bovenaan/i)
   await page.close()
 })
