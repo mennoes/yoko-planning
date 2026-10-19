@@ -1139,7 +1139,6 @@ export default function TodosPage() {
   }, [])
   const [editOrder, setEditOrder] = useState(false)
   const [memberVisibility, setMemberVisibility] = useState<Record<string, boolean>>({})
-  const [peopleOpen, setPeopleOpen] = useState(false)
   // Mobiel: paginatitel en knoppen vreten verticale ruimte. Alles wat
   // geen weeknavigatie is, verhuist naar dit menu.
   const [pageMenuOpen, setPageMenuOpen] = useState(false)
@@ -1608,8 +1607,7 @@ export default function TodosPage() {
   }
 
   const teamGroupPicker = (
-    <div data-todo-team-group-filter style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
-      {!isMobile && <span style={{ marginRight: 2, fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Groepen</span>}
+    <div data-todo-team-group-filter style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', minWidth: 0 }}>
       {teamFilterOptions.map(group => {
         const selected = selectedTeamGroupSet.has(group.id)
         const count = personalBase.filter(section => teamGroupIdForMember(section.id) === group.id).length
@@ -1642,18 +1640,33 @@ export default function TodosPage() {
     </div>
   )
 
+  // De personen stonden achter een dichtgeklapte 'Personen tonen /
+  // verbergen'. Je moest dus eerst iets openklappen om te zien wie er
+  // überhaupt zijn. Nu staat de rij er altijd; aangevinkt is zichtbaar.
   const peoplePicker = (
-<details open={peopleOpen} onToggle={e => setPeopleOpen(e.currentTarget.open)} style={{ marginBottom: 18 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>Personen tonen / verbergen</summary>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 0' }}>
-          {personalSections.filter(section => selectedTeamGroupSet.has(teamGroupIdForMember(section.id))).map(s => (
-            <label key={s.id} style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={personal.some(p => p.id === s.id)} onChange={e => toggleMember(s.id, e.target.checked)} />
-              <MemberAvatar memberId={s.id} size={30} /> {liveTeam.find(m => m.id === s.id)?.name ?? s.title}
-            </label>
-          ))}
-        </div>
-      </details>
+    // Eén regel die nooit afbreekt, met een vaste hoogte. Dat is wat het
+    // verspringen bij het wisselen van groep veroorzaakte: een groep met
+    // meer mensen liet deze rij naar twee regels lopen, en alles eronder
+    // schoof dus een regel omlaag. Past 'ie niet, dan scroll je 'm
+    // horizontaal — de hoogte blijft hoe dan ook gelijk.
+    <div data-todo-people-filter
+      style={{ display: 'flex', flexWrap: 'nowrap', gap: 14, margin: '0 0 18px',
+        height: 34, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' }}>
+      {personalSections.filter(section => selectedTeamGroupSet.has(teamGroupIdForMember(section.id))).map(s => {
+        const zichtbaar = personal.some(p => p.id === s.id)
+        const naam = liveTeam.find(m => m.id === s.id)?.name ?? s.title
+        return (
+          <label key={s.id}
+            title={zichtbaar ? `${naam} verbergen` : `${naam} tonen`}
+            style={{ display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer',
+              flexShrink: 0, opacity: zichtbaar ? 1 : 0.45 }}>
+            <input type="checkbox" checked={zichtbaar} onChange={e => toggleMember(s.id, e.target.checked)} />
+            <MemberAvatar memberId={s.id} size={30} />
+            <span style={{ fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{naam}</span>
+          </label>
+        )
+      })}
+    </div>
   )
   if (!hydrated) return null
 
@@ -1823,19 +1836,24 @@ export default function TodosPage() {
               ))}
             </div>
 
-            {/* Kop van de persoonlijke sectie: hier staat ook de week,
-                want alleen deze kolommen veranderen ermee. Altijd tonen
-                (ook zonder algemene secties) — anders verdwijnt de
-                weekkiezer mee. */}
-            {personal.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>Persoonlijk</span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            {/* Kop van de persoonlijke sectie: de week staat links, want
+                alleen deze kolommen veranderen ermee, en de groepen staan
+                er direct naast. Eerder stond hier het woord 'Persoonlijk'
+                met de week helemaal rechts en de groepen op een eigen
+                regel eronder — drie regels voor wat op één past. */}
+            {/* Let op de voorwaarde: personalBase, niet personal. Kies je
+                een groep waar niemand in zit, dan is personal leeg — en
+                met `personal.length > 0` verdween de hele balk, inclusief
+                de knop waarmee je een andere groep kiest. Je zat dan vast
+                op een leeg scherm. */}
+            {personalBase.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
                 {weekNav}
+                {teamGroupPicker}
+                <div style={{ flex: 1, minWidth: 24, height: 1, background: 'var(--border)' }} />
               </div>
             )}
 
-            {teamGroupPicker}
             {peoplePicker}
             <div
               data-personal-todo-grid

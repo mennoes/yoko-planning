@@ -55,7 +55,10 @@ test('mobiel: dezelfde herhaling weg als naast elkaar', () => {
   assert.match(page, /<MemberWeeklyTodos compact memberId=\{section\.id\}/)
   assert.match(page, /<TodoCard section=\{additions\} isMember=\{true\} compact/)
   assert.doesNotMatch(page, /<h2 style=\{\{ fontSize: 16 \}\}>Persoonlijk<\/h2>/)
-  assert.match(page, /\{!isMobile && <span style=\{\{ marginRight: 2[^}]*\}\}>Groepen<\/span>\}/)
+  // Het kopje 'Groepen' boven de groepsknoppen is nu overal weg, niet
+  // alleen op mobiel: de knoppen zeggen zelf al wat ze zijn, en ze staan
+  // inmiddels op dezelfde regel als de weekkiezer.
+  assert.doesNotMatch(page, />Groepen<\/span>/)
 })
 
 test('een kaart met vaste titel heeft geen losse emoji', () => {
@@ -74,7 +77,9 @@ test('de weekkiezer staat bij de persoonlijke sectie, niet in de paginakop', () 
   assert.match(page, /const weekNav = \(/)
   const header = page.slice(page.indexOf('<h1 style='), page.indexOf('{syncError &&'))
   assert.doesNotMatch(header, /Naar deze week/)
-  // De sectiekop toont 'm, en blijft ook staan zonder algemene secties —
-  // anders verdwijnt de weekkiezer mee.
-  assert.match(page, /\{personal\.length > 0 && \(\n[\s\S]{0,400}?\{weekNav\}/)
+  // De sectiekop toont 'm. Let op personalBase, niet personal: kies je een
+  // groep waar niemand in zit, dan is personal leeg — en dan mag de balk
+  // met de weekkiezer én de groepsknoppen niet verdwijnen, want anders kun
+  // je geen andere groep meer kiezen.
+  assert.match(page, /\{personalBase\.length > 0 && \(\n[\s\S]{0,400}?\{weekNav\}/)
 })
