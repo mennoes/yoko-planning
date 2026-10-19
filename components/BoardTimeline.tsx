@@ -10,9 +10,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 import {
-  buildCols, getMonthGroupsFromCols, rangeToPx,
+  buildCols, getMonthGroupsFromCols, rangeToPx, pxNaarDagen, lokaleIso,
   ZOOM_COL_W, type ZoomLevel,
 } from '@/lib/timelineCols'
+import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
 
 const NAAM_W = 240
@@ -54,12 +55,23 @@ export function itemPeriode(item: BoardItem): { van: Date; tot: Date } | null {
   return { van, tot }
 }
 
-export default function BoardTimeline({ groups, color, onOpenItem }: {
+export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }: {
   groups: BoardGroup[]
   color: string
-  /** Klikken op een balk brengt je naar dat item in de lijst. */
+  /** Klikken op een balk opent de item-popup. */
   onOpenItem: (itemId: string) => void
+  /** Slepen verzet de datums. Zonder dit kun je hier alleen kijken, en dan
+   *  is de tijdlijn een slechtere versie van de planning. */
+  onMoveItem: (itemId: string, startDate: string, endDate: string) => void
 }) {
+  // Wat er nú gesleept wordt, zodat de balk meteen meebeweegt in plaats
+  // van pas te springen als je loslaat.
+  const [sleep, setSleep] = useState<
+    { itemId: string; soort: 'heel' | 'start' | 'eind'; dagen: number } | null>(null)
+  // Na een sleep volgt er ook een click. Zonder dit vlaggetje opende de
+  // popup zodra je losliet — en die ligt dan over de balk heen, dus je
+  // kon niet twee keer achter elkaar slepen.
+  const netGesleept = useRef(false)
   const [zoom, setZoom] = useState<ZoomLevel>('week')
   const scrollRef = useRef<HTMLDivElement>(null)
   const naarVandaagGescrold = useRef(false)
@@ -121,6 +133,51 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
   const eerder = relevant.flatMap(({ groep, items }) =>
     items.filter(valtEerder).map(item => ({ groep, item })))
 
+  const dagenTussen = (van: Date, tot: Date) => {
+    const dag = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
+    return Math.max(1, dag(tot) - dag(van) + 1)
+  }
+
+  /** Begin een sleepactie op een balk. 'heel' schuift de hele periode op,
+   *  'start' en 'eind' verzetten één kant. We rekenen pixels pas bij het
+   *  loslaten om naar datums, zodat tussentijds niets wordt opgeslagen. */
+  function startSleep(
+    event: React.PointerEvent,
+    item: BoardItem,
+    periode: { van: Date; tot: Date },
+    soort: 'heel' | 'start' | 'eind',
+  ) {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    let dagen = 0
+
+    const beweeg = (move: PointerEvent) => {
+      dagen = pxNaarDagen(cols, 0, move.clientX - startX)
+      setSleep({ itemId: item.id, soort, dagen })
+    }
+    const los = () => {
+      window.removeEventListener('pointermove', beweeg)
+      window.removeEventListener('pointerup', los)
+      window.removeEventListener('pointercancel', los)
+      setSleep(null)
+      if (dagen === 0) return
+      netGesleept.current = true
+      window.setTimeout(() => { netGesleept.current = false }, 0)
+      const schuif = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+      let van = periode.van
+      let tot = periode.tot
+      if (soort === 'heel')  { van = schuif(van, dagen); tot = schuif(tot, dagen) }
+      if (soort === 'start') { van = schuif(van, dagen); if (van > tot) van = tot }
+      if (soort === 'eind')  { tot = schuif(tot, dagen); if (tot < van) tot = van }
+      onMoveItem(item.id, lokaleIso(van), lokaleIso(tot))
+    }
+    window.addEventListener('pointermove', beweeg)
+    window.addEventListener('pointerup', los)
+    window.addEventListener('pointercancel', los)
+  }
+
   const totaleBreedte = cols.reduce((som, col) => som + col.widthPx, 0)
   const maandKoppen = useMemo(() => getMonthGroupsFromCols(cols), [cols])
 
@@ -137,7 +194,8 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
 
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-card)' }}>
+    <div data-board-timeline
+      style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-card)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border-light)' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           Zoom
@@ -222,11 +280,20 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
                       <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
                         background: 'var(--bg-card)', padding: '0 12px', display: 'flex', alignItems: 'center',
                         borderRight: '1px solid var(--border)' }}>
+                        {/* Wie het doet hoort erbij: zonder eigenaren mis je
+                            precies wat de planning wél laat zien. */}
+                        <span style={{ display: 'inline-flex', flexShrink: 0, marginRight: 7 }}>
+                          {(item.ownerIds ?? []).filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
+                            <span key={id} style={{ marginLeft: i === 0 ? 0 : -7, display: 'inline-flex' }}>
+                              <UserAvatar memberId={id} size={20} />
+                            </span>
+                          ))}
+                        </span>
                         <button onClick={() => onOpenItem(item.id)}
-                          title={`${item.name} — open in de lijst`}
+                          title={`${item.name} — open`}
                           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
                             fontSize: 12.5, color: 'var(--text-primary)', opacity: isDone ? 0.55 : 1,
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
                           {item.name || '(naamloos)'}
                         </button>
                       </div>
@@ -238,17 +305,44 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
                             background: col.isCurrent ? 'var(--accent-light)' : col.isPast ? 'var(--overlay-faint)' : 'transparent',
                             pointerEvents: 'none' }} />
                         ))}
-                        {balk && (
-                          <button onClick={() => onOpenItem(item.id)}
-                            title={`${item.name} · ${periode.van.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${periode.tot.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`}
-                            style={{ position: 'absolute', left: balk.left, width: balk.width,
-                              top: (RIJ_H - BALK_H) / 2, height: BALK_H, borderRadius: 5, border: 0, cursor: 'pointer',
-                              background: groep.color || color, opacity: isDone ? 0.4 : 0.9,
-                              color: '#fff', fontSize: 10.5, fontWeight: 700, padding: '0 6px',
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
-                            {balk.width > 54 ? item.name : ''}
-                          </button>
-                        )}
+                        {balk && (() => {
+                          // Tijdens het slepen schuift de balk alvast mee,
+                          // zodat je ziet waar je 'm neerlegt.
+                          const bezig = sleep?.itemId === item.id ? sleep : null
+                          const dagBreedte = balk.width / Math.max(1, dagenTussen(periode.van, periode.tot))
+                          const verschuif = bezig ? bezig.dagen * dagBreedte : 0
+                          const left  = balk.left + (bezig?.soort === 'eind' ? 0 : verschuif)
+                          const width = Math.max(6, balk.width + (bezig?.soort === 'heel' ? 0 : bezig?.soort === 'start' ? -verschuif : verschuif))
+                          const sleepbaar = !!onMoveItem && !isDone
+                          return (
+                            <div
+                              onPointerDown={e => sleepbaar && startSleep(e, item, periode, 'heel')}
+                              onClick={() => { if (!sleep && !netGesleept.current) onOpenItem(item.id) }}
+                              title={`${item.name} · ${periode.van.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${periode.tot.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}${sleepbaar ? ' · sleep om te verzetten' : ''}`}
+                              style={{ position: 'absolute', left, width,
+                                top: (RIJ_H - BALK_H) / 2, height: BALK_H, borderRadius: 5,
+                                cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
+                                background: groep.color || color, opacity: isDone ? 0.4 : bezig ? 1 : 0.9,
+                                boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
+                                color: '#fff', fontSize: 10.5, fontWeight: 700,
+                                display: 'flex', alignItems: 'center', padding: '0 6px',
+                                overflow: 'hidden', whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
+                              {sleepbaar && (
+                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, item, periode, 'start') }}
+                                  title="Sleep om de startdatum te verzetten"
+                                  style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
+                              )}
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {width > 54 ? item.name : ''}
+                              </span>
+                              {sleepbaar && (
+                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, item, periode, 'eind') }}
+                                  title="Sleep om de einddatum te verzetten"
+                                  style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   )

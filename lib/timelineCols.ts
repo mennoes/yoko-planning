@@ -183,3 +183,43 @@ export function rangeToPx(cols: Col[], start: Date, eind: Date): { left: number;
   // onzichtbaar.
   return { left: links, width: Math.max(4, rechts - links) }
 }
+
+/**
+ * Welke datum hoort bij deze x-positie? De omgekeerde weg van dateToPx,
+ * nodig om een balk te kunnen verslepen: tijdens het slepen reken je
+ * pixels terug naar dagen.
+ *
+ * Buiten het raster klemmen we op de eerste of laatste dag — slepen mag
+ * nooit een datum opleveren die niet op de tijdlijn staat.
+ */
+export function pxToDate(cols: Col[], px: number): Date | null {
+  if (cols.length === 0) return null
+  if (px <= 0) return new Date(cols[0].rangeStart)
+  let x = 0
+  for (const col of cols) {
+    if (px < x + col.widthPx) {
+      const deel = (px - x) / col.widthPx
+      const duur = col.rangeEnd.getTime() - col.rangeStart.getTime()
+      return new Date(col.rangeStart.getTime() + deel * duur)
+    }
+    x += col.widthPx
+  }
+  return new Date(cols[cols.length - 1].rangeEnd)
+}
+
+/** 'YYYY-MM-DD' in lokale tijd. toISOString() schuift in NL een dag terug. */
+export function lokaleIso(date: Date): string {
+  const pad = (n: number) => (n < 10 ? '0' : '') + n
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/** Hoeveel hele dagen zit er tussen twee x-posities? Gebruikt bij het
+ *  verslepen van een hele balk: de periode blijft even lang, hij schuift
+ *  alleen op. */
+export function pxNaarDagen(cols: Col[], vanPx: number, naarPx: number): number {
+  const van = pxToDate(cols, vanPx)
+  const naar = pxToDate(cols, naarPx)
+  if (!van || !naar) return 0
+  const dag = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
+  return Math.round(dag(naar) - dag(van))
+}
