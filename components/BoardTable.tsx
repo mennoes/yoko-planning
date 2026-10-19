@@ -2146,7 +2146,9 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     // eigen rij in board_items, dus het belandt nooit in de prullenbak —
     // zonder deze regel is er achteraf geen enkel spoor van wie 't wanneer
     // heeft weggegooid.
-    if (parentItemId) void logItemActivity(parentItemId, 'verwijderde subitem', deleted?.name || id)
+    // Geen naam? Dan niets erachter zetten. Een rauwe id ('1791466688562')
+    // in het logboek zegt niemand iets en ziet eruit als een fout.
+    if (parentItemId) void logItemActivity(parentItemId, 'verwijderde subitem', deleted?.name?.trim() || undefined)
   }
   const [justCreatedSubId, setJustCreatedSubId] = useState<string | null>(null)
   function addOne() {
@@ -5749,7 +5751,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           )
           for (const sub of i.subitems) {
             if (!selectedIds.has(sub.id)) continue
-            void logItemActivity(i.id, 'verwijderde subitem', sub.name || sub.id)
+            void logItemActivity(i.id, 'verwijderde subitem', sub.name?.trim() || undefined)
             // Zelfde tombstones als de losse ×, voor élk subitem: ook een
             // handmatig subitem komt anders via preserveStoredHistory terug.
             for (const tombstone of dismissTombstones(undefined, sub, sub.id)) dismissed.add(tombstone)
