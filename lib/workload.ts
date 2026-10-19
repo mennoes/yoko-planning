@@ -34,6 +34,10 @@ export type Project = {
   // de naam van de parent. Gebruikt door planning-popovers zodat duidelijk
   // is bij welke parent de subitem hoort.
   parentName?: string
+  // Alleen voor het detailvenster: wanneer het achterliggende item is
+  // aangemaakt (board_items.created_at). Wie dat deed weten we van oudere
+  // items niet — dat werd toen niet opgeslagen.
+  createdAt?: string
   completionParentItemId?: string
   completionSubitemId?: string
 }
@@ -258,6 +262,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           externalLink:  (i.externalLink as string | undefined),
           externalSyncedAt: (i.externalSyncedAt as string | undefined),
           meetLink:      (i.meetLink as string | undefined),
+          createdAt:     (i.createdAt as string | undefined),
         }]
       })
   )

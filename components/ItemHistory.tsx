@@ -21,7 +21,7 @@ function fmtRelative(iso: string): string {
  * Lijstje van wat er met dit item is gebeurd — wie zette wat wanneer.
  * Leest uit public.activity met target = 'board_item:${itemId}'.
  */
-export function ItemHistory({ itemId }: { itemId: string }) {
+export function ItemHistory({ itemId, createdAt }: { itemId: string; createdAt?: string }) {
   const { getPhoto } = useTeamPhotos()
   const [items, setItems]       = useState<ItemActivity[]>([])
   const [profiles, setProfiles] = useState<Record<string, ProfileRow>>({})
@@ -45,8 +45,19 @@ export function ItemHistory({ itemId }: { itemId: string }) {
     return onItemActivityChange(itemId, refresh)
   }, [itemId])
 
+  // Wie een item maakte is pas sinds kort bekend; wannéér staat al sinds
+  // het begin in board_items.created_at. Voor alles van vóór die
+  // wijziging is die datum het enige houvast, dus die tonen we onderaan —
+  // de oudste regel, waar hij chronologisch hoort.
+  const aangemaakt = createdAt ? (
+    <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+      Aangemaakt op {new Date(createdAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+      {items.length === 0 && ' · wie dat deed is van vóór we dat bijhielden'}
+    </div>
+  ) : null
+
   if (items.length === 0) {
-    return <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Nog geen wijzigingen.</span>
+    return aangemaakt ?? <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Nog geen wijzigingen.</span>
   }
 
   return (
@@ -81,6 +92,7 @@ export function ItemHistory({ itemId }: { itemId: string }) {
           </div>
         )
       })}
+      {aangemaakt}
     </div>
   )
 }

@@ -292,6 +292,7 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
     source:         googleBacked ? 'google' : ((r.source as BoardItem['source']) ?? undefined),
     externalLink:     (r.external_link as string | undefined) ?? undefined,
     externalSyncedAt: (r.external_synced_at as string | undefined) ?? undefined,
+    createdAt:        (r.created_at as string | undefined) ?? undefined,
   } as BoardItem
 }
 
@@ -433,6 +434,9 @@ const STANDARD_FIELDS = new Set([
   'id','name','ownerIds','status','startDate','endDate','deadline','estHours',
   'dagen','notes','contactpersoon','uitzenddag','framelink','nummers','subitems','journal',
   'source','externalLink','externalSyncedAt',
+  // createdAt is read-only: de database zet 'm zelf. Zonder deze regel
+  // belandt 'ie in de extra-JSON en schrijven we 'm bij elke save terug.
+  'createdAt',
   // 'ownerHours' is intentionally NOT here — it lives in the `extra` JSON
   // column since the board_items table has no dedicated column for it.
 ])
