@@ -63,23 +63,16 @@ import type { BoardGroup, ColumnDef } from '@/lib/boards'
 import { getBoardConfig } from '@/lib/boardsRegistry'
 import { planningDetailHours } from '@/lib/planningDetailHours'
 import { membersWithWorkInWindow, FREELANCER_ACTIVE_DAYS } from '@/lib/freelancerActivity'
-
-const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
+// De kolom-indeling van de tijdlijn woont in lib/timelineCols.ts, zodat de
+// Tijdlijn-weergave van één agenda dezelfde rekenkunde gebruikt.
+import {
+  NL_MON, NL_DAY, ZOOM_COL_W, ZOOM_COUNT, HISTORY_BACK,
+  buildCols, getMonthGroupsFromCols, dateToWeekPx,
+  type Col, type ZoomLevel,
+} from '@/lib/timelineCols'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ViewSize  = 'compact' | 'large'
-type ZoomLevel = 'dag' | 'week' | 'maand'
-
-type Col = {
-  key: string
-  rangeStart: Date
-  rangeEnd:   Date
-  label1:     string
-  label2:     string
-  widthPx:    number
-  isCurrent:  boolean
-  isPast:     boolean
-}
 
 // ─── Static layout constants ──────────────────────────────────────────────────
 const NAME_W   = 196
@@ -124,7 +117,6 @@ function vc(vs: ViewSize) {
 // Column widths per zoom
 // 'dag' = Google-Agenda-stijl Week (dagkolommen). Wijder zodat eventblokken
 // met owner + naam goed leesbaar zijn (zoals Google Cal week-view).
-const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 }
 // How many columns of history to render before today on first load.
 // Voor de Week-view (dag-zoom) 7 dagen terug + 14 vooruit (totaal 21 dagen
 // in cols). Initial auto-scroll plaatst 'vandaag' aan de linkerkant van het
@@ -133,100 +125,13 @@ const ZOOM_COL_W: Record<ZoomLevel, number> = { dag: 200, week: 104, maand: 120 
 // Column counts per zoom
 // Week-zoom: 21 dagen = 7 dagen historie + vandaag + 13 dagen vooruit (zie
 // HISTORY_BACK). Overzicht (week-zoom) en maand-fallback hun bredere range.
-const ZOOM_COUNT: Record<ZoomLevel, number> = { dag: 56, week: 104, maand: 48 }
-const HISTORY_BACK: Record<ZoomLevel, number> = { dag: 28, week: 26, maand: 18 }
-const NL_DAY = ['zo','ma','di','wo','do','vr','za']
 
 // ─── Column generators ────────────────────────────────────────────────────────
-function getWeekCols(from: Date, count: number, colW: number): Col[] {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  return getWeeks(from, count).map(ws => {
-    const we  = new Date(ws); we.setDate(ws.getDate() + 6); we.setHours(23,59,59,999)
-    const lbl = getWeekLabel(ws)
-    return { key: ws.toISOString(), rangeStart: ws, rangeEnd: we,
-      label1: lbl.weekNum, label2: lbl.range, widthPx: colW, isCurrent: lbl.isCurrentWeek,
-      isPast: we.getTime() < today.getTime() }
-  })
-}
 
-function getMonthCols(from: Date, count: number, colW: number): Col[] {
-  const cols: Col[] = []
-  const d = new Date(from.getFullYear(), from.getMonth(), 1)
-  const now = new Date()
-  for (let i = 0; i < count; i++) {
-    const ms = new Date(d)
-    const me = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999)
-    cols.push({ key: ms.toISOString(), rangeStart: ms, rangeEnd: me,
-      label1: NL_MON[ms.getMonth()].toUpperCase(),
-      label2: String(ms.getFullYear()),
-      widthPx: colW,
-      isCurrent: now >= ms && now <= me,
-      isPast: me.getTime() < now.getTime() })
-    d.setMonth(d.getMonth() + 1)
-  }
-  return cols
-}
 
-function getDayCols(from: Date, count: number, colW: number): Col[] {
-  // Week-view toont werkdagen (ma–vr) als volle kolommen en za+zo
-  // samengevoegd in één smalle 'we'-kolom — zo blijft de week-grens
-  // visueel intact maar slokt weekendwerk niet onnodig veel ruimte op.
-  // Smalle weekend-kolom = 35% van een normale dag-kolom.
-  const WEEKEND_W = Math.max(28, Math.round(colW * 0.35))
-  const cols: Col[] = []
-  const today = new Date(); today.setHours(0,0,0,0)
-  let added = 0, offset = 0
-  while (added < count) {
-    const ds = new Date(from); ds.setDate(from.getDate() + offset); ds.setHours(0,0,0,0)
-    const dow = ds.getDay() // 0=zo, 6=za
-    if (dow === 6) {
-      // Zaterdag: één combo-kolom voor za + zo. Range loopt t/m
-      // zondag 23:59 zodat hours-in-range beide dagen capteert.
-      const zo = new Date(ds); zo.setDate(ds.getDate() + 1); zo.setHours(23,59,59,999)
-      const isCurrent = today >= ds && today <= zo
-      cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: zo,
-        label1: 'we',
-        label2: `${ds.getDate()}/${zo.getDate()}`,
-        widthPx: WEEKEND_W,
-        isCurrent,
-        isPast: zo.getTime() < today.getTime() })
-      offset += 2
-      added++
-      continue
-    }
-    if (dow === 0) { offset++; continue } // zondag los: skip (al gecoverd door za)
-    const de = new Date(ds); de.setHours(23,59,59,999)
-    cols.push({ key: ds.toISOString(), rangeStart: ds, rangeEnd: de,
-      label1: NL_DAY[ds.getDay()],          // 'ma', 'di', ...
-      label2: String(ds.getDate()),         // '6', '7', ...
-      widthPx: colW,
-      isCurrent: ds.getTime() === today.getTime(),
-      isPast: de.getTime() < today.getTime() })
-    added++
-    offset++
-  }
-  return cols
-}
 
-function buildCols(zoom: ZoomLevel, from: Date, colW: number): Col[] {
-  const count = ZOOM_COUNT[zoom]
-  if (zoom === 'maand') return getMonthCols(from, count, colW)
-  if (zoom === 'dag')   return getDayCols(from, count, colW)
-  return getWeekCols(from, count, colW)
-}
 
 // ─── Month grouping row (for week/day zoom) ───────────────────────────────────
-function getMonthGroupsFromCols(cols: Col[]): { label: string; count: number; widthPx: number }[] {
-  const groups: { label: string; count: number; widthPx: number }[] = []
-  for (const col of cols) {
-    const d     = col.rangeStart
-    const label = `${NL_MON[d.getMonth()].toUpperCase()}. ${d.getFullYear()}`
-    const last  = groups[groups.length - 1]
-    if (last?.label === label) { last.count++; last.widthPx += col.widthPx }
-    else groups.push({ label, count: 1, widthPx: col.widthPx })
-  }
-  return groups
-}
 
 // Werkdag-teller (ma-vr) tussen twee timestamps, beide uiteinden incl.
 // Sla Vrij-dagen hier NIET over: projecten die tijdens vakantie gepland
@@ -1303,21 +1208,6 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
 // In week zoom we render only Mon–Fri inside each week column (5 day-cells per
 // week). Saturday/Sunday events are clipped to the end of Friday so weekends
 // don't waste horizontal space.
-function dateToWeekPx(d: Date, gridStart: Date, weekColW: number): number {
-  // Gebruik kalenderdagen, niet verstreken milliseconden. De grid begint
-  // maanden vóór vandaag; zodra daar een zomer-/wintertijdgrens tussen zit,
-  // is `getTime()` één uur korter/langer dan N × 24u. Math.floor schoof dan
-  // alle datums na de DST-wissel één volledige dagslice naar links (woensdag
-  // verscheen onder dinsdag). Date.UTC op alleen Y/M/D blijft DST-neutraal.
-  const calendarDay = (value: Date) => Date.UTC(
-    value.getFullYear(), value.getMonth(), value.getDate(),
-  ) / 86400000
-  const days = calendarDay(d) - calendarDay(gridStart)
-  const weekIdx = Math.floor(days / 7)
-  const dowMon = ((days % 7) + 7) % 7  // 0=Mon..6=Sun (gridStart is a Mon)
-  const cellInWeek = Math.min(dowMon, 5) // Sat/Sun snap to col-end
-  return weekIdx * weekColW + (cellInWeek / 5) * weekColW
-}
 
 // ─── Week-time-grid (Google Calendar-stijl uur-positie + drag) ───────────────
 function pad2(n: number) { return n < 10 ? '0' + n : String(n) }

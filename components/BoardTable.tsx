@@ -20,6 +20,7 @@ import { IconComment, IconSearch, IconActivity, IconHistory } from './Icon'
 import { BoardTrashDrawer } from './BoardTrashDrawer'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity, logItemCreated } from '@/lib/itemActivity'
+import BoardTimeline from './BoardTimeline'
 import {
   loadCommentsFor, saveComment, newCommentId, onCommentsUpdate,
   toggleReaction, type CommentThread,
@@ -5041,6 +5042,21 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // `?focus=<itemId>`. Klap de groep open als-ie dicht zit, scroll naar
   // de rij, en flash 'em zodat je oog er heen wordt getrokken.
   // window.location.search ipv useSearchParams() — zie import-blok hierboven.
+  // Lijst of Tijdlijn. Per agenda onthouden: je kijkt naar de ene agenda
+  // vaak als lijst en naar de andere liever over de tijd.
+  const weergaveKey = `yoko-board-weergave-${boardId}`
+  const [weergave, setWeergaveRaw] = useState<'lijst' | 'tijdlijn'>('lijst')
+  useEffect(() => {
+    try {
+      const bewaard = localStorage.getItem(weergaveKey)
+      if (bewaard === 'tijdlijn' || bewaard === 'lijst') setWeergaveRaw(bewaard)
+    } catch {}
+  }, [weergaveKey])
+  function setWeergave(next: 'lijst' | 'tijdlijn') {
+    setWeergaveRaw(next)
+    try { localStorage.setItem(weergaveKey, next) } catch {}
+  }
+
   const [focusId, setFocusId] = useState<string | null>(null)
   useEffect(() => {
     function read() {
@@ -5972,8 +5988,24 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         </div>
       </div>
 
-      {/* Filter bar */}
-      <div style={{ display: isMobile && !hasFilter ? 'none' : 'flex', gap: isMobile ? 6 : 10, marginBottom: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Filter bar — begint met de weergave, want die bepaalt waar je naar
+          kijkt; de rest van de balk filtert daarbinnen. */}
+      <div style={{ display: 'flex', gap: isMobile ? 6 : 10, marginBottom: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div role="group" aria-label="Weergave"
+          style={{ display: 'inline-flex', background: 'var(--bg-hover)', borderRadius: 8, padding: 2, flexShrink: 0 }}>
+          {([['lijst', 'Lijst'], ['tijdlijn', 'Tijdlijn']] as const).map(([waarde, label]) => (
+            <button key={waarde} onClick={() => setWeergave(waarde)}
+              aria-pressed={weergave === waarde}
+              title={waarde === 'lijst' ? 'Alles als rijen onder elkaar' : 'Alles als balken over de tijd'}
+              style={{ padding: isMobile ? '5px 10px' : '6px 13px', borderRadius: 6, border: 0, cursor: 'pointer',
+                background: weergave === waarde ? 'var(--bg-card)' : 'transparent',
+                boxShadow: weergave === waarde ? '0 1px 2px rgba(0,0,0,0.10)' : 'none',
+                color: weergave === waarde ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontSize: isMobile ? 12 : 13, fontWeight: weergave === waarde ? 700 : 500 }}>
+              {label}
+            </button>
+          ))}
+        </div>
         <div style={{ position: 'relative', flex: '0 0 auto', display: isMobile ? 'none' : 'block' }}>
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', display: 'inline-flex' }}>
             <IconSearch size={isMobile ? 14 : 16} />
@@ -6084,7 +6116,21 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           de kolommen breder zijn dan 't scherm. Op desktop blijft 't
           gewoon overflow: visible zodat popovers er niet door geclipt
           worden. */}
-      <div style={isMobile
+      {weergave === 'tijdlijn' && (
+        <BoardTimeline
+          groups={filteredGroups}
+          color={color}
+          onOpenItem={itemId => {
+            // Terug naar de lijst en meteen naar dat item: de tijdlijn
+            // laat zien wánneer iets loopt, bewerken doe je in de lijst.
+            setWeergave('lijst')
+            setFocusId(itemId)
+            lastFocusedRef.current = null
+          }} />
+      )}
+      <div style={weergave === 'tijdlijn'
+        ? { display: 'none' }
+        : isMobile
         ? {
             width: 'calc(100% + 32px)', maxWidth: '100vw', boxSizing: 'border-box',
             overflowX: 'scroll', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' as const,
@@ -6235,8 +6281,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         </div>
       </div>
 
-      <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-        Klik op tekst/cijfers om te bewerken · Sleep tussen rijen om te herordenen · Sleep óp een rij maakt het een subitem · Klik op tijdlijn om datums in te stellen
+      {/* Deze uitleg gaat over de lijst (klikken, slepen, herordenen) en
+          slaat nergens op in de Tijdlijn. */}
+      <p style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)', display: weergave === 'tijdlijn' ? 'none' : undefined }}>
+        {weergave === 'tijdlijn' ? null : 'Klik op tekst/cijfers om te bewerken · Sleep tussen rijen om te herordenen · Sleep óp een rij maakt het een subitem · Klik op tijdlijn om datums in te stellen'}
       </p>
 
       {/* Bulk action bar */}
