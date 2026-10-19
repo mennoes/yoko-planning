@@ -64,7 +64,7 @@ test('de tijdlijn toont een balk per item met de juiste periode', { skip: skip ?
   await page.waitForTimeout(900)
 
   const balken = await page.evaluate(() =>
-    [...document.querySelectorAll('button[title*="·"]')].map(b => b.title))
+    [...document.querySelectorAll('[data-board-timeline] [title*=" · "]')].map(b => b.getAttribute('title')))
   await page.close()
 
   assert.ok(balken.some(t => t.startsWith('NL College S04 E33 ·')), `verwacht een balk voor het college, kreeg: ${balken.join(' | ')}`)
@@ -94,7 +94,7 @@ test('afgerond werk staat er standaard niet bij', { skip: skip ?? false }, async
   await page.waitForTimeout(900)
 
   const namen = await page.evaluate(() =>
-    [...document.querySelectorAll('button[title*="·"]')].map(b => b.title.split(' ·')[0]))
+    [...document.querySelectorAll('[data-board-timeline] [title*=" · "]')].map(b => (b.getAttribute('title') ?? '').split(' ·')[0]))
   await page.close()
 
   assert.ok(namen.includes('NL College S04 E33'), 'lopend werk staat er')
@@ -117,7 +117,7 @@ test('je kunt afgerond werk erbij zetten, en ziet hoeveel het er zijn', { skip: 
   await knop.first().click()
   await page.waitForTimeout(900)
   const namen = await page.evaluate(() =>
-    [...document.querySelectorAll('button[title*="·"]')].map(b => b.title.split(' ·')[0]))
+    [...document.querySelectorAll('[data-board-timeline] [title*=" · "]')].map(b => (b.getAttribute('title') ?? '').split(' ·')[0]))
   await page.close()
 
   assert.ok(namen.includes('Allang klaar'), 'nu staat het afgeronde werk er wel')
@@ -149,7 +149,7 @@ test('rijen zonder zichtbare balk staan niet in het raster', { skip: skip ?? fal
   await page.waitForTimeout(1000)
 
   const balken = () => page.evaluate(() =>
-    [...document.querySelectorAll('button[title*=" · "]')].filter(b => /\d/.test(b.title)).length)
+    [...document.querySelectorAll('[data-board-timeline] [title*=" · "]')].filter(b => /\d/.test(b.getAttribute('title') ?? '')).length)
   assert.equal(await balken(), 1, 'alleen het werk dat nu loopt staat in het raster')
 
   const tekst = await page.evaluate(() => document.body.innerText)
@@ -200,4 +200,100 @@ test('de keuze wordt per agenda onthouden', { skip: skip ?? false }, async () =>
 
   assert.equal(actief, 'Tijdlijn', 'na een refresh sta je nog in de Tijdlijn')
   assert.equal(anders, null, 'en een andere agenda is daar niet door veranderd')
+})
+
+test('een balk verslepen verzet de datums, met behoud van de duur', { skip: skip ?? false }, async () => {
+  // Zonder dit kun je in de tijdlijn alleen kijken, en dan is het een
+  // slechtere versie van de planning.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const datums = () => page.evaluate(() => {
+    const i = JSON.parse(localStorage.getItem('yoko-board-nederland'))
+      .flatMap(g => g.items).find(x => x.id === 'i1')
+    return `${i.startDate} → ${i.endDate}`
+  })
+  const voor = await datums()
+
+  const balk = page.locator('div[title*="sleep om te verzetten"]').first()
+  const doos = await balk.boundingBox()
+  assert.ok(doos, 'de balk is te pakken')
+  // Twee weekkolommen naar rechts.
+  await page.mouse.move(doos.x + doos.width / 2, doos.y + doos.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(doos.x + doos.width / 2 + 208, doos.y + doos.height / 2, { steps: 12 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+
+  const na = await datums()
+  await page.close()
+  assert.notEqual(na, voor, 'de datums zijn verzet')
+  const duur = d => { const [a, b] = d.split(' → '); return (Date.parse(b) - Date.parse(a)) / 86400000 }
+  assert.equal(duur(na), duur(voor), 'en de klus duurt nog even lang')
+})
+
+test('de rand verslepen verandert alleen de einddatum', { skip: skip ?? false }, async () => {
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const start = () => page.evaluate(() => JSON.parse(localStorage.getItem('yoko-board-nederland'))
+    .flatMap(g => g.items).find(x => x.id === 'i1').startDate)
+  const eind = () => page.evaluate(() => JSON.parse(localStorage.getItem('yoko-board-nederland'))
+    .flatMap(g => g.items).find(x => x.id === 'i1').endDate)
+  const startVoor = await start(); const eindVoor = await eind()
+
+  const balk = page.locator('div[title*="sleep om te verzetten"]').first()
+  const doos = await balk.boundingBox()
+  await page.mouse.move(doos.x + doos.width - 3, doos.y + doos.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(doos.x + doos.width - 3 + 104, doos.y + doos.height / 2, { steps: 10 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+
+  const startNa = await start(); const eindNa = await eind()
+  await page.close()
+  assert.equal(startNa, startVoor, 'de startdatum blijft staan')
+  assert.notEqual(eindNa, eindVoor, 'de einddatum schuift op')
+})
+
+test('verslepen is terug te draaien', { skip: skip ?? false }, async () => {
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+  const datums = () => page.evaluate(() => {
+    const i = JSON.parse(localStorage.getItem('yoko-board-nederland'))
+      .flatMap(g => g.items).find(x => x.id === 'i1')
+    return `${i.startDate} → ${i.endDate}`
+  })
+  const voor = await datums()
+
+  const doos = await page.locator('div[title*="sleep om te verzetten"]').first().boundingBox()
+  await page.mouse.move(doos.x + doos.width / 2, doos.y + doos.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(doos.x + doos.width / 2 + 208, doos.y + doos.height / 2, { steps: 10 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+  assert.notEqual(await datums(), voor)
+
+  await page.getByText(/Maak ongedaan/).first().click()
+  await page.waitForTimeout(900)
+  const na = await datums()
+  await page.close()
+  assert.equal(na, voor, 'ongedaan zet de oude datums terug')
+})
+
+test('de eigenaren staan bij de naam', { skip: skip ?? false }, async () => {
+  // Precies wat de planning wél liet zien en de tijdlijn niet.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+  const avatars = await page.evaluate(() => {
+    const rij = [...document.querySelectorAll('[data-board-timeline] button')].find(b => /NL College S04 E33/.test(b.textContent ?? ''))
+    const cel = rij?.parentElement
+    return cel ? cel.querySelectorAll('img, span[aria-hidden]').length : 0
+  })
+  await page.close()
+  assert.ok(avatars > 0, 'er staat minstens één eigenaar bij de naam')
 })

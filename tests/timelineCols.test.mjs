@@ -83,3 +83,31 @@ test('een einddatum vóór de startdatum levert geen negatieve balk op', () => {
   const balk = cols.rangeToPx(weekRaster(), new Date('2026-10-15T00:00:00'), new Date('2026-10-06T00:00:00'))
   assert.ok(balk.width > 0)
 })
+
+test('een x-positie komt terug als een datum in die kolom', () => {
+  const raster = weekRaster()
+  const px = cols.dateToPx(raster, new Date('2026-10-15T12:00:00'))
+  const terug = cols.pxToDate(raster, px)
+  assert.equal(cols.lokaleIso(terug), '2026-10-15', 'heen en terug levert dezelfde dag op')
+})
+
+test('slepen buiten het raster klemt op de randen', () => {
+  const raster = weekRaster()
+  assert.equal(cols.lokaleIso(cols.pxToDate(raster, -500)), '2026-10-05')
+  assert.equal(cols.lokaleIso(cols.pxToDate(raster, 99999)), '2026-10-25')
+})
+
+test('een verschuiving in pixels wordt een heel aantal dagen', () => {
+  const raster = weekRaster()
+  // Eén kolom = 100px = 7 dagen.
+  assert.equal(cols.pxNaarDagen(raster, 0, 100), 7)
+  assert.equal(cols.pxNaarDagen(raster, 100, 0), -7)
+  assert.equal(cols.pxNaarDagen(raster, 0, 0), 0, 'niet slepen is nul dagen')
+})
+
+test('lokaleIso schuift niet naar de vorige dag', () => {
+  // toISOString() doet dat wel in NL (UTC+1/+2); dan landt een balk een
+  // dag te vroeg.
+  assert.equal(cols.lokaleIso(new Date(2026, 9, 19, 0, 30)), '2026-10-19')
+  assert.equal(cols.lokaleIso(new Date(2026, 9, 19, 23, 30)), '2026-10-19')
+})

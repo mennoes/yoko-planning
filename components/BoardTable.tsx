@@ -6135,6 +6135,27 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             // popup openen. De popup hangt aan een portal, dus hij werkt
             // ook terwijl de lijst eronder verborgen is.
             setOpenRequest({ id: itemId })
+          }}
+          onMoveItem={(itemId, startDate, endDate) => {
+            // Datums verzetten vanuit de tijdlijn. Alleen start/eind — geen
+            // uren-herverdeling zoals updateItem in de groep doet, want die
+            // hangt aan subitems en eigenaren en verandert hier niet.
+            const snapshot = groups
+            const item = groups.flatMap(g => g.items).find(i => i.id === itemId)
+            if (!item) return
+            const oudStart = item.startDate ?? '—'
+            const oudEind  = item.endDate ?? '—'
+            if (oudStart === startDate && oudEind === endDate) return
+            onChange(groups.map(groep => ({
+              ...groep,
+              items: groep.items.map(i => i.id === itemId ? { ...i, startDate, endDate } : i),
+            })))
+            void logItemActivity(itemId, 'wijzigde de timeline',
+              `${oudStart} – ${oudEind}  →  ${startDate} – ${endDate}`,
+              { field: 'startDate', boardId, itemName: item.name,
+                before: { startDate: item.startDate, endDate: item.endDate },
+                after:  { startDate, endDate } })
+            pushUndo(() => onChange(snapshot), `'${item.name || 'Item'}' verzet`)
           }} />
       )}
       <div style={weergave === 'tijdlijn'
