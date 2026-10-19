@@ -1742,7 +1742,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         return <div aria-hidden style={{ flex: 1, alignSelf: 'stretch', background: 'var(--bg-base)', borderLeft: '3px double var(--border-strong)', opacity: 0.72 }} />
       case 'owner':
       case 'ownerIds':
-        return <div style={cellBorder}><OwnersCell value={subitem.ownerIds}
+        return <div style={cellBorder}><OwnersCell value={subitem.ownerIds ?? []}
           ownerHours={subitem.ownerHours}
           totalHours={Number(subitem.estHours) || 0}
           onDistributionChange={hours => onUpdate({
@@ -1764,8 +1764,8 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         // gedrag als bij top-level items). alignSelf:stretch overruled
         // de alignItems:center van de grid-row zodat de pill écht uitvult.
         return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden', flex: 1, minWidth: 0 }}>
-          <StatusCell value={subitem.status} menuLabel="Status project" extraContent={parentItemId && new Set(subitem.ownerIds.filter(id => id && id !== 'unassigned')).size > 1 && !!profile?.memberId && subitem.ownerIds.includes(profile.memberId) ? <PersonalCompletionSection
-            target={{ parentItemId, subitemId: subitem.id }} ownerIds={subitem.ownerIds} status={subitem.status}
+          <StatusCell value={subitem.status} menuLabel="Status project" extraContent={parentItemId && new Set((subitem.ownerIds ?? []).filter(id => id && id !== 'unassigned')).size > 1 && !!profile?.memberId && (subitem.ownerIds ?? []).includes(profile.memberId) ? <PersonalCompletionSection
+            target={{ parentItemId, subitemId: subitem.id }} ownerIds={subitem.ownerIds ?? []} status={subitem.status}
             renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : null} onChange={v => onUpdate({
             status: v,
             ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
@@ -2106,7 +2106,7 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     if (!sortBy) return subitems
     const value = (subitem: SubItem): string | number => {
       if (sortBy.key === 'name') return subitem.name.toLowerCase()
-      if (sortBy.key === 'owner' || sortBy.key === 'ownerIds') return subitem.ownerIds[0] ?? '~'
+      if (sortBy.key === 'owner' || sortBy.key === 'ownerIds') return subitem.ownerIds?.[0] ?? '~'
       if (sortBy.key === 'status') return STATUS_OPTIONS.findIndex(option => option.label === subitem.status)
       if (sortBy.key === 'timeline') return subitem.startDate ?? subitem.endDate ?? '9999-99-99'
       const raw = (subitem as unknown as Record<string, unknown>)[sortBy.key]
@@ -2350,8 +2350,11 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
               width: '100%', textAlign: 'left',
               background: 'var(--overlay-faint)', border: 'none',
               borderBottom: '1px solid var(--border)',
-              padding: '7px 14px 7px 56px', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 8,
+              padding: 0, cursor: 'pointer',
+              // Zelfde kolomraster als de subitem-rijen eronder, zodat het
+              // urentotaal recht onder de Est-kolom staat in plaats van
+              // achter de tekst te bungelen.
+              display: 'grid', gridTemplateColumns: gridTemplate, alignItems: 'center',
               fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
               textTransform: 'uppercase', letterSpacing: '0.05em',
               position: 'relative',
@@ -2360,11 +2363,24 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
                 Eindigt hier wanneer Done dicht is, loopt door wanneer open. */}
             <span aria-hidden style={{ position: 'absolute', left: 36 - 4 - 2, top: 0, bottom: doneOpen ? 0 : '50%', width: 2, background: rail }} />
             <span aria-hidden style={{ position: 'absolute', left: 36 - 4, top: '50%', width: 6, height: 2, background: rail }} />
-            <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>{doneOpen ? '▼' : '▶'}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 9, height: 9, borderRadius: 2, background: '#00c875' }} />
-              Done ({done.length}){urenLabel(done.reduce((som, sub) => som + (Number(sub.estHours) || 0), 0))}
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 2 }}>
+              <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>{doneOpen ? '▼' : '▶'}</span>
             </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px 7px 6px',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ width: 9, height: 9, borderRadius: 2, background: '#00c875', flexShrink: 0 }} />
+              Done ({done.length})
+            </span>
+            {cols.map(col => {
+              const uren = done.reduce((som, sub) => som + (Number(sub.estHours) || 0), 0)
+              return (
+                <span key={col.key} style={{ padding: '7px 8px', borderLeft: '1px solid var(--border-light)', textTransform: 'none' }}>
+                  {col.key === 'estHours' && uren > 0 ? `${Math.round(uren * 10) / 10}u`
+                    : col.key === 'dagen' && uren > 0 ? Math.round((uren / 8) * 10) / 10 : ''}
+                </span>
+              )
+            })}
+            <span />
           </button>
           {doneOpen && done.map((sub, idx) => (
             <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
@@ -2904,7 +2920,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
       )}
       {openSub && (
         <ItemDetailDrawer
-          item={{ ...subitemAsItem(openSub), ownerIds: openSub.ownerIds.some(id => id && id !== 'unassigned') ? openSub.ownerIds : item.ownerIds }}
+          item={{ ...subitemAsItem(openSub), ownerIds: (openSub.ownerIds ?? []).some(id => id && id !== 'unassigned') ? openSub.ownerIds : item.ownerIds }}
           parentItemId={item.id}
           parentStatus={item.status}
           cols={cols}
@@ -4476,62 +4492,84 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
               </div>
               )
               }
+              /** Kop boven een ingeklapt blok (Opkomend / Afgerond). Op
+               *  desktop volgt hij hetzelfde kolomraster als de rijen, zodat
+               *  het urentotaal recht onder de Est-kolom staat in plaats van
+               *  los achter de tekst te bungelen. */
+              function bucketKop(kleur: string, label: string, items: BoardItem[], open: boolean, toggle: () => void) {
+                const uren  = items.reduce((som, i) => som + effectiveHours(i), 0)
+                const dagen = Math.round((uren / 8) * 10) / 10
+                const basis: React.CSSProperties = {
+                  width: isMobile ? '100vw' : '100%', textAlign: 'left',
+                  background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)', border: 'none',
+                  borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                  fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                  position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
+                  zIndex: isMobile ? 10 : undefined,
+                  borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
+                  boxSizing: 'border-box',
+                }
+                const klik = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); toggle() }
+                const titel = (
+                  <>
+                    <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
+                      {open ? '▼' : '▶'}
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 2, background: kleur }} />
+                      {label} ({items.length})
+                    </span>
+                  </>
+                )
+                // Mobiel is er geen kolomraster om op uit te lijnen; daar
+                // blijft het totaal gewoon achter de tekst staan.
+                if (isMobile) return (
+                  <button type="button" onClick={klik}
+                    style={{ ...basis, padding: '9px 14px 9px 32px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {titel}{urenLabel(uren)}
+                  </button>
+                )
+                return (
+                  <button type="button" onClick={klik}
+                    style={{ ...basis, display: 'grid', gridTemplateColumns: gridTemplate, alignItems: 'center', padding: 0 }}>
+                    {/* De pijl hoort in de selectiekolom, zoals hij stond; de
+                        naam begint in de naamkolom. Zo verschuift er niets
+                        links terwijl de uren rechts wel uitlijnen. */}
+                    <span style={{ display: 'flex', alignItems: 'center', paddingLeft: 32 }}>
+                      <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>{open ? '▼' : '▶'}</span>
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 9px 4px',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 2, background: kleur, flexShrink: 0 }} />
+                      {label} ({items.length})
+                    </span>
+                    {/* textTransform none op de getallen: de kop staat in
+                        kapitalen, en '485.5U' leest raar naast de '485.5u'
+                        van de Som-rij eronder. */}
+                    {cols.map(col => (
+                      <span key={col.key} style={{ padding: '9px 8px', borderLeft: '1px solid var(--border-light)', textTransform: 'none' }}>
+                        {col.key === 'estHours' ? (uren > 0 ? `${Math.round(uren * 10) / 10}u` : '')
+                          : col.key === 'dagen' ? (dagen > 0 ? dagen : '') : ''}
+                      </span>
+                    ))}
+                    <span />
+                  </button>
+                )
+              }
+
               return (
                 <>
                   {currentItems.map(renderRow)}
                   {opkomendItems.length > 0 && (
                     <>
-                      <button type="button"
-                        onClick={e => { e.preventDefault(); e.stopPropagation(); setOpkomendOpen(o => !o) }}
-                        style={{
-                          width: isMobile ? '100vw' : '100%', textAlign: 'left',
-                          background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)', border: 'none',
-                          borderBottom: '1px solid var(--border)',
-                          padding: '9px 14px 9px 32px', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
-                          textTransform: 'uppercase', letterSpacing: '0.05em',
-                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
-                          zIndex: isMobile ? 10 : undefined,
-                          borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
-                          boxSizing: 'border-box',
-                        }}>
-                        <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
-                          {opkomendOpen ? '▼' : '▶'}
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 9, height: 9, borderRadius: 2, background: group.color }} />
-                          Opkomend ({opkomendItems.length}){urenLabel(opkomendItems.reduce((som, i) => som + effectiveHours(i), 0))}
-                        </span>
-                      </button>
+                      {bucketKop(group.color, 'Opkomend', opkomendItems, opkomendOpen, () => setOpkomendOpen(o => !o))}
                       {opkomendOpen && opkomendItems.map(renderRow)}
                     </>
                   )}
                   {doneItems.length > 0 && (
                     <>
-                      <button type="button"
-                        onClick={e => { e.preventDefault(); e.stopPropagation(); setDoneOpen(o => !o) }}
-                        style={{
-                          width: isMobile ? '100vw' : '100%', textAlign: 'left',
-                          background: isMobile ? 'var(--bg-card)' : 'var(--overlay-faint)', border: 'none',
-                          borderBottom: '1px solid var(--border)',
-                          padding: '9px 14px 9px 32px', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
-                          textTransform: 'uppercase', letterSpacing: '0.05em',
-                          position: isMobile ? 'sticky' : 'relative', left: isMobile ? -16 : undefined,
-                          zIndex: isMobile ? 10 : undefined,
-                          borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
-                          boxSizing: 'border-box',
-                        }}>
-                        <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>
-                          {doneOpen ? '▼' : '▶'}
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 9, height: 9, borderRadius: 2, background: 'var(--green)' }} />
-                          Afgerond ({doneItems.length}){urenLabel(doneItems.reduce((som, i) => som + effectiveHours(i), 0))}
-                        </span>
-                      </button>
+                      {bucketKop('var(--green)', 'Afgerond', doneItems, doneOpen, () => setDoneOpen(o => !o))}
                       {doneOpen && doneItems.map(renderRow)}
                     </>
                   )}
@@ -5417,8 +5455,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         // meerdere subitems staat. Subitem-only eigenaren moeten eveneens
         // met hun avatar op dit bord kunnen filteren.
         const owners = new Set([
-          ...item.ownerIds,
-          ...(item.subitems ?? []).flatMap(sub => sub.ownerIds),
+          ...(item.ownerIds ?? []),
+          ...(item.subitems ?? []).flatMap(sub => sub.ownerIds ?? []),
         ])
         for (const id of owners) counts.set(id, (counts.get(id) ?? 0) + 1)
       }
