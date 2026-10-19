@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
+import { isOnDemoRoute, scopedKey } from './demoRoute'
+import { DEMO_BUDGET_ALLOWED_MEMBER_IDS, demoBudgetSeed } from './demoBudgetFixtures'
 
 // Budget/omzet-tracking — alleen voor Menno + Vincent (zie 0033_budget_entries.sql
 // voor de server-side RLS-afscherming; de sidebar/route-guard hier is alleen UX,
@@ -16,7 +18,16 @@ export type BudgetEntry = {
 
 export const BUDGET_ALLOWED_MEMBER_IDS = ['menno', 'vincent']
 
-const STORAGE_KEY = 'yoko-budget-entries'
+/** Wie budget mag zien. Op /demo zijn dat de verzonnen leden — anders zou
+ *  de demo een lege pagina tonen, want menno/vincent bestaan daar niet. */
+export function budgetAllowedMemberIds(): string[] {
+  return isOnDemoRoute() ? DEMO_BUDGET_ALLOWED_MEMBER_IDS : BUDGET_ALLOWED_MEMBER_IDS
+}
+
+// Op /demo schrijft dezelfde code naar 'yoko-demo-budget-entries', dus een
+// demo-bezoeker kan nooit bij echte omzetcijfers.
+const BASE_KEY = 'yoko-budget-entries'
+function storageKey(): string { return scopedKey(BASE_KEY) }
 
 export function genBudgetId(): string {
   return `bud_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -53,14 +64,20 @@ export function quarterLabel(q: string): string {
 export function loadBudgetEntries(): BudgetEntry[] {
   if (typeof window === 'undefined') return []
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as BudgetEntry[]) : []
+    const raw = localStorage.getItem(storageKey())
+    if (raw) return JSON.parse(raw) as BudgetEntry[]
+    if (!isOnDemoRoute()) return []
+    // Verse demo-bezoeker: één keer de verzonnen cijfers neerzetten,
+    // anders opent de demo op een leeg scherm.
+    const seeded = demoBudgetSeed()
+    localStorage.setItem(storageKey(), JSON.stringify(seeded))
+    return seeded
   } catch { return [] }
 }
 
 function writeLocal(entries: BudgetEntry[]) {
   if (typeof window === 'undefined') return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
+  localStorage.setItem(storageKey(), JSON.stringify(entries))
   window.dispatchEvent(new CustomEvent('yoko-budget-update'))
 }
 
@@ -78,7 +95,7 @@ function rowToEntry(r: Record<string, unknown>): BudgetEntry {
 }
 
 export async function pullBudgetEntries(): Promise<boolean> {
-  if (!supabase) return false
+  if (isOnDemoRoute() || !supabase) return false
   const uid = await getCurrentUserId()
   if (!uid) return false
   const { data, error } = await supabase.from('budget_entries').select('*').order('quarter', { ascending: true })
@@ -96,7 +113,7 @@ export async function upsertBudgetEntry(entry: BudgetEntry): Promise<boolean> {
     : [...current, entry]
   writeLocal(next)
 
-  if (!supabase) return false
+  if (isOnDemoRoute() || !supabase) return false
   const uid = await getCurrentUserId()
   if (!uid) return false
   const { error } = await supabase.from('budget_entries').upsert({
@@ -113,7 +130,7 @@ export async function upsertBudgetEntry(entry: BudgetEntry): Promise<boolean> {
 
 export async function deleteBudgetEntry(id: string): Promise<boolean> {
   writeLocal(loadBudgetEntries().filter(e => e.id !== id))
-  if (!supabase) return false
+  if (isOnDemoRoute() || !supabase) return false
   const uid = await getCurrentUserId()
   if (!uid) return false
   const { error } = await supabase.from('budget_entries').delete().eq('id', id)
@@ -122,7 +139,7 @@ export async function deleteBudgetEntry(id: string): Promise<boolean> {
 
 let budgetChannelOn = false
 export function subscribeRemoteBudget(): () => void {
-  if (!supabase || budgetChannelOn) return () => {}
+  if (isOnDemoRoute() || !supabase || budgetChannelOn) return () => {}
   budgetChannelOn = true
   const ch = supabase.channel('public:budget_entries')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_entries' }, () => {
