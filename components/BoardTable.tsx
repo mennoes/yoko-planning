@@ -6205,34 +6205,42 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         <BoardTimeline
           groups={filteredGroups}
           color={color}
-          onOpenItem={itemId => {
+          onOpenItem={(itemId, subitemId) => {
             // Open de item-popup, zonder van weergave te wisselen. Eerst
             // schakelde dit terug naar de Lijst en lichtte daar de rij op —
             // dan ben je je plek in de tijd kwijt en moet je zelf nog de
             // popup openen. De popup hangt aan een portal, dus hij werkt
             // ook terwijl de lijst eronder verborgen is.
-            setOpenRequest({ id: itemId })
+            setOpenRequest(subitemId ? { id: itemId, subitemId } : { id: itemId })
           }}
-          onMoveItem={(itemId, startDate, endDate) => {
+          onMoveItem={(itemId, startDate, endDate, subitemId) => {
             // Datums verzetten vanuit de tijdlijn. Alleen start/eind — geen
             // uren-herverdeling zoals updateItem in de groep doet, want die
             // hangt aan subitems en eigenaren en verandert hier niet.
             const snapshot = groups
             const item = groups.flatMap(g => g.items).find(i => i.id === itemId)
             if (!item) return
-            const oudStart = item.startDate ?? '—'
-            const oudEind  = item.endDate ?? '—'
+            const sub = subitemId ? (item.subitems ?? []).find(s => s.id === subitemId) : undefined
+            if (subitemId && !sub) return
+            const doel = sub ?? item
+            const oudStart = doel.startDate ?? '—'
+            const oudEind  = doel.endDate ?? '—'
             if (oudStart === startDate && oudEind === endDate) return
             onChange(groups.map(groep => ({
               ...groep,
-              items: groep.items.map(i => i.id === itemId ? { ...i, startDate, endDate } : i),
+              items: groep.items.map(i => {
+                if (i.id !== itemId) return i
+                if (!sub) return { ...i, startDate, endDate }
+                return { ...i, subitems: (i.subitems ?? []).map(s =>
+                  s.id === subitemId ? { ...s, startDate, endDate } : s) }
+              }),
             })))
             void logItemActivity(itemId, 'wijzigde de timeline',
-              `${oudStart} – ${oudEind}  →  ${startDate} – ${endDate}`,
+              `${sub ? `${sub.name}: ` : ''}${oudStart} – ${oudEind}  →  ${startDate} – ${endDate}`,
               { field: 'startDate', boardId, itemName: item.name,
-                before: { startDate: item.startDate, endDate: item.endDate },
+                before: { startDate: doel.startDate, endDate: doel.endDate },
                 after:  { startDate, endDate } })
-            pushUndo(() => onChange(snapshot), `'${item.name || 'Item'}' verzet`)
+            pushUndo(() => onChange(snapshot), `'${doel.name || 'Item'}' verzet`)
           }} />
       )}
       <div style={weergave === 'tijdlijn'

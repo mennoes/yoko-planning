@@ -49,6 +49,35 @@ async function openAgenda() {
   return page
 }
 
+/** Een bord met één item dat zijn werk in subitems heeft staan. */
+const SUB_BORD = [{ id: 'g1', name: 'Colleges', color: '#9c7ee8', items: [
+  { id: 'p1', name: 'Aflevering 9', ownerIds: ['menno'], status: 'Working on it', estHours: 40,
+    startDate: iso(-2), endDate: iso(20), subitems: [
+      { id: 's1', name: 'Research', ownerIds: ['menno'], status: 'Working on it', estHours: 16,
+        startDate: iso(-2), endDate: iso(5) },
+      { id: 's2', name: 'Montage', ownerIds: ['odette'], status: 'Working on it', estHours: 24,
+        startDate: iso(8), endDate: iso(20) },
+    ] },
+] }]
+
+async function openSubBord() {
+  const page = await browser.newPage({ viewport: { width: 1500, height: 950 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-nederland', b)
+  }, JSON.stringify(SUB_BORD))
+  await page.goto(BASE_URL + '/projects/nederland', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(2000)
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+  return page
+}
+
+/** De namen in het raster, van boven naar beneden. */
+const namenInRaster = page => page.evaluate(() =>
+  [...document.querySelectorAll('[data-board-timeline] button[title$="— open"]')]
+    .map(b => (b.textContent ?? '').trim()))
+
 test('de agenda heeft een schakelaar Lijst / Tijdlijn', { skip: skip ?? false }, async () => {
   const page = await openAgenda()
   assert.equal(await page.getByRole('button', { name: 'Lijst' }).count(), 1)
@@ -284,21 +313,20 @@ test('verslepen is terug te draaien', { skip: skip ?? false }, async () => {
   assert.equal(na, voor, 'ongedaan zet de oude datums terug')
 })
 
-test('onder de naam staat wat je van een balk niet afleest', { skip: skip ?? false }, async () => {
-  // Een balk vertelt je wanneer, niet hoe het ervoor staat of hoe groot
-  // het is. Daar is de tweede regel voor.
+test('onder de naam staat geen tweede regel meer', { skip: skip ?? false }, async () => {
+  // Die regel gaf status en uren, maar dat voegde te weinig toe om er een
+  // halve rij breder van te worden.
   const page = await openAgenda()
   await page.getByRole('button', { name: 'Tijdlijn' }).click()
   await page.waitForTimeout(900)
 
-  const regel = await page.evaluate(() => {
+  const naamknop = await page.evaluate(() => {
     const knop = [...document.querySelectorAll('[data-board-timeline] button')]
       .find(b => /NL College S04 E33/.test(b.textContent ?? ''))
-    return [...(knop?.querySelectorAll('span') ?? [])].map(s => s.textContent).join(' | ')
+    return (knop?.textContent ?? '').trim()
   })
   await page.close()
-  assert.match(regel, /Working on it/, 'de status staat erbij')
-  assert.match(regel, /16u/, 'en hoeveel uur het is')
+  assert.equal(naamknop, 'NL College S04 E33', 'alleen de naam, verder niets')
 })
 
 test('de hele rij licht op als je eroverheen gaat', { skip: skip ?? false }, async () => {
@@ -409,16 +437,96 @@ test('de breedte van de item-popup is te verslepen en wordt onthouden', { skip: 
   assert.equal(naRefresh, na, 'en die breedte staat er na een refresh nog')
 })
 
-test('de eigenaren staan bij de naam', { skip: skip ?? false }, async () => {
-  // Precies wat de planning wél liet zien en de tijdlijn niet.
+test('de eigenaren staan rechts van de titel', { skip: skip ?? false }, async () => {
+  // Precies wat de planning wél liet zien en de tijdlijn niet. Ze stonden
+  // eerst vóór de naam; dan begint elke naam op een andere x, afhankelijk
+  // van hoeveel mensen eraan werken.
   const page = await openAgenda()
   await page.getByRole('button', { name: 'Tijdlijn' }).click()
   await page.waitForTimeout(900)
-  const avatars = await page.evaluate(() => {
-    const rij = [...document.querySelectorAll('[data-board-timeline] button')].find(b => /NL College S04 E33/.test(b.textContent ?? ''))
-    const cel = rij?.parentElement
-    return cel ? cel.querySelectorAll('img, span[aria-hidden]').length : 0
+  const m = await page.evaluate(() => {
+    const knop = [...document.querySelectorAll('[data-board-timeline] button')].find(b => /NL College S04 E33/.test(b.textContent ?? ''))
+    const cel = knop?.parentElement
+    const avatar = cel?.querySelector('img, span[aria-hidden]')
+    return {
+      avatars: cel ? cel.querySelectorAll('img, span[aria-hidden]').length : 0,
+      naamX:   knop ? Math.round(knop.getBoundingClientRect().left) : null,
+      avatarX: avatar ? Math.round(avatar.getBoundingClientRect().left) : null,
+    }
   })
   await page.close()
-  assert.ok(avatars > 0, 'er staat minstens één eigenaar bij de naam')
+  assert.ok(m.avatars > 0, 'er staat minstens één eigenaar bij de naam')
+  assert.ok(m.avatarX > m.naamX, `de avatar staat rechts van de titel (naam ${m.naamX}, avatar ${m.avatarX})`)
+})
+
+test('een item met subitems toont die subitems als eigen regels', { skip: skip ?? false }, async () => {
+  // Het werk zit in de subitems. Eerst zag je alleen de ouder, en die
+  // zegt niet veel meer dan 'ergens in deze twee maanden'.
+  const page = await openSubBord()
+  const regels = await namenInRaster(page)
+  await page.close()
+
+  assert.ok(regels.includes('Aflevering 9'), 'de ouder staat er nog')
+  assert.ok(regels.includes('Research'), 'en de subitems staan eronder')
+  assert.ok(regels.includes('Montage'))
+  assert.equal(regels.indexOf('Aflevering 9') < regels.indexOf('Research'), true, 'de ouder staat boven zijn subitems')
+})
+
+test('de ouderbalk is dun en grijs, de subitems springen eruit', { skip: skip ?? false }, async () => {
+  const page = await openSubBord()
+  const balken = await page.evaluate(() => {
+    const meet = naam => {
+      const el = [...document.querySelectorAll('[data-board-timeline] div[title]')]
+        .find(d => (d.getAttribute('title') ?? '').startsWith(`${naam} ·`))
+      if (!el) return null
+      const s = getComputedStyle(el)
+      return { hoogte: Math.round(el.getBoundingClientRect().height), kleur: s.backgroundColor, dekking: Number(s.opacity) }
+    }
+    return { ouder: meet('Aflevering 9'), sub: meet('Montage') }
+  })
+  await page.close()
+
+  assert.ok(balken.ouder && balken.sub, 'beide balken staan er')
+  assert.ok(balken.ouder.hoogte < balken.sub.hoogte / 2,
+    `de ouderbalk is veel dunner (${balken.ouder.hoogte}px vs ${balken.sub.hoogte}px)`)
+  assert.ok(balken.ouder.dekking < balken.sub.dekking, 'en lichter')
+  assert.notEqual(balken.ouder.kleur, balken.sub.kleur, 'grijs in plaats van de groepskleur')
+})
+
+test('een subitem verslepen verzet dat subitem, niet het hele item', { skip: skip ?? false }, async () => {
+  const page = await openSubBord()
+  const opgeslagen = () => page.evaluate(() => {
+    const item = JSON.parse(localStorage.getItem('yoko-board-nederland')).flatMap(g => g.items).find(i => i.id === 'p1')
+    const sub = item.subitems.find(s => s.id === 's2')
+    return { item: `${item.startDate} → ${item.endDate}`, sub: `${sub.startDate} → ${sub.endDate}` }
+  })
+  const voor = await opgeslagen()
+
+  const balk = page.locator('[data-board-timeline] div[title^="Montage ·"]').first()
+  const doos = await balk.boundingBox()
+  assert.ok(doos, 'de subbalk is te pakken')
+  await page.mouse.move(doos.x + doos.width / 2, doos.y + doos.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(doos.x + doos.width / 2 + 208, doos.y + doos.height / 2, { steps: 12 })
+  await page.mouse.up()
+  await page.waitForTimeout(900)
+
+  const na = await opgeslagen()
+  await page.close()
+  assert.notEqual(na.sub, voor.sub, 'het subitem is verzet')
+  assert.equal(na.item, voor.item, 'en de datums van het item zelf zijn niet aangeraakt')
+})
+
+test('de ouderbalk van een item met subitems is niet te verslepen', { skip: skip ?? false }, async () => {
+  // Zijn periode is de optelsom van de subitems; schuiven zou meteen weer
+  // worden overschreven door de regels eronder.
+  const page = await openSubBord()
+  const titel = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-board-timeline] div[title]')]
+      .find(d => (d.getAttribute('title') ?? '').startsWith('Aflevering 9 ·'))
+    return el?.getAttribute('title') ?? ''
+  })
+  await page.close()
+  assert.ok(!/sleep om te verzetten/.test(titel), `de ouderbalk belooft geen slepen, kreeg: ${titel}`)
+  assert.match(titel, /loopt mee met de subitems/, 'en legt uit waarom')
 })
