@@ -7,10 +7,12 @@ const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.u
 const registry = readFileSync(new URL('../lib/boardsRegistry.ts', import.meta.url), 'utf8')
 
 test('sorteren op timeline gebruikt dezelfde datum als de kolom toont', () => {
-  // De kolom toont bij subitems altijd de rollup; de sortering pakte die
-  // alleen als de parent zelf geen datum had. Een Google-serie heeft die
-  // wel (vaak verouderd), dus die rijen stonden op een willekeurige plek.
-  assert.match(board, /if \(dates\.length > 0 && !item\.datesOverride\) \{/)
+  // Liep dit uit elkaar, dan stond een rij op een onnavolgbare plek: je
+  // zag 21 okt staan terwijl er op een heel andere datum gesorteerd werd.
+  // Allebei via itemDatums is de enige manier om dat vast te houden; de
+  // regel zelf staat in tests/itemDatums.test.mjs.
+  const sortBlok = board.slice(board.indexOf("if (dKey === 'startDate' || dKey === 'endDate')"))
+  assert.match(sortBlok.slice(0, 300), /itemDatums\(item\)/)
   assert.doesNotMatch(board, /if \(!v && \(dKey === 'startDate' \|\| dKey === 'endDate'\)\)/)
 })
 

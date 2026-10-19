@@ -15,6 +15,7 @@ import {
 } from '@/lib/timelineCols'
 import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
+import { itemDatums } from '@/lib/itemDatums'
 
 const NAAM_W = 270
 const RIJ_H  = 32
@@ -48,23 +49,15 @@ export function isAfgerond(item: BoardItem, groepsNaam: string): boolean {
   return item.status === 'Done'
 }
 
-/** De getoonde periode van een item: subitems met datums winnen van het
- *  (vaak verouderde) veld op het item zelf — net als in de lijst. */
+/** De getoonde periode van een item. Zelfde regel als in de lijst: eigen
+ *  datums winnen, en pas als die er niet zijn telt de omspanning van de
+ *  subitems. */
 export function itemPeriode(item: BoardItem): { van: Date; tot: Date } | null {
-  const datums: string[] = []
-  for (const sub of item.subitems ?? []) {
-    if (sub.status === 'Done') continue
-    if (sub.startDate) datums.push(sub.startDate)
-    if (sub.endDate)   datums.push(sub.endDate)
-  }
-  if (datums.length === 0) {
-    if (item.startDate) datums.push(item.startDate)
-    if (item.endDate)   datums.push(item.endDate)
-  }
+  const { startDate, endDate } = itemDatums(item)
+  const datums = [startDate, endDate].filter((d): d is string => !!d).sort()
   if (datums.length === 0) return null
-  const gesorteerd = [...datums].sort()
-  const van = new Date(`${gesorteerd[0]}T00:00:00`)
-  const tot = new Date(`${gesorteerd[gesorteerd.length - 1]}T23:59:59`)
+  const van = new Date(`${datums[0]}T00:00:00`)
+  const tot = new Date(`${datums[datums.length - 1]}T23:59:59`)
   if (Number.isNaN(van.getTime()) || Number.isNaN(tot.getTime())) return null
   return { van, tot }
 }
