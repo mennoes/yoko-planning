@@ -88,6 +88,10 @@ export type BoardItem = {
   deadlineOverride?: boolean
   externalLink?:  string                // link back to source (e.g. Google Calendar event)
   externalSyncedAt?: string             // gebruikt om de nieuwste Google-variant te kiezen
+  // Alleen lezen: komt uit board_items.created_at. Wie een item maakte is
+  // nooit opgeslagen, wanneer wél — en bij een item dat je niet herkent
+  // is die datum het enige houvast dat er met terugwerkende kracht is.
+  createdAt?:     string
   ownerHours?:    Record<string, number>  // per-owner hour overrides for shared items
   googleParticipantIds?: string[]          // actuele accepted deelnemers uit Google; los van handmatige owners
   googleCalendarMemberIds?: string[]        // teamleden wier eigen gekoppelde agenda deze afspraak bevat

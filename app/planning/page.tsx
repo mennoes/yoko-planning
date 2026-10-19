@@ -4041,7 +4041,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         {/* 'Activiteit' heet het ook op de agendapagina; twee namen voor
             dezelfde lijst was alleen maar verwarrend. */}
         <Row label="Activiteit">
-          <ItemHistory itemId={project.id.slice(project.board.length + 2)} />
+          <ItemHistory itemId={project.id.slice(project.board.length + 2)} createdAt={project.createdAt} />
         </Row>
       </div>}
       <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
