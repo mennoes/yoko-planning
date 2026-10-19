@@ -10,6 +10,22 @@ export type TeamGroup = {
   memberIds: string[]
 }
 
+/** De vaste secties doen mee in dezelfde volgorde als je eigen teams.
+ *  Ze staan als gewone rijen in dezelfde opslag, met een gereserveerde id,
+ *  zodat één lijst de hele volgorde bepaalt — inclusief waar Freelancers
+ *  en Inactief team staan. Hun leden komen niet uit memberIds maar uit de
+ *  indeling zelf (eigen team / freelancer / geen recent werk), dus die
+ *  lijst blijft leeg. */
+export const BASE_SECTIONS: ReadonlyArray<{ id: string; name: string; color: string }> = [
+  { id: '__yoko__',      name: 'Studio Yoko',   color: '#579bfc' },
+  { id: '__freelance__', name: 'Freelancers',   color: '#9aadbd' },
+  { id: '__inactive__',  name: 'Inactief team', color: '#8a919c' },
+]
+
+export function isBaseSectionId(id: string): boolean {
+  return BASE_SECTIONS.some(section => section.id === id)
+}
+
 const KEY = 'yoko-team-groups'
 const EVENT = 'yoko-team-groups-update'
 
@@ -40,10 +56,44 @@ export function loadTeamGroups() {
   return read().sort((a, b) => a.position - b.position)
 }
 
+/** Alleen de teams die jij zelf hebt gemaakt. */
+export function loadCustomTeamGroups() {
+  return loadTeamGroups().filter(group => !isBaseSectionId(group.id))
+}
+
+/**
+ * Alle secties in volgorde: je eigen teams én de vaste blokken.
+ *
+ * Nog niet eerder verplaatst? Dan staan de vaste blokken op hun
+ * vertrouwde plek: Studio Yoko bovenaan, daarna je eigen teams, en
+ * Freelancers + Inactief team onderaan.
+ */
+export function loadTeamSections(): TeamGroup[] {
+  const opgeslagen = loadTeamGroups()
+  const bekend = new Map(opgeslagen.map(group => [group.id, group]))
+  const eigen = opgeslagen.filter(group => !isBaseSectionId(group.id))
+
+  const sectie = (id: string): TeamGroup => {
+    const bestaand = bekend.get(id)
+    if (bestaand) return bestaand
+    const basis = BASE_SECTIONS.find(section => section.id === id)!
+    return { ...basis, position: 0, memberIds: [] }
+  }
+
+  // Zijn de vaste blokken al eens verplaatst, dan hebben ze een opgeslagen
+  // positie en doet de gewone sortering het werk.
+  if (BASE_SECTIONS.every(section => bekend.has(section.id))) return opgeslagen
+
+  const yoko = sectie('__yoko__')
+  const freelance = sectie('__freelance__')
+  const inactief = sectie('__inactive__')
+  return [yoko, ...eigen, freelance, inactief]
+}
+
 /** Kan deze groep nog omhoog/omlaag? De pijlen stonden er altijd, ook bij
  *  één groep — dan gebeurde er niets en leek het stuk. */
 export function canMoveTeamGroup(groupId: string, direction: -1 | 1): boolean {
-  const groups = loadTeamGroups()
+  const groups = loadTeamSections()
   const index = groups.findIndex(group => group.id === groupId)
   if (index < 0) return false
   const target = index + direction
@@ -113,12 +163,15 @@ export async function assignMemberToTeamGroup(memberId: string, targetGroupId: s
 }
 
 export async function moveTeamGroup(groupId: string, direction: -1 | 1): Promise<void> {
-  const groups = read().sort((a, b) => a.position - b.position)
-  const index = groups.findIndex(group => group.id === groupId)
+  // Over de volledige lijst, dus ook langs Studio Yoko, Freelancers en
+  // Inactief team. Eerder ging dit alleen over je eigen teams, waardoor er
+  // met één team niets te verschuiven viel en de pijlen niets deden.
+  const sections = loadTeamSections()
+  const index = sections.findIndex(group => group.id === groupId)
   const target = index + direction
-  if (index < 0 || target < 0 || target >= groups.length) return
-  ;[groups[index], groups[target]] = [groups[target], groups[index]]
-  const next = groups.map((group, position) => ({ ...group, position }))
+  if (index < 0 || target < 0 || target >= sections.length) return
+  ;[sections[index], sections[target]] = [sections[target], sections[index]]
+  const next = sections.map((group, position) => ({ ...group, position }))
   write(next)
   await push(next)
 }
