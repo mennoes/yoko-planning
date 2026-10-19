@@ -1502,6 +1502,14 @@ export function effectiveDays(item: BoardItem): number {
   return Math.round((effectiveHours(item) / 8) * 10) / 10
 }
 
+/** '· 42u' achter een ingeklapte kop, zodat je ziet hoeveel werk erin zit
+ *  zonder 'm open te hoeven klappen. Leeg bij 0 uur: dan is het alleen
+ *  ruis. */
+export function urenLabel(uren: number): string {
+  const afgerond = Math.round(uren * 10) / 10
+  return afgerond > 0 ? ` · ${afgerond}u` : ''
+}
+
 // ─── Pro-rated hours/days in een datum-window ────────────────────────────────
 // Wanneer de gebruiker een periode-filter zet, wil het totaal alléén de uren
 // optellen die binnen dat window vallen — niet de volledige itemduur. We
@@ -2352,7 +2360,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
             <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>{doneOpen ? '▼' : '▶'}</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 9, height: 9, borderRadius: 2, background: '#00c875' }} />
-              Done ({done.length})
+              Done ({done.length}){urenLabel(done.reduce((som, sub) => som + (Number(sub.estHours) || 0), 0))}
             </span>
           </button>
           {doneOpen && done.map((sub, idx) => (
@@ -4454,7 +4462,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ width: 9, height: 9, borderRadius: 2, background: group.color }} />
-                          Opkomend ({opkomendItems.length})
+                          Opkomend ({opkomendItems.length}){urenLabel(opkomendItems.reduce((som, i) => som + effectiveHours(i), 0))}
                         </span>
                       </button>
                       {opkomendOpen && opkomendItems.map(renderRow)}
@@ -4482,7 +4490,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ width: 9, height: 9, borderRadius: 2, background: 'var(--green)' }} />
-                          Afgerond ({doneItems.length})
+                          Afgerond ({doneItems.length}){urenLabel(doneItems.reduce((som, i) => som + effectiveHours(i), 0))}
                         </span>
                       </button>
                       {doneOpen && doneItems.map(renderRow)}
@@ -6121,11 +6129,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           groups={filteredGroups}
           color={color}
           onOpenItem={itemId => {
-            // Terug naar de lijst en meteen naar dat item: de tijdlijn
-            // laat zien wánneer iets loopt, bewerken doe je in de lijst.
-            setWeergave('lijst')
-            setFocusId(itemId)
-            lastFocusedRef.current = null
+            // Open de item-popup, zonder van weergave te wisselen. Eerst
+            // schakelde dit terug naar de Lijst en lichtte daar de rij op —
+            // dan ben je je plek in de tijd kwijt en moet je zelf nog de
+            // popup openen. De popup hangt aan een portal, dus hij werkt
+            // ook terwijl de lijst eronder verborgen is.
+            setOpenRequest({ id: itemId })
           }} />
       )}
       <div style={weergave === 'tijdlijn'
