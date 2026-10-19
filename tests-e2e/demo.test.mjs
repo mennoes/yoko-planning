@@ -46,6 +46,35 @@ test('de demo noemt nooit een echte teamnaam op de budgetpagina', { skip: skip ?
   assert.match(tekst, /Bert|Pippi/, 'de verzonnen namen wel')
 })
 
+// /demo is publiek. Deze test is de reden dat de samenvoeging van demo en
+// echt veilig is: als een `isDemo`-tak ooit wegvalt, staan hier meteen
+// echte namen en loopt dit rood.
+const ECHTE_NAMEN = /Menno|Vincent|Odette|Anne-Fleur|Kars/
+
+test('de demo-teampagina toont geen enkele echte teamnaam', { skip: skip ?? false }, async () => {
+  const { tekst, sleutels } = await bezoek('/demo/team')
+
+  assert.doesNotMatch(tekst, ECHTE_NAMEN, 'geen echte teamleden in de demo')
+  assert.match(tekst, /Bert|Pippi|Rembo/, 'wel de verzonnen leden')
+  assert.doesNotMatch(tekst, /studioyoko\.nl/, 'en geen echte e-mailadressen')
+
+  for (const k of sleutels.filter(s => /capacit|contacts|days-off/.test(s))) {
+    assert.match(k, /^yoko-demo-/, `${k} hoort een demo-sleutel te zijn`)
+  }
+})
+
+test('de demo-teampagina verwijst naar demo-beheer, niet naar het echte', { skip: skip ?? false }, async () => {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 950 } })
+  await page.goto(BASE_URL + '/demo/team', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(2000)
+  const links = await page.evaluate(() =>
+    [...document.querySelectorAll('a[href*="team-admin"]')].map(a => a.getAttribute('href')))
+  await page.close()
+
+  assert.ok(links.length > 0, 'er staan links naar team beheren')
+  for (const href of links) assert.match(href, /^\/demo\//, `${href} moet binnen /demo blijven`)
+})
+
 test('de echte budgetpagina raakt geen demo-data aan', { skip: skip ?? false }, async () => {
   const { tekst, sleutels } = await bezoek('/budget', { profiel: MENNO })
   assert.doesNotMatch(tekst, /orks vóór zonsopgang/, 'geen verzonnen regels in de echte app')
