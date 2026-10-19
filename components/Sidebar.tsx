@@ -592,6 +592,15 @@ function SectionBlock({
             // (zoals Budget) in de array staan.
             const idx = section.items.findIndex(i => i.id === item.id)
             const active  = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
+            // De naam van een agenda is gedeeld (boards.name in Supabase);
+            // het menu bewaart per apparaat alleen een kopie. Hernoemde een
+            // collega iets, dan stond hier nog de oude naam tot de
+            // reconcile-en-opslaan-ronde eroverheen was. Lees 'm daarom bij
+            // het tekenen rechtstreeks uit de registry.
+            const boardIdVoorLabel = section.type === 'projects' && item.href.startsWith('/projects/')
+              ? item.href.slice('/projects/'.length)
+              : null
+            const label = (boardIdVoorLabel ? getBoardConfig(boardIdVoorLabel)?.name : null) ?? item.label
             const editing = editingItemId === item.id
             // Een /projects/<board> link mag een item-drop accepteren —
             // dat verplaatst het board-item van zijn bron-bord hierheen.
@@ -661,7 +670,7 @@ function SectionBlock({
               >
                 {editing ? (
                   <div style={{ flex: 1, margin: '2px 4px 2px 14px', minWidth: 0 }}>
-                    <input autoFocus defaultValue={item.label}
+                    <input autoFocus defaultValue={label}
                       onBlur={e => { const v = e.target.value.trim(); if (v) renameItem(item.id, v); setEditingItemId(null) }}
                       onKeyDown={e => { if (e.key === 'Enter') { const v = e.currentTarget.value.trim(); if (v) renameItem(item.id, v); setEditingItemId(null) } if (e.key === 'Escape') { setRenameError(null); setEditingItemId(null) } }}
                       style={{ width: '100%', background: 'var(--bg-base)', border: `1px solid ${renameError?.id === item.id ? 'var(--red, #C9483D)' : 'var(--accent)'}`, borderRadius: 4, padding: '3px 7px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
@@ -686,7 +695,7 @@ function SectionBlock({
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                   >
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
                   </Link>
                 )}
 
