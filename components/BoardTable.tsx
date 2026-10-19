@@ -4229,17 +4229,16 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                   // nest-zone outline tonen zolang muis in 't middelste
                   // gedeelte van de row staat.
                   if (hasSubitem) {
-                    const r = e.currentTarget.getBoundingClientRect()
-                    const y = e.clientY - r.top
-                    const nestZone = y > r.height * 0.25 && y < r.height * 0.75
-                    if (nestZone) {
-                      e.preventDefault()
-                      e.dataTransfer.dropEffect = 'move'
-                      e.currentTarget.style.outline = '2px dashed var(--accent)'
-                      e.currentTarget.style.outlineOffset = '-2px'
-                    } else {
-                      e.currentTarget.style.outline = ''
-                    }
+                    // De hele rij telt, niet alleen de middelste helft.
+                    // Eerder accepteerde de rij een subitem alleen in de
+                    // middelste 50%; liet je 'm iets hoger of lager los,
+                    // dan ving de groep eronder de drop op en werd het
+                    // subitem een los item bovenaan het bord. Dat zag
+                    // eruit alsof het verdwenen was.
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    e.currentTarget.style.outline = '2px dashed var(--accent)'
+                    e.currentTarget.style.outlineOffset = '-2px'
                     return
                   }
                   if (hasItem && dragRowRef.current === null) return
@@ -4275,6 +4274,26 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                 onDragLeave={e => { e.currentTarget.style.outline = '' }}
                 onDrop={e => {
                   e.currentTarget.style.outline = ''
+                  // Een gesleept SUBitem hoort altijd bij deze rij, waar je
+                  // 'm ook loslaat. De zone-check hieronder gold ook voor
+                  // subitems, dus liet je er één net boven of onder het
+                  // midden los, dan viel de drop door naar de groep en werd
+                  // het subitem een los item bovenaan het bord. Precies het
+                  // 'opeens weg'-gedrag.
+                  const rawSubFirst = e.dataTransfer.getData('application/x-yoko-subitem')
+                  if (rawSubFirst) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    try {
+                      const data = JSON.parse(rawSubFirst) as { subitemId: string; parentItemId: string; fromGroupId: string }
+                      if (!data.subitemId || !data.parentItemId) return
+                      // Terugleggen op de eigen ouder: niets doen, maar wel
+                      // hier stoppen zodat de groep er geen los item van maakt.
+                      if (data.parentItemId === item.id) return
+                      onReparentSubitem(data.subitemId, data.parentItemId, data.fromGroupId, item.id)
+                    } catch {}
+                    return
+                  }
                   const r = e.currentTarget.getBoundingClientRect()
                   const y = e.clientY - r.top
                   const nestZone = y > r.height * 0.25 && y < r.height * 0.75
@@ -4291,18 +4310,6 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                       onNestItem(data.itemId, data.fromGroupId, item.id)
                     } catch {}
                     return
-                  }
-                  // Subitem uit een ander item gesleept op dit item ->
-                  // verhuis 'm onder dit item.
-                  const rawSub = e.dataTransfer.getData('application/x-yoko-subitem')
-                  if (rawSub) {
-                    try {
-                      const data = JSON.parse(rawSub) as { subitemId: string; parentItemId: string; fromGroupId: string }
-                      if (!data.subitemId || !data.parentItemId || data.parentItemId === item.id) return
-                      e.preventDefault()
-                      e.stopPropagation()
-                      onReparentSubitem(data.subitemId, data.parentItemId, data.fromGroupId, item.id)
-                    } catch {}
                   }
                 }}
                 onDragEnd={() => {
@@ -5385,6 +5392,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const parent    = fromGroup?.items.find(i => i.id === fromParentId)
     const sub       = parent?.subitems?.find(s => s.id === subitemId)
     if (!parent || !sub) return
+    // Verslepen is makkelijk mis te klikken. Met een snapshot vooraf is
+    // één klik genoeg om het terug te zetten.
+    const snapshot = groups
+    const doel = groups.flatMap(g => g.items).find(i => i.id === toParentId)
+    const doelNaam = doel?.name ?? 'item'
+    // Heeft het doel dit subitem al, dan zou de verplaatsing 'm bij de bron
+    // weghalen en bij het doel niets toevoegen — netto verdwenen. Niets doen.
+    if ((doel?.subitems ?? []).some(existing => existing.id === sub.id)) return
     const movedSub = sub.source === 'google' ? { ...sub, googlePlacementLocked: true } : sub
     const seriesId = sub.source === 'google' ? sub.sourceItemId : undefined
     onChange(groups.map(g => {
@@ -5411,6 +5426,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       })
       return { ...g, items }
     }))
+    pushUndo(() => onChange(snapshot), `'${sub.name || 'Subitem'}' verplaatst naar '${doelNaam}'`)
   }
 
   async function unnestSubitemHere(subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) {
@@ -5418,14 +5434,21 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     const parent    = fromGroup?.items.find(i => i.id === parentItemId)
     const sub       = parent?.subitems?.find(s => s.id === subitemId)
     if (!fromGroup || !parent || !sub) return
+    const snapshot = groups
+    // Begin bij álle velden van het subitem en overschrijf daarna alleen
+    // wat een top-level item anders doet. Eerder stond hier een vaste
+    // lijst velden, waardoor uitnesten stilletjes de deadline, echt
+    // gewerkte uren en de waarden van je eigen kolommen weggooide.
+    const { nestedSource: _nested, sourceItemId: _bron, ...subVelden } = sub as SubItem & Record<string, unknown>
     const promoted: BoardItem = {
+      ...subVelden,
       id:         sub.source === 'google' && sub.sourceItemId ? sub.sourceItemId : sub.id,
       name:       sub.name,
       ownerIds:   sub.ownerIds ?? [],
       status:     sub.status ?? '',
       startDate:  sub.startDate ?? null,
       endDate:    sub.endDate ?? null,
-      deadline:   null,
+      deadline:   sub.deadline ?? null,
       estHours:   sub.nestedSource?.estHours ?? (Number(sub.estHours) || 0),
       dagen:      0,
       subitems:   sub.nestedSource?.subitems?.map(child => ({ ...child })),
@@ -5481,6 +5504,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       }
       return next
     }))
+    pushUndo(() => onChange(snapshot), `'${sub.name || 'Subitem'}' is nu een los item`)
   }
 
   // Sleep een item van de ene groep naar de andere. Aangeroepen vanuit de
