@@ -6531,7 +6531,14 @@ export default function PlanningPage() {
         const sectieKnoppen = (sectionId: string) => ([-1, 1] as const).map(richting => {
           const kan = canMoveTeamGroup(sectionId, richting)
           return (
-            <button key={richting} onClick={() => { if (kan) void moveTeamGroup(sectionId, richting) }}
+            <button key={richting} onClick={() => {
+                if (!kan) return
+                // Een mislukte opslag mag niet lijken op 'er gebeurt niets':
+                // dan klik je tien keer en verandert er nooit iets.
+                void moveTeamGroup(sectionId, richting).then(reden => {
+                  if (reden) showToast(reden)
+                })
+              }}
               disabled={!kan}
               title={kan
                 ? (richting === -1 ? 'Omhoog' : 'Omlaag')
