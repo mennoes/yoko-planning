@@ -598,6 +598,7 @@ function SectionBlock({
             const targetBoardId = section.type === 'projects' && item.href.startsWith('/projects/')
               ? item.href.replace('/projects/', '')
               : null
+            const isBoardDropTarget = targetBoardId !== null && boardDropTarget === targetBoardId
             return (
               <div key={item.id} draggable
                 onDragStart={() => onDragStart(idx)}
@@ -641,8 +642,14 @@ function SectionBlock({
                 style={{
                   position: 'relative', display: 'flex', alignItems: 'center', cursor: 'grab', borderRadius: 6,
                   transition: 'background 0.12s, outline-color 0.12s',
-                  background: boardDropTarget === targetBoardId ? 'rgba(88,150,255,0.18)' : undefined,
-                  outline: boardDropTarget === targetBoardId
+                  // targetBoardId is null voor alles wat geen agenda is
+                  // (Team, Budget, Accounts…). Zonder de null-check was
+                  // `boardDropTarget === targetBoardId` dus null === null,
+                  // en kregen al die rijen permanent de blauwe
+                  // 'laat hier los'-markering zonder dat er iets gesleept
+                  // werd.
+                  background: isBoardDropTarget ? 'rgba(88,150,255,0.18)' : undefined,
+                  outline: isBoardDropTarget
                     ? '2px solid rgba(88,150,255,0.85)'
                     : boardItemDragging && targetBoardId && !active
                       ? '1px dashed var(--border-strong)'
