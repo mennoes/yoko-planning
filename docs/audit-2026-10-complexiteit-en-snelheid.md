@@ -198,14 +198,44 @@ aanroep hoeft te verdwijnen.
 Gesorteerd op "hoeveel sneller maakt dit de *volgende* wijziging", niet op
 hoeveel het oplevert op de weegschaal.
 
-| # | Actie | Werk | Winst |
-|---|---|---|---|
-| 1 | Seed-JSON uit de clientbundel (fallback via een server-route) | ~1 uur | −200 KB per pagina, geen data-sprong bij eerste render |
-| 2 | Zware kinderen memoiseren + popup-state naar de popup | ~2 uur | typen en klappen voelen direct sneller |
-| 3 | 626 broncode-regexen vervangen door ~10 flow-tests | ~halve sessie | refactoren wordt goedkoop; voorwaarde voor 4 en 5 |
-| 4 | Demo en echt samenvoegen achter één data-provider | 2–3 sessies | **−13.000 regels**, elke wijziging één keer i.p.v. twee |
-| 5 | `planning/page.tsx` en `BoardTable.tsx` knippen per domein | 2 sessies | 52 effecten worden overzienbaar; minder bugs zoals de verwijder- en hernoem-bugs |
-| 6 | Windowing op de agenda-rijen | ~halve sessie | 8.161 → ~800 nodes, soepel scrollen |
+| # | Actie | Werk | Winst | Status |
+|---|---|---|---|---|
+| 1 | Seed-JSON uit de clientbundel | ~1 uur | −190 KB per pagina | **gedaan** |
+| 2 | Agenda-rijen buiten beeld uit de layout houden | ~2 uur | in-/uitklappen ~40% sneller | **gedaan** |
+| 2b | Hydration-mismatch op elke pagina | ~1 uur | React gooit de server-HTML niet meer weg | **gedaan** (niet voorzien, pas tijdens het meten gevonden) |
+| 3 | Broncode-regexen vervangen door flow-tests | halve sessie | refactoren wordt goedkoop; voorwaarde voor 4 en 5 | **begonnen** — zie hieronder |
+| 4 | Demo en echt samenvoegen achter één data-provider | 2–3 sessies | **−13.000 regels**, elke wijziging één keer i.p.v. twee | open |
+| 5 | `planning/page.tsx` en `BoardTable.tsx` knippen per domein | 2 sessies | 52 effecten worden overzienbaar | open |
+| 6 | Windowing op de agenda-rijen | halve sessie | nog minder DOM; alleen nodig als 2 niet genoeg blijkt | open |
 
-1 en 2 kan ik vandaag doen zonder risico. 3 is de sleutel: zolang de tests de
-broncode toetsen, is 4 en 5 duurder dan het hoort te zijn.
+### Wat er van 3 af is
+
+`tests-e2e/` is nieuw: flow-tests die in een echte browser op een
+productiebuild klikken, met `npm run e2e`. Ze draaien bewust **niet** mee in
+`npm test` en dus niet in de Vercel-build — daar is geen browser.
+
+Negen tests, waarvan acht groen en één die zichzelf overslaat met uitleg
+(het gelukte hernoem-pad heeft een database nodig). Ze leggen precies de
+bugs vast die deze week bleven terugkomen: het kruisje vraagt om
+bevestiging, een verwijdering die niet opgeslagen kan worden zet het item
+terug én zegt waarom, een hernoeming springt nooit stil terug, de sticky
+naamkolom blijft op mobiel staan, en rijen buiten beeld blijven klikbaar.
+
+Daar horen twee echte prestatiemetingen bij, met ruime drempels (1 seconde)
+die de regressies vangen die we gehad hebben:
+
+```
+planning uitklappen:   102ms   (was 1950ms vóór de bord-index)
+agenda groep klappen:  185ms
+```
+
+In ruil is `tests/planningPersonalTimelinePerformance.test.mjs` opgeschoond
+en hernoemd naar `tests/agendaColumnsAndPersonalStatus.test.mjs`. Dat
+bestand heette 'performance' maar bevatte geen enkele meting: het legde de
+vórm van de oplossing vast (`const parentItemsByBoard = new Map<...>`,
+`const WorkloadCell = memo(...)`). Die drie tests zijn weg; de 'deze functie
+is er niet meer'-wachters staan er nog, want die zijn wél stabiel.
+
+Netto drie tests minder in `npm test` (312 → 309) en negen echte flow-tests
+erbij. Er staan nog ~600 broncode-regexen in de andere 59 bestanden; die
+gaan het beste om wanneer je het stuk code eromheen toch aanraakt.
