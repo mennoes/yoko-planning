@@ -16,22 +16,19 @@ test('retired personal timelines no longer affect Agenda or Planning', () => {
   assert.match(board, /column\.key !== '__personalTimeline'/)
 })
 
-test('completion reads are memoized until the shared comment store changes', () => {
-  assert.match(client, /let completionIndex: Map<string, CompletionState> \| null = null/)
-  assert.match(client, /function loadCompletionIndex\(\)/)
-  assert.match(client, /for \(const thread of loadAllComments\(\)\)/)
-  assert.match(client, /onCommentsUpdate\(\(\) => \{ completionIndex = null \}\)/)
-  assert.doesNotMatch(client, /completionState\(loadAllComments\(\)/)
-})
-
-test('planning indexes projects per person and reuses stable completion ids', () => {
-  assert.match(planning, /const datedProjectsByMember = useMemo\(\(\) =>/)
-  assert.match(planning, /contributionsPerCell\(team, cols, effectiveProjects, loadCategoryOverrides\(\)\)/)
-  assert.match(planning, /<TimelineBars memberId=\{member\.id\} projects=\{memberProjects\}/)
-  assert.match(planning, /function planningCompletionTarget\(project: Project\)/)
-  assert.match(planning, /project\.completionParentItemId/)
-  assert.match(planning, /const WorkloadCell = memo\(function WorkloadCell/)
-})
+// Hier stonden drie 'prestatietests' die in werkelijkheid de vórm van de
+// oplossing vastlegden: dat er `let completionIndex: Map<...> | null`
+// stond, dat WorkloadCell in een memo() zat, dat de bord-index precies
+// `const parentItemsByBoard = new Map<...>` heette. Die faalden bij elke
+// hernoeming en slaagden als de index er stond maar niet gebruikt werd.
+//
+// De échte eis — blijft uitklappen snel? — wordt nu gemeten in
+// tests-e2e/performance.test.mjs, in een browser op een productiebuild.
+// Zie tests-e2e/harness.mjs voor hoe je die draait.
+//
+// Wat hieronder overblijft zijn geen prestatietests maar 'deze functie is
+// er niet meer'-wachters, en die zijn wél stabiel: ze matchen op namen die
+// bewust zijn weggehaald.
 
 test('agenda nests personal status inside the project status menu', () => {
   assert.match(board, /column\.key !== '__personalTimeline' && column\.key !== PERSONAL_STATUS_KEY/)
@@ -73,17 +70,4 @@ test('agenda headers support direct column reordering with a visible drop positi
 test('personal completion client only persists personal status', () => {
   assert.doesNotMatch(client, /timelineStart|timelineEnd/)
   assert.match(client, /parentItemId: target\.parentItemId, subitemId: target\.subitemId, memberId, done, status/)
-})
-
-test('board lookups are indexed instead of reparsing the board per call', () => {
-  // completionTargetForProject deed per aanroep een loadGroups(): hele
-  // bord uit localStorage parsen, klonen en subitems dedupliceren. De
-  // planning roept 'm één keer per agenda-afspraak aan, dus één persoon
-  // uitklappen parseerde hetzelfde bord honderden keren.
-  assert.match(client, /const parentItemsByBoard = new Map<string, Map<string, BoardItem>>\(\)/)
-  assert.match(client, /const parent = parentItemsFor\(ref\.board\)\.get\(parentItemId\)/)
-  assert.doesNotMatch(client, /loadGroups\(ref\.board, \[\]\)\.flatMap/)
-  // En de index moet weg zodra een bord wijzigt, anders lees je stale data.
-  assert.match(client, /window\.addEventListener\('yoko-board-update', invalidate\)/)
-  assert.match(client, /event\.key\.startsWith\('yoko-board-'\)/)
 })

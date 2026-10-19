@@ -7,6 +7,7 @@
     "build": "next build",
     "check": "tsc --noEmit --incremental --tsBuildInfoFile .next/cache/tsconfig.check.tsbuildinfo",
     "test": "node --test tests/*.test.mjs",
+    "e2e": "node --test tests-e2e/*.test.mjs",
     "verify:fast": "npm run check && npm test",
     "verify": "npm run check && npm test && npm run lint && npm run build",
     "vercel-build": "npm run check && npm test && npm run lint -- --quiet && next build",
@@ -26,6 +27,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "playwright-core": "^1.64.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "xlsx": "^0.18.5"
