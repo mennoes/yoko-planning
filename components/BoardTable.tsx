@@ -35,6 +35,7 @@ import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
 import { normalizeOwnerHours, rebalanceOwnerHours } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
+import { itemDatums } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
 import { PersonalCompletionSection } from './PersonalCompletionSection'
@@ -1580,17 +1581,15 @@ function Cell({ item, col, onUpdate, statusExtra }: {
     notifyOwnersOfStatusChange(item, item.status, v)
   }} />
   if (col.type === 'daterange') {
-    // Bij subitems volgt de timeline standaard automatisch de subitem-
-    // rollup (zie effectiveItem in BoardRow) — net als de est-uren-cel
-    // ('Eigen Xu + Yu uit subs') krijgt deze cel een title-tooltip die
-    // uitlegt wat er gebeurt. Kiest de gebruiker hier zelf een datum,
-    // dan wint die vanaf nu (datesOverride) — de ↺-knop zet 'm terug op
-    // automatisch.
+    // Heeft het item zelf een periode, dan blijft die staan — ook als er
+    // later een kort subitem bij komt. Maak je 'm leeg, dan volgt hij
+    // weer de subitems (vroegste t/m laatste datum). De ↺-knop doet dat
+    // leegmaken in één klik.
     const hasSubsForDates = (item.subitems?.length ?? 0) > 0
-    const overridden = hasSubsForDates && !!item.datesOverride
+    const overridden = hasSubsForDates && !item.__datumsUitSubitems && !!(item.startDate || item.endDate)
     const hint = !hasSubsForDates ? undefined : overridden
-      ? 'Handmatig ingesteld — volgt niet meer automatisch de subitems. Klik ↺ om terug te zetten op automatisch.'
-      : 'Automatisch overgenomen van de subitems (vroegste t/m laatste datum). Kies hier een eigen datum om dit te overrulen.'
+      ? 'Eigen periode — blijft staan, ook als de subitems korter lopen. Klik ↺ om de periode leeg te maken en weer de subitems te volgen.'
+      : 'Automatisch overgenomen van de subitems (vroegste t/m laatste datum). Kies hier een eigen periode om dit vast te zetten.'
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }} title={hint}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1602,8 +1601,8 @@ function Cell({ item, col, onUpdate, statusExtra }: {
               : { startDate: s, endDate: e })} />
         </div>
         {overridden && (
-          <button onClick={e => { e.stopPropagation(); onUpdate({ datesOverride: false }) }}
-            title="Terug naar automatisch (volgt weer de subitems)"
+          <button onClick={e => { e.stopPropagation(); onUpdate({ startDate: null, endDate: null, datesOverride: false }) }}
+            title="Periode leegmaken — volgt dan weer de subitems"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}>
             ↺
           </button>
@@ -2614,31 +2613,23 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   // afleiden uit subitems. Hours doen we al verderop in de Cell-dispatcher
   // (read-only sum). Hier: timeline + owners.
   //
-  // Timeline is een UITZONDERING op 'schrijf-actie overschrijft de derived
-  // waarde': zolang item.datesOverride niet gezet is, wint de subitem-
-  // rollup ALTIJD — dat is de gewenste 'volgt automatisch de subitems'-
-  // default. Zet de gebruiker zelf een datum op het hoofditem (via de
-  // datum-cel), dan zet de UI datesOverride=true en wint vanaf dat moment
-  // de eigen waarde — tot de gebruiker 'm weer terugzet via de '↺ Auto'-
-  // knop (die datesOverride weer op false zet).
+  // Timeline: zie lib/itemDatums.ts. Heeft het item zelf datums, dan
+  // gelden die; maak je ze leeg, dan volgt hij weer de subitems. Eerder
+  // won de subitem-rollup altijd, en dan kaapte één kort subitem de
+  // periode die je zelf op de klus had gezet.
   let effectiveItem: BoardItem = allSubitems.length === subitems.length
     ? item
     : { ...item, subitems }
   if (hasSubitems) {
     const updates: Partial<BoardItem> = {}
-    // Parent-timeline volgt altijd de ACTIEVE (niet-Done) subitems. Een
-    // Done-instance moet 't bereik niet meer beïnvloeden — anders blijft
-    // de parent op 20 mei staan terwijl alle resterende subitems pas op
-    // 17 juni beginnen. Zijn alle subitems Done, val terug op de complete
-    // set zodat de range nog ergens op slaat (anders zou de parent leeg
-    // ogen).
-    const activeSubs = subitems.filter(s => s.status !== 'Done')
-    const dateSubs   = activeSubs.length > 0 ? activeSubs : subitems
-    const subStarts = dateSubs.map(s => s.startDate).filter(Boolean) as string[]
-    const subEnds   = dateSubs.map(s => s.endDate).filter(Boolean) as string[]
-    if (!item.datesOverride) {
-      if (subStarts.length > 0) updates.startDate = [...subStarts].sort()[0]
-      if (subEnds.length   > 0) updates.endDate   = [...subEnds].sort().slice(-1)[0]
+    const rollup = itemDatums({ ...item, subitems })
+    if (rollup.bron === 'subitems') {
+      updates.startDate = rollup.startDate
+      updates.endDate   = rollup.endDate
+      // De datumcel moet verderop nog kunnen zien dat deze datums geleend
+      // zijn. Zonder dit vlaggetje leest hij de rollup terug als 'eigen
+      // periode' en biedt hij een ↺ aan die niets heeft om leeg te maken.
+      updates.__datumsUitSubitems = true
     }
     // Owner-rollup: alle eigenaren over subitems verzamelen en samenvoegen
     // met de parent eigen ownerIds. Voorheen vulden we alleen aan wanneer
@@ -3749,23 +3740,13 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
     if (key === 'startDate' || key === 'endDate' || key === 'deadline' || key === 'uitzenddag' || key === 'timeline') {
       const dKey = key === 'timeline' ? 'startDate' : key
       let v = item[dKey] as string | null
-      // Sorteren op exact de datum die in de Timeline-kolom staat. Die
-      // kolom toont bij een item met subitems ALTIJD de rollup (vroegste
-      // start / laatste eind van de actieve subitems), tenzij de datums
-      // handmatig zijn overschreven. Hier werd de rollup alleen gebruikt
-      // als de parent zelf geen datum had — en een Google-serie heeft die
-      // wel, vaak een verouderde. Gevolg: die rijen stonden op een
-      // onnavolgbare plek, want je zag 21 okt staan terwijl er op een
-      // heel andere datum gesorteerd werd.
+      // Sorteren op exact de datum die in de Timeline-kolom staat — en die
+      // kolom gebruikt itemDatums. Deden we dat hier niet, dan stond een
+      // rij op een onnavolgbare plek: je zag 21 okt staan terwijl er op
+      // een heel andere datum gesorteerd werd.
       if (dKey === 'startDate' || dKey === 'endDate') {
-        const allSubs = (item.subitems ?? []) as Array<{ status?: string; startDate?: string | null; endDate?: string | null }>
-        const activeSubs = allSubs.filter(s => s.status !== 'Done')
-        const subs = activeSubs.length > 0 ? activeSubs : allSubs
-        const dates = subs.map(s => dKey === 'startDate' ? s.startDate : s.endDate).filter(Boolean) as string[]
-        if (dates.length > 0 && !item.datesOverride) {
-          dates.sort()
-          v = dKey === 'startDate' ? dates[0] : dates[dates.length - 1]
-        }
+        const datums = itemDatums(item)
+        v = dKey === 'startDate' ? datums.startDate : datums.endDate
       }
       // null laten doorvallen — de outer sort gooit null altijd onderaan,
       // ongeacht asc/desc. (MAX_SAFE_INTEGER zou items zonder datum in DESC
