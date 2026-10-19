@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
+import { isOnDemoRoute, scopedKey } from './demoRoute'
 
 // Omzet-sjabloon voor een herkende terugkerende reeks (bv. 'UvNL S04
 // aflevering X'): één default-bedrag dat automatisch geldt voor alle
@@ -12,7 +13,9 @@ export type RevenueTemplate = {
   updatedAt:     string
 }
 
-const STORAGE_KEY = 'yoko-revenue-templates'
+// Op /demo wordt dit 'yoko-demo-revenue-templates' — zie lib/demoRoute.ts.
+const BASE_KEY = 'yoko-revenue-templates'
+function storageKey(): string { return scopedKey(BASE_KEY) }
 
 function templateKey(boardId: string, pattern: string): string {
   return `${boardId}::${pattern}`
@@ -21,14 +24,14 @@ function templateKey(boardId: string, pattern: string): string {
 export function loadRevenueTemplates(): RevenueTemplate[] {
   if (typeof window === 'undefined') return []
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey())
     return raw ? (JSON.parse(raw) as RevenueTemplate[]) : []
   } catch { return [] }
 }
 
 function writeLocal(templates: RevenueTemplate[]) {
   if (typeof window === 'undefined') return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(templates))
+  localStorage.setItem(storageKey(), JSON.stringify(templates))
   window.dispatchEvent(new CustomEvent('yoko-revenue-template-update'))
 }
 
@@ -42,7 +45,7 @@ function rowToTemplate(r: Record<string, unknown>): RevenueTemplate {
 }
 
 export async function pullRevenueTemplates(): Promise<boolean> {
-  if (!supabase) return false
+  if (isOnDemoRoute() || !supabase) return false
   const uid = await getCurrentUserId()
   if (!uid) return false
   const { data, error } = await supabase.from('revenue_templates').select('*')
@@ -59,7 +62,7 @@ export async function upsertRevenueTemplate(t: RevenueTemplate): Promise<boolean
     : [...current, t]
   writeLocal(next)
 
-  if (!supabase) return false
+  if (isOnDemoRoute() || !supabase) return false
   const uid = await getCurrentUserId()
   if (!uid) return false
   const { error } = await supabase.from('revenue_templates').upsert({
@@ -71,7 +74,7 @@ export async function upsertRevenueTemplate(t: RevenueTemplate): Promise<boolean
 
 let templateChannelOn = false
 export function subscribeRemoteRevenueTemplates(): () => void {
-  if (!supabase || templateChannelOn) return () => {}
+  if (isOnDemoRoute() || !supabase || templateChannelOn) return () => {}
   templateChannelOn = true
   const ch = supabase.channel('public:revenue_templates')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'revenue_templates' }, () => {

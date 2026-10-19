@@ -10,15 +10,10 @@ import type { BoardGroup, BoardItem } from './boards'
 import type { TeamMember } from './teamStore'
 import type { UserProfile } from './profile'
 
-export function isDemoPath(pathname: string | null | undefined): boolean {
-  return !!pathname && pathname.startsWith('/demo')
-}
-
-// Huidige route is /demo, ook bruikbaar buiten React-componenten (plain
-// lib-modules hebben geen usePathname()).
-export function isOnDemoRoute(): boolean {
-  return typeof window !== 'undefined' && window.location.pathname.startsWith('/demo')
-}
+// Deze twee wonen in lib/demoRoute.ts, zodat een store kan weten of 'ie
+// op /demo draait zonder dit hele bestand aan de bundel te hangen. Hier
+// doorgegeven zodat bestaande imports blijven werken.
+export { isDemoPath, isOnDemoRoute } from './demoRoute'
 
 export const DEMO_BLOCKED_EVENT = 'yoko-demo-blocked'
 

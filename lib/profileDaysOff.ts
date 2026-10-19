@@ -5,6 +5,7 @@
 // profile-page al een veel rijkere days_off-editor heeft. Eén bron.
 
 import { supabase } from './supabase'
+import { isOnDemoRoute, scopedKey } from './demoRoute'
 import { getCurrentUserId } from './sync'
 
 // ISO weekday: 1=Ma, …, 5=Vr, 6=Za, 7=Zo
@@ -12,7 +13,8 @@ const DAY_TO_ISO: Record<string, number> = {
   mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7,
 }
 
-const STORAGE_KEY  = 'yoko-profile-days-off'
+const STORAGE_KEY_BASE = 'yoko-profile-days-off'
+function storageKey(): string { return scopedKey(STORAGE_KEY_BASE) }
 const UPDATE_EVENT = 'yoko-profile-days-off-update'
 
 export type ProfileDaysOffMap = Record<string, number[]>
@@ -20,7 +22,7 @@ export type ProfileDaysOffMap = Record<string, number[]>
 function readCache(): ProfileDaysOffMap {
   if (typeof window === 'undefined') return {}
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey())
     if (!raw) return {}
     const parsed = JSON.parse(raw) as ProfileDaysOffMap
     return parsed && typeof parsed === 'object' ? parsed : {}
@@ -28,7 +30,7 @@ function readCache(): ProfileDaysOffMap {
 }
 function writeCache(map: ProfileDaysOffMap) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(map)) } catch {}
+  try { localStorage.setItem(storageKey(), JSON.stringify(map)) } catch {}
   window.dispatchEvent(new CustomEvent(UPDATE_EVENT))
 }
 
@@ -91,7 +93,7 @@ export function onProfileDaysOffChange(handler: () => void): () => void {
 }
 
 export async function pullProfileDaysOff(): Promise<boolean> {
-  if (!supabase) return false
+  if (isOnDemoRoute() || !supabase) return false
   if (!await getCurrentUserId()) return false
   // MERGE-met-localStorage i.p.v. overwrite. Localstorage is sinds de
   // /team-toggle de bron-van-waarheid voor velden die door /team
@@ -148,7 +150,7 @@ function schedulePull() {
   }, 400)
 }
 export function subscribeRemoteProfileDaysOff(): () => void {
-  if (!supabase) return () => {}
+  if (isOnDemoRoute() || !supabase) return () => {}
   if (channel) return () => {}
   const ch = supabase.channel('profile_days_off')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },         () => schedulePull())

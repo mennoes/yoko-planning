@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useProfile } from '@/components/ProfileContext'
 import { useTeam } from '@/components/TeamContext'
 import {
-  type BudgetEntry, BUDGET_ALLOWED_MEMBER_IDS,
+  type BudgetEntry, budgetAllowedMemberIds,
   loadBudgetEntries, pullBudgetEntries, subscribeRemoteBudget,
   upsertBudgetEntry, deleteBudgetEntry, genBudgetId,
   quarterRange, quarterOf, quarterLabel, currentQuarter,
@@ -26,7 +26,7 @@ import { isVrijTitle } from '@/lib/workloadCategory'
 import { normalizeTitle } from '@/lib/subitemRules'
 import { IconChart } from '@/components/Icon'
 
-// ─── Project-lijst (Menno/Vincent als owner, over alle boards) ─────────────
+// ─── Project-lijst (budget-eigenaren, over alle boards) ───────────────────
 type ForecastSubitem = {
   id:        string
   name:      string
@@ -40,7 +40,7 @@ type ForecastProject = {
   boardId:  string
   boardName: string
   name:     string
-  ownerIds: string[]     // subset ∩ {menno, vincent}
+  ownerIds: string[]     // subset ∩ budgetAllowedMemberIds()
   status:   string
   endDate:  string | null  // effectieve einddatum (subitem-rollup), bepaalt kwartaal
   subitems: ForecastSubitem[]  // alleen voor context — geen eigen omzet-veld
@@ -85,7 +85,7 @@ function loadForecastProjects(): ForecastProject[] {
         // apart te factureren klantproject.
         if (isVrijTitle(item.name)) continue
         if (item.source === 'google') continue
-        const owned = (item.ownerIds ?? []).filter(id => BUDGET_ALLOWED_MEMBER_IDS.includes(id))
+        const owned = (item.ownerIds ?? []).filter(id => budgetAllowedMemberIds().includes(id))
         if (owned.length === 0) continue
         const normalized = normalizeTitle(item.name)
         out.push({
@@ -560,10 +560,10 @@ export default function BudgetPage() {
     }
   }, [])
 
-  const allowed = !!profile && BUDGET_ALLOWED_MEMBER_IDS.includes(profile.memberId)
+  const allowed = !!profile && budgetAllowedMemberIds().includes(profile.memberId)
 
   const members = useMemo(() => {
-    return BUDGET_ALLOWED_MEMBER_IDS.map(id => {
+    return budgetAllowedMemberIds().map(id => {
       const m = teamMembers.find(t => t.id === id)
       return { id, name: m?.name ?? id, color: m?.color ?? '#888' }
     })
@@ -682,7 +682,9 @@ export default function BudgetPage() {
         <IconChart size={26} />Budget
       </h1>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 24px' }}>
-        Omzet per kwartaal · alleen zichtbaar voor Menno &amp; Vincent
+        {/* Namen uit de ledenlijst i.p.v. hardgecodeerd: op /demo zijn dit
+            de verzonnen leden, en daar hoort geen echte naam te staan. */}
+        Omzet per kwartaal · alleen zichtbaar voor {members.map(m => m.name).join(' & ')}
       </p>
 
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>

@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import contactsData from '@/data/contacts.json'
 import teamData     from '@/data/team.json'
 import { useTeam }  from '@/components/TeamContext'
+import { isDemoPath } from '@/lib/demoRoute'
+import { DEMO_CONTACT_GROUPS } from '@/lib/demoTeamFixtures'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
 import { UserAvatar }    from '@/components/UserAvatar'
@@ -441,6 +444,13 @@ function InlineField({ value, placeholder, onSave, style, type = 'text' }: {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function TeamPage() {
+  // /demo draait exact deze pagina. De stores weten zelf al dat ze dan
+  // naar 'yoko-demo-*'-sleutels moeten schrijven en hun Supabase-calls
+  // moeten overslaan (zie lib/demoRoute.ts). Wat hier nog moet: niet
+  // terugvallen op de echte namen uit data/team.json en data/contacts.json,
+  // en doorlinken naar de demo-versie van team beheren.
+  const isDemo = isDemoPath(usePathname())
+
   // Live team-leden uit Supabase voor de kind-indeling (yoko/freelance).
   // Bij ontbreken vallen we terug op YOKO_IDS-set; zie de render hieronder.
   const { members: liveMembers } = useTeam()
@@ -449,7 +459,7 @@ export default function TeamPage() {
   // luisteren ook live mee zodat een aanpassing in Planning hier direct
   // doorkomt (en andersom).
   const initialCaps: Record<string, number> = Object.fromEntries(
-    teamData.members.map(m => [m.id, m.weeklyCapacity ?? 0])
+    (isDemo ? [] : teamData.members).map(m => [m.id, m.weeklyCapacity ?? 0])
   )
   const [caps, setCaps] = useState<Record<string, number>>(initialCaps)
   useEffect(() => {
@@ -516,7 +526,7 @@ export default function TeamPage() {
 
   // Contacts leven in localStorage (override op data/contacts.json) en
   // worden via een custom event live ge-sync'd binnen dezelfde browser.
-  const initialGroups = contactsData.groups as Group[]
+  const initialGroups = (isDemo ? DEMO_CONTACT_GROUPS : contactsData.groups) as unknown as Group[]
   const [groups, setGroups] = useState<Group[]>(initialGroups)
   useEffect(() => {
     const refresh = () => setGroups(getContacts(initialGroups as unknown as StoredGroup[]) as unknown as Group[])
@@ -545,7 +555,7 @@ export default function TeamPage() {
             Studio Yoko
           </div>
           <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
-          <Link href="/team-admin"
+          <Link href={isDemo ? "/demo/team-admin" : "/team-admin"}
             style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border)',
               background: 'var(--bg-card)', color: 'var(--text-secondary)',
               fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textDecoration: 'none',
@@ -570,7 +580,7 @@ export default function TeamPage() {
             seen.add(m.id)
             all.push({ id: m.id, name: m.name, color: m.color, email: m.email, weeklyCapacity: m.weeklyCapacity })
           }
-          for (const m of teamData.members) {
+          for (const m of (isDemo ? [] : teamData.members)) {
             if (seen.has(m.id) || m.id === 'unassigned') continue
             seen.add(m.id)
             all.push({ id: m.id, name: m.name, color: m.color, email: m.email, weeklyCapacity: m.weeklyCapacity })

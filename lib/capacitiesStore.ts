@@ -3,9 +3,11 @@
 // is. localStorage blijft als cache + offline fallback.
 
 import { supabase } from './supabase'
+import { isOnDemoRoute, scopedKey } from './demoRoute'
 import { getCurrentUserId } from './sync'
 
-const STORAGE_KEY  = 'yoko-capacities'
+const STORAGE_KEY_BASE = 'yoko-capacities'
+function storageKey(): string { return scopedKey(STORAGE_KEY_BASE) }
 const UPDATE_EVENT = 'yoko-capacities-update'
 
 export type CapacityMap = Record<string, number>
@@ -13,7 +15,7 @@ export type CapacityMap = Record<string, number>
 function readCache(): CapacityMap {
   if (typeof window === 'undefined') return {}
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey())
     if (!raw) return {}
     const parsed = JSON.parse(raw) as CapacityMap
     return parsed && typeof parsed === 'object' ? parsed : {}
@@ -21,7 +23,7 @@ function readCache(): CapacityMap {
 }
 function writeCache(map: CapacityMap) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(map)) } catch {}
+  try { localStorage.setItem(storageKey(), JSON.stringify(map)) } catch {}
   window.dispatchEvent(new CustomEvent(UPDATE_EVENT))
 }
 
@@ -44,7 +46,7 @@ export function onCapacitiesChange(handler: () => void): () => void {
 
 // ─── Remote sync ──────────────────────────────────────────────────────────────
 export async function pullCapacities(): Promise<boolean> {
-  if (!supabase) return false
+  if (isOnDemoRoute() || !supabase) return false
   if (!await getCurrentUserId()) return false
   const { data, error } = await supabase
     .from('team_capacities')
@@ -76,7 +78,7 @@ export async function pullCapacities(): Promise<boolean> {
 }
 
 async function pushCapacity(memberId: string, capacity: number): Promise<void> {
-  if (!supabase) return
+  if (isOnDemoRoute() || !supabase) return
   if (!await getCurrentUserId()) return
   await supabase.from('team_capacities').upsert({
     member_id:       memberId,
@@ -102,7 +104,7 @@ function schedulePull() {
 }
 
 export function subscribeRemoteCapacities(): () => void {
-  if (!supabase) return () => {}
+  if (isOnDemoRoute() || !supabase) return () => {}
   if (capacitiesChannel) return () => {}
   const ch = supabase.channel('team_capacities')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'team_capacities' }, () => schedulePull())
