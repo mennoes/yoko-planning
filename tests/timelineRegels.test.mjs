@@ -33,12 +33,13 @@ const sub = (id, naam, van, tot, extra = {}) => ({
   id, name: naam, status: 'Working on it', ownerIds: ['menno'],
   startDate: van, endDate: tot, ...extra,
 })
+const OPEN = new Set(['i1'])
 const periode = (van, tot) => ({ van: new Date(`${van}T00:00:00`), tot: new Date(`${tot}T23:59:59`) })
 
 test('een item zonder subitems blijft één regel', () => {
   const regels = tl.bouwRegels(
     [{ item: { id: 'i1', name: 'Losse klus', ownerIds: ['menno'], subitems: [] }, periode: periode('2026-03-02', '2026-03-06') }],
-    { toonAfgerond: false, rasterStart: RASTER })
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: OPEN })
   assert.equal(regels.length, 1)
   assert.equal(regels[0].naam, 'Losse klus')
   assert.equal(regels[0].isOuder, false, 'zonder subitems is het geen samenvatting maar gewoon werk')
@@ -52,7 +53,7 @@ test('een item met subitems krijgt een regel per subitem, met de ouder erboven',
     ],
   }
   const regels = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-13') }],
-    { toonAfgerond: false, rasterStart: RASTER })
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: OPEN })
 
   assert.deepEqual(Array.from(regels.map(r => r.naam)), ['Aflevering 9', 'Research', 'Montage'],
     'de ouder staat bovenaan, de subitems op volgorde van startdatum eronder')
@@ -63,13 +64,51 @@ test('een item met subitems krijgt een regel per subitem, met de ouder erboven',
   assert.equal(regels[0].key !== regels[1].key, true, 'elke regel heeft een eigen sleutel')
 })
 
+test('een item met subitems staat standaard dicht, met het aantal erbij', () => {
+  // Alles openklappen maakt van het overzicht meteen weer een lange lijst.
+  const item = {
+    id: 'i1', name: 'Aflevering 9', ownerIds: ['menno'], subitems: [
+      sub('s1', 'Research', '2026-03-02', '2026-03-06'),
+      sub('s2', 'Montage', '2026-03-09', '2026-03-13'),
+    ],
+  }
+  const dicht = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-13') }],
+    { toonAfgerond: false, rasterStart: RASTER })
+  assert.equal(dicht.length, 1, 'dicht is het één regel')
+  assert.equal(dicht[0].subAantal, 2, 'maar hij weet hoeveel er onder zit')
+  assert.equal(dicht[0].isOuder, false, 'en krijgt dus een gewone volle balk, geen grijze streep')
+
+  const open = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-13') }],
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: new Set(['i1']) })
+  assert.equal(open.length, 3, 'uitgeklapt komen de subitems erbij')
+  assert.equal(open[0].isOuder, true, 'en zakt de ouder terug tot samenvatting')
+})
+
+test('het aantal op de balk telt alleen subitems die een regel zouden krijgen', () => {
+  // Een '4' op de balk en dan twee regels eronder is erger dan geen getal.
+  const item = {
+    id: 'i1', name: 'Aflevering 9', ownerIds: [], subitems: [
+      sub('s1', 'Montage', '2026-03-09', '2026-03-13'),
+      sub('s2', 'Allang af', '2026-03-02', '2026-03-06', { status: 'Done' }),
+      sub('s3', 'Oud werk', '2025-02-01', '2025-02-05'),
+      { id: 's4', name: 'Nog te plannen', status: '', ownerIds: [], startDate: null, endDate: null },
+    ],
+  }
+  const dicht = tl.bouwRegels([{ item, periode: periode('2026-03-09', '2026-03-13') }],
+    { toonAfgerond: false, rasterStart: RASTER })
+  assert.equal(dicht[0].subAantal, 1, 'alleen Montage telt mee')
+  const open = tl.bouwRegels([{ item, periode: periode('2026-03-09', '2026-03-13') }],
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: new Set(['i1']) })
+  assert.equal(open.length - 1, dicht[0].subAantal, 'het getal klopt met wat je uitgeklapt ziet')
+})
+
 test('de eigenaren van een subitem zijn die van het subitem zelf', () => {
   const item = {
     id: 'i1', name: 'Aflevering 9', ownerIds: ['menno'],
     subitems: [sub('s1', 'Montage', '2026-03-02', '2026-03-06', { ownerIds: ['eliane'] })],
   }
   const regels = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-06') }],
-    { toonAfgerond: false, rasterStart: RASTER })
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: OPEN })
   assert.deepEqual(Array.from(regels[0].ownerIds), ['menno'])
   assert.deepEqual(Array.from(regels[1].ownerIds), ['eliane'])
 })
@@ -79,7 +118,7 @@ test('een subitem zonder ownerIds levert geen fout op', () => {
   // tijdlijn niet meenemen.
   const item = { id: 'i1', name: 'Aflevering 9', subitems: [{ id: 's1', name: 'Montage', startDate: '2026-03-02', endDate: '2026-03-06' }] }
   const regels = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-06') }],
-    { toonAfgerond: false, rasterStart: RASTER })
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: OPEN })
   assert.equal(regels.length, 2)
   assert.deepEqual(Array.from(regels[1].ownerIds), [])
 })
@@ -92,11 +131,11 @@ test('afgeronde subitems staan er standaard niet bij, maar kunnen erbij', () => 
     ],
   }
   const uit = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-13') }],
-    { toonAfgerond: false, rasterStart: RASTER })
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: OPEN })
   assert.deepEqual(Array.from(uit.map(r => r.naam)), ['Aflevering 9', 'Montage'])
 
   const aan = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-13') }],
-    { toonAfgerond: true, rasterStart: RASTER })
+    { toonAfgerond: true, rasterStart: RASTER, uitgeklapt: OPEN })
   assert.deepEqual(Array.from(aan.map(r => r.naam)), ['Aflevering 9', 'Research', 'Montage'])
   assert.equal(aan[1].isDone, true)
 })
@@ -111,7 +150,7 @@ test('een subitem dat helemaal vóór het raster ligt krijgt geen regel', () => 
     ],
   }
   const regels = tl.bouwRegels([{ item, periode: periode('2026-03-09', '2026-03-13') }],
-    { toonAfgerond: false, rasterStart: RASTER })
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: OPEN })
   assert.deepEqual(Array.from(regels.map(r => r.naam)), ['Aflevering 9', 'Montage'])
 })
 
@@ -121,7 +160,7 @@ test('een item waarvan alle subitems zonder datum zijn blijft één gewone regel
     subitems: [{ id: 's1', name: 'Nog te plannen', status: '', ownerIds: [], startDate: null, endDate: null }],
   }
   const regels = tl.bouwRegels([{ item, periode: periode('2026-03-02', '2026-03-06') }],
-    { toonAfgerond: false, rasterStart: RASTER })
+    { toonAfgerond: false, rasterStart: RASTER, uitgeklapt: OPEN })
   assert.equal(regels.length, 1)
   assert.equal(regels[0].isOuder, false, 'zonder subregels eronder is de ouder geen samenvatting')
 })

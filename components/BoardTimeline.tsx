@@ -89,21 +89,27 @@ export type TijdlijnRegel = {
   naam: string
   ownerIds: string[]
   periode: { van: Date; tot: Date }
-  /** Een item dat subitems met datums heeft. Die regel is een samenvatting
-   *  van de regels eronder, geen werk op zich. */
+  /** Een uitgeklapte ouder. Die regel is een samenvatting van de regels
+   *  eronder, geen werk op zich — vandaar het dunne grijze streepje. */
   isOuder: boolean
+  /** Hoeveel subitems met datums eronder zitten. Boven nul betekent: deze
+   *  regel is uit of in te klappen, en de balk draagt een bolletje met dit
+   *  aantal. */
+  subAantal: number
   isDone: boolean
 }
 
 /**
- * Zet items om in regels. Heeft een item subitems met datums, dan krijgt
- * elk subitem een eigen regel en blijft de ouder erboven staan als dunne
- * samenvatting — daar zit het werk immers niet in. Heeft het item geen
- * subitems, dan is het gewoon één regel zoals eerst.
+ * Zet items om in regels.
+ *
+ * Een item met subitems staat standaard ingeklapt: één gewone balk in de
+ * groepskleur, met een bolletje dat zegt hoeveel er onder zit. Klap je 'm
+ * uit, dan krijgt elk subitem een eigen regel en zakt de ouder terug tot
+ * een dun grijs streepje erboven — daar zit het werk immers niet in.
  */
 export function bouwRegels(
   metDatum: { item: BoardItem; periode: { van: Date; tot: Date } }[],
-  opties: { toonAfgerond: boolean; rasterStart: Date },
+  opties: { toonAfgerond: boolean; rasterStart: Date; uitgeklapt?: Set<string> },
 ): TijdlijnRegel[] {
   const regels: TijdlijnRegel[] = []
   for (const { item, periode } of metDatum) {
@@ -115,16 +121,18 @@ export function bouwRegels(
       // dus geen regel — zelfde regel als voor items.
       .filter(e => e.periode.tot >= opties.rasterStart)
       .sort((a, b) => a.periode.van.getTime() - b.periode.van.getTime())
+    const open = subs.length > 0 && (opties.uitgeklapt?.has(item.id) ?? false)
     regels.push({
       key: item.id, itemId: item.id, naam: item.name || '(naamloos)',
       ownerIds: item.ownerIds ?? [], periode,
-      isOuder: subs.length > 0, isDone: item.status === 'Done',
+      isOuder: open, subAantal: subs.length, isDone: item.status === 'Done',
     })
+    if (!open) continue
     for (const { sub, periode: subTijd } of subs) {
       regels.push({
         key: `${item.id}:${sub.id}`, itemId: item.id, subitemId: sub.id,
         naam: sub.name || '(naamloos)', ownerIds: sub.ownerIds ?? [], periode: subTijd,
-        isOuder: false, isDone: sub.status === 'Done',
+        isOuder: false, subAantal: 0, isDone: sub.status === 'Done',
       })
     }
   }
@@ -150,6 +158,15 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   // kon niet twee keer achter elkaar slepen.
   const netGesleept = useRef(false)
   const [hoverItem, setHoverItem] = useState<string | null>(null)
+  // Welke items hun subitems laten zien. Standaard staat alles dicht: zo
+  // blijft het raster een overzicht, en haal je er pas detail bij als je
+  // er om vraagt.
+  const [uitgeklapt, setUitgeklapt] = useState<Set<string>>(new Set())
+  const klapOmgekeerd = (itemId: string) => setUitgeklapt(vorige => {
+    const volgende = new Set(vorige)
+    if (volgende.has(itemId)) volgende.delete(itemId); else volgende.add(itemId)
+    return volgende
+  })
   // Welke groepen je uit beeld hebt gehaald. Leeg = alles zichtbaar.
   const [verborgenGroepen, setVerborgenGroepen] = useState<Set<string>>(new Set())
   // Hoeveel extra historie er is bijgeladen door naar links te scrollen.
@@ -220,7 +237,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
     items.filter(valtEerder).map(item => ({ groep, item })))
 
   const regelsVan = (metDatum: { item: BoardItem; periode: { van: Date; tot: Date } }[]) =>
-    bouwRegels(metDatum, { toonAfgerond, rasterStart: cols[0]?.rangeStart ?? vensterStart })
+    bouwRegels(metDatum, { toonAfgerond, rasterStart: cols[0]?.rangeStart ?? vensterStart, uitgeklapt })
 
   const dagenTussen = (van: Date, tot: Date) => {
     const dag = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
@@ -420,10 +437,12 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                   const balk = rangeToPx(cols, regel.periode.van, regel.periode.tot)
                   const hoog = regel.isOuder ? OUDER_RIJ_H : RIJ_H
                   const hoogte = regel.isOuder ? OUDER_H : BALK_H
-                  // Een ouder met subitems laat zich niet verslepen: zijn
-                  // datums zijn de optelsom van de subitems eronder, dus
-                  // schuiven zou meteen weer worden overschreven.
-                  const sleepbaar = !regel.isOuder && !regel.isDone
+                  // Een item met subitems laat zich niet verslepen: zijn
+                  // datums zijn de optelsom van de subitems, dus schuiven
+                  // zou meteen weer worden overschreven. Klap 'm uit en
+                  // versleep het subitem dat je bedoelt.
+                  const heeftSubs = regel.subAantal > 0
+                  const sleepbaar = !heeftSubs && !regel.isDone
                   const aan = hoverItem === regel.key
                   return (
                     <div key={regel.key}
@@ -434,9 +453,25 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                         background: aan ? 'var(--bg-hover)' : 'transparent' }}>
                       <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
                         background: aan ? 'var(--bg-hover)' : 'var(--bg-card)',
-                        padding: regel.subitemId ? '0 12px 0 28px' : '0 12px',
+                        padding: regel.subitemId ? '0 12px 0 44px' : '0 12px',
                         display: 'flex', alignItems: 'center', gap: 7,
                         borderRight: '1px solid var(--border)' }}>
+                        {/* Uitklappijltje vóór de naam. Alleen bij items die
+                            iets te openen hebben; anders houdt een lege
+                            inspringing de namen uit elkaar. */}
+                        {!regel.subitemId && !heeftSubs && <span style={{ width: 12, flexShrink: 0 }} />}
+                        {heeftSubs && (
+                          <button onClick={() => klapOmgekeerd(regel.itemId)}
+                            aria-expanded={regel.isOuder}
+                            title={regel.isOuder
+                              ? `${regel.naam} inklappen`
+                              : `${regel.naam} uitklappen — ${regel.subAantal} subitem${regel.subAantal === 1 ? '' : 's'}`}
+                            style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer',
+                              width: 12, flexShrink: 0, fontSize: 9, lineHeight: 1,
+                              color: 'var(--text-muted)' }}>
+                            {regel.isOuder ? '▼' : '▶'}
+                          </button>
+                        )}
                         <button onClick={() => onOpenItem(regel.itemId, regel.subitemId)}
                           title={`${regel.naam} — open`}
                           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
@@ -476,11 +511,23 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                           const left  = balk.left + (bezig?.soort === 'eind' ? 0 : verschuif)
                           const width = Math.max(6, balk.width + (bezig?.soort === 'heel' ? 0 : bezig?.soort === 'start' ? -verschuif : verschuif))
                           const datum = (d: Date) => d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+                          const subs = `${regel.subAantal} subitem${regel.subAantal === 1 ? '' : 's'}`
+                          const staart = heeftSubs
+                            ? ` · ${subs} · klik om ${regel.isOuder ? 'in' : 'uit'} te klappen`
+                            : sleepbaar ? ' · sleep om te verzetten' : ''
                           return (
                             <div
                               onPointerDown={e => sleepbaar && startSleep(e, regel, regel.periode, 'heel')}
-                              onClick={() => { if (!sleep && !netGesleept.current) onOpenItem(regel.itemId, regel.subitemId) }}
-                              title={`${regel.naam} · ${datum(regel.periode.van)} – ${datum(regel.periode.tot)}${sleepbaar ? ' · sleep om te verzetten' : regel.isOuder ? ' · loopt mee met de subitems' : ''}`}
+                              // Een balk met subitems klapt open in plaats van
+                              // de popup te openen: dat is waar je op dat
+                              // moment naar op zoek bent. De naam ernaast
+                              // opent nog steeds het item zelf.
+                              onClick={() => {
+                                if (sleep || netGesleept.current) return
+                                if (heeftSubs) klapOmgekeerd(regel.itemId)
+                                else onOpenItem(regel.itemId, regel.subitemId)
+                              }}
+                              title={`${regel.naam} · ${datum(regel.periode.van)} – ${datum(regel.periode.tot)}${staart}`}
                               style={{ position: 'absolute', left, width,
                                 top: (hoog - hoogte) / 2, height: hoogte, borderRadius: regel.isOuder ? 3 : 5,
                                 cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
@@ -498,6 +545,19 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {!regel.isOuder && width > 54 ? regel.naam : ''}
                               </span>
+                              {/* Bolletje met het aantal subitems: aan een
+                                  balk zie je anders niet dat er nog iets
+                                  onder zit. Op de uitgeklapte grijze streep
+                                  past het niet en is het ook overbodig — daar
+                                  staan de subitems er gewoon. */}
+                              {heeftSubs && !regel.isOuder && (
+                                <span aria-hidden style={{ marginLeft: 'auto', flexShrink: 0,
+                                  minWidth: 15, height: 15, borderRadius: 999, padding: '0 4px',
+                                  background: 'rgba(255,255,255,0.92)', color: 'rgba(0,0,0,0.75)',
+                                  fontSize: 9.5, fontWeight: 800, lineHeight: '15px', textAlign: 'center' }}>
+                                  {regel.subAantal}
+                                </span>
+                              )}
                               {sleepbaar && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'eind') }}
                                   title="Sleep om de einddatum te verzetten"
