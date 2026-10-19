@@ -32,7 +32,23 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
-export function loadTeamGroups() { return read() }
+/** Altijd op `position`, nooit op de volgorde waarin ze toevallig in
+ *  localStorage staan. createTeamGroup en assignMemberToTeamGroup
+ *  schrijven de lijst terug zoals ze 'm kregen, dus zonder deze sortering
+ *  kon de getoonde volgorde na een willekeurige actie omslaan. */
+export function loadTeamGroups() {
+  return read().sort((a, b) => a.position - b.position)
+}
+
+/** Kan deze groep nog omhoog/omlaag? De pijlen stonden er altijd, ook bij
+ *  één groep — dan gebeurde er niets en leek het stuk. */
+export function canMoveTeamGroup(groupId: string, direction: -1 | 1): boolean {
+  const groups = loadTeamGroups()
+  const index = groups.findIndex(group => group.id === groupId)
+  if (index < 0) return false
+  const target = index + direction
+  return target >= 0 && target < groups.length
+}
 
 export function onTeamGroupsChange(handler: () => void) {
   if (typeof window === 'undefined') return () => {}

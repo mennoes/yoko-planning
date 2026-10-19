@@ -4643,7 +4643,7 @@ export default function PlanningPage() {
   const { pushUndo, showToast } = useUndo()
   const { profile }    = useProfile()
   const { members: liveTeam, refresh: refreshTeam } = useTeam()
-  const { groups: teamGroups, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup, moveGroup: moveTeamGroup } = useTeamGroups()
+  const { groups: teamGroups, createGroup: createTeamGroup, assignMember: assignMemberToTeamGroup, moveGroup: moveTeamGroup, canMoveGroup: canMoveTeamGroup } = useTeamGroups()
   // Helper: classificeer een memberId als 'yoko' op basis van de live
   // team_members tabel; valt terug op de hardcoded YOKO_IDS voor leden
   // die nog niet in de DB staan (bv. extras of voor migratie 0018 is
@@ -6621,8 +6621,24 @@ export default function PlanningPage() {
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
                 <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{group.name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-muted)' }}>{teamDropTargetKey === dropTarget.key ? 'Laat los' : members.length}</span>
-                <button onClick={() => void moveTeamGroup(group.id, -1)} title="Team omhoog" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>↑</button>
-                <button onClick={() => void moveTeamGroup(group.id, 1)} title="Team omlaag" style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>↓</button>
+{/* Uitgezet als er niets te verschuiven valt — met één team deden
+                    deze pijlen niets en leek het kapot. */}
+                {([-1, 1] as const).map(richting => {
+                  const kan = canMoveTeamGroup(group.id, richting)
+                  return (
+                    <button key={richting} onClick={() => { if (kan) void moveTeamGroup(group.id, richting) }}
+                      disabled={!kan}
+                      title={kan
+                        ? (richting === -1 ? 'Team omhoog' : 'Team omlaag')
+                        : (teamGroups.length < 2
+                            ? 'Maak een tweede team om de volgorde te kunnen wijzigen'
+                            : richting === -1 ? 'Staat al bovenaan' : 'Staat al onderaan')}
+                      style={{ border: 0, background: 'transparent', cursor: kan ? 'pointer' : 'default',
+                        color: kan ? 'var(--text-muted)' : 'var(--border-strong)', opacity: kan ? 1 : 0.6 }}>
+                      {richting === -1 ? '↑' : '↓'}
+                    </button>
+                  )
+                })}
               </div>
               {members.length > 0 ? members.map(row) : (
                 <div style={{ padding: '10px 2px', fontSize: 12, color: 'var(--text-muted)' }}>Sleep mensen hierheen</div>
@@ -6647,7 +6663,10 @@ export default function PlanningPage() {
                 </button>
               )}
             </div>
-            {teamGroups.map(groupZone)}
+            {/* Zelfde volgorde als in het raster: Studio Yoko eerst, de
+                eigen teams daaronder. Hier stonden de teams erbóven,
+                dus wat je in dit venster zag kwam niet overeen met wat je
+                op de pagina erachter zag. */}
             <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 10, marginBottom: 2 }}>
               Studio Yoko
             </div>
@@ -6657,6 +6676,7 @@ export default function PlanningPage() {
                 outline: teamDropTargetKey === peopleYokoTarget.key ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2 }}>
               {yokoTeam.length > 0 ? yokoTeam.map(row) : <div style={{ padding: '10px 0', fontSize: 12, color: 'var(--text-muted)' }}>Sleep hierheen om uit een groep te halen</div>}
             </div>
+            {teamGroups.map(groupZone)}
             {unassigned.length > 0 && (
               <>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 14, marginBottom: 2 }}>
