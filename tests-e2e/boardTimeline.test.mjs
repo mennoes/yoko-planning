@@ -284,6 +284,131 @@ test('verslepen is terug te draaien', { skip: skip ?? false }, async () => {
   assert.equal(na, voor, 'ongedaan zet de oude datums terug')
 })
 
+test('onder de naam staat wat je van een balk niet afleest', { skip: skip ?? false }, async () => {
+  // Een balk vertelt je wanneer, niet hoe het ervoor staat of hoe groot
+  // het is. Daar is de tweede regel voor.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const regel = await page.evaluate(() => {
+    const knop = [...document.querySelectorAll('[data-board-timeline] button')]
+      .find(b => /NL College S04 E33/.test(b.textContent ?? ''))
+    return [...(knop?.querySelectorAll('span') ?? [])].map(s => s.textContent).join(' | ')
+  })
+  await page.close()
+  assert.match(regel, /Working on it/, 'de status staat erbij')
+  assert.match(regel, /16u/, 'en hoeveel uur het is')
+})
+
+test('de hele rij licht op als je eroverheen gaat', { skip: skip ?? false }, async () => {
+  // Met balken ver naar rechts en de naam links vastgeplakt verlies je
+  // zonder dit welke naam bij welke balk hoort.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const rij = page.locator('[data-board-timeline] div').filter({ hasText: 'NL College S04 E33' })
+  const kleuren = () => page.evaluate(() => {
+    const knop = [...document.querySelectorAll('[data-board-timeline] button')]
+      .find(b => /NL College S04 E33/.test(b.textContent ?? ''))
+    const naamCel = knop?.parentElement
+    const rijEl = naamCel?.parentElement
+    const lees = el => el ? getComputedStyle(el).backgroundColor : ''
+    return { rij: lees(rijEl), naam: lees(naamCel) }
+  })
+  const voor = await kleuren()
+  await rij.last().hover()
+  await page.waitForTimeout(250)
+  const na = await kleuren()
+  await page.close()
+
+  assert.notEqual(na.rij, voor.rij, 'de rij zelf krijgt een andere achtergrond')
+  assert.notEqual(na.naam, voor.naam, 'en de vastgeplakte naamkolom ook, anders valt die eruit')
+})
+
+test('je kunt kiezen welke groepen je ziet', { skip: skip ?? false }, async () => {
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const namen = () => page.evaluate(() =>
+    [...document.querySelectorAll('[data-board-timeline] [title*=" · "]')]
+      .map(b => (b.getAttribute('title') ?? '').split(' ·')[0]))
+  assert.ok((await namen()).includes('FTI Shorts x14'))
+
+  // De knop heet 'Shorts'; wat hij doet staat in de title.
+  await page.getByTitle('Shorts verbergen').click()
+  await page.waitForTimeout(600)
+  const over = await namen()
+  assert.ok(!over.includes('FTI Shorts x14'), 'de verborgen groep is uit het raster')
+  assert.ok(over.includes('NL College S04 E33'), 'de andere groep staat er nog')
+
+  await page.getByTitle('Shorts tonen').click()
+  await page.waitForTimeout(600)
+  const terug = await namen()
+  await page.close()
+  assert.ok(terug.includes('FTI Shorts x14'), 'en hij komt gewoon terug')
+})
+
+test('naar links scrollen laadt eerdere weken bij', { skip: skip ?? false }, async () => {
+  // Eerder liep je tegen een harde rand: het raster begon drie weken terug
+  // en verder terug kijken kon niet.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const eersteKolom = () => page.evaluate(() => {
+    const koppen = document.querySelectorAll('[data-board-timeline] div[style*="border-left"]')
+    return koppen[0]?.textContent ?? ''
+  })
+  const voor = await eersteKolom()
+
+  await page.evaluate(() => {
+    const raster = [...document.querySelectorAll('[data-board-timeline] div')]
+      .find(d => d.scrollWidth > d.clientWidth + 50)
+    if (raster) raster.scrollLeft = 0
+    raster?.dispatchEvent(new Event('scroll', { bubbles: true }))
+  })
+  await page.waitForTimeout(900)
+  const na = await eersteKolom()
+  await page.close()
+  assert.notEqual(na, voor, `het raster loopt verder terug (van ${voor} naar ${na})`)
+})
+
+test('de breedte van de item-popup is te verslepen en wordt onthouden', { skip: skip ?? false }, async () => {
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+  await page.getByRole('button', { name: /NL College S04 E33/ }).first().click()
+  await page.waitForTimeout(900)
+
+  const breedte = () => page.evaluate(() => {
+    const greep = document.querySelector('[title*="breder of smaller"]')
+    return greep?.parentElement ? Math.round(greep.parentElement.getBoundingClientRect().width) : 0
+  })
+  const doos = await page.locator('[title*="breder of smaller"]').first().boundingBox()
+  assert.ok(doos, 'er zit een sleepgreep op de rand')
+  const voor = await breedte()
+
+  // Naar links trekken maakt het venster breder.
+  await page.mouse.move(doos.x + 3, doos.y + doos.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(doos.x + 3 - 200, doos.y + doos.height / 2, { steps: 12 })
+  await page.mouse.up()
+  await page.waitForTimeout(400)
+  const na = await breedte()
+  assert.ok(na > voor + 100, `het venster is breder geworden (${voor} → ${na})`)
+
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.waitForTimeout(2000)
+  await page.getByRole('button', { name: /NL College S04 E33/ }).first().click()
+  await page.waitForTimeout(900)
+  const naRefresh = await breedte()
+  await page.close()
+  assert.equal(naRefresh, na, 'en die breedte staat er na een refresh nog')
+})
+
 test('de eigenaren staan bij de naam', { skip: skip ?? false }, async () => {
   // Precies wat de planning wél liet zien en de tijdlijn niet.
   const page = await openAgenda()

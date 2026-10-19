@@ -16,9 +16,34 @@ import {
 import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
 
-const NAAM_W = 240
-const RIJ_H  = 30
-const BALK_H = 18
+const NAAM_W = 270
+const RIJ_H  = 44   // ruimte voor een tweede regel onder de naam
+const BALK_H = 20
+/** Tot hoever je terug kunt scrollen voordat we stoppen met bijladen. */
+const MAX_EXTRA_TERUG = 730
+
+/** '· 120u' achter een groepskop. */
+function urenVanGroep(items: BoardItem[]): string {
+  const totaal = items.reduce((som, item) => som + (Number(item.estHours) || 0), 0)
+  const afgerond = Math.round(totaal * 10) / 10
+  return afgerond > 0 ? ` · ${afgerond}u` : ''
+}
+
+/** Wat staat er klein onder de naam? Status en uren zeggen het meest in
+ *  één oogopslag: 'hoe staat het ermee' en 'hoe groot is het'. Zijn er
+ *  subitems, dan is hoever je bent interessanter dan het totaal. */
+function subtitel(item: BoardItem): string {
+  const delen: string[] = []
+  if (item.status) delen.push(item.status)
+  const subs = item.subitems ?? []
+  if (subs.length > 0) {
+    const af = subs.filter(sub => sub.status === 'Done').length
+    delen.push(`${af}/${subs.length} subitems af`)
+  }
+  const uren = Number(item.estHours) || 0
+  if (uren > 0) delen.push(`${Math.round(uren * 10) / 10}u`)
+  return delen.join(' · ')
+}
 
 /** Een groep die 'Done…' heet is een archief; daar staat per definitie
  *  alleen afgerond werk in. Zelfde regel als in de lijst. */
@@ -72,6 +97,12 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   // popup zodra je losliet — en die ligt dan over de balk heen, dus je
   // kon niet twee keer achter elkaar slepen.
   const netGesleept = useRef(false)
+  const [hoverItem, setHoverItem] = useState<string | null>(null)
+  // Welke groepen je uit beeld hebt gehaald. Leeg = alles zichtbaar.
+  const [verborgenGroepen, setVerborgenGroepen] = useState<Set<string>>(new Set())
+  // Hoeveel extra historie er is bijgeladen door naar links te scrollen.
+  const [extraTerug, setExtraTerug] = useState(0)
+  const ladenBezig = useRef(false)
   const [zoom, setZoom] = useState<ZoomLevel>('week')
   const scrollRef = useRef<HTMLDivElement>(null)
   const naarVandaagGescrold = useRef(false)
@@ -85,10 +116,12 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   // wat loopt en wat eraan komt. Je kunt het erbij zetten, en we laten
   // altijd zien hoeveel er verborgen is — stilletjes minder tonen is hoe
   // je denkt dat items verdwenen zijn.
-  const relevant = useMemo(() => groups.map(groep => ({
-    groep,
-    items: groep.items.filter(item => toonAfgerond || !isAfgerond(item, groep.name)),
-  })), [groups, toonAfgerond])
+  const relevant = useMemo(() => groups
+    .filter(groep => !verborgenGroepen.has(groep.id))
+    .map(groep => ({
+      groep,
+      items: groep.items.filter(item => toonAfgerond || !isAfgerond(item, groep.name)),
+    })), [groups, toonAfgerond, verborgenGroepen])
 
   const afgerondAantal = useMemo(() => groups.reduce((som, groep) =>
     som + groep.items.filter(item => isAfgerond(item, groep.name)).length, 0), [groups])
@@ -103,7 +136,8 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   // in het raster maar in een eigen blokje eronder — tenzij je het opvraagt.
   const vensterStart = useMemo(() => {
     const vandaag = new Date()
-    const drieWekenTerug = new Date(vandaag); drieWekenTerug.setDate(vandaag.getDate() - 21)
+    const drieWekenTerug = new Date(vandaag)
+    drieWekenTerug.setDate(vandaag.getDate() - 21 - extraTerug)
     if (!toonEerder && !toonAfgerond) return drieWekenTerug
 
     const vroegste = relevant
@@ -113,7 +147,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
     const jaarTerug = new Date(vandaag); jaarTerug.setFullYear(vandaag.getFullYear() - 1)
     if (!vroegste || vroegste > drieWekenTerug) return drieWekenTerug
     return vroegste < jaarTerug ? jaarTerug : vroegste
-  }, [relevant, toonEerder, toonAfgerond])
+  }, [relevant, toonEerder, toonAfgerond, extraTerug])
 
   const cols = useMemo(() => {
     const start = zoom === 'maand'
@@ -208,6 +242,33 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
             {niveau === 'dag' ? 'Dag' : niveau === 'week' ? 'Week' : 'Maand'}
           </button>
         ))}
+        {groups.length > 1 && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginLeft: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Groepen
+            </span>
+            {groups.map(groep => {
+              const aan = !verborgenGroepen.has(groep.id)
+              return (
+                <button key={groep.id} onClick={() => setVerborgenGroepen(vorige => {
+                    const volgende = new Set(vorige)
+                    if (volgende.has(groep.id)) volgende.delete(groep.id); else volgende.add(groep.id)
+                    return volgende
+                  })}
+                  aria-pressed={aan}
+                  title={aan ? `${groep.name} verbergen` : `${groep.name} tonen`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999,
+                    border: '1px solid var(--border)', cursor: 'pointer',
+                    background: aan ? 'var(--bg-hover)' : 'transparent',
+                    color: aan ? 'var(--text-primary)' : 'var(--text-muted)',
+                    opacity: aan ? 1 : 0.6, fontSize: 11.5, fontWeight: 600 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: groep.color || color, flexShrink: 0 }} />
+                  {groep.name}
+                </button>
+              )
+            })}
+          </span>
+        )}
         {afgerondAantal > 0 && (
           <button onClick={() => setToonAfgerond(v => !v)} aria-pressed={toonAfgerond}
             title={toonAfgerond
@@ -222,7 +283,28 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
         )}
       </div>
 
-      <div ref={scrollRef} style={{ overflowX: 'auto', overflowY: 'visible' }}>
+      <div ref={scrollRef}
+        onScroll={e => {
+          // Naar links blijven scrollen laadt eerdere weken bij, in plaats
+          // van tegen een harde rand te lopen. We houden de kijkpositie
+          // gelijk door net zoveel terug te scrollen als er kolommen bij
+          // komen; anders springt het beeld.
+          const el = e.currentTarget
+          if (el.scrollLeft > 40 || ladenBezig.current) return
+          // Niet eindeloos doorladen: twee jaar historie is ruim, en zonder
+          // deze grens blijft hij bijladen zolang je aan de linkerrand staat.
+          if (extraTerug >= MAX_EXTRA_TERUG) return
+          ladenBezig.current = true
+          const breedteVoor = el.scrollWidth
+          setExtraTerug(vorige => Math.min(MAX_EXTRA_TERUG, vorige + 56))
+          requestAnimationFrame(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollLeft += scrollRef.current.scrollWidth - breedteVoor
+            }
+            ladenBezig.current = false
+          })
+        }}
+        style={{ overflowX: 'auto', overflowY: 'visible' }}>
         <div style={{ minWidth: NAAM_W + totaleBreedte }}>
           {/* Maandkoppen */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
@@ -262,13 +344,20 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
             if (metDatum.length === 0) return null
             return (
               <div key={groep.id}>
-                <div style={{ display: 'flex', background: 'var(--overlay-faint)', borderBottom: '1px solid var(--border-light)' }}>
+                {/* Groepskop duidelijker: een gekleurde band links, een
+                    dikkere scheiding erboven en wat lucht. Eerder was het
+                    verschil tussen een groepskop en een itemrij een iets
+                    ander grijs — dan zie je de indeling niet. */}
+                <div style={{ display: 'flex', background: 'var(--overlay-faint)',
+                  borderTop: '2px solid var(--border-strong)', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
-                    background: 'var(--overlay-faint)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: groep.color || color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                    background: 'var(--overlay-faint)', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8,
+                    borderLeft: `4px solid ${groep.color || color}`, boxSizing: 'border-box' }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{groep.name}</span>
-                    <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{metDatum.length}</span>
+                    <span style={{ fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>
+                      {metDatum.length}{urenVanGroep(metDatum.map(e => e.item))}
+                    </span>
                   </div>
                   <div style={{ width: totaleBreedte, flexShrink: 0 }} />
                 </div>
@@ -276,25 +365,38 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                   const balk = rangeToPx(cols, periode.van, periode.tot)
                   const isDone = item.status === 'Done'
                   return (
-                    <div key={item.id} style={{ display: 'flex', minHeight: RIJ_H, borderBottom: '1px solid var(--border-light)' }}>
+                    <div key={item.id}
+                      onMouseEnter={() => setHoverItem(item.id)}
+                      onMouseLeave={() => setHoverItem(current => current === item.id ? null : current)}
+                      style={{ display: 'flex', minHeight: RIJ_H, borderBottom: '1px solid var(--border-light)',
+                        background: hoverItem === item.id ? 'var(--bg-hover)' : 'transparent' }}>
                       <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
-                        background: 'var(--bg-card)', padding: '0 12px', display: 'flex', alignItems: 'center',
+                        background: hoverItem === item.id ? 'var(--bg-hover)' : 'var(--bg-card)',
+                        padding: '0 12px', display: 'flex', alignItems: 'center',
                         borderRight: '1px solid var(--border)' }}>
                         {/* Wie het doet hoort erbij: zonder eigenaren mis je
                             precies wat de planning wél laat zien. */}
                         <span style={{ display: 'inline-flex', flexShrink: 0, marginRight: 7 }}>
                           {(item.ownerIds ?? []).filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
                             <span key={id} style={{ marginLeft: i === 0 ? 0 : -7, display: 'inline-flex' }}>
-                              <UserAvatar memberId={id} size={20} />
+                              <UserAvatar memberId={id} size={22} />
                             </span>
                           ))}
                         </span>
                         <button onClick={() => onOpenItem(item.id)}
                           title={`${item.name} — open`}
                           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
-                            fontSize: 12.5, color: 'var(--text-primary)', opacity: isDone ? 0.55 : 1,
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
-                          {item.name || '(naamloos)'}
+                            minWidth: 0, flex: 1, opacity: isDone ? 0.55 : 1 }}>
+                          <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-primary)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.name || '(naamloos)'}
+                          </span>
+                          {/* Tweede regel: status, hoever de subitems zijn en
+                              de uren. Dat is wat je van een balk niet afleest. */}
+                          <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+                            {subtitel(item)}
+                          </span>
                         </button>
                       </div>
                       <div style={{ width: totaleBreedte, flexShrink: 0, position: 'relative' }}>

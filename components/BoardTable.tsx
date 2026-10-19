@@ -1491,6 +1491,9 @@ function UrlCell({ value, onChange }: { value: string; onChange: (v: string) => 
 
 // ─── Effective hours/days helpers ─────────────────────────────────────────────
 // Days are always derived from hours at 8h/day.
+/** Breedte van het item-venster, bewaard per apparaat. */
+const DETAIL_BREEDTE_KEY = 'yoko-item-detail-breedte'
+
 export function effectiveHours(item: BoardItem): number {
   // Subitems zijn de uitsplitsing van het hoofdtotaal. Een parent van 88u
   // met subitems van 80u en 8u blijft dus 88u, geen 176u. Een parentwaarde
@@ -3272,6 +3275,35 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
     saveComment({ ...ownerThread, thread: ownerThread.thread.filter(r => r.id !== replyId) })
   }
 
+  // Breedte van dit venster. Een voorkeur van de gebruiker, dus bewaard —
+  // niet iets dat je bij elk item opnieuw wilt instellen.
+  const [breedte, setBreedte] = useState(760)
+  useEffect(() => {
+    try {
+      const bewaard = Number(localStorage.getItem(DETAIL_BREEDTE_KEY))
+      if (Number.isFinite(bewaard) && bewaard >= 420) setBreedte(Math.min(bewaard, 1400))
+    } catch {}
+  }, [])
+  function startBreedteSleep(event: React.PointerEvent) {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startBreedte = breedte
+    let laatste = startBreedte
+    const beweeg = (move: PointerEvent) => {
+      // Het venster zit rechts vast, dus naar links slepen maakt breder.
+      laatste = Math.max(420, Math.min(1400, startBreedte + (startX - move.clientX)))
+      setBreedte(laatste)
+    }
+    const los = () => {
+      window.removeEventListener('pointermove', beweeg)
+      window.removeEventListener('pointerup', los)
+      try { localStorage.setItem(DETAIL_BREEDTE_KEY, String(Math.round(laatste))) } catch {}
+    }
+    window.addEventListener('pointermove', beweeg)
+    window.addEventListener('pointerup', los)
+  }
+
   const accent = accentColor ?? '#579bfc'
   const isGoogle = item.source === 'google'
 
@@ -3281,11 +3313,18 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 9000 }} />
       <div onClick={e => e.stopPropagation()} style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 'min(760px, 96vw)', zIndex: 9001,
+        width: `min(${breedte}px, 96vw)`, zIndex: 9001,
         background: 'var(--bg-base)', borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         boxShadow: '-12px 0 40px rgba(0,0,0,0.35)',
       }}>
+        {/* Sleepgreep op de linkerrand: trek het venster breder of smaller.
+            De keuze blijft bewaard, want het is een voorkeur en geen
+            instelling die je per item opnieuw wilt maken. */}
+        <div onPointerDown={startBreedteSleep}
+          title="Sleep om het venster breder of smaller te maken"
+          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6,
+            cursor: 'ew-resize', zIndex: 2 }} />
         {/* Header */}
         <div style={{
           padding: '16px 22px 14px', borderBottom: '1px solid var(--border)',
