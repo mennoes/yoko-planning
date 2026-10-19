@@ -65,6 +65,7 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
   const naarVandaagGescrold = useRef(false)
 
   const [toonAfgerond, setToonAfgerond] = useState(false)
+  const [toonEerder, setToonEerder] = useState(false)
 
   const colW = ZOOM_COL_W[zoom]
 
@@ -83,31 +84,42 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
   const zonderDatum = relevant.flatMap(({ groep, items }) =>
     items.filter(item => itemPeriode(item) === null).map(item => ({ groep, item })))
 
-  const cols = useMemo(() => {
-    // Het raster begint waar het vroegste zichtbare werk begint, maar
-    // hooguit een jaar terug en altijd minstens een paar weken historie.
-    //
-    // Vast op 26 weken terug (zoals de planning) opende de agenda op een
-    // half jaar lege kolommen. Vast op 3 weken terug zette afgerond werk
-    // van maanden geleden juist búiten het raster: je zette 'Afgerond' aan
-    // en kreeg lege rijen. Dus: laat het raster volgen wat je toont.
+  // Waar begint het raster? Standaard drie weken terug. Liet ik het bij het
+  // vroegste item beginnen, dan kreeg je een raster van een jaar breed en
+  // stonden de meeste balken links buiten beeld: een muur van lege rijen
+  // bij vandaag. Werk dat helemaal in het verleden ligt hoort daarom niet
+  // in het raster maar in een eigen blokje eronder — tenzij je het opvraagt.
+  const vensterStart = useMemo(() => {
     const vandaag = new Date()
+    const drieWekenTerug = new Date(vandaag); drieWekenTerug.setDate(vandaag.getDate() - 21)
+    if (!toonEerder && !toonAfgerond) return drieWekenTerug
+
     const vroegste = relevant
       .flatMap(({ items }) => items.map(itemPeriode))
       .filter((p): p is { van: Date; tot: Date } => p !== null)
       .reduce<Date | null>((min, p) => (min === null || p.van < min ? p.van : min), null)
-
     const jaarTerug = new Date(vandaag); jaarTerug.setFullYear(vandaag.getFullYear() - 1)
-    const minimaalTerug = new Date(vandaag); minimaalTerug.setDate(vandaag.getDate() - 21)
-    const gewenst = vroegste && vroegste < minimaalTerug
-      ? (vroegste < jaarTerug ? jaarTerug : vroegste)
-      : minimaalTerug
+    if (!vroegste || vroegste > drieWekenTerug) return drieWekenTerug
+    return vroegste < jaarTerug ? jaarTerug : vroegste
+  }, [relevant, toonEerder, toonAfgerond])
 
+  const cols = useMemo(() => {
     const start = zoom === 'maand'
-      ? new Date(gewenst.getFullYear(), gewenst.getMonth(), 1)
-      : new Date(getWeekStart(gewenst))
+      ? new Date(vensterStart.getFullYear(), vensterStart.getMonth(), 1)
+      : new Date(getWeekStart(vensterStart))
     return buildCols(zoom, start, colW)
-  }, [zoom, colW, relevant])
+  }, [zoom, colW, vensterStart])
+
+  /** Ligt dit werk helemaal vóór het raster? Dan heeft een rij geen balk en
+   *  dus geen betekenis. */
+  const valtEerder = (item: BoardItem): boolean => {
+    const periode = itemPeriode(item)
+    if (!periode) return false
+    return periode.tot < (cols[0]?.rangeStart ?? vensterStart)
+  }
+
+  const eerder = relevant.flatMap(({ groep, items }) =>
+    items.filter(valtEerder).map(item => ({ groep, item })))
 
   const totaleBreedte = cols.reduce((som, col) => som + col.widthPx, 0)
   const maandKoppen = useMemo(() => getMonthGroupsFromCols(cols), [cols])
@@ -186,6 +198,8 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
             const metDatum = items
               .map(item => ({ item, periode: itemPeriode(item) }))
               .filter((entry): entry is { item: BoardItem; periode: { van: Date; tot: Date } } => entry.periode !== null)
+              // Geen rij zonder balk: dat is wat de lijst onleesbaar maakte.
+              .filter(entry => !valtEerder(entry.item))
               .sort((a, b) => a.periode.van.getTime() - b.periode.van.getTime())
             if (metDatum.length === 0) return null
             return (
@@ -250,6 +264,31 @@ export default function BoardTimeline({ groups, color, onOpenItem }: {
           Tijdlijn stilzwijgend minder tonen dan de Lijst. Buiten het
           scrollende raster, want ze hebben geen plek in de tijd — daarbinnen
           scrolden ze mee naar links en stonden ze buiten beeld. */}
+      {eerder.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '8px 12px' }}>
+          <button onClick={() => setToonEerder(v => !v)} aria-expanded={toonEerder}
+            title={toonEerder
+              ? 'Laat alleen werk vanaf drie weken terug zien'
+              : 'Dit werk ligt helemaal in het verleden; klik om het raster terug te laten lopen'}
+            style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer',
+              fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',
+              textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            {toonEerder ? '▾' : '▸'} Eerder · {eerder.length}
+          </button>
+          {!toonEerder && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              {eerder.map(({ item }) => (
+                <button key={item.id} onClick={() => onOpenItem(item.id)}
+                  title={`${item.name} — openen`}
+                  style={{ border: '1px solid var(--border)', background: 'var(--bg-hover)', borderRadius: 999,
+                    padding: '3px 9px', fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {item.name || '(naamloos)'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {zonderDatum.length > 0 && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 12px' }}>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',

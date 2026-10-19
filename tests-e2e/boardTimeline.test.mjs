@@ -124,6 +124,45 @@ test('je kunt afgerond werk erbij zetten, en ziet hoeveel het er zijn', { skip: 
   assert.ok(namen.includes('Archiefklus'))
 })
 
+test('rijen zonder zichtbare balk staan niet in het raster', { skip: skip ?? false }, async () => {
+  // De klacht: achttien rijen waarvan er vier een balk hadden. De rest
+  // lag maanden in het verleden en stond links buiten beeld — een muur
+  // van lege rijen bij vandaag.
+  const iso2 = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+  const bord = [{ id: 'g1', name: 'Lopend', color: '#579bfc', items: [
+    ...Array.from({ length: 6 }, (_, i) => ({
+      id: `o${i}`, name: `Oud ${i}`, ownerIds: ['menno'], status: 'Working on it',
+      estHours: 8, startDate: iso2(-200 + i * 8), endDate: iso2(-195 + i * 8), subitems: [],
+    })),
+    { id: 'n1', name: 'Loopt nu', ownerIds: ['menno'], status: 'Working on it', estHours: 40,
+      startDate: iso2(-5), endDate: iso2(25), subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-nederland', b)
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/projects/nederland', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(1800)
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(1000)
+
+  const balken = () => page.evaluate(() =>
+    [...document.querySelectorAll('button[title*=" · "]')].filter(b => /\d/.test(b.title)).length)
+  assert.equal(await balken(), 1, 'alleen het werk dat nu loopt staat in het raster')
+
+  const tekst = await page.evaluate(() => document.body.innerText)
+  assert.match(tekst, /Eerder · 6/i, 'de rest staat in een blokje met het aantal')
+  assert.match(tekst, /Oud 0/, 'en is daar gewoon aan te klikken')
+
+  // Opvragen zet ze alsnog op de tijdlijn.
+  await page.getByRole('button', { name: /Eerder ·/ }).click()
+  await page.waitForTimeout(900)
+  assert.equal(await balken(), 7, 'uitgeklapt loopt het raster terug en krijgt alles een balk')
+  await page.close()
+})
+
 test('klikken op een balk opent de popup zonder van weergave te wisselen', { skip: skip ?? false }, async () => {
   // Eerst schakelde dit terug naar de Lijst en lichtte daar de rij op.
   // Dan ben je je plek in de tijd kwijt en moet je de popup alsnog zelf
