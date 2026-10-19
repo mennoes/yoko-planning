@@ -40,8 +40,12 @@ test('ook de planning zet een tombstone bij het verwijderen van een subitem', ()
 test('een verwijderd subitem wordt vastgelegd in de geschiedenis', () => {
   // Een subitem is geen eigen rij in board_items en komt dus nooit in de
   // prullenbak terecht. Zonder log is er achteraf geen enkel spoor.
-  assert.match(board, /if \(parentItemId\) void logItemActivity\(parentItemId, 'verwijderde subitem', deleted\?\.name \|\| id\)/)
-  assert.match(board, /void logItemActivity\(i\.id, 'verwijderde subitem', sub\.name \|\| sub\.id\)/)
+  assert.match(board, /logItemActivity\(parentItemId, 'verwijderde subitem', deleted\?\.name\?\.trim\(\) \|\| undefined\)/)
+  assert.match(board, /logItemActivity\(i\.id, 'verwijderde subitem', sub\.name\?\.trim\(\) \|\| undefined\)/)
+  // Zonder naam valt er niets zinnigs te tonen: de id als terugval gaf
+  // regels als 'verwijderde subitem 1791466688562', die eruitzien als een
+  // fout. Dan liever alleen de actie.
+  assert.doesNotMatch(board, /'verwijderde subitem', [^)]*\|\| (id|sub\.id)\)/)
 })
 
 test('de Verwijderd-tab toont die log-regels ook', () => {

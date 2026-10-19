@@ -382,9 +382,13 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading ? (
             <p style={{ padding: 20, color: 'var(--text-muted)', fontSize: 13 }}>Laden…</p>
-          ) : items.length === 0 ? (
+          ) : items.length === 0 && activity.length === 0 ? (
+            /* Stond hier op `items.length === 0`: was de papierbak leeg, dan
+               verdween het hele logboek — ook op het tabblad Wijzigingen,
+               waar de papierbak niets mee te maken heeft. Op een bord waar
+               nooit iets is weggegooid zag je dus nooit activiteit. */
             <p style={{ padding: 20, color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic' }}>
-              Geen verwijderde items op dit bord.
+              Nog geen activiteit op dit bord.
             </p>
           ) : (() => {
             type Ev = { kind: 'delete'; ts: string; t: TrashItem } | { kind: 'change'; ts: string; e: ItemActivity }
@@ -395,9 +399,29 @@ export function BoardTrashDrawer({ boardId, boardTitle, open, onClose, onOpenLog
             // gelogd; laat die log-regels ook onder 'Verwijderd' zien, anders
             // lijkt zo'n verwijdering nergens te zijn vastgelegd.
             const isDeletionEntry = (entry: ItemActivity) => /^verwijderde\b/i.test(entry.action)
+            // Hoort deze regel bij DIT bord? loadBoardActivity kan dat alleen
+            // zien aan meta.boardId, en die ontbreekt op elke regel zolang
+            // migratie 0020 niet gedraaid is. Die regels kwamen er allemaal
+            // doorheen — ook van andere agenda's — en kregen dan de titel
+            // '(naamloos)' met de naam van dít bord eronder. Beloofd was een
+            // controle op de item-ids van dit bord; die stond er nooit.
+            // Zolang we de item-ids van dit bord nog niet hebben kunnen we
+            // niets uitsluiten; dan liever te veel tonen dan een lege lijst.
+            const idsBekend = Object.keys(itemNameById).length > 0
+            const hoortBijDitBord = (entry: ItemActivity) => {
+              const metaBoard = (entry.meta as { boardId?: string } | null)?.boardId
+              if (metaBoard) return metaBoard === boardId
+              if (!idsBekend) return true
+              const id = itemIdFromTarget(entry.target)
+              if (!id) return false
+              // '{parentId}__siN' hoort bij z'n hoofditem.
+              const parentId = id.includes('__si') ? id.slice(0, id.indexOf('__si')) : id
+              return id in itemNameById || parentId in itemNameById
+            }
             for (const a of activity) {
               if (filter === 'deleted' && !isDeletionEntry(a)) continue
               if (filter === 'changes' && isDeletionEntry(a)) continue
+              if (!hoortBijDitBord(a)) continue
               events.push({ kind: 'change', ts: a.ts, e: a })
             }
             if (events.length === 0) {
@@ -510,10 +534,19 @@ function LogRow({ tone, icon, title, titleNote, body, context, actor, ts, action
             {title}
           </span>
         </div>
-        {body && <div style={{ marginTop: 3 }}>{body}</div>}
-        {context && (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {context}
+        {/* Eén regel onder de titel in plaats van drie: wat er veranderde,
+            de van→naar en waar het stond stonden allemaal op een eigen
+            regel, waardoor elke gebeurtenis vier regels hoog was en je door
+            een paar wijzigingen al moest scrollen. */}
+        {(body || context) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, minWidth: 0, flexWrap: 'nowrap', overflow: 'hidden' }}>
+            {body}
+            {context && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 1, minWidth: 0,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                · {context}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -657,7 +690,14 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
         const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
         const iconKind = iconTypeFor(e)
         const itemId = itemIdFromTarget(e.target)
-        const itemName = e.meta?.itemName ?? (itemId ? itemNameById[itemId] : null) ?? null
+        // Bij een subitem-regel ('{parentId}__siN') staat de naam soms
+        // alleen onder het hoofditem; dan is die naam nog altijd beter dan
+        // '(naamloos)'.
+        const parentItemId = itemId && itemId.includes('__si') ? itemId.slice(0, itemId.indexOf('__si')) : null
+        const itemName = e.meta?.itemName
+          ?? (itemId ? itemNameById[itemId] : null)
+          ?? (parentItemId ? itemNameById[parentItemId] : null)
+          ?? null
         const boardForLink = (e.meta?.boardId as string | undefined) ?? null
         const metaField = e.meta?.field as ActivityField | undefined
         // Fallback: leid field af uit action-tekst wanneer meta ontbreekt
@@ -676,8 +716,10 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
         }
         const isSubitem = !!(itemId && itemContextById[itemId]?.parentName)
         const ctx = itemId ? itemContextById[itemId] : undefined
+        // Geen boardTitle meer: de kop van dit paneel zegt al om welk bord
+        // het gaat, dus op elke regel 'Nederland' herhalen kostte alleen
+        // breedte die de van→naar nodig heeft.
         const contextLine = [
-          boardTitle,
           ctx?.groupName ?? null,
           ctx?.parentName ? `onder '${ctx.parentName}'` : null,
         ].filter(Boolean).join(' · ')
@@ -690,7 +732,7 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
               ? itemName
               : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontWeight: 500 }}>(naamloos)</span>}
             body={<>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>
                 {' '}
                 {isOwnerChange ? renderOwnerActionText(e) : e.action}
@@ -701,7 +743,7 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
                   meta.before/after ontbreken zolang migratie 0020 niet
                   gedraaid is; dan valt 'ie terug op de platte detail-tekst. */}
               {(e.meta?.before !== undefined || e.meta?.after !== undefined) ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap', flexShrink: 0 }}>
                   {isOwnerChange ? (
                     <OwnerChangePill before={e.meta?.before} after={e.meta?.after} getPhoto={getPhoto} />
                   ) : (
@@ -713,7 +755,7 @@ function DayGroup({ day, dayEvents, busyId, defaultOpen, profiles, getPhoto, ite
                   )}
                 </div>
               ) : e.detail && !e.action?.startsWith('verwijderde subitem') ? (
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{e.detail}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{e.detail}</div>
               ) : null}
             </>}
             context={contextLine}
@@ -825,18 +867,35 @@ function pillStyle(positive: boolean): React.CSSProperties {
   }
 }
 
+/** '2026-10-21' → '21 okt'. Twee volledige ISO-datums naast elkaar met een
+ *  pijl ertussen zijn breder dan de kolom; dan valt de nieuwe waarde — juist
+ *  het interessante deel — buiten beeld. Het jaar erbij alleen als het niet
+ *  dit jaar is. */
+function kortDatum(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return iso
+  const d = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  const opties: Intl.DateTimeFormatOptions = d.getFullYear() === new Date().getFullYear()
+    ? { day: 'numeric', month: 'short' }
+    : { day: 'numeric', month: 'short', year: 'numeric' }
+  return d.toLocaleDateString('nl-NL', opties).replace('.', '')
+}
+
 function fmtSimple(v: unknown): string {
   if (v === null || v === undefined || v === '') return '—'
   if (Array.isArray(v)) return v.length === 0 ? '—' : v.join(', ')
   if (typeof v === 'object') {
     const o = v as Record<string, unknown>
     if ('startDate' in o || 'endDate' in o) {
-      const s = (o.startDate as string | null) ?? '—'
+      const s = (o.startDate as string | null) ?? null
       const e = (o.endDate as string | null) ?? s
-      return s === e ? s : `${s} – ${e}`
+      if (!s) return '—'
+      return s === e ? kortDatum(s) : `${kortDatum(s)} – ${kortDatum(e ?? s)}`
     }
     return JSON.stringify(v)
   }
+  if (typeof v === 'string') return kortDatum(v)
   return String(v)
 }
 
