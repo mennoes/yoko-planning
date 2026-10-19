@@ -8,7 +8,7 @@
 // Dezelfde kolom-rekenkunde (lib/timelineCols.ts), andere vraag.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { BoardGroup, BoardItem } from '@/lib/boards'
+import type { BoardGroup, BoardItem, SubItem } from '@/lib/boards'
 import {
   buildCols, getMonthGroupsFromCols, rangeToPx, pxNaarDagen, lokaleIso,
   ZOOM_COL_W, type ZoomLevel,
@@ -17,8 +17,13 @@ import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
 
 const NAAM_W = 270
-const RIJ_H  = 44   // ruimte voor een tweede regel onder de naam
-const BALK_H = 20
+const RIJ_H  = 32
+const OUDER_RIJ_H = 24
+const BALK_H = 18
+/** Een ouder met subitems is een samenvatting, geen werk op zich. Zijn
+ *  balk is daarom een dun grijs streepje boven de subitems: je ziet de
+ *  omspanning, maar je blik gaat naar de regels eronder. */
+const OUDER_H = 5
 /** Tot hoever je terug kunt scrollen voordat we stoppen met bijladen. */
 const MAX_EXTRA_TERUG = 730
 
@@ -27,22 +32,6 @@ function urenVanGroep(items: BoardItem[]): string {
   const totaal = items.reduce((som, item) => som + (Number(item.estHours) || 0), 0)
   const afgerond = Math.round(totaal * 10) / 10
   return afgerond > 0 ? ` · ${afgerond}u` : ''
-}
-
-/** Wat staat er klein onder de naam? Status en uren zeggen het meest in
- *  één oogopslag: 'hoe staat het ermee' en 'hoe groot is het'. Zijn er
- *  subitems, dan is hoever je bent interessanter dan het totaal. */
-function subtitel(item: BoardItem): string {
-  const delen: string[] = []
-  if (item.status) delen.push(item.status)
-  const subs = item.subitems ?? []
-  if (subs.length > 0) {
-    const af = subs.filter(sub => sub.status === 'Done').length
-    delen.push(`${af}/${subs.length} subitems af`)
-  }
-  const uren = Number(item.estHours) || 0
-  if (uren > 0) delen.push(`${Math.round(uren * 10) / 10}u`)
-  return delen.join(' · ')
 }
 
 /** Een groep die 'Done…' heet is een archief; daar staat per definitie
@@ -80,19 +69,82 @@ export function itemPeriode(item: BoardItem): { van: Date; tot: Date } | null {
   return { van, tot }
 }
 
+/** De periode van één subitem. Anders dan bij een item kijken we hier
+ *  niet verder omlaag: een subitem heeft zelf datums of het heeft ze niet. */
+export function subPeriode(sub: SubItem): { van: Date; tot: Date } | null {
+  const datums = [sub.startDate, sub.endDate].filter((d): d is string => !!d)
+  if (datums.length === 0) return null
+  const gesorteerd = [...datums].sort()
+  const van = new Date(`${gesorteerd[0]}T00:00:00`)
+  const tot = new Date(`${gesorteerd[gesorteerd.length - 1]}T23:59:59`)
+  if (Number.isNaN(van.getTime()) || Number.isNaN(tot.getTime())) return null
+  return { van, tot }
+}
+
+/** Eén regel in het raster: een item, of een subitem van dat item. */
+export type TijdlijnRegel = {
+  key: string
+  itemId: string
+  subitemId?: string
+  naam: string
+  ownerIds: string[]
+  periode: { van: Date; tot: Date }
+  /** Een item dat subitems met datums heeft. Die regel is een samenvatting
+   *  van de regels eronder, geen werk op zich. */
+  isOuder: boolean
+  isDone: boolean
+}
+
+/**
+ * Zet items om in regels. Heeft een item subitems met datums, dan krijgt
+ * elk subitem een eigen regel en blijft de ouder erboven staan als dunne
+ * samenvatting — daar zit het werk immers niet in. Heeft het item geen
+ * subitems, dan is het gewoon één regel zoals eerst.
+ */
+export function bouwRegels(
+  metDatum: { item: BoardItem; periode: { van: Date; tot: Date } }[],
+  opties: { toonAfgerond: boolean; rasterStart: Date },
+): TijdlijnRegel[] {
+  const regels: TijdlijnRegel[] = []
+  for (const { item, periode } of metDatum) {
+    const subs = (item.subitems ?? [])
+      .filter(sub => opties.toonAfgerond || sub.status !== 'Done')
+      .map(sub => ({ sub, periode: subPeriode(sub) }))
+      .filter((e): e is { sub: SubItem; periode: { van: Date; tot: Date } } => e.periode !== null)
+      // Een subitem dat helemaal vóór het raster ligt heeft geen balk en
+      // dus geen regel — zelfde regel als voor items.
+      .filter(e => e.periode.tot >= opties.rasterStart)
+      .sort((a, b) => a.periode.van.getTime() - b.periode.van.getTime())
+    regels.push({
+      key: item.id, itemId: item.id, naam: item.name || '(naamloos)',
+      ownerIds: item.ownerIds ?? [], periode,
+      isOuder: subs.length > 0, isDone: item.status === 'Done',
+    })
+    for (const { sub, periode: subTijd } of subs) {
+      regels.push({
+        key: `${item.id}:${sub.id}`, itemId: item.id, subitemId: sub.id,
+        naam: sub.name || '(naamloos)', ownerIds: sub.ownerIds ?? [], periode: subTijd,
+        isOuder: false, isDone: sub.status === 'Done',
+      })
+    }
+  }
+  return regels
+}
+
 export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }: {
   groups: BoardGroup[]
   color: string
-  /** Klikken op een balk opent de item-popup. */
-  onOpenItem: (itemId: string) => void
+  /** Klikken op een balk opent de item-popup, desnoods op een subitem. */
+  onOpenItem: (itemId: string, subitemId?: string) => void
   /** Slepen verzet de datums. Zonder dit kun je hier alleen kijken, en dan
    *  is de tijdlijn een slechtere versie van de planning. */
-  onMoveItem: (itemId: string, startDate: string, endDate: string) => void
+  onMoveItem: (itemId: string, startDate: string, endDate: string, subitemId?: string) => void
 }) {
   // Wat er nú gesleept wordt, zodat de balk meteen meebeweegt in plaats
-  // van pas te springen als je loslaat.
+  // van pas te springen als je loslaat. De sleutel is de rij, niet het
+  // item: een ouder en zijn subitems staan allemaal op dezelfde item-id.
   const [sleep, setSleep] = useState<
-    { itemId: string; soort: 'heel' | 'start' | 'eind'; dagen: number } | null>(null)
+    { rijKey: string; soort: 'heel' | 'start' | 'eind'; dagen: number } | null>(null)
   // Na een sleep volgt er ook een click. Zonder dit vlaggetje opende de
   // popup zodra je losliet — en die ligt dan over de balk heen, dus je
   // kon niet twee keer achter elkaar slepen.
@@ -167,6 +219,9 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   const eerder = relevant.flatMap(({ groep, items }) =>
     items.filter(valtEerder).map(item => ({ groep, item })))
 
+  const regelsVan = (metDatum: { item: BoardItem; periode: { van: Date; tot: Date } }[]) =>
+    bouwRegels(metDatum, { toonAfgerond, rasterStart: cols[0]?.rangeStart ?? vensterStart })
+
   const dagenTussen = (van: Date, tot: Date) => {
     const dag = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
     return Math.max(1, dag(tot) - dag(van) + 1)
@@ -177,7 +232,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
    *  loslaten om naar datums, zodat tussentijds niets wordt opgeslagen. */
   function startSleep(
     event: React.PointerEvent,
-    item: BoardItem,
+    rij: { key: string; itemId: string; subitemId?: string },
     periode: { van: Date; tot: Date },
     soort: 'heel' | 'start' | 'eind',
   ) {
@@ -189,7 +244,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
 
     const beweeg = (move: PointerEvent) => {
       dagen = pxNaarDagen(cols, 0, move.clientX - startX)
-      setSleep({ itemId: item.id, soort, dagen })
+      setSleep({ rijKey: rij.key, soort, dagen })
     }
     const los = () => {
       window.removeEventListener('pointermove', beweeg)
@@ -205,7 +260,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
       if (soort === 'heel')  { van = schuif(van, dagen); tot = schuif(tot, dagen) }
       if (soort === 'start') { van = schuif(van, dagen); if (van > tot) van = tot }
       if (soort === 'eind')  { tot = schuif(tot, dagen); if (tot < van) tot = van }
-      onMoveItem(item.id, lokaleIso(van), lokaleIso(tot))
+      onMoveItem(rij.itemId, lokaleIso(van), lokaleIso(tot), rij.subitemId)
     }
     window.addEventListener('pointermove', beweeg)
     window.addEventListener('pointerup', los)
@@ -361,43 +416,48 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                   </div>
                   <div style={{ width: totaleBreedte, flexShrink: 0 }} />
                 </div>
-                {metDatum.map(({ item, periode }) => {
-                  const balk = rangeToPx(cols, periode.van, periode.tot)
-                  const isDone = item.status === 'Done'
+                {regelsVan(metDatum).map(regel => {
+                  const balk = rangeToPx(cols, regel.periode.van, regel.periode.tot)
+                  const hoog = regel.isOuder ? OUDER_RIJ_H : RIJ_H
+                  const hoogte = regel.isOuder ? OUDER_H : BALK_H
+                  // Een ouder met subitems laat zich niet verslepen: zijn
+                  // datums zijn de optelsom van de subitems eronder, dus
+                  // schuiven zou meteen weer worden overschreven.
+                  const sleepbaar = !regel.isOuder && !regel.isDone
+                  const aan = hoverItem === regel.key
                   return (
-                    <div key={item.id}
-                      onMouseEnter={() => setHoverItem(item.id)}
-                      onMouseLeave={() => setHoverItem(current => current === item.id ? null : current)}
-                      style={{ display: 'flex', minHeight: RIJ_H, borderBottom: '1px solid var(--border-light)',
-                        background: hoverItem === item.id ? 'var(--bg-hover)' : 'transparent' }}>
+                    <div key={regel.key}
+                      onMouseEnter={() => setHoverItem(regel.key)}
+                      onMouseLeave={() => setHoverItem(current => current === regel.key ? null : current)}
+                      style={{ display: 'flex', minHeight: hoog,
+                        borderBottom: regel.isOuder ? 'none' : '1px solid var(--border-light)',
+                        background: aan ? 'var(--bg-hover)' : 'transparent' }}>
                       <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
-                        background: hoverItem === item.id ? 'var(--bg-hover)' : 'var(--bg-card)',
-                        padding: '0 12px', display: 'flex', alignItems: 'center',
+                        background: aan ? 'var(--bg-hover)' : 'var(--bg-card)',
+                        padding: regel.subitemId ? '0 12px 0 28px' : '0 12px',
+                        display: 'flex', alignItems: 'center', gap: 7,
                         borderRight: '1px solid var(--border)' }}>
-                        {/* Wie het doet hoort erbij: zonder eigenaren mis je
-                            precies wat de planning wél laat zien. */}
-                        <span style={{ display: 'inline-flex', flexShrink: 0, marginRight: 7 }}>
-                          {(item.ownerIds ?? []).filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
+                        <button onClick={() => onOpenItem(regel.itemId, regel.subitemId)}
+                          title={`${regel.naam} — open`}
+                          style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+                            minWidth: 0, flex: 1, opacity: regel.isDone ? 0.55 : 1,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            fontSize: regel.isOuder ? 11 : 12.5,
+                            fontWeight: regel.isOuder ? 700 : 500,
+                            letterSpacing: regel.isOuder ? '0.03em' : undefined,
+                            color: regel.isOuder ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                          {regel.naam}
+                        </button>
+                        {/* Eigenaren rechts van de titel: zo staan ze bij
+                            elkaar in één kolom en loopt de naam niet in
+                            een wisselend aantal avatars vast. */}
+                        <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+                          {regel.ownerIds.filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
                             <span key={id} style={{ marginLeft: i === 0 ? 0 : -7, display: 'inline-flex' }}>
-                              <UserAvatar memberId={id} size={22} />
+                              <UserAvatar memberId={id} size={regel.isOuder ? 17 : 21} />
                             </span>
                           ))}
                         </span>
-                        <button onClick={() => onOpenItem(item.id)}
-                          title={`${item.name} — open`}
-                          style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
-                            minWidth: 0, flex: 1, opacity: isDone ? 0.55 : 1 }}>
-                          <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-primary)',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.name || '(naamloos)'}
-                          </span>
-                          {/* Tweede regel: status, hoever de subitems zijn en
-                              de uren. Dat is wat je van een balk niet afleest. */}
-                          <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
-                            {subtitel(item)}
-                          </span>
-                        </button>
                       </div>
                       <div style={{ width: totaleBreedte, flexShrink: 0, position: 'relative' }}>
                         {cols.map((col, i) => (
@@ -410,35 +470,36 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                         {balk && (() => {
                           // Tijdens het slepen schuift de balk alvast mee,
                           // zodat je ziet waar je 'm neerlegt.
-                          const bezig = sleep?.itemId === item.id ? sleep : null
-                          const dagBreedte = balk.width / Math.max(1, dagenTussen(periode.van, periode.tot))
+                          const bezig = sleep?.rijKey === regel.key ? sleep : null
+                          const dagBreedte = balk.width / Math.max(1, dagenTussen(regel.periode.van, regel.periode.tot))
                           const verschuif = bezig ? bezig.dagen * dagBreedte : 0
                           const left  = balk.left + (bezig?.soort === 'eind' ? 0 : verschuif)
                           const width = Math.max(6, balk.width + (bezig?.soort === 'heel' ? 0 : bezig?.soort === 'start' ? -verschuif : verschuif))
-                          const sleepbaar = !!onMoveItem && !isDone
+                          const datum = (d: Date) => d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
                           return (
                             <div
-                              onPointerDown={e => sleepbaar && startSleep(e, item, periode, 'heel')}
-                              onClick={() => { if (!sleep && !netGesleept.current) onOpenItem(item.id) }}
-                              title={`${item.name} · ${periode.van.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${periode.tot.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}${sleepbaar ? ' · sleep om te verzetten' : ''}`}
+                              onPointerDown={e => sleepbaar && startSleep(e, regel, regel.periode, 'heel')}
+                              onClick={() => { if (!sleep && !netGesleept.current) onOpenItem(regel.itemId, regel.subitemId) }}
+                              title={`${regel.naam} · ${datum(regel.periode.van)} – ${datum(regel.periode.tot)}${sleepbaar ? ' · sleep om te verzetten' : regel.isOuder ? ' · loopt mee met de subitems' : ''}`}
                               style={{ position: 'absolute', left, width,
-                                top: (RIJ_H - BALK_H) / 2, height: BALK_H, borderRadius: 5,
+                                top: (hoog - hoogte) / 2, height: hoogte, borderRadius: regel.isOuder ? 3 : 5,
                                 cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
-                                background: groep.color || color, opacity: isDone ? 0.4 : bezig ? 1 : 0.9,
+                                background: regel.isOuder ? 'var(--text-muted)' : (groep.color || color),
+                                opacity: regel.isOuder ? 0.32 : regel.isDone ? 0.4 : bezig ? 1 : 0.9,
                                 boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
                                 color: '#fff', fontSize: 10.5, fontWeight: 700,
                                 display: 'flex', alignItems: 'center', padding: '0 6px',
                                 overflow: 'hidden', whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
                               {sleepbaar && (
-                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, item, periode, 'start') }}
+                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
                                   title="Sleep om de startdatum te verzetten"
                                   style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
                               )}
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {width > 54 ? item.name : ''}
+                                {!regel.isOuder && width > 54 ? regel.naam : ''}
                               </span>
                               {sleepbaar && (
-                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, item, periode, 'eind') }}
+                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'eind') }}
                                   title="Sleep om de einddatum te verzetten"
                                   style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
                               )}
