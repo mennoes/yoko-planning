@@ -39,7 +39,7 @@ const namen = lijst => Array.from(lijst, s => s.id)
 test('zonder eerdere verplaatsing staan de vaste blokken op hun vertrouwde plek', () => {
   const store = laadStore([team('onderzoek', 0)])
   assert.deepEqual(namen(store.loadTeamSections()),
-    ['__yoko__', 'onderzoek', '__freelance__', '__inactive__'])
+    ['__yoko__', 'onderzoek', '__freelance__', '__inactive__', '__overig__'])
 })
 
 test('één eigen team kan nu wél omhoog, langs Studio Yoko', () => {
@@ -54,23 +54,24 @@ test('omhoog verwisselt met Studio Yoko en blijft zo staan', async () => {
   const store = laadStore([team('onderzoek', 0)])
   await store.moveTeamGroup('onderzoek', -1)
   assert.deepEqual(namen(store.loadTeamSections()),
-    ['onderzoek', '__yoko__', '__freelance__', '__inactive__'])
+    ['onderzoek', '__yoko__', '__freelance__', '__inactive__', '__overig__'])
   // En opnieuw inlezen geeft dezelfde volgorde: de posities zijn bewaard.
   assert.deepEqual(namen(store.loadTeamSections()),
-    ['onderzoek', '__yoko__', '__freelance__', '__inactive__'])
+    ['onderzoek', '__yoko__', '__freelance__', '__inactive__', '__overig__'])
 })
 
 test('Freelancers is een gewone sectie en kan naar boven', async () => {
   const store = laadStore([team('onderzoek', 0)])
   await store.moveTeamGroup('__freelance__', -1)
   assert.deepEqual(namen(store.loadTeamSections()),
-    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__'])
+    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__', '__overig__'])
 })
 
 test('de bovenste kan niet omhoog en de onderste niet omlaag', () => {
   const store = laadStore([team('onderzoek', 0)])
   assert.equal(store.canMoveTeamGroup('__yoko__', -1), false)
-  assert.equal(store.canMoveTeamGroup('__inactive__', 1), false)
+  assert.equal(store.canMoveTeamGroup('__overig__', 1), false)
+  assert.equal(store.canMoveTeamGroup('__inactive__', 1), true, 'die heeft Overig nog onder zich')
 })
 
 test('eigen teams blijven los opvraagbaar van de vaste blokken', async () => {
@@ -88,7 +89,7 @@ test('zonder database blijft een verschuiving gewoon staan', async () => {
   const reden = await store.moveTeamGroup('__freelance__', -1)
   assert.equal(reden, null)
   assert.deepEqual(namen(store.loadTeamSections()),
-    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__'])
+    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__', '__overig__'])
 })
 
 test('een onbekende sectie geeft een reden in plaats van stilte', async () => {
@@ -127,5 +128,38 @@ test('een gelukte opslag bewaart de nieuwe volgorde', async () => {
   })
   assert.equal(await store.moveTeamGroup('__freelance__', -1), null)
   assert.deepEqual(namen(store.loadTeamSections()),
-    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__'])
+    ['__yoko__', '__freelance__', 'onderzoek', '__inactive__', '__overig__'])
+})
+
+test('Overig kan net zo goed omhoog als de rest', () => {
+  // Hij stond altijd onderaan vastgepind, buiten de lijst om.
+  const store = laadStore([team('onderzoek', 0)])
+  assert.equal(store.canMoveTeamGroup('__overig__', -1), true)
+  assert.equal(store.canMoveTeamGroup('__overig__', 1), false, 'onderaan houdt het op')
+})
+
+test('Overig omhoog verwisselt met Inactief team', async () => {
+  const store = laadStore([team('onderzoek', 0)])
+  await store.moveTeamGroup('__overig__', -1)
+  assert.deepEqual(namen(store.loadTeamSections()),
+    ['__yoko__', 'onderzoek', '__freelance__', '__overig__', '__inactive__'])
+})
+
+test('Overig is geen team dat je in de teamkeuze aangeboden krijgt', async () => {
+  const store = laadStore([team('onderzoek', 0)])
+  await store.moveTeamGroup('__overig__', -1)
+  assert.deepEqual(namen(store.loadCustomTeamGroups()), ['onderzoek'])
+})
+
+test('een nieuw vast blok gooit een bestaande volgorde niet om', () => {
+  // Overig kwam er later bij. Wie zijn secties al had gesorteerd, had
+  // alle vier de blokken nog niet in de opslag staan — en met een
+  // 'ken ik ze allemaal?'-check sloeg die hele volgorde dan terug naar
+  // de standaard.
+  const store = laadStore([
+    team('__freelance__', 0), team('onderzoek', 1), team('__yoko__', 2), team('__inactive__', 3),
+  ])
+  assert.deepEqual(namen(store.loadTeamSections()),
+    ['__freelance__', 'onderzoek', '__yoko__', '__inactive__', '__overig__'],
+    'de zelfgekozen volgorde blijft staan en het nieuwe blok komt erachter')
 })

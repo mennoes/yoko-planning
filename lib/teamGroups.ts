@@ -20,6 +20,7 @@ export const BASE_SECTIONS: ReadonlyArray<{ id: string; name: string; color: str
   { id: '__yoko__',      name: 'Studio Yoko',   color: '#579bfc' },
   { id: '__freelance__', name: 'Freelancers',   color: '#9aadbd' },
   { id: '__inactive__',  name: 'Inactief team', color: '#8a919c' },
+  { id: '__overig__',    name: 'Overig',        color: '#8a919c' },
 ]
 
 export function isBaseSectionId(id: string): boolean {
@@ -70,24 +71,27 @@ export function loadCustomTeamGroups() {
  */
 export function loadTeamSections(): TeamGroup[] {
   const opgeslagen = loadTeamGroups()
-  const bekend = new Map(opgeslagen.map(group => [group.id, group]))
-  const eigen = opgeslagen.filter(group => !isBaseSectionId(group.id))
-
-  const sectie = (id: string): TeamGroup => {
-    const bestaand = bekend.get(id)
-    if (bestaand) return bestaand
+  const bekend = new Set(opgeslagen.map(group => group.id))
+  const maak = (id: string): TeamGroup => {
     const basis = BASE_SECTIONS.find(section => section.id === id)!
     return { ...basis, position: 0, memberIds: [] }
   }
 
-  // Zijn de vaste blokken al eens verplaatst, dan hebben ze een opgeslagen
-  // positie en doet de gewone sortering het werk.
-  if (BASE_SECTIONS.every(section => bekend.has(section.id))) return opgeslagen
-
-  const yoko = sectie('__yoko__')
-  const freelance = sectie('__freelance__')
-  const inactief = sectie('__inactive__')
-  return [yoko, ...eigen, freelance, inactief]
+  // Wat al een opgeslagen positie heeft, houdt die. Alleen vaste blokken
+  // die nog nooit zijn verplaatst krijgen hun vertrouwde plek: Studio Yoko
+  // bovenaan, de rest onderaan in de volgorde van BASE_SECTIONS, met je
+  // eigen teams ertussen.
+  //
+  // Dit moet per blok, niet in één keer: komt er een vast blok bij (zoals
+  // Overig), dan zou 'ken ik ze allemaal?' voor iedereen false worden en
+  // sloeg de hele zelfgekozen volgorde om naar de standaard.
+  const resultaat = [...opgeslagen]
+  if (!bekend.has('__yoko__')) resultaat.unshift(maak('__yoko__'))
+  for (const section of BASE_SECTIONS) {
+    if (section.id === '__yoko__' || bekend.has(section.id)) continue
+    resultaat.push(maak(section.id))
+  }
+  return resultaat
 }
 
 /** Kan deze groep nog omhoog/omlaag? De pijlen stonden er altijd, ook bij
