@@ -6612,14 +6612,21 @@ export default function PlanningPage() {
                 ? { leden: yokoTeam, target: peopleYokoTarget, leeg: 'Sleep hierheen om uit een groep te halen', dicht: false }
                 : section.id === '__freelance__'
                   ? { leden: freelancers, target: peopleFreelanceTarget, leeg: 'Niemand met werk in de afgelopen of komende drie weken', dicht: true }
-                  : { leden: inactiveTeam, target: peopleInactiveTarget, leeg: 'Geen inactieve teamleden', dicht: true }
-              const actief = teamDropTargetKey === basis.target.key
+                  : section.id === '__inactive__'
+                    ? { leden: inactiveTeam, target: peopleInactiveTarget, leeg: 'Geen inactieve teamleden', dicht: true }
+                    // Overig is geen groep waar je iemand heen sleept — het
+                    // is wat er overblijft. Vandaar geen drop-zone, maar wel
+                    // de pijltjes: hij stond altijd onderaan vastgepind.
+                    : { leden: unassigned, target: null, leeg: '', dicht: false }
+              // Leeg en niet te vullen: dan is een kop zonder rijen alleen ruis.
+              if (section.id === '__overig__' && basis.leden.length === 0) return null
+              const actief = basis.target !== null && teamDropTargetKey === basis.target.key
               // Freelancers en Inactief team blijven dicht tot je ze opent:
               // dat kunnen tientallen mensen zijn en dan is het venster niet
               // meer te overzien. Studio Yoko staat altijd open.
               const open = !basis.dicht || openPeopleSections.has(section.id)
               return (
-                <div key={section.id} {...planningTeamDropProps(basis.target)}
+                <div key={section.id} {...(basis.target ? planningTeamDropProps(basis.target) : {})}
                   style={{ marginTop: 12, borderRadius: 8,
                     background: actief ? 'var(--accent-light)' : 'transparent',
                     outline: actief ? '2px solid var(--accent)' : '2px solid transparent', outlineOffset: 2,
@@ -6648,14 +6655,6 @@ export default function PlanningPage() {
                 </div>
               )
             })}
-            {unassigned.length > 0 && (
-              <>
-                <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 14, marginBottom: 2 }}>
-                  Overig
-                </div>
-                {unassigned.map(row)}
-              </>
-            )}
             <form onSubmit={e => {
               e.preventDefault()
               const name = newTeamGroupName.trim()
