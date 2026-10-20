@@ -174,6 +174,20 @@ export async function assignMemberToTeamGroup(memberId: string, targetGroupId: s
  * lokaal, de opslag naar Supabase ging fout, en de eerstvolgende pull zette
  * alles terug. Je zag dan een lijst die niet bewoog, zonder uitleg.
  */
+/** Schrijf een nieuwe volgorde weg, en zet 'm terug als de database 'm
+ *  niet accepteert — anders kijk je naar een volgorde die na een refresh
+ *  weer anders is. */
+async function bewaarVolgorde(sections: TeamGroup[], before: TeamGroup[]): Promise<string | null> {
+  const next = sections.map((group, position) => ({ ...group, position }))
+  write(next)
+
+  const remoteExpected = !!supabase && !!await getCurrentUserId()
+  if (!remoteExpected) return null   // lokaal-only installatie: klaar
+  if (await push(next)) return null
+  write(before)
+  return 'De nieuwe volgorde is niet opgeslagen. Probeer het opnieuw.'
+}
+
 export async function moveTeamGroup(groupId: string, direction: -1 | 1): Promise<string | null> {
   // Over de volledige lijst, dus ook langs Studio Yoko, Freelancers en
   // Inactief team. Eerder ging dit alleen over je eigen teams, waardoor er
@@ -186,17 +200,28 @@ export async function moveTeamGroup(groupId: string, direction: -1 | 1): Promise
     return index < 0 ? 'Deze sectie staat niet in de lijst.' : null
   }
   ;[sections[index], sections[target]] = [sections[target], sections[index]]
-  const next = sections.map((group, position) => ({ ...group, position }))
-  write(next)
+  return bewaarVolgorde(sections, before)
+}
 
-  const remoteExpected = !!supabase && !!await getCurrentUserId()
-  if (!remoteExpected) return null   // lokaal-only installatie: klaar
-  const persisted = await push(next)
-  if (persisted) return null
-  // Niet opgeslagen: zet terug, zodat je niet naar een volgorde kijkt die
-  // na een refresh weer anders is.
-  write(before)
-  return 'De nieuwe volgorde is niet opgeslagen. Probeer het opnieuw.'
+/**
+ * Zet een sectie op de plek van een andere, zoals bij het verslepen van
+ * een chip. Eén volgorde voor de hele app: de planning en de to do's
+ * lezen dezelfde lijst, dus wat je hier verschuift staat daar ook anders.
+ */
+export async function moveTeamGroupBefore(groupId: string, targetId: string): Promise<string | null> {
+  if (groupId === targetId) return null
+  const before = read()
+  const sections = loadTeamSections()
+  const van = sections.findIndex(group => group.id === groupId)
+  if (van < 0 || !sections.some(group => group.id === targetId)) {
+    return 'Deze sectie staat niet in de lijst.'
+  }
+  const [verplaatst] = sections.splice(van, 1)
+  // Het doel pas opzoeken ná het weghalen: anders klopt de index bij
+  // slepen naar achteren niet meer en landt hij één plek te ver.
+  const naar = sections.findIndex(group => group.id === targetId)
+  sections.splice(naar, 0, verplaatst)
+  return bewaarVolgorde(sections, before)
 }
 
 export async function pullTeamGroups(): Promise<boolean> {

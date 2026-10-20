@@ -163,3 +163,41 @@ test('een nieuw vast blok gooit een bestaande volgorde niet om', () => {
     ['__freelance__', 'onderzoek', '__yoko__', '__inactive__', '__overig__'],
     'de zelfgekozen volgorde blijft staan en het nieuwe blok komt erachter')
 })
+
+test('een sectie voor een andere zetten verschuift hem daarheen', async () => {
+  // Dit is het verslepen van een chip op de to do's-pagina.
+  const store = laadStore([team('onderzoek', 0)])
+  await store.moveTeamGroupBefore('__inactive__', '__yoko__')
+  assert.deepEqual(namen(store.loadTeamSections()),
+    ['__inactive__', '__yoko__', 'onderzoek', '__freelance__', '__overig__'])
+})
+
+test('naar achteren slepen kan net zo goed', async () => {
+  const store = laadStore([team('onderzoek', 0)])
+  await store.moveTeamGroupBefore('__yoko__', '__overig__')
+  assert.deepEqual(namen(store.loadTeamSections()),
+    ['onderzoek', '__freelance__', '__inactive__', '__yoko__', '__overig__'],
+    'hij neemt de plek van het doel in; het doel schuift op')
+})
+
+test('op zichzelf laten vallen verandert niets', async () => {
+  const store = laadStore([team('onderzoek', 0)])
+  const voor = namen(store.loadTeamSections())
+  assert.equal(await store.moveTeamGroupBefore('onderzoek', 'onderzoek'), null)
+  assert.deepEqual(namen(store.loadTeamSections()), voor)
+})
+
+test('slepen naar een sectie die niet bestaat geeft een reden', async () => {
+  const store = laadStore([team('onderzoek', 0)])
+  assert.match(await store.moveTeamGroupBefore('onderzoek', 'bestaat-niet'), /niet in de lijst/i)
+})
+
+test('een mislukte opslag draait ook een sleep terug', async () => {
+  const store = laadStore([team('onderzoek', 0)], {
+    uid: 'user-1',
+    supabase: { from: () => ({ upsert: async () => ({ error: { message: 'nee' } }) }) },
+  })
+  const voor = namen(store.loadTeamSections())
+  assert.match(await store.moveTeamGroupBefore('__inactive__', '__yoko__') ?? '', /niet opgeslagen/i)
+  assert.deepEqual(namen(store.loadTeamSections()), voor)
+})

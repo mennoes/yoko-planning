@@ -1127,7 +1127,13 @@ export default function TodosPage() {
   const isMobile     = useIsMobile()
   const { profile: currentProfile } = useProfile()
   const { members: liveTeam } = useTeam()
-  const { groups: teamGroups } = useTeamGroups()
+  const { groups: teamGroups, sections: teamSections, moveGroupBefore: moveTeamGroupBefore } = useTeamGroups()
+  // Welke chip je nu versleept, en waar hij boven hangt. De ref is wat
+  // telt tijdens het slepen: state is er pas na een render, en dragover
+  // en drop kunnen in dezelfde tick volgen.
+  const chipSleepRef = useRef<string | null>(null)
+  const [chipSleep, setChipSleep] = useState<string | null>(null)
+  const [chipDoel, setChipDoel] = useState<string | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [hydrated, setHydrated] = useState(false)
   const [syncReady, setSyncReady] = useState(false)
@@ -1522,18 +1528,24 @@ export default function TodosPage() {
 
   const personalMemberIds = new Set(personalSections.map(section => section.id))
   const usedTeamGroupIds = new Set([...personalMemberIds].map(teamGroupIdForMember))
-  const teamFilterOptions = [
-    ...[...teamGroups]
-      .sort((a, b) => a.position - b.position)
-      .filter(group => usedTeamGroupIds.has(`custom:${group.id}`))
-      .map(group => ({ id: `custom:${group.id}`, name: group.name, color: group.color })),
-    ...([
-      { id: 'base:yoko', name: 'Studio Yoko', color: '#579bfc' },
-      { id: 'base:freelance', name: 'Freelancers', color: '#9c7ee8' },
-      { id: 'base:inactive', name: 'Inactief', color: '#8d95a2' },
-      { id: 'base:unassigned', name: 'Niet toegewezen', color: '#9aadbd' },
-    ].filter(group => usedTeamGroupIds.has(group.id))),
-  ]
+  // Eén volgorde voor de hele app: dezelfde lijst als het venster
+  // 'Mensen & capaciteit' op de planning. Hier stond een eigen
+  // volgorde — eerst je eigen teams, dan de vaste blokken op een vaste
+  // plek — en die kon dus niet overeenkomen met wat je daar instelde.
+  const sectieChip: Record<string, { id: string; naam: string }> = {
+    __yoko__:      { id: 'base:yoko',       naam: 'Studio Yoko' },
+    __freelance__: { id: 'base:freelance',  naam: 'Freelancers' },
+    __inactive__:  { id: 'base:inactive',   naam: 'Inactief' },
+    __overig__:    { id: 'base:unassigned', naam: 'Niet toegewezen' },
+  }
+  const teamFilterOptions = teamSections
+    .map(section => {
+      const vast = sectieChip[section.id]
+      return vast
+        ? { id: vast.id, name: vast.naam, color: section.color, sectionId: section.id }
+        : { id: `custom:${section.id}`, name: section.name, color: section.color, sectionId: section.id }
+    })
+    .filter(option => usedTeamGroupIds.has(option.id))
 
   useEffect(() => {
     if (!groupFilterReady || groupFilterChosen.current || teamFilterOptions.length === 0) return
@@ -1612,9 +1624,38 @@ export default function TodosPage() {
         const selected = selectedTeamGroupSet.has(group.id)
         const count = personalBase.filter(section => teamGroupIdForMember(section.id) === group.id).length
         return <button key={group.id} type="button" aria-pressed={selected}
-          title={selected && selectedTeamGroupSet.size === 1
+          title={(selected && selectedTeamGroupSet.size === 1
             ? `Klik om alle groepen weer te tonen · shift-klik om '${group.name}' los te zetten`
-            : `Klik om alleen '${group.name}' te tonen · shift-klik om 'm erbij te zetten`}
+            : `Klik om alleen '${group.name}' te tonen · shift-klik om 'm erbij te zetten`)
+            + ' · sleep om de volgorde te veranderen (geldt ook op de planning)'}
+          // Verslepen verandert de volgorde van de secties, en die is
+          // gedeeld met de planning: wat je hier verschuift staat daar
+          // ook anders.
+          draggable
+          onDragStart={event => {
+            chipSleepRef.current = group.sectionId
+            setChipSleep(group.sectionId)
+            event.dataTransfer.effectAllowed = 'move'
+            // Firefox start geen sleep zonder data.
+            event.dataTransfer.setData('text/plain', group.sectionId)
+          }}
+          onDragOver={event => {
+            const bron = chipSleepRef.current
+            if (!bron || bron === group.sectionId) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+            setChipDoel(group.sectionId)
+          }}
+          onDragLeave={() => setChipDoel(doel => doel === group.sectionId ? null : doel)}
+          onDrop={event => {
+            event.preventDefault()
+            const bron = chipSleepRef.current ?? event.dataTransfer.getData('text/plain')
+            chipSleepRef.current = null
+            setChipSleep(null); setChipDoel(null)
+            if (!bron || bron === group.sectionId) return
+            void moveTeamGroupBefore(bron, group.sectionId)
+          }}
+          onDragEnd={() => { chipSleepRef.current = null; setChipSleep(null); setChipDoel(null) }}
           onClick={event => {
             // Klikken = springen naar één groep; dat is wat je meestal
             // bedoelt. Erbij zetten doe je met shift (of cmd/ctrl).
@@ -1628,7 +1669,9 @@ export default function TodosPage() {
           }}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 9px', border: 0, borderRadius: 8,
             background: selected ? 'var(--text-primary)' : 'var(--bg-hover)', color: selected ? 'var(--bg-card)' : 'var(--text-secondary)',
-            fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>
+            fontSize: 11.5, fontWeight: 700, cursor: chipSleep ? 'grabbing' : 'pointer',
+            opacity: chipSleep === group.sectionId ? 0.4 : 1,
+            boxShadow: chipDoel === group.sectionId ? 'inset 3px 0 0 0 var(--accent)' : undefined }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: group.color }} />
           {group.name}<span style={{ opacity: 0.58 }}>{count}</span>
         </button>
