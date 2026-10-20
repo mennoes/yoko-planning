@@ -19,6 +19,15 @@ test('share API exposes subitem owners for accurate accountability', () => {
   assert.match(api, /ownerIds:\s+s\.ownerIds \?\? r\.owner_ids \?\? \[\]/)
 })
 
+test('share page resolves live owners and renders their avatars', () => {
+  assert.match(api, /from\('team_members'\)\.select\('id, name, color'\)\.in\('id', sharedOwnerIds\)/)
+  assert.match(api, /from\('profiles'\)\.select\('member_id, photo'\)\.in\('member_id', sharedOwnerIds\)/)
+  assert.match(api, /Response\.json\(\{ ok: true, board, groups, owners, monthlyHours, comments \}\)/)
+  assert.match(page, /function ShareOwnerAvatar/)
+  assert.match(page, /<ShareOwners ownerIds=\{row\.ownerIds\} ownersById=\{ownersById\} \/>/)
+  assert.doesNotMatch(page, /teamData\.members\.find/)
+})
+
 test('share monthly totals use the same project materialization as Home and Planning', () => {
   assert.match(api, /groupsToProjects\(board, workloadGroups\)/)
   assert.doesNotMatch(api, /function collectHourSources/)

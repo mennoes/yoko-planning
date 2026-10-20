@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { BOARD_COLORS } from '@/lib/workload'
-import teamData from '@/data/team.json'
+import { staticAvatarUrl } from '@/lib/avatarAssets'
 
 // Read-only data shape die de /api/share/[board] endpoint teruggeeft.
 // Bewust een subset van BoardItem — gevoelige velden (notes, journal,
@@ -35,6 +35,7 @@ type ShareGroup = {
 }
 type MonthlyHours = { key: string; label: string; hours: number; isCurrent: boolean }
 type ShareComment = { id: string; author: string; body: string; createdAt: string }
+type ShareOwner = { id: string; name: string; color: string; photo: string | null }
 
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 function fmtDate(iso: string | null): string {
@@ -84,11 +85,56 @@ function hoursInSelectedRange(start: string | null, end: string | null, hours: n
   return hours * (overlapDays / Math.max(1, totalDays))
 }
 
+function ShareOwnerAvatar({ owner }: { owner: ShareOwner }) {
+  const [photoFailed, setPhotoFailed] = useState(false)
+  const photo = photoFailed ? null : (owner.photo ?? staticAvatarUrl(owner.id))
+  const initials = owner.name.split(/\s+/).filter(Boolean).map(word => word[0]).slice(0, 2).join('').toUpperCase()
+  const sharedStyle = {
+    width: 29, height: 29, borderRadius: '50%', flexShrink: 0,
+    border: '2px solid var(--bg-card)', boxShadow: `0 0 0 1px ${owner.color}66`,
+  } as const
+  if (photo) {
+    return <img src={photo} alt={owner.name} title={owner.name} onError={() => setPhotoFailed(true)}
+      style={{ ...sharedStyle, objectFit: 'cover' }} />
+  }
+  return (
+    <span title={owner.name} aria-label={owner.name} style={{
+      ...sharedStyle, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      background: owner.color + '2b', color: owner.color, fontSize: 9.5, fontWeight: 800,
+    }}>{initials || '?'}</span>
+  )
+}
+
+function ShareOwners({ ownerIds, ownersById }: { ownerIds: string[]; ownersById: Map<string, ShareOwner> }) {
+  const owners = [...new Set(ownerIds)]
+    .filter(id => id && id !== 'unassigned')
+    .map(id => ownersById.get(id) ?? {
+      id, name: id.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
+      color: '#9aadbd', photo: null,
+    })
+  if (owners.length === 0) return <span style={{ color: 'var(--text-muted)' }}>—</span>
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <span aria-label={owners.map(owner => owner.name).join(', ')} style={{ display: 'flex', paddingLeft: 1, flexShrink: 0 }}>
+        {owners.map((owner, index) => (
+          <span key={owner.id} style={{ display: 'inline-flex', marginLeft: index === 0 ? 0 : -7, position: 'relative', zIndex: owners.length - index }}>
+            <ShareOwnerAvatar owner={owner} />
+          </span>
+        ))}
+      </span>
+      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)' }}>
+        {owners.map(owner => owner.name).join(', ')}
+      </span>
+    </span>
+  )
+}
+
 export default function ShareBoardPage() {
   const params = useParams<{ board: string }>()
   const board = params.board
 
   const [groups, setGroups]             = useState<ShareGroup[]>([])
+  const [owners, setOwners]             = useState<ShareOwner[]>([])
   const [, setMonthlyHours] = useState<MonthlyHours[]>([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState<string | null>(null)
@@ -116,6 +162,7 @@ export default function ShareBoardPage() {
         if (!r.ok || !j?.ok) { setError(j?.error ?? 'Kon bord niet laden'); setGroups([]); return }
         const loadedGroups = (j.groups ?? []) as ShareGroup[]
         setGroups(loadedGroups)
+        setOwners((j.owners ?? []) as ShareOwner[])
         setComments((j.comments ?? []) as ShareComment[])
         setSelectedGroupIds(new Set(loadedGroups.map(group => group.id)))
         setMonthlyHours((j.monthlyHours ?? []) as MonthlyHours[])
@@ -150,6 +197,7 @@ export default function ShareBoardPage() {
     () => groups.filter(group => selectedGroupIds.has(group.id)),
     [groups, selectedGroupIds],
   )
+  const ownersById = useMemo(() => new Map(owners.map(owner => [owner.id, owner])), [owners])
 
   const allGroupsSelected = groups.length > 0 && groups.every(group => selectedGroupIds.has(group.id))
   const selectedGroupLabel = selectedGroups.length === 0
@@ -399,29 +447,26 @@ export default function ShareBoardPage() {
           </div>
           <strong style={{ fontSize: 20, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{periodHours}u</strong>
         </div>
-        <div style={{ overflowX: 'auto', background: 'var(--bg-card)', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-light)' }}>
-          <div role="table" style={{ minWidth: 670 }}>
-            <div role="row" style={{ display: 'grid', gridTemplateColumns: '120px minmax(260px,1fr) minmax(160px,.65fr) 72px', gap: 16, padding: '9px 12px', fontSize: 10.5, fontWeight: 750, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+        <div style={{ overflowX: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
+          <div role="table" style={{ minWidth: 740 }}>
+            <div role="row" style={{ display: 'grid', gridTemplateColumns: '112px minmax(260px,1fr) minmax(230px,.8fr) 72px', gap: 18, padding: '10px 16px', background: 'var(--overlay-faint)', fontSize: 10.5, fontWeight: 750, color: 'var(--text-muted)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
               <span role="columnheader">Datum</span><span role="columnheader">Werk</span><span role="columnheader">Door</span><span role="columnheader" style={{ textAlign: 'right' }}>Uren</span>
             </div>
             {workRows.length === 0 ? (
               <div style={{ padding: '22px 12px', color: 'var(--text-muted)', fontSize: 12 }}>Geen geschreven uren binnen deze selectie.</div>
-            ) : workRows.map((row, index) => {
-              const ownerNames = row.ownerIds.map(id => teamData.members.find(member => member.id === id)?.name).filter(Boolean)
-              return (
-                <div role="row" key={`${row.groupId}-${row.id}-${row.startDate}-${index}`} style={{ display: 'grid', gridTemplateColumns: '120px minmax(260px,1fr) minmax(160px,.65fr) 72px', gap: 16, alignItems: 'center', padding: '11px 12px', borderTop: '1px solid var(--border-light)', color: 'var(--text-primary)' }}>
-                  <span role="cell" style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+            ) : workRows.map((row, index) => (
+                <div role="row" key={`${row.groupId}-${row.id}-${row.startDate}-${index}`} style={{ display: 'grid', gridTemplateColumns: '112px minmax(260px,1fr) minmax(230px,.8fr) 72px', gap: 18, alignItems: 'center', minHeight: 62, padding: '10px 16px', borderTop: '1px solid var(--border-light)', color: 'var(--text-primary)' }}>
+                  <span role="cell" style={{ width: 'fit-content', padding: '4px 8px', borderRadius: 999, background: 'var(--overlay-faint)', fontSize: 11.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                     {fmtDate(row.startDate)}{row.endDate && row.endDate !== row.startDate ? ` – ${fmtDate(row.endDate)}` : ''}
                   </span>
                   <span role="cell" style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, fontSize: 10.5, color: 'var(--text-muted)' }}><i style={{ width: 6, height: 6, borderRadius: 2, background: row.color }} />{row.groupName}</span>
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, fontSize: 10.5, color: 'var(--text-muted)' }}><i style={{ width: 7, height: 7, borderRadius: 2, background: row.color }} />{row.groupName}</span>
                   </span>
-                  <span role="cell" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{ownerNames.join(', ') || '—'}</span>
-                  <strong role="cell" style={{ textAlign: 'right', fontSize: 13 }}>{row.hours}u</strong>
+                  <span role="cell" style={{ minWidth: 0 }}><ShareOwners ownerIds={row.ownerIds} ownersById={ownersById} /></span>
+                  <strong role="cell" style={{ textAlign: 'right', fontSize: 15 }}>{row.hours}u</strong>
                 </div>
-              )
-            })}
+              ))}
           </div>
         </div>
       </section>

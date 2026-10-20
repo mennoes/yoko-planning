@@ -4,6 +4,8 @@ import { signShare, validShare } from '@/lib/shareToken'
 import { randomUUID } from 'node:crypto'
 import { groupsToProjects, type Project } from '@/lib/workload'
 import type { BoardGroup, BoardItem, SubItem } from '@/lib/boards'
+import teamData from '@/data/team.json'
+import { TEAM_PHOTO_META_PREFIX } from '@/lib/teamMemberIdentity'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -60,6 +62,12 @@ type ShareGroup = {
   name:  string
   color: string
   items: ShareItem[]
+}
+type ShareOwner = {
+  id:    string
+  name:  string
+  color: string
+  photo: string | null
 }
 
 type ItemRow = {
@@ -206,6 +214,50 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
     items: itemsByGroup.get(g.id) ?? [],
   }))
 
+  // De deelpagina is publiek en kan de ingelogde TeamContext dus niet als
+  // bron gebruiken. Geef uitsluitend de minimale publieke ownergegevens
+  // terug van mensen die daadwerkelijk in deze selectie voorkomen. Zo
+  // verdwijnen nieuw toegevoegde teamleden (zoals Loeta) niet omdat ze nog
+  // niet in de statische seed staan, terwijl e-mail/capaciteit/inactief e.d.
+  // buiten de response blijven.
+  const sharedOwnerIds = [...new Set(groups.flatMap(group => group.items.flatMap(item => [
+    ...(item.ownerIds ?? []),
+    ...item.subitems.flatMap(subitem => subitem.ownerIds ?? []),
+  ])))].filter(id => id && id !== 'unassigned')
+  const seedOwners = new Map((teamData.members as Array<{ id: string; name: string; color?: string }>)
+    .map(member => [member.id, member] as const))
+  let ownerRows: Array<{ id: string; name: string; color: string | null }> = []
+  let profileRows: Array<{ member_id: string | null; photo: string | null }> = []
+  let photoRows: Array<{ id: string; email: string | null }> = []
+  if (sharedOwnerIds.length > 0) {
+    const [membersResult, profilesResult, photosResult] = await Promise.all([
+      supabaseAdmin.from('team_members').select('id, name, color').in('id', sharedOwnerIds),
+      supabaseAdmin.from('profiles').select('member_id, photo').in('member_id', sharedOwnerIds),
+      supabaseAdmin.from('team_members_extra').select('id, email')
+        .in('id', sharedOwnerIds.map(id => `${TEAM_PHOTO_META_PREFIX}${id}`)),
+    ])
+    ownerRows = (membersResult.data ?? []) as typeof ownerRows
+    profileRows = (profilesResult.data ?? []) as typeof profileRows
+    photoRows = (photosResult.data ?? []) as typeof photoRows
+  }
+  const liveOwnerMap = new Map(ownerRows.map(owner => [owner.id, owner]))
+  const profilePhotoMap = new Map(profileRows
+    .filter(row => row.member_id && row.photo)
+    .map(row => [row.member_id as string, row.photo as string]))
+  const sharedPhotoMap = new Map(photoRows
+    .filter(row => row.id.startsWith(TEAM_PHOTO_META_PREFIX) && row.email)
+    .map(row => [row.id.slice(TEAM_PHOTO_META_PREFIX.length), row.email as string]))
+  const owners: ShareOwner[] = sharedOwnerIds.map(id => {
+    const live = liveOwnerMap.get(id)
+    const seed = seedOwners.get(id)
+    return {
+      id,
+      name: live?.name ?? seed?.name ?? id.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()),
+      color: live?.color ?? seed?.color ?? '#9aadbd',
+      photo: sharedPhotoMap.get(id) ?? profilePhotoMap.get(id) ?? null,
+    }
+  })
+
   // Gebruik exact dezelfde projectmaterialisatie als Home, Planning en To
   // do's. Daardoor kan Share nooit meer een parent én diens subitems dubbel
   // tellen of een Google-serietotaal als extra uren meenemen.
@@ -257,7 +309,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boar
       createdAt: String(reply.createdAt ?? row.created_at),
     })))
 
-  return Response.json({ ok: true, board, groups, monthlyHours, comments })
+  return Response.json({ ok: true, board, groups, owners, monthlyHours, comments })
 }
 
 // Publieke share-reactie. Alleen tekst + een zelfgekozen naam; geen account,
