@@ -97,7 +97,9 @@ const PALETTE = [
 ]
 
 // ─── Groep context (kleur) ────────────────────────────────────────────────────
-const GroupCtx = createContext<{ color: string }>({ color: '#579bfc' })
+/** Waar staat deze rij? De kleur gebruikten we al; de namen erbij, zodat
+ *  het item-venster kan zeggen in welke agenda en groep je zit. */
+const GroupCtx = createContext<{ color: string; boardName?: string; groupName?: string }>({ color: '#579bfc' })
 
 // ─── Datum helpers ────────────────────────────────────────────────────────────
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
@@ -2914,6 +2916,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
           item={{ ...subitemAsItem(openSub), ownerIds: (openSub.ownerIds ?? []).some(id => id && id !== 'unassigned') ? openSub.ownerIds : item.ownerIds }}
           parentItemId={item.id}
           parentStatus={item.status}
+          parentName={item.name}
           cols={cols}
           accentColor={accentColor}
           onUpdate={u => {
@@ -3208,9 +3211,11 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
   )
 }
 
-function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentItemId, parentStatus }: {
+function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentItemId, parentStatus, parentName }: {
   item: BoardItem; cols: ColumnDef[]; accentColor?: string
   parentItemId?: string; parentStatus?: string
+  /** De naam van het hoofditem, als dit venster een subitem toont. */
+  parentName?: string
   onUpdate: (u: Partial<BoardItem>) => void
   onClose: () => void
 }) {
@@ -3235,6 +3240,11 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, editName])
+
+  // Agenda › groep › hoofditem. Lege stukken vallen weg in plaats van een
+  // los liggend pijltje achter te laten.
+  const { boardName, groupName } = useContext(GroupCtx)
+  const kruimels = [boardName, groupName, parentName].filter((deel): deel is string => !!deel)
 
   const thread = threads.find(t => !t.thread.some(r => r.personalCompletion))
   const replies = threads.flatMap(t => t.thread).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -3340,9 +3350,20 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
         }}>
           <div style={{ width: 4, alignSelf: 'stretch', borderRadius: 3, background: accent, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>Item</span>
-              {isGoogle && <span style={{ background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3 }}>GOOGLE</span>}
+            {/* Waar sta je? Zonder dit is een item dat je via de planning
+                of een zoekactie opent een naam zonder plek: in welke
+                agenda, in welke groep, en — bij een subitem — onder welk
+                item. */}
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ flexShrink: 0 }}>{parentItemId ? 'Subitem' : 'Item'}</span>
+              {isGoogle && <span style={{ background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>GOOGLE</span>}
+              {kruimels.length > 0 && (
+                <span title={kruimels.join('  ›  ')}
+                  style={{ textTransform: 'none', letterSpacing: 'normal', fontWeight: 600,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                  · {kruimels.join('  ›  ')}
+                </span>
+              )}
             </div>
             {editName && !isGoogle ? (
               <input autoFocus value={nameDraft}
@@ -3953,9 +3974,20 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
   //    → álle groepen krijgen een subtiele animerende stippel-rand
   //      ("hier kan je loslaten")
   //  - dropHover = je hovert nú boven deze groep → opvallend accent
+  // Waar staan deze rijen? Het item-venster leest dit om te laten zien in
+  // welke agenda en groep je zit.
+  const groupContext = useMemo(
+    () => ({
+      color: group.color,
+      boardName: getBoards().find(board => board.id === boardId)?.name ?? boardId,
+      groupName: group.name,
+    }),
+    [group.color, group.name, boardId],
+  )
+
   const isDropTarget = !!subDragName
   return (
-    <GroupCtx.Provider value={{ color: group.color }}>
+    <GroupCtx.Provider value={groupContext}>
       <div style={{
         marginBottom: 18, borderRadius: 14, position: 'relative',
         // Eigen rondingen + kader maakt 't visueel minder hoekig en geeft
