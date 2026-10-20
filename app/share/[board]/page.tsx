@@ -347,25 +347,24 @@ export default function ShareBoardPage() {
               <button key={m.key} onClick={() => { setPreset('custom'); setFrom(monthFrom); setUntil(monthUntil) }}
                 style={{
                   textAlign: 'left', cursor: 'pointer',
-                  padding: '14px 16px', borderRadius: 12,
-                  background: 'var(--bg-card)',
-                  border: `${active ? 2 : 1}px solid ${active ? color : 'var(--border-light)'}`,
-                  boxShadow: active ? `inset 0 3px 0 ${color}` : 'none',
+                  padding: '18px 20px', borderRadius: 12,
+                  background: active ? 'var(--yellow)' : 'var(--bg-card)',
+                  border: `1px solid ${active ? 'var(--yellow)' : 'var(--border-light)'}`,
                 }}>
                 <div style={{
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                  color: m.isCurrent ? color : 'var(--text-muted)', marginBottom: 6,
+                  fontSize: 12, fontWeight: 700, letterSpacing: '0.055em', textTransform: 'uppercase',
+                  color: active ? '#1A1714' : m.isCurrent ? color : 'var(--text-secondary)', marginBottom: 8,
                   display: 'flex', alignItems: 'center', gap: 6,
                 }}>
                   {relativeMonthLabel(m.key) ?? m.label}
                   {m.isCurrent && (
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: active ? '#1A1714' : color }} />
                   )}
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                <div style={{ fontSize: 30, lineHeight: 1.08, fontWeight: 700, color: active ? '#1A1714' : 'var(--text-primary)', letterSpacing: '-0.025em' }}>
                   {m.hours > 0 ? `${m.hours}u` : '—'}
                 </div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', textTransform: 'capitalize', marginTop: 2 }}>
+                <div style={{ fontSize: 13, lineHeight: 1.35, color: active ? 'rgba(26,23,20,0.72)' : 'var(--text-secondary)', textTransform: 'capitalize', marginTop: 5 }}>
                   {m.label}
                 </div>
               </button>

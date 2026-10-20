@@ -31,7 +31,8 @@ test('share page resolves live owners and renders their avatars', () => {
 test('share page uses restrained solid cards and clear Studio Yoko branding', () => {
   assert.match(page, /src="\/yoko-logo\.png" alt="Studio Yoko"/)
   assert.match(page, />Studio Yoko</)
-  assert.match(page, /background: 'var\(--bg-card\)'/)
+  assert.match(page, /background: active \? 'var\(--yellow\)' : 'var\(--bg-card\)'/)
+  assert.doesNotMatch(page, /boxShadow: active/)
   assert.doesNotMatch(page, /color \+ '14'/)
   assert.doesNotMatch(page, /color \+ '55'/)
   assert.doesNotMatch(page, /group\.color \+ '18'/)
