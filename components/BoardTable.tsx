@@ -53,6 +53,28 @@ import { itemRollupHours } from '@/lib/itemHours'
 const OwnerUsageCtx = createContext<Record<string, number>>({})
 const PERSONAL_STATUS_KEY = '__personalStatus'
 const isPersonalColumn = (key: string) => key === PERSONAL_STATUS_KEY
+const ITEM_EXPANSION_KEY_PREFIX = 'yoko-board-item-expanded-v1:'
+
+function loadRememberedItemExpansion(itemId: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(`${ITEM_EXPANSION_KEY_PREFIX}${itemId}`) === '1'
+  } catch {
+    return false
+  }
+}
+
+function rememberItemExpansion(itemId: string, expanded: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    const key = `${ITEM_EXPANSION_KEY_PREFIX}${itemId}`
+    if (expanded) window.localStorage.setItem(key, '1')
+    else window.localStorage.removeItem(key)
+  } catch {
+    // localStorage kan geblokkeerd of vol zijn. De agenda blijft dan gewoon
+    // werken; alleen de voorkeur kan niet tussen bezoeken worden onthouden.
+  }
+}
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
 // actor-id kunnen meegeven aan een notification.
@@ -2531,10 +2553,18 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
   const [hover,     setHover]     = useState(false)
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(item.name)
-  const [expanded,  setExpanded]  = useState(false)
+  const [expanded, setExpandedState] = useState(() => loadRememberedItemExpansion(item.id))
   const allSubitems = item.subitems ?? []
   const subitems    = visibleRecurringSubitems(item.source, allSubitems)
   const hasSubitems = subitems.length > 0
+
+  function setExpanded(next: boolean | ((current: boolean) => boolean)) {
+    setExpandedState(current => {
+      const value = typeof next === 'function' ? next(current) : next
+      rememberItemExpansion(item.id, value)
+      return value
+    })
+  }
 
   function saveItemName() {
     const inferred = defaultEditName ? inferWeekPlanning(nameDraft) : null
