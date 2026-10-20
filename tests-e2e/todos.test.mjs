@@ -84,3 +84,63 @@ test('alle personen zijn meteen zichtbaar, zonder iets open te klappen', { skip:
   assert.doesNotMatch(tekst, /Personen tonen \/ verbergen/, 'het open/dicht-kopje is weg')
   assert.ok(zichtbaar >= 2, `de personen staan er meteen (${zichtbaar} gevonden)`)
 })
+
+/** De namen van de groepchips, op volgorde. */
+const chipNamen = page => page.evaluate(() =>
+  [...document.querySelectorAll('[data-todo-team-group-filter] button')]
+    .map(b => (b.textContent ?? '').trim().replace(/\d+$/, ''))
+    .filter(naam => naam && naam !== 'Alles'))
+
+test('de chips staan in dezelfde volgorde als de secties op de planning', { skip: skip ?? false }, async () => {
+  // Hier stond een eigen volgorde: eerst je eigen teams, dan de vaste
+  // blokken op een vaste plek. Wat je op de planning instelde kwam dus
+  // niet terug. Nu leest deze pagina dezelfde lijst.
+  const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, colorScheme: 'light' })
+  await page.addInitScript(groepen => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    // Studio Yoko staat hier bewust onder het eigen team: dat is een
+    // volgorde die alleen uit de gedeelde opslag kan komen.
+    localStorage.setItem('yoko-team-groups', groepen)
+  }, JSON.stringify([
+    { id: '__yoko__',   name: 'Studio Yoko', color: '#579bfc', position: 1, memberIds: [] },
+    { id: 'onderzoek',  name: 'Onderzoek',   color: '#9c7ee8', position: 0, memberIds: ['menno', 'vincent'] },
+  ]))
+  await page.goto(BASE_URL + '/todos', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(3000)
+
+  const namen = await chipNamen(page)
+  await page.close()
+  assert.equal(namen[0], 'Onderzoek', `het eigen team staat vooraan, kreeg ${namen.join(' / ')}`)
+  assert.ok(namen.includes('Studio Yoko'), 'en Studio Yoko staat erachter')
+  assert.ok(namen.indexOf('Onderzoek') < namen.indexOf('Studio Yoko'))
+})
+
+test('een chip verslepen verandert de volgorde, ook voor de planning', { skip: skip ?? false }, async () => {
+  const page = await todosPagina({ breedte: 1200 })
+  const voor = await chipNamen(page)
+  assert.deepEqual(voor.slice(0, 2), ['Onderzoek', 'Studio'],
+    `twee eigen teams om te wisselen, kreeg ${voor.join(' / ')}`)
+
+  // De tweede chip op de plek van de eerste laten vallen.
+  await page.evaluate(() => {
+    const chips = [...document.querySelectorAll('[data-todo-team-group-filter] button')]
+    const bron = chips[1], doel = chips[0]
+    const dt = new DataTransfer()
+    bron.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }))
+    doel.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }))
+    doel.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }))
+    bron.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }))
+  })
+  await page.waitForTimeout(900)
+
+  const na = await chipNamen(page)
+  const bewaard = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('yoko-team-groups'))
+      .sort((a, b) => a.position - b.position).map(g => g.name))
+  await page.close()
+
+  assert.deepEqual(na.slice(0, 2), ['Studio', 'Onderzoek'], `de chips zijn om, kreeg ${na.join(' / ')}`)
+  // Dezelfde opslag die het venster op de planning leest.
+  assert.ok(bewaard.indexOf('Studio') < bewaard.indexOf('Onderzoek'),
+    `en dat staat in de gedeelde volgorde: ${bewaard.join(' / ')}`)
+})
