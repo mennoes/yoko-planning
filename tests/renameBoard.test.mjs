@@ -58,8 +58,8 @@ function load({ updateResult, upsertError = null }) {
   return { registry: exports, calls, nameNow: () => JSON.parse(localStorage.getItem('yoko-boards-registry')).find(b => b.id === 'vlaanderen')?.name }
 }
 
-test('hernoemen schrijft rechtstreeks naar de boards-tabel', async () => {
-  const { registry, calls, nameNow } = load({ updateResult: { data: [{ id: 'vlaanderen' }], error: null } })
+test('hernoemen schrijft rechtstreeks naar de boards-tabel en controleert de opgeslagen naam', async () => {
+  const { registry, calls, nameNow } = load({ updateResult: { data: [{ id: 'vlaanderen', name: 'Vlaanderen 2' }], error: null } })
   assert.equal(await registry.renameBoard('vlaanderen', 'Vlaanderen 2'), null)
   assert.equal(calls.updates.length, 1)
   assert.equal(calls.updates[0].name, 'Vlaanderen 2')
@@ -114,6 +114,8 @@ test('een ontbrekende updated_at-kolom blokkeert het opslaan niet meer', () => {
   assert.equal((registry.match(/isMissingUpdatedAt\(/g) ?? []).length, 4)
   assert.match(route, /error\.code === 'PGRST204' \|\| \/updated_at\/\.test\(error\.message \?\? ''\)/)
   assert.match(migration, /add column if not exists updated_at timestamptz/)
+  assert.doesNotMatch(route, /profile_not_found/)
+  assert.match(route, /authData\.user/)
 })
 
 test('zonder updated_at-kolom slaat hij alsnog op, zonder tijdstempel', async () => {
@@ -122,7 +124,7 @@ test('zonder updated_at-kolom slaat hij alsnog op, zonder tijdstempel', async ()
   const { registry, calls, nameNow } = load({
     updateResult: [
       { data: null, error: { code: 'PGRST204', message: "Could not find the 'updated_at' column of 'boards' in the schema cache" } },
-      { data: [{ id: 'vlaanderen' }], error: null },
+      { data: [{ id: 'vlaanderen', name: 'Vlaanderen 2' }], error: null },
     ],
   })
   assert.equal(await registry.renameBoard('vlaanderen', 'Vlaanderen 2'), null)

@@ -10,8 +10,12 @@ export async function POST(req: NextRequest) {
   if (!auth?.startsWith('Bearer ')) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(auth.slice(7))
   if (authError || !authData.user) return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const { data: profile } = await supabaseAdmin.from('profiles').select('user_id').eq('user_id', authData.user.id).maybeSingle()
-  if (!profile) return Response.json({ ok: false, error: 'profile_not_found' }, { status: 403 })
+
+  // Een geldige Yoko-login is voldoende om een agenda te hernoemen. De
+  // eerdere extra profiles-check maakte dit onnodig kwetsbaar: oudere of
+  // opnieuw gekoppelde accounts kunnen wel correct ingelogd zijn, maar nog
+  // geen profiles-rij hebben. Dan leek de naam lokaal gewijzigd, terwijl de
+  // server hem weigerde en hij na refresh terugviel.
 
   let body: { boardId?: string; name?: string }
   try { body = await req.json() } catch { return Response.json({ ok: false, error: 'invalid_body' }, { status: 400 }) }

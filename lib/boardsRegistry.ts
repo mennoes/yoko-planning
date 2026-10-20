@@ -221,12 +221,12 @@ export async function renameBoard(boardId: string, name: string): Promise<string
   let direct = await supabase.from('boards')
     .update(withStamp({ name: clean }))
     .eq('id', boardId)
-    .select('id')
+    .select('id, name')
   if (isMissingUpdatedAt(direct.error)) {
     boardsUpdatedAtSupported = false
-    direct = await supabase.from('boards').update({ name: clean }).eq('id', boardId).select('id')
+    direct = await supabase.from('boards').update({ name: clean }).eq('id', boardId).select('id, name')
   }
-  if (!direct.error && (direct.data?.length ?? 0) > 0) return null
+  if (!direct.error && direct.data?.some(row => row.id === boardId && row.name === clean)) return null
 
   // 2. Nul rijen geraakt? Dan bestond de rij nog niet (een agenda die
   //    nooit gedeeld is). Alsnog aanmaken, mét de nieuwe naam.
