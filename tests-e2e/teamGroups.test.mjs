@@ -110,3 +110,56 @@ test('Overig staat in dezelfde lijst en is te verplaatsen', { skip: skip ?? fals
     ['Studio Yoko', 'Onderzoek', 'Freelancers', 'Overig', 'Inactief team'],
     'Overig is één plek opgeschoven en dat is opgeslagen')
 })
+
+/** De sectiekoppen zoals ze in het raster achter het venster staan. Het
+ *  venster zelf telt niet mee: dat toont dezelfde namen. */
+const rasterKoppen = page => page.evaluate(() => {
+  const venster = [...document.querySelectorAll('div')]
+    .find(d => d.textContent?.startsWith('Mensen & capaciteit'))
+  return [...document.querySelectorAll('span')]
+    .filter(e => e.children.length === 0 &&
+      !(venster && venster.contains(e)) &&
+      /^(Studio Yoko|Onderzoek|Editors|Freelancers|Inactief team|Overig)$/.test((e.textContent ?? '').trim()))
+    .map(e => (e.textContent ?? '').trim())
+})
+
+test('Overig omhoog zetten verandert ook het raster, niet alleen het venster', { skip: skip ?? false }, async () => {
+  // Overig deed in het raster niet mee in de lijst maar werd achteraf
+  // aangeplakt. De volgorde in het venster veranderde dus wel en die in
+  // de planning erachter niet.
+  const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+  const bord = [{ id: 'g1', name: 'Groep', color: '#579bfc', items: [
+    { id: 'i1', name: 'Klus zonder eigenaar', ownerIds: ['unassigned'], status: 'Working on it',
+      estHours: 8, startDate: iso(0), endDate: iso(5), subitems: [] },
+    { id: 'i2', name: 'Klus van Vincent', ownerIds: ['vincent'], status: 'Working on it',
+      estHours: 8, startDate: iso(0), endDate: iso(5), subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1400, height: 1100 }, colorScheme: 'light' })
+  await page.addInitScript(data => {
+    const { groepen, board } = JSON.parse(data)
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-team-groups', groepen)
+    localStorage.setItem('yoko-board-yoko', board)
+  }, JSON.stringify({ groepen: JSON.stringify(EEN), board: JSON.stringify(bord) }))
+  await page.goto(BASE_URL + '/planning', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(2500)
+
+  const voor = await rasterKoppen(page)
+  assert.deepEqual(voor, ['Onderzoek', 'Inactief team', 'Overig'],
+    `Overig staat onderaan, kreeg ${voor.join(' / ')}`)
+
+  await page.getByText('Menu', { exact: true }).first().click()
+  await page.waitForTimeout(400)
+  await page.getByText(/Mensen & capaciteit/).first().click()
+  await page.waitForTimeout(800)
+  await page.getByTitle('Omhoog').last().click()
+  await page.waitForTimeout(700)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(900)
+
+  const na = await rasterKoppen(page)
+  await page.close()
+  assert.deepEqual(na, ['Onderzoek', 'Overig', 'Inactief team'],
+    `het raster volgt het venster, kreeg ${na.join(' / ')}`)
+})
