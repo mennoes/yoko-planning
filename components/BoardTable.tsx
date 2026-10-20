@@ -770,12 +770,15 @@ function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<st
 const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
   Object.fromEntries(ids.map(id => [id, String(Math.round((hours[id] ?? 0) * 10) / 10)]))
 
-function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange }: {
+function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange, avatarSize = 34 }: {
   value: string[]
   onChange: (v: string[], distribution?: Record<string, number>) => void
   ownerHours?: Record<string, number>
   totalHours?: number
   onDistributionChange?: (v: Record<string, number>) => void
+  /** In een rij moet een gezicht klein blijven; in het item-venster is
+   *  er ruimte zat en wil je gewoon zien wie het doet. */
+  avatarSize?: number
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -898,22 +901,25 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   }
 
   function allocatedAvatar(id: string, index: number) {
-    if (!hasDistribution) return <MemberAvatar key={id} id={id} size={34} />
+    if (!hasDistribution) return <MemberAvatar key={id} id={id} size={avatarSize} />
     const member = memberFor(id)
     const hours = liveHours[id] ?? 0
     const pct = totalHours > 0 ? Math.max(0, Math.min(100, hours / totalHours * 100)) : 0
     const color = member?.color ?? '#9aa3ad'
+    // De ring met het aandeel zit om de avatar heen, dus die vraagt wat
+    // extra ruimte.
+    const ring = avatarSize + 4
     return (
       <span key={id} title={`${member?.name ?? id} · ${Math.round(hours * 10) / 10}u · ${Math.round(pct)}%`}
         style={{
-          width: 38, height: 38, padding: 4, boxSizing: 'border-box', borderRadius: '50%', flexShrink: 0,
+          width: ring, height: ring, padding: 4, boxSizing: 'border-box', borderRadius: '50%', flexShrink: 0,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           background: `conic-gradient(${color} ${pct * 3.6}deg, var(--border) 0deg)`,
           boxShadow: '0 0 0 2px var(--bg-card)',
           marginLeft: index > 0 ? -6 : 0,
           position: 'relative', zIndex: visibleOwners.length - index,
         }}>
-        <UserAvatar memberId={id} size={30} borderless style={{ boxShadow: '0 0 0 2px var(--bg-card)' }} />
+        <UserAvatar memberId={id} size={avatarSize - 4} borderless style={{ boxShadow: '0 0 0 2px var(--bg-card)' }} />
       </span>
     )
   }
@@ -1547,11 +1553,12 @@ function overlapDays(
   return Math.round((hi - lo) / 86400000) + 1
 }
 // ─── Cel dispatcher ───────────────────────────────────────────────────────────
-function Cell({ item, col, onUpdate, statusExtra }: {
+function Cell({ item, col, onUpdate, statusExtra, avatarSize }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void; statusExtra?: React.ReactNode
+  avatarSize?: number
 }) {
   const rolledOwnerTotal = Number(item.__relevantOwnerHoursTotal)
-  if (col.type === 'owners')    return <OwnersCell value={item.ownerIds}
+  if (col.type === 'owners')    return <OwnersCell value={item.ownerIds} avatarSize={avatarSize}
     ownerHours={item.ownerHours}
     totalHours={Number.isFinite(rolledOwnerTotal) ? rolledOwnerTotal : effectiveHours(item)}
     onDistributionChange={hours => onUpdate({
@@ -3294,7 +3301,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 
   // Breedte van dit venster. Een voorkeur van de gebruiker, dus bewaard —
   // niet iets dat je bij elk item opnieuw wilt instellen.
-  const [breedte, setBreedte] = useState(760)
+  const [breedte, setBreedte] = useState(880)
   useEffect(() => {
     try {
       const bewaard = Number(localStorage.getItem(DETAIL_BREEDTE_KEY))
@@ -3344,11 +3351,11 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
             cursor: 'ew-resize', zIndex: 2 }} />
         {/* Header */}
         <div style={{
-          padding: '16px 22px 14px', borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'flex-start', gap: 12,
+          padding: '22px 28px 18px', borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'flex-start', gap: 14,
           background: 'var(--bg-card)',
         }}>
-          <div style={{ width: 4, alignSelf: 'stretch', borderRadius: 3, background: accent, flexShrink: 0 }} />
+          <div style={{ width: 5, alignSelf: 'stretch', borderRadius: 3, background: accent, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Waar sta je? Zonder dit is een item dat je via de planning
                 of een zoekactie opent een naam zonder plek: in welke
@@ -3373,31 +3380,37 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                   if (e.key === 'Enter') { onUpdate({ name: nameDraft }); setEditName(false) }
                   if (e.key === 'Escape') { setNameDraft(item.name); setEditName(false) }
                 }}
-                style={{ ...editInput, fontSize: 20, fontWeight: 700, width: '100%' }} />
+                style={{ ...editInput, fontSize: 24, fontWeight: 700, width: '100%' }} />
             ) : (
               <h2 onClick={() => { if (!isGoogle) { setNameDraft(item.name); setEditName(true) } }}
                 title={isGoogle ? 'Bewerk in Google Calendar' : 'Klik om te bewerken'}
-                style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)',
-                  cursor: isGoogle ? 'default' : 'text', lineHeight: 1.25 }}>
+                style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--text-primary)',
+                  cursor: isGoogle ? 'default' : 'text', lineHeight: 1.22, letterSpacing: '-0.01em' }}>
                 {item.name}
               </h2>
             )}
           </div>
           <button onClick={onClose} title="Sluiten (Esc)"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
+            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-light)', borderRadius: 8,
+              cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 20, lineHeight: 1,
+              width: 32, height: 32, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
 
         {/* Body: properties + comments */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 22px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 28px' }}>
           {/* Properties grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px 18px', marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14, marginBottom: 28 }}>
             {cols.filter(col => !isPersonalColumn(col.key)).map(col => (
-              <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              // Elk veld in een eigen vlak: eerder liepen label en waarde
+              // van de buurman in elkaar over en was het één grijze soep.
+              <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 8,
+                padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)',
+                border: '1px solid var(--border-light)' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                   {col.key === 'status' ? 'Status' : col.key === 'timeline' ? 'Timeline' : col.label}
                 </span>
-                <div style={{ minHeight: 28, display: 'flex', alignItems: 'center' }}>
-                  <Cell item={item} col={col} onUpdate={onUpdate} />
+                <div style={{ minHeight: 38, display: 'flex', alignItems: 'center', fontSize: 14 }}>
+                  <Cell item={item} col={col} onUpdate={onUpdate} avatarSize={44} />
                 </div>
                 {col.key === 'status' && <PersonalCompletionSection
                   key={item.id}
@@ -3430,18 +3443,18 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 
           {/* Notities-thread (voorheen "Opmerkingen") */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                 Notities
               </div>
               <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {replies.length} {replies.length === 1 ? 'reactie' : 'reacties'}
               </span>
             </div>
 
             {replies.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic', margin: '8px 0 14px' }}>Nog geen opmerkingen. Wees de eerste!</p>
+              <p style={{ fontSize: 13.5, color: 'var(--text-muted)', fontStyle: 'italic', margin: '10px 0 16px' }}>Nog geen opmerkingen. Wees de eerste!</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
                 {[...replies].reverse().map(r => {

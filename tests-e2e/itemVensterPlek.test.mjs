@@ -70,3 +70,33 @@ test('het venster van een subitem noemt ook het hoofditem', { skip: skip ?? fals
   assert.match(kop, /Nederland.*Colleges.*NL College S04 E33/,
     `agenda, groep en hoofditem staan op volgorde: ${kop}`)
 })
+
+test('het venster geeft de velden lucht en de gezichten formaat', { skip: skip ?? false }, async () => {
+  // Het venster voelde klein en onduidelijk: alle labels en waarden
+  // liepen in één grijze soep in elkaar over, en de avatars waren even
+  // klein als in een rij — terwijl hier ruimte zat is.
+  const page = await openAgenda()
+  await page.locator('[data-item-id="p1"]').getByTitle('Plaats opmerking').first().click()
+  await page.waitForTimeout(1000)
+
+  const m = await page.evaluate(() => {
+    const titel = [...document.querySelectorAll('h2')].find(e => /NL College/.test(e.textContent ?? ''))
+    const venster = titel?.closest('div[style*="position: fixed"]')
+    const label = [...(venster?.querySelectorAll('span') ?? [])]
+      .find(s => (s.textContent ?? '').trim() === 'OWNER' || (s.textContent ?? '').trim() === 'Owner')
+    const vak = label?.parentElement
+    const avatar = vak?.querySelector('img, [class*="avatar"], span[aria-hidden]')
+    return {
+      titelPx: titel ? Math.round(parseFloat(getComputedStyle(titel).fontSize)) : 0,
+      vensterBreed: venster ? Math.round(venster.getBoundingClientRect().width) : 0,
+      vakRand: vak ? getComputedStyle(vak).borderTopWidth : '',
+      avatarPx: avatar ? Math.round(avatar.getBoundingClientRect().width) : 0,
+    }
+  })
+  await page.close()
+
+  assert.ok(m.titelPx >= 23, `de titel is niet meer muizig (${m.titelPx}px)`)
+  assert.ok(m.vensterBreed >= 860, `en het venster heeft breedte (${m.vensterBreed}px)`)
+  assert.notEqual(m.vakRand, '0px', 'elk veld staat in zijn eigen vlak')
+  assert.ok(m.avatarPx >= 40, `de gezichten zijn groter dan in een rij (${m.avatarPx}px)`)
+})
