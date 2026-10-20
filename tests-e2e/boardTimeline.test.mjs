@@ -392,10 +392,8 @@ test('naar links scrollen laadt eerdere weken bij', { skip: skip ?? false }, asy
   await page.getByRole('button', { name: 'Tijdlijn' }).click()
   await page.waitForTimeout(900)
 
-  const eersteKolom = () => page.evaluate(() => {
-    const koppen = document.querySelectorAll('[data-board-timeline] div[style*="border-left"]')
-    return koppen[0]?.textContent ?? ''
-  })
+  const eersteKolom = () => page.evaluate(() =>
+    document.querySelector('[data-board-timeline] [data-kolomkop]')?.textContent ?? '')
   const voor = await eersteKolom()
 
   await page.evaluate(() => {
@@ -470,19 +468,130 @@ test('een item met subitems staat dicht, met een bolletje dat het aantal noemt',
   // lijst. Maar aan een kale balk zie je niet dát er iets onder zit.
   const page = await openSubBord()
   const regels = await namenInRaster(page)
-  const balk = await page.evaluate(() => {
+  const m = await page.evaluate(() => {
     const el = [...document.querySelectorAll('[data-board-timeline] div[title]')]
       .find(d => (d.getAttribute('title') ?? '').startsWith('Aflevering 9 ·'))
-    return { titel: el?.getAttribute('title') ?? '', tekst: (el?.textContent ?? '').trim(),
-      hoogte: el ? Math.round(el.getBoundingClientRect().height) : 0 }
+    const naam = [...document.querySelectorAll('[data-board-timeline] button')]
+      .find(b => /Aflevering 9/.test(b.textContent ?? ''))
+    const bolletje = [...(naam?.parentElement?.querySelectorAll('span') ?? [])]
+      .find(s => s.children.length === 0 && (s.textContent ?? '').trim() === '2')
+    return {
+      titel: el?.getAttribute('title') ?? '',
+      hoogte: el ? Math.round(el.getBoundingClientRect().height) : 0,
+      balkTekst: (el?.textContent ?? '').trim(),
+      bolletjeX: bolletje ? Math.round(bolletje.getBoundingClientRect().left) : null,
+      naamX: naam ? Math.round(naam.getBoundingClientRect().right) : null,
+    }
   })
   await page.close()
 
   assert.ok(!regels.includes('Montage'), 'de subitems staan er nog niet')
   assert.ok(regels.includes('Aflevering 9'), 'het item zelf wel')
-  assert.match(balk.tekst, /2$/, 'en op de balk staat het aantal subitems')
-  assert.ok(balk.hoogte > 10, `het is een gewone volle balk, geen streepje (${balk.hoogte}px)`)
-  assert.match(balk.titel, /2 subitems · klik om uit te klappen/)
+  assert.ok(m.hoogte > 10, `het is een gewone volle balk, geen streepje (${m.hoogte}px)`)
+  assert.match(m.titel, /2 subitems · klik om uit te klappen/)
+  // Het bolletje hoort naast de naam, niet op de balk: bij een klus van
+  // een half jaar staat het eind van die balk buiten beeld.
+  assert.ok(m.bolletjeX, 'er staat een bolletje met het aantal in de naamkolom')
+  assert.ok(m.bolletjeX >= m.naamX, 'direct achter de naam')
+  assert.ok(!/2/.test(m.balkTekst), `en niet meer op de balk zelf: "${m.balkTekst}"`)
+})
+
+test('een item zonder eigen periode toont losse stukjes, geen lange balk', { skip: skip ?? false }, async () => {
+  // Eén doorlopende balk van oktober tot december beweert dat er een
+  // kwartaal aan gewerkt wordt, terwijl het om drie losse dagen gaat.
+  const bord = [{ id: 'g1', name: 'Groep', color: '#e2445c', items: [
+    { id: 'p1', name: 'Anne-Fleur / Djoeke', ownerIds: ['menno'], status: 'Working on it', estHours: 12,
+      startDate: null, endDate: null, subitems: [
+        { id: 's1', name: 'Sessie 1', ownerIds: ['menno'], status: '', estHours: 4, startDate: iso(-4), endDate: iso(-4) },
+        { id: 's2', name: 'Sessie 2', ownerIds: ['menno'], status: '', estHours: 4, startDate: iso(10), endDate: iso(10) },
+        { id: 's3', name: 'Sessie 3', ownerIds: ['menno'], status: '', estHours: 4, startDate: iso(24), endDate: iso(24) },
+      ] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 950 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-nederland', b)
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/projects/nederland', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(2000)
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const stukken = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-board-timeline] div[title]')]
+      .filter(d => (d.getAttribute('title') ?? '').startsWith('Anne-Fleur / Djoeke ·'))
+      .map(d => Math.round(d.getBoundingClientRect().width)))
+  await page.close()
+
+  assert.equal(stukken.length, 3, `drie losse stukjes, één per subitem (kreeg ${stukken.length})`)
+  for (const breedte of stukken) {
+    assert.ok(breedte < 60, `elk stukje is kort, geen balk over het hele kwartaal (${breedte}px)`)
+  }
+})
+
+test('er is een vandaag-streep en een knop die ernaartoe springt', { skip: skip ?? false }, async () => {
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const lijn = page.locator('[data-vandaag-lijn]')
+  assert.equal(await lijn.count(), 1, 'de streep staat er')
+
+  const raster = () => page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-board-timeline] div')].find(d => d.scrollWidth > d.clientWidth + 50)
+    return el ? el.scrollLeft : null
+  })
+  // Ver naar rechts, zodat vandaag uit beeld is.
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-board-timeline] div')].find(d => d.scrollWidth > d.clientWidth + 50)
+    if (el) el.scrollLeft = el.scrollWidth
+  })
+  await page.waitForTimeout(400)
+  const ver = await raster()
+
+  await page.getByRole('button', { name: 'VANDAAG' }).click()
+  await page.waitForTimeout(1200)
+  const terug = await raster()
+  await page.close()
+  assert.ok(terug < ver, `de knop scrollt terug naar vandaag (${ver} → ${terug})`)
+})
+
+test('terugscrollen schuift het beeld niet onder je handen weg', { skip: skip ?? false }, async () => {
+  // Het raster heeft een vast aantal kolommen: bijladen verschuift het
+  // hele venster in plaats van er kolommen bij te plakken. Corrigeerden
+  // we op de totale breedte, dan corrigeerden we op niets en sprong het
+  // beeld acht weken vooruit.
+  const page = await openAgenda()
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const meet = () => page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-board-timeline] div')].find(d => d.scrollWidth > d.clientWidth + 50)
+    const balk = [...document.querySelectorAll('[data-board-timeline] div[title]')]
+      .find(d => (d.getAttribute('title') ?? '').startsWith('NL College S04 E33 ·'))
+    return {
+      balkX: balk ? Math.round(balk.getBoundingClientRect().left) : null,
+      scrollLeft: el ? el.scrollLeft : 0,
+      kop: document.querySelector('[data-kolomkop]')?.textContent ?? '',
+    }
+  })
+  const voor = await meet()
+  assert.ok(voor.scrollLeft > 0, 'de tijdlijn opent niet helemaal links, dus er valt terug te scrollen')
+  // Waar zou de balk staan als je naar links scrollt en er niets bijlaadt?
+  const verwachtX = voor.balkX + voor.scrollLeft
+
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-board-timeline] div')].find(d => d.scrollWidth > d.clientWidth + 50)
+    if (el) el.scrollLeft = 0
+  })
+  await page.waitForTimeout(1200)
+  const na = await meet()
+  await page.close()
+
+  assert.notEqual(na.kop, voor.kop, `er is echt historie bijgeladen (${voor.kop} → ${na.kop})`)
+  assert.ok(Math.abs(na.balkX - verwachtX) <= 2,
+    `en de balk staat waar je 'm liet, niet weken verderop (verwacht ${verwachtX}, kreeg ${na.balkX})`)
 })
 
 test('klikken op de balk klapt de subitems uit en weer in', { skip: skip ?? false }, async () => {
