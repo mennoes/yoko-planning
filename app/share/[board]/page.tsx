@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useRef } from 'react'
+import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { BOARD_COLORS } from '@/lib/workload'
 import { staticAvatarUrl } from '@/lib/avatarAssets'
@@ -306,11 +307,15 @@ export default function ShareBoardPage() {
 
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px 80px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 6 }}>
-        <span style={{ width: 14, height: 14, borderRadius: 4, background: color }} />
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Studio Yoko · Read-only weergave
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+        <Image src="/yoko-logo.png" alt="Studio Yoko" width={34} height={34} priority unoptimized
+          style={{ display: 'block', width: 34, height: 34 }} />
+        <div>
+          <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 750, lineHeight: 1.15 }}>Studio Yoko</div>
+          <div style={{ marginTop: 3, fontSize: 10.5, color: 'var(--text-muted)', fontWeight: 650, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Gedeelde planning · alleen lezen
+          </div>
+        </div>
       </div>
       <h1 style={{ fontSize: 36, fontWeight: 700, margin: '0 0 4px', color: 'var(--text-primary)', letterSpacing: '-0.02em', textTransform: 'capitalize' }}>
         {board}
@@ -343,8 +348,9 @@ export default function ShareBoardPage() {
                 style={{
                   textAlign: 'left', cursor: 'pointer',
                   padding: '14px 16px', borderRadius: 12,
-                  background: m.isCurrent ? color + '14' : 'var(--bg-card)',
-                  border: `1.5px solid ${active ? color : m.isCurrent ? color + '55' : 'var(--border-light)'}`,
+                  background: 'var(--bg-card)',
+                  border: `${active ? 2 : 1}px solid ${active ? color : 'var(--border-light)'}`,
+                  boxShadow: active ? `inset 0 3px 0 ${color}` : 'none',
                 }}>
                 <div style={{
                   fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -395,7 +401,7 @@ export default function ShareBoardPage() {
               const checked = selectedGroupIds.has(group.id)
               return (
                 <label key={group.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7,
-                  background: checked ? group.color + '18' : 'transparent', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 12 }}>
+                  background: checked ? 'var(--bg-hover)' : 'transparent', cursor: 'pointer', color: 'var(--text-primary)', fontSize: 12 }}>
                   <input type="checkbox" checked={checked} onChange={() => toggleGroup(group.id)} style={{ accentColor: group.color }} />
                   <span style={{ width: 8, height: 8, borderRadius: 2, background: group.color, flexShrink: 0 }} />
                   <span style={{ flex: 1, fontWeight: checked ? 650 : 500 }}>{group.name}</span>

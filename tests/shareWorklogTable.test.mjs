@@ -28,6 +28,15 @@ test('share page resolves live owners and renders their avatars', () => {
   assert.doesNotMatch(page, /teamData\.members\.find/)
 })
 
+test('share page uses restrained solid cards and clear Studio Yoko branding', () => {
+  assert.match(page, /src="\/yoko-logo\.png" alt="Studio Yoko"/)
+  assert.match(page, />Studio Yoko</)
+  assert.match(page, /background: 'var\(--bg-card\)'/)
+  assert.doesNotMatch(page, /color \+ '14'/)
+  assert.doesNotMatch(page, /color \+ '55'/)
+  assert.doesNotMatch(page, /group\.color \+ '18'/)
+})
+
 test('share monthly totals use the same project materialization as Home and Planning', () => {
   assert.match(api, /groupsToProjects\(board, workloadGroups\)/)
   assert.doesNotMatch(api, /function collectHourSources/)
