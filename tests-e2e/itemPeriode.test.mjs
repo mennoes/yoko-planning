@@ -97,3 +97,63 @@ test('de periode leegmaken zet het item terug op automatisch', { skip: skip ?? f
   assert.equal(opgeslagen.eind, null)
   assert.match(cel, /nov\. 10 – 11/, `en de cel volgt nu het subitem: ${cel}`)
 })
+
+test('een Google-serie krijgt geen ↺ en volgt zijn instances', { skip: skip ?? false }, async () => {
+  // De klacht: bij bijna elk Google-item stond een ↺ alsof je de periode
+  // zelf had ingevuld. De sync schrijft die datums op het hoofditem; jij
+  // niet. En de getoonde periode hoorde die van de instances te zijn.
+  const googleBord = [{ id: 'g1', name: 'Groep', color: '#579bfc', items: [
+    { id: 'p1', name: 'Anne-Fleur / Djoeke', ownerIds: ['menno'], status: 'Doorlopend', estHours: 3,
+      source: 'google', startDate: '2026-11-11', endDate: '2026-12-09', subitems: [
+        { id: 's1', name: 'Anne-Fleur / Djoeke', ownerIds: ['menno'], status: 'Working on it', estHours: 1,
+          source: 'google', startDate: '2026-10-14', endDate: '2026-10-14' },
+        { id: 's2', name: 'Anne-Fleur / Djoeke', ownerIds: ['menno'], status: '', estHours: 1,
+          source: 'google', startDate: '2026-11-11', endDate: '2026-11-11' },
+        { id: 's3', name: 'Anne-Fleur / Djoeke', ownerIds: ['menno'], status: '', estHours: 1,
+          source: 'google', startDate: '2026-12-09', endDate: '2026-12-09' },
+      ] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 950 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+  }, JSON.stringify(googleBord))
+  await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id="p1"]', { timeout: 20000 })
+  await page.waitForTimeout(1500)
+
+  const cel = await rijTekst(page)
+  const herstelKnop = await page.getByTitle(/Periode leegmaken/).count()
+  await page.close()
+
+  assert.equal(herstelKnop, 0, `geen ↺ bij een item dat zijn datums van de sync krijgt: ${cel}`)
+  assert.match(cel, /14 okt\./, `de periode komt van de instances: ${cel}`)
+  assert.match(cel, /9 dec\./, `en loopt tot de laatste: ${cel}`)
+})
+
+test('een Google-serie die je zelf hebt overschreven houdt wél zijn ↺', { skip: skip ?? false }, async () => {
+  const googleBord = [{ id: 'g1', name: 'Groep', color: '#579bfc', items: [
+    { id: 'p1', name: 'Anne-Fleur / Djoeke', ownerIds: ['menno'], status: 'Doorlopend', estHours: 3,
+      source: 'google', datesOverride: true, startDate: '2026-11-11', endDate: '2026-12-09', subitems: [
+        { id: 's1', name: 'Anne-Fleur / Djoeke', ownerIds: ['menno'], status: 'Working on it', estHours: 1,
+          source: 'google', startDate: '2026-10-14', endDate: '2026-10-14' },
+      ] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 950 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+  }, JSON.stringify(googleBord))
+  await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id="p1"]', { timeout: 20000 })
+  await page.waitForTimeout(1500)
+
+  const cel = await rijTekst(page)
+  const herstelKnop = await page.getByTitle(/Periode leegmaken/).count()
+  await page.close()
+
+  assert.equal(herstelKnop, 1, 'hier heb je wél iets om terug te zetten')
+  assert.match(cel, /11 nov\./, `en je eigen periode blijft staan: ${cel}`)
+})

@@ -98,3 +98,54 @@ test('volgtSubitems zegt of de cel nog automatisch is', () => {
   assert.equal(volgtSubitems({ startDate: null, endDate: null, subitems: [] }), false,
     'zonder subitems valt er niets te volgen')
 })
+
+test('een Google-serie volgt zijn instances, ook al staan er datums op', () => {
+  // De klacht: bij bijna elk Google-item stond een ↺ alsof je de periode
+  // zelf had ingevuld. De sync schrijft die datums; jij niet.
+  const d = itemDatums({
+    source: 'google',
+    startDate: '2026-11-11', endDate: '2026-12-09',
+    subitems: [sub('2026-10-14', '2026-10-14'), sub('2026-11-11', '2026-11-11'), sub('2026-12-09', '2026-12-09')],
+  })
+  assert.equal(d.bron, 'subitems', 'de datums komen van de instances, niet van jou')
+  assert.equal(d.startDate, '2026-10-14')
+  assert.equal(d.endDate, '2026-12-09')
+})
+
+test('een Google-serie die je zelf hebt overschreven houdt zijn periode', () => {
+  const d = itemDatums({
+    source: 'google', datesOverride: true,
+    startDate: '2026-11-11', endDate: '2026-12-09',
+    subitems: [sub('2026-10-14', '2026-10-14')],
+  })
+  assert.equal(d.bron, 'eigen')
+  assert.equal(d.startDate, '2026-11-11')
+})
+
+test('een Google-afspraak zonder instances houdt gewoon zijn eigen datum', () => {
+  // Terugvallen op de subitems kan hier niet; dan zou de afspraak uit de
+  // tijdlijn verdwijnen.
+  const d = itemDatums({ source: 'google', startDate: '2026-11-11', endDate: '2026-11-11', subitems: [] })
+  assert.equal(d.startDate, '2026-11-11')
+  assert.equal(d.endDate, '2026-11-11')
+})
+
+test('een gewoon item met eigen datums blijft eigen, ook zonder vlaggetje', () => {
+  // Alleen Google-items krijgen hun datums van een sync. Zet jij ze op een
+  // gewoon item, dan gelden ze — ook als het vlaggetje van vóór die regel
+  // nog ontbreekt.
+  const d = itemDatums({ startDate: '2026-03-02', endDate: '2026-04-24', subitems: [sub('2026-03-10', '2026-03-11')] })
+  assert.equal(d.bron, 'eigen')
+  assert.equal(d.endDate, '2026-04-24')
+})
+
+test('volgtSubitems ziet een Google-serie als automatisch', () => {
+  assert.equal(volgtSubitems({
+    source: 'google', startDate: '2026-11-11', endDate: '2026-12-09',
+    subitems: [sub('2026-10-14', '2026-10-14')],
+  }), true, 'geen eigen periode, dus geen ↺')
+  assert.equal(volgtSubitems({
+    source: 'google', datesOverride: true, startDate: '2026-11-11', endDate: '2026-12-09',
+    subitems: [sub('2026-10-14', '2026-10-14')],
+  }), false)
+})
