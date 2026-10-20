@@ -33,7 +33,7 @@ import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
-import { normalizeOwnerHours, rebalanceOwnerHours } from '@/lib/ownerHours'
+import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { itemDatums } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
@@ -3613,21 +3613,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
           const oldSum = Object.values(i.ownerHours).reduce((s, v) => s + (Number(v) || 0), 0)
           const newTotal = Number(updates.estHours) || 0
           if (oldSum > 0 && newTotal > 0 && Math.abs(oldSum - newTotal) > 0.01) {
-            const factor = newTotal / oldSum
-            const scaled: Record<string, number> = {}
-            for (const [k, v] of Object.entries(i.ownerHours)) {
-              scaled[k] = Math.round((Number(v) || 0) * factor * 10) / 10
-            }
-            // Rounding kan een paar tienden afwijken van newTotal —
-            // corrigeer 't restje op de grootste deler zodat de som
-            // EXACT klopt en de pie geen drift krijgt.
-            const scaledSum = Object.values(scaled).reduce((s, v) => s + v, 0)
-            const diff = Math.round((newTotal - scaledSum) * 10) / 10
-            if (Math.abs(diff) >= 0.1) {
-              const largest = Object.entries(scaled).sort((a, b) => b[1] - a[1])[0]
-              if (largest) scaled[largest[0]] = Math.round((largest[1] + diff) * 10) / 10
-            }
-            merged.ownerHours = scaled
+            merged.ownerHours = scaleOwnerHours(i.ownerHours, newTotal)
           } else if (newTotal === 0) {
             // Naar 0u: leeg de verdeling, anders blijft de pie
             // verkeerd staan met som > 0.

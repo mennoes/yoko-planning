@@ -607,13 +607,23 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                                 boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
                                 color: '#fff', fontSize: 10.5, fontWeight: 700,
                                 display: 'flex', alignItems: 'center', padding: '0 6px',
-                                overflow: 'hidden', whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
+                                // Geen overflow:hidden meer: dat maakt van de
+                                // balk een eigen scroll-container en dan werkt
+                                // de meescrollende naam hieronder niet.
+                                whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
                               {sleepbaar && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
                                   title="Sleep om de startdatum te verzetten"
                                   style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
                               )}
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {/* De naam schuift mee met het scrollen en blijft
+                                  binnen zijn eigen balk. Bij een klus van een
+                                  half jaar begint de balk anders ver links
+                                  buiten beeld en zie je alleen nog een gekleurde
+                                  baan zonder te weten waarvan. */}
+                              <span style={{ position: 'sticky', left: NAAM_W + 8,
+                                maxWidth: Math.max(0, width - 12),
+                                overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {!regel.isOuder && !regel.segmenten && width > 54 ? regel.naam : ''}
                               </span>
                               {sleepbaar && (

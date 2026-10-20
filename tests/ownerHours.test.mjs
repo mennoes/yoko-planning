@@ -38,3 +38,37 @@ test('normalization preserves an intentional positive unequal split', () => {
     { take: 21.5, menno: 2.5 },
   )
 })
+
+test('uren erbij laat ieders aandeel meegroeien, verhoudingen gelijk', () => {
+  // De klacht: zet je een klus van 20 naar 40 uur, dan bleef de verdeling
+  // op 10 + 10 staan en zakte iedereen van 50% naar 25%.
+  const result = exports.scaleOwnerHours({ menno: 10, take: 10 }, 40)
+  assert.deepEqual({ ...result }, { menno: 20, take: 20 })
+})
+
+test('een scheve verdeling blijft even scheef', () => {
+  const result = exports.scaleOwnerHours({ a: 30, b: 10 }, 80)
+  assert.deepEqual({ ...result }, { a: 60, b: 20 })
+  assert.equal(Object.values(result).reduce((som, v) => som + v, 0), 80)
+})
+
+test('het afrondingsrestje gaat naar de grootste deler', () => {
+  // 10 verdeeld over drie is 3.33…; opgeteld 9.9. Zonder correctie zou de
+  // taart naast het totaal staan.
+  const result = exports.scaleOwnerHours({ a: 1, b: 1, c: 1 }, 10)
+  assert.equal(Object.values(result).reduce((som, v) => som + v, 0), 10)
+})
+
+test('uren eraf werkt net zo goed als uren erbij', () => {
+  const result = exports.scaleOwnerHours({ a: 30, b: 10 }, 20)
+  assert.deepEqual({ ...result }, { a: 15, b: 5 })
+})
+
+test('stond alles op nul, dan is er geen verhouding en wordt het gelijk op', () => {
+  const result = exports.scaleOwnerHours({ a: 0, b: 0 }, 10)
+  assert.deepEqual({ ...result }, { a: 5, b: 5 })
+})
+
+test('zonder eigenaren valt er niets te schalen', () => {
+  assert.deepEqual({ ...exports.scaleOwnerHours({}, 40) }, {})
+})

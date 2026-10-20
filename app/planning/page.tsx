@@ -42,6 +42,7 @@ import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useTeam } from '@/components/TeamContext'
 import { upsertTeamMember } from '@/lib/teamStore'
 import { DistributionPie } from '@/components/DistributionPie'
+import { scaleOwnerHours } from '@/lib/ownerHours'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
 import { logActivity }   from '@/lib/activityLog'
@@ -3330,7 +3331,17 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     const nextNotes = patch.notes     !== undefined ? patch.notes     : notes
     const nextContactpersoon = patch.contactpersoon !== undefined ? patch.contactpersoon : contactpersoon
     const nextJournal    = patch.journal    !== undefined ? patch.journal    : journal
-    const nextOwnerHours = patch.ownerHours !== undefined ? patch.ownerHours : ownerHours
+    // Uren erbij? Dan groeit ieders aandeel mee. Eerder bleef de verdeling
+    // op de oude uren staan: zette je een klus van 20 naar 40 uur, dan
+    // stond er nog steeds 10 + 10 en zakte iedereen van 50% naar 25% —
+    // terwijl de taart hetzelfde hoorde te blijven en alleen de uren
+    // groter moesten worden.
+    let nextOwnerHours = patch.ownerHours !== undefined ? patch.ownerHours : ownerHours
+    if (patch.ownerHours === undefined && patch.estHours !== undefined && !hasSubitems
+        && Object.keys(nextOwnerHours).length > 0) {
+      nextOwnerHours = scaleOwnerHours(nextOwnerHours, nextEst)
+      setOwnerHours(nextOwnerHours)
+    }
     const nextLinks      = patch.links      !== undefined ? patch.links      : links
     const rawOwners      = patch.ownerIds   !== undefined ? patch.ownerIds   : ownerIds
     // 'unassigned' alleen behouden als enige owner; anders eruit filteren.

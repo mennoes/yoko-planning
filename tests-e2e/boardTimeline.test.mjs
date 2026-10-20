@@ -530,6 +530,52 @@ test('een item zonder eigen periode toont losse stukjes, geen lange balk', { ski
   }
 })
 
+test('de naam op een balk schuift mee en valt nooit uit beeld', { skip: skip ?? false }, async () => {
+  // Bij een klus van een half jaar begint de balk ver links buiten beeld.
+  // Stond de naam vast aan het begin van de balk, dan zag je alleen nog
+  // een gekleurde baan zonder te weten waarvan.
+  const bord = [{ id: 'g1', name: 'Groep', color: '#579bfc', items: [
+    { id: 'p1', name: 'Hele lange klus van een half jaar', ownerIds: ['menno'], status: 'Working on it',
+      estHours: 200, startDate: iso(-30), endDate: iso(150), subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1300, height: 700 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-nederland', b)
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/projects/nederland', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(2000)
+  await page.getByRole('button', { name: 'Tijdlijn' }).click()
+  await page.waitForTimeout(900)
+
+  const label = () => page.evaluate(() => {
+    const balk = [...document.querySelectorAll('[data-board-timeline] div[title]')]
+      .find(d => (d.getAttribute('title') ?? '').startsWith('Hele lange klus'))
+    const naam = [...(balk?.querySelectorAll('span') ?? [])]
+      .find(s => (s.textContent ?? '').startsWith('Hele lange klus'))
+    const doos = naam?.getBoundingClientRect()
+    return doos ? { links: Math.round(doos.left), breedte: Math.round(doos.width) } : null
+  })
+
+  const voor = await label()
+  assert.ok(voor && voor.breedte > 0, 'de naam staat op de balk')
+
+  await page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-board-timeline] div')].find(d => d.scrollWidth > d.clientWidth + 50)
+    if (el) el.scrollLeft += 1200
+  })
+  await page.waitForTimeout(500)
+  const na = await label()
+  await page.close()
+
+  assert.ok(na && na.breedte > 0, 'na het scrollen staat de naam er nog steeds')
+  // Zou hij vastzitten aan het begin van de balk, dan was hij 1200px naar
+  // links verdwenen.
+  assert.ok(na.links > 0 && na.links < 1300,
+    `en nog steeds in beeld (links: ${voor.links} → ${na.links})`)
+})
+
 test('er is een vandaag-streep en een knop die ernaartoe springt', { skip: skip ?? false }, async () => {
   const page = await openAgenda()
   await page.getByRole('button', { name: 'Tijdlijn' }).click()
