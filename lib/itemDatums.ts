@@ -18,6 +18,27 @@ type ItemLike = {
   startDate?: string | null
   endDate?:   string | null
   subitems?:  SubLike[] | null
+  /** 'google' betekent: de datums op dit item worden door de agenda-sync
+   *  geschreven, niet door jou. */
+  source?:    string | null
+  /** Staat alleen op true als iemand de periode zelf heeft ingevuld. */
+  datesOverride?: boolean
+}
+
+/**
+ * Heeft dit item een periode die iemand er zelf op heeft gezet?
+ *
+ * Voor een gewoon item is dat simpel: staat er een datum, dan heb jij 'm
+ * erop gezet. Bij een Google-serie niet: daar schrijft de sync elke keer
+ * de omspanning van de instances op het hoofditem, dus 'er staat een
+ * datum' zegt niets. Alleen als je 'm in de datumcel hebt overschreven
+ * (datesOverride) is het een eigen periode — anders volgt hij gewoon de
+ * subitems, en hoort er ook geen ↺-knop bij te staan.
+ */
+function heeftEigenPeriode(item: ItemLike): boolean {
+  if (!item.startDate && !item.endDate) return false
+  if (item.source === 'google') return item.datesOverride === true
+  return true
 }
 
 /**
@@ -35,9 +56,12 @@ export function itemDatums(item: ItemLike): {
 } {
   const eigenStart = item.startDate ?? null
   const eigenEind  = item.endDate ?? null
-  if (eigenStart || eigenEind) {
-    return { startDate: eigenStart ?? eigenEind, endDate: eigenEind ?? eigenStart, bron: 'eigen' }
+  const eigen = {
+    startDate: eigenStart ?? eigenEind,
+    endDate:   eigenEind ?? eigenStart,
+    bron: 'eigen' as const,
   }
+  if (heeftEigenPeriode(item)) return eigen
 
   const alle   = item.subitems ?? []
   const actief = alle.filter(sub => sub.status !== 'Done')
@@ -46,7 +70,9 @@ export function itemDatums(item: ItemLike): {
   const starts = bron.map(sub => sub.startDate).filter((d): d is string => !!d).sort()
   const einden = bron.map(sub => sub.endDate).filter((d): d is string => !!d).sort()
   if (starts.length === 0 && einden.length === 0) {
-    return { startDate: null, endDate: null, bron: 'geen' }
+    // Geen subitems om op terug te vallen. Heeft het item zelf wel datums
+    // (een Google-afspraak zonder instances), dan zijn die alles wat er is.
+    return eigen.startDate ? eigen : { startDate: null, endDate: null, bron: 'geen' }
   }
   return {
     startDate: starts[0] ?? einden[0],
