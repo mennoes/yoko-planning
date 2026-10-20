@@ -7107,6 +7107,18 @@ export default function PlanningPage() {
                   </div>
                 )
               }
+              if (sectionId === '__overig__') {
+                // Overig deed hier niet mee en werd achteraf aangeplakt; in
+                // 'Mensen & capaciteit' omhoog zetten veranderde hier dus
+                // niets.
+                if (unassignedVisible.length === 0) return null
+                return (
+                  <div key="day-overig">
+                    {sectionLabel('Overig', unassignedVisible.length, unassignedVisible)}
+                    {unassignedVisible.map(renderPerson)}
+                  </div>
+                )
+              }
               const eigen = groupedVisible.find(entry => entry.group.id === sectionId)
               if (!eigen) return null
               const { group, members } = eigen
@@ -7119,13 +7131,7 @@ export default function PlanningPage() {
                 </div>
               )
             }
-            return (
-              <>
-                {teamSections.map(section => dagSectie(section.id))}
-                {unassignedVisible.length > 0 && sectionLabel('Unassigned', unassignedVisible.length, unassignedVisible)}
-                {unassignedVisible.map(renderPerson)}
-              </>
-            )
+            return <>{teamSections.map(section => dagSectie(section.id))}</>
           })() : (() => {
             // YOKO_IDS-check loopt nu via isYokoCrew (team_members.kind),
         // met fallback op de hardcoded set voor leden die nog geen kind
@@ -7394,18 +7400,24 @@ export default function PlanningPage() {
               if (inactiveTeamPos !== 0) inactiveTeam.forEach((m, i) => out.push(wrap(m, `ia-${m.id}`, i, inactiveTeam)))
             }
 
+            // Overig deed hier niet mee en werd achteraf aangeplakt. Zet je
+            // 'm in 'Mensen & capaciteit' omhoog, dan veranderde er in het
+            // raster dus niets.
+            const toonOverig = () => {
+              if (unassigned.length === 0) return
+              out.push(<div key="hdr-un">{sectionHeader('Overig', unassigned.length)}</div>)
+              unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i, unassigned)))
+            }
+
             for (const section of teamSections) {
               if (section.id === '__yoko__') toonYoko()
               else if (section.id === '__freelance__') toonFreelancers()
               else if (section.id === '__inactive__') toonInactief()
+              else if (section.id === '__overig__') toonOverig()
               else {
                 const eigen = groupedVisible.find(entry => entry.group.id === section.id)
                 if (eigen) toonTeam(eigen.group, eigen.members)
               }
-            }
-            if (unassigned.length > 0) {
-              out.push(<div key="hdr-un">{sectionHeader('Unassigned', unassigned.length)}</div>)
-              unassigned.forEach((m, i) => out.push(wrap(m, `u-${m.id}`, i, unassigned)))
             }
             return out
           })()}
