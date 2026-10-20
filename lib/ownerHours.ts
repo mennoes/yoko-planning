@@ -58,3 +58,44 @@ export function rebalanceOwnerHours(
   if (Math.abs(remainder) >= 0.1) next[others[0]] = round1(next[others[0]] + remainder)
   return next
 }
+
+/**
+ * Schaal een verdeling mee met een nieuw totaal.
+ *
+ * Zet je de uren van een klus van 20 naar 40, dan verdubbelt ieders
+ * aandeel en blijven de verhoudingen — en dus de taart en de percentages
+ * — precies gelijk. Zonder dit bleef de verdeling op de oude uren staan:
+ * de taart klopte niet meer met het totaal en iedereens percentage zakte.
+ *
+ * Het afrondingsrestje gaat naar de grootste deler, zodat de som exact op
+ * het nieuwe totaal uitkomt en de taart niet gaat driften.
+ */
+export function scaleOwnerHours(
+  current: Record<string, number>,
+  newTotal: number,
+): Record<string, number> {
+  const paren = Object.entries(current ?? {})
+    .map(([id, waarde]) => [id, Math.max(0, Number(waarde) || 0)] as const)
+  if (paren.length === 0) return {}
+
+  const totaal = Math.max(0, Number(newTotal) || 0)
+  const som = paren.reduce((acc, [, waarde]) => acc + waarde, 0)
+
+  // Stond alles op nul, dan is er geen verhouding om te bewaren: gelijk op.
+  if (som <= 0) {
+    const per = round1(totaal / paren.length)
+    const gelijk = Object.fromEntries(paren.map(([id]) => [id, per]))
+    gelijk[paren[0][0]] = round1(per + round1(totaal - per * paren.length))
+    return gelijk
+  }
+
+  const factor = totaal / som
+  const next = Object.fromEntries(paren.map(([id, waarde]) => [id, round1(waarde * factor)]))
+  const nieuweSom = Object.values(next).reduce((acc, waarde) => acc + waarde, 0)
+  const rest = round1(totaal - nieuweSom)
+  if (Math.abs(rest) >= 0.1) {
+    const grootste = Object.entries(next).sort((a, b) => b[1] - a[1])[0]
+    if (grootste) next[grootste[0]] = round1(grootste[1] + rest)
+  }
+  return next
+}
