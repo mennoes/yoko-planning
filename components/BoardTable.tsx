@@ -123,6 +123,16 @@ const PALETTE = [
  *  het item-venster kan zeggen in welke agenda en groep je zit. */
 const GroupCtx = createContext<{ color: string; boardName?: string; groupName?: string }>({ color: '#579bfc' })
 
+/** Hoe groot de tekst in een cel is, als factor. In een rij 1; in het
+ *  item-venster ruimer, want daar is plek zat en moet je het kunnen
+ *  lezen. De cellen zijn gedeeld, dus dit scheelt een prop door elke
+ *  laag heen. */
+const CelSchaalCtx = createContext(1)
+function useCelFont() {
+  const schaal = useContext(CelSchaalCtx)
+  return (basis: number) => Math.round(basis * schaal * 10) / 10
+}
+
 // ─── Datum helpers ────────────────────────────────────────────────────────────
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
@@ -415,6 +425,7 @@ function EstHoursSummedCell({ own, ownEdit, subsSum, totalValue, isProrated, onC
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
+  const celFont = useCelFont()
   const editV = ownEdit ?? own
   function start() { setDraft(editV ? String(editV) : ''); setEditing(true) }
   function save()  { onChange(parseFloat(draft) || 0); setEditing(false) }
@@ -433,7 +444,7 @@ function EstHoursSummedCell({ own, ownEdit, subsSum, totalValue, isProrated, onC
         ? `Periode-fractie · klik om de echte item-uren te wijzigen (${editV}u)`
         : (subsSum > 0 ? `${subsSum}u uit subitems` : `${own}u op het hoofditem`)}
       style={{
-        padding: '0 4px', cursor: 'pointer', fontSize: 13,
+        padding: '0 4px', cursor: 'pointer', fontSize: celFont(13),
         color: total > 0 ? 'var(--text-secondary)' : 'var(--text-muted)',
         fontStyle: isProrated ? 'italic' : 'normal',
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -488,6 +499,7 @@ function EditableCell({
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
+  const celFont = useCelFont()
 
   function start() { setDraft(value?.toString() ?? ''); setEditing(true) }
   function save()  {
@@ -512,7 +524,7 @@ function EditableCell({
 
   return (
     <div onClick={start} style={{
-      padding: '0 4px', cursor: 'pointer', fontSize: 13,
+      padding: '0 4px', cursor: 'pointer', fontSize: celFont(13),
       color: display ? 'var(--text-secondary)' : 'var(--text-muted)',
       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       userSelect: 'none', width: '100%',
@@ -533,6 +545,7 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel, menuLabel, e
 }) {
   const [open, setOpen] = useState(false)
   const [hover, setHover] = useState(false)
+  const celFont = useCelFont()
   const btnRef = useRef<HTMLButtonElement>(null)
   const opt = STATUS_OPTIONS.find(s => s.label === value) ?? STATUS_OPTIONS[0]
 
@@ -550,7 +563,7 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel, menuLabel, e
           padding: '0 10px', borderRadius: 0, cursor: disabled ? 'default' : 'pointer', border: 'none', opacity: disabled ? 0.6 : 1,
           background: opt.color || 'var(--overlay-medium)',
           color: opt.color ? '#fff' : 'var(--text-muted)',
-          fontSize: 12.5, fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
+          fontSize: celFont(12.5), fontWeight: opt.color ? 600 : 400, lineHeight: 1.15,
           whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
@@ -1385,6 +1398,7 @@ function DateRangeCell({
   const { color } = useContext(GroupCtx)
   const [open, setOpen]   = useState(false)
   const [hover, setHover] = useState(false)
+  const celFont = useCelFont()
   const btnRef = useRef<HTMLButtonElement>(null)
 
   const today   = new Date().toISOString().split('T')[0]
@@ -1455,7 +1469,7 @@ function DateRangeCell({
               }}>!</span>
             )}
             <span title={`${progressPct}% verstreken · ${dur ?? ''}`}
-              style={{ position: 'relative', zIndex: 1, fontSize: 13, fontWeight: 600,
+              style={{ position: 'relative', zIndex: 1, fontSize: celFont(13), fontWeight: 600,
                 color: progressPct > 35 ? '#fff' : 'var(--text-primary)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 flex: 1, textAlign: 'center',
@@ -1579,6 +1593,7 @@ function Cell({ item, col, onUpdate, statusExtra, avatarSize }: {
   item: BoardItem; col: ColumnDef; onUpdate: (u: Partial<BoardItem>) => void; statusExtra?: React.ReactNode
   avatarSize?: number
 }) {
+  const celFont = useCelFont()
   const rolledOwnerTotal = Number(item.__relevantOwnerHoursTotal)
   if (col.type === 'owners')    return <OwnersCell value={item.ownerIds} avatarSize={avatarSize}
     ownerHours={item.ownerHours}
@@ -1663,7 +1678,7 @@ function Cell({ item, col, onUpdate, statusExtra, avatarSize }: {
       return (
         <span
           title="Som van de losse Google-afspraken; de hoofdrij telt niet apart mee"
-          style={{ fontSize: 13, color: total > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}
+          style={{ fontSize: celFont(13), color: total > 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}
         >
           {total > 0 ? total : '—'}
         </span>
@@ -1684,7 +1699,7 @@ function Cell({ item, col, onUpdate, statusExtra, avatarSize }: {
   // dagen: always computed from estHours (or sum of subs), read-only.
   if (col.key === 'dagen') {
     const days = effectiveDays(item)
-    return <span title="Auto: uren ÷ 8" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{days || ''}</span>
+    return <span title="Auto: uren ÷ 8" style={{ fontSize: celFont(13), color: 'var(--text-muted)' }}>{days || ''}</span>
   }
 
   return (
@@ -3193,7 +3208,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
         Verdeling
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 16px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
@@ -3214,7 +3229,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
             const val = live[oid] ?? 0
             const pct = total > 0 ? Math.round((val / total) * 100) : 0
             return (
-              <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <div key={oid} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5 }}>
                 <span style={{ width: 10, height: 10, borderRadius: 2, background: m.color ?? '#9aa3ad', flexShrink: 0 }} />
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
@@ -3254,7 +3269,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
             )
           })}
           {nietVerdeeld > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14.5, color: 'var(--text-muted)' }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--border-strong)', flexShrink: 0 }} />
               <span style={{ flex: 1, minWidth: 0 }}>Nog niemand</span>
               <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
@@ -3264,7 +3279,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
           )}
         </div>
       </div>
-      <p style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+      <p style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-muted)' }}>
         {uitSubitems
           ? 'Opgeteld uit de subitems — pas de uren daar aan, dan loopt dit mee.'
           : 'Sleep de witte bolletjes of vul de uren per persoon rechtstreeks in.'}
@@ -3405,6 +3420,9 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
   return createPortal(
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 9000 }} />
+      {/* Alles in dit venster een maatje groter dan in een rij: hier is
+          ruimte zat, en op een groot scherm las het als kleine lettertjes. */}
+      <CelSchaalCtx.Provider value={1.18}>
       <div onClick={e => e.stopPropagation()} style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: `min(${breedte}px, 96vw)`, zIndex: 9001,
@@ -3431,7 +3449,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                 of een zoekactie opent een naam zonder plek: in welke
                 agenda, in welke groep, en — bij een subitem — onder welk
                 item. */}
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span style={{ flexShrink: 0 }}>{parentItemId ? 'Subitem' : 'Item'}</span>
               {isGoogle && <span style={{ background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>GOOGLE</span>}
               {kruimels.length > 0 && (
@@ -3476,10 +3494,10 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 8,
                 padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)',
                 border: '1px solid var(--border-light)' }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                   {col.key === 'status' ? 'Status' : col.key === 'timeline' ? 'Timeline' : col.label}
                 </span>
-                <div style={{ minHeight: 38, display: 'flex', alignItems: 'center', fontSize: 14 }}>
+                <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', fontSize: 15 }}>
                   <Cell item={vensterItem} col={col} onUpdate={onUpdate} avatarSize={44} />
                 </div>
                 {col.key === 'status' && <PersonalCompletionSection
@@ -3522,17 +3540,17 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
           {/* Notities-thread (voorheen "Opmerkingen") */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                 Notities
               </div>
               <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                 {replies.length} {replies.length === 1 ? 'reactie' : 'reacties'}
               </span>
             </div>
 
             {replies.length === 0 ? (
-              <p style={{ fontSize: 13.5, color: 'var(--text-muted)', fontStyle: 'italic', margin: '10px 0 16px' }}>Nog geen opmerkingen. Wees de eerste!</p>
+              <p style={{ fontSize: 14.5, color: 'var(--text-muted)', fontStyle: 'italic', margin: '10px 0 16px' }}>Nog geen opmerkingen. Wees de eerste!</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
                 {[...replies].reverse().map(r => {
@@ -3546,12 +3564,12 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                       onMouseEnter={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '1' }}
                       onMouseLeave={e => { const btn = e.currentTarget.querySelector<HTMLElement>('.cmt-del'); if (btn) btn.style.opacity = '0' }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                        <strong style={{ fontSize: 13.5, color: 'var(--text-primary)' }}>{r.author}</strong>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        <strong style={{ fontSize: 14.5, color: 'var(--text-primary)' }}>{r.author}</strong>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                           {new Date(r.createdAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <div style={{ fontSize: 14, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 }}>
+                      <div style={{ fontSize: 15, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 }}>
                         {r.body}
                       </div>
                       {profile?.memberId && (
@@ -3598,7 +3616,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                   style={{ padding: '8px 16px', borderRadius: 6, border: 'none',
                     background: newReply.trim() ? 'var(--accent)' : 'var(--bg-hover)',
                     color: newReply.trim() ? '#000' : 'var(--text-muted)',
-                    fontSize: 13, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed' }}>
+                    fontSize: 14, fontWeight: 700, cursor: newReply.trim() ? 'pointer' : 'not-allowed' }}>
                   Plaats opmerking
                 </button>
               </div>
@@ -3606,6 +3624,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
           </div>
         </div>
       </div>
+      </CelSchaalCtx.Provider>
     </>,
     document.body,
   )
