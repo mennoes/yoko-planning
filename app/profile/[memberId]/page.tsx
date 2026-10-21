@@ -17,6 +17,7 @@ import { isTeamAdmin } from '@/lib/teamAdmin'
 import { pinnedStaticAvatarUrl, staticAvatarUrl } from '@/lib/avatarAssets'
 import { useTeamGroups } from '@/components/useTeamGroups'
 import { AvatarEditor } from '@/components/AvatarEditor'
+import { DatumVeld } from '@/components/DatumVeld'
 
 type ExtendedProfile = {
   user_id?:           string
@@ -390,7 +391,7 @@ function AdminTeamCard({ member, capacity, refresh, onError }: {
       <label style={labelStyle}>Naam<input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} style={fieldStyle} /></label>
       <label style={labelStyle}>E-mail<input type="email" value={draft.email} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} style={fieldStyle} /></label>
       <label style={labelStyle}>Uren per week<input type="number" min={0} max={80} value={draft.weeklyCapacity} onChange={e => setDraft(d => ({ ...d, weeklyCapacity: Number(e.target.value) }))} style={fieldStyle} /></label>
-      <label style={labelStyle}>Startdatum<input type="date" value={draft.startDate} onChange={e => setDraft(d => ({ ...d, startDate: e.target.value }))} style={fieldStyle} /></label>
+      <label style={labelStyle}>Startdatum<DatumVeld value={draft.startDate} ariaLabel="Startdatum" onChange={v => setDraft(d => ({ ...d, startDate: v ?? '' }))} style={fieldStyle} /></label>
       <label style={labelStyle}>Team<select value={draft.kind} onChange={e => setDraft(d => ({ ...d, kind: e.target.value as TeamKind }))} style={fieldStyle}>
         <option value="yoko">Studio Yoko</option><option value="freelance">Freelance</option>
       </select></label>

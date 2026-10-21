@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { BOARD_COLORS } from '@/lib/workload'
 import { staticAvatarUrl } from '@/lib/avatarAssets'
+import { DatumVeld } from '@/components/DatumVeld'
 
 // Read-only data shape die de /api/share/[board] endpoint teruggeeft.
 // Bewust een subset van BoardItem — gevoelige velden (notes, journal,
@@ -433,10 +434,10 @@ export default function ShareBoardPage() {
         })}
         {preset === 'custom' && (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+            <DatumVeld value={from} ariaLabel="Van" onChange={v => setFrom(v ?? '')}
               style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }} />
             <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>tot</span>
-            <input type="date" value={until} onChange={e => setUntil(e.target.value)}
+            <DatumVeld value={until} ariaLabel="Tot" onChange={v => setUntil(v ?? '')}
               style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12 }} />
           </div>
         )}

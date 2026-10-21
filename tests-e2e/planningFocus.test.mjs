@@ -151,3 +151,37 @@ test('een balk die te krap is houdt de pill', { skip: skip ?? false }, async () 
   assert.equal(m.gezichten, 0, 'geen half ingevulde strook')
   assert.equal(m.pill, true, 'maar wel het aantal mensen')
 })
+
+test('datumvelden beginnen met de dag, ook in een Engelse browser', { skip: skip ?? false }, async () => {
+  // Een <input type="date"> volgt de taal van de browser, niet lang="nl".
+  // In een Engelse Chrome stond er 11/04/2026 waar 4 november bedoeld is.
+  const bord = [{ id: 'g1', name: 'Projecten', color: '#579bfc', items: [
+    { id: 'p1', name: 'Testklus', ownerIds: ['menno'], status: 'Working on it',
+      estHours: 8, startDate: '2026-11-04', endDate: '2026-11-19', subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, locale: 'en-US' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id="p1"]', { timeout: 20000 })
+  await page.waitForTimeout(1200)
+  await page.locator('[data-item-id="p1"]').getByText(/nov\./).first().click()
+  await page.waitForTimeout(900)
+
+  const velden = page.locator('input[placeholder="dd-mm-jjjj"]')
+  const waarden = await velden.evaluateAll(els => els.map(e => e.value))
+  assert.deepEqual(waarden, ['04-11-2026', '19-11-2026'],
+    `dag eerst, kreeg ${waarden.join(' / ')}`)
+
+  // En intikken werkt in dezelfde volgorde.
+  await velden.first().fill('25-12-2026')
+  await velden.first().blur()
+  await page.waitForTimeout(700)
+  const opgeslagen = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('yoko-board-yoko')).flatMap(g => g.items).find(i => i.id === 'p1').startDate)
+  await page.close()
+  assert.equal(opgeslagen, '2026-12-25', '25-12 is 25 december, geen 12 mei')
+})
