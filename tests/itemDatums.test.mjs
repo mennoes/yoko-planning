@@ -14,7 +14,7 @@ function laad(file) {
   return exports
 }
 
-const { itemDatums, volgtSubitems } = laad('../lib/itemDatums.ts')
+const { itemDatums, volgtSubitems, subitemsGevenPeriode } = laad('../lib/itemDatums.ts')
 
 const sub = (van, tot, status = 'Working on it') => ({ status, startDate: van, endDate: tot })
 
@@ -148,4 +148,37 @@ test('volgtSubitems ziet een Google-serie als automatisch', () => {
     source: 'google', datesOverride: true, startDate: '2026-11-11', endDate: '2026-12-09',
     subitems: [sub('2026-10-14', '2026-10-14')],
   }), false)
+})
+
+test('subitems zonder datums geven niets om op terug te vallen', () => {
+  // Hier ging het mis: er stond een ↺ bij een item waarvan de subitems
+  // helemaal geen periode hebben. Klikken zou de datums leeghalen en er
+  // niets voor terugzetten.
+  assert.equal(subitemsGevenPeriode({
+    startDate: '2026-10-21', endDate: '2026-10-21',
+    subitems: [
+      { id: 's1', name: 'Doorlezen', status: '', startDate: null, endDate: null },
+      { id: 's2', name: 'Bespreken', status: '', startDate: null, endDate: null },
+    ],
+  }), false)
+})
+
+test('subitems mét datums geven dat wel', () => {
+  assert.equal(subitemsGevenPeriode({
+    startDate: null, endDate: null,
+    subitems: [sub('2026-03-02', '2026-03-06')],
+  }), true)
+})
+
+test('zonder subitems valt er al helemaal niets terug te vallen', () => {
+  assert.equal(subitemsGevenPeriode({ startDate: '2026-03-02', endDate: '2026-03-06', subitems: [] }), false)
+})
+
+test('een item met datumloze subitems houdt gewoon zijn eigen periode', () => {
+  const d = itemDatums({
+    source: 'google', startDate: '2026-10-21', endDate: '2026-10-21',
+    subitems: [{ id: 's1', name: 'Doorlezen', status: '', startDate: null, endDate: null }],
+  })
+  assert.equal(d.startDate, '2026-10-21')
+  assert.equal(d.endDate, '2026-10-21')
 })

@@ -42,13 +42,28 @@ function heeftEigenPeriode(item: ItemLike): boolean {
 }
 
 /**
- * De periode van een item, en waar die vandaan komt.
+ * De omspanning van de subitems, of null als die er geen datums hebben.
  *
- * Done-subitems tellen niet mee voor de omspanning: anders blijft een
- * klus op 20 mei staan terwijl al het resterende werk pas in juni
- * begint. Zijn ze állemaal af, dan vallen we terug op de hele set — een
- * lege periode is minder bruikbaar dan een verlopen periode.
+ * Done-subitems tellen niet mee: anders blijft een klus op 20 mei staan
+ * terwijl al het resterende werk pas in juni begint. Zijn ze állemaal
+ * af, dan vallen we terug op de hele set — een lege periode is minder
+ * bruikbaar dan een verlopen periode.
  */
+function uitSubitems(item: ItemLike): { startDate: string; endDate: string } | null {
+  const alle   = item.subitems ?? []
+  const actief = alle.filter(sub => sub.status !== 'Done')
+  const bron   = actief.length > 0 ? actief : alle
+
+  const starts = bron.map(sub => sub.startDate).filter((d): d is string => !!d).sort()
+  const einden = bron.map(sub => sub.endDate).filter((d): d is string => !!d).sort()
+  if (starts.length === 0 && einden.length === 0) return null
+  return {
+    startDate: starts[0] ?? einden[0],
+    endDate:   einden[einden.length - 1] ?? starts[starts.length - 1],
+  }
+}
+
+/** De periode van een item, en waar die vandaan komt. */
 export function itemDatums(item: ItemLike): {
   startDate: string | null
   endDate:   string | null
@@ -63,22 +78,25 @@ export function itemDatums(item: ItemLike): {
   }
   if (heeftEigenPeriode(item)) return eigen
 
-  const alle   = item.subitems ?? []
-  const actief = alle.filter(sub => sub.status !== 'Done')
-  const bron   = actief.length > 0 ? actief : alle
-
-  const starts = bron.map(sub => sub.startDate).filter((d): d is string => !!d).sort()
-  const einden = bron.map(sub => sub.endDate).filter((d): d is string => !!d).sort()
-  if (starts.length === 0 && einden.length === 0) {
+  const geleend = uitSubitems(item)
+  if (!geleend) {
     // Geen subitems om op terug te vallen. Heeft het item zelf wel datums
     // (een Google-afspraak zonder instances), dan zijn die alles wat er is.
     return eigen.startDate ? eigen : { startDate: null, endDate: null, bron: 'geen' }
   }
-  return {
-    startDate: starts[0] ?? einden[0],
-    endDate:   einden[einden.length - 1] ?? starts[starts.length - 1],
-    bron: 'subitems',
-  }
+  return { ...geleend, bron: 'subitems' }
+}
+
+/**
+ * Valt er iets terug te vallen op de subitems?
+ *
+ * Staan er wel subitems onder maar hebben die geen datums, dan is er
+ * niets om de periode van het hoofditem uit af te leiden. Een ↺ naast
+ * de datumcel zou dan alleen de periode leeghalen en er niets voor
+ * terugzetten — dus die hoort er in dat geval niet te staan.
+ */
+export function subitemsGevenPeriode(item: ItemLike): boolean {
+  return uitSubitems(item) !== null
 }
 
 /** Volgt dit item (nog) automatisch zijn subitems? Bepaalt of de datumcel

@@ -157,3 +157,33 @@ test('een Google-serie die je zelf hebt overschreven houdt wél zijn ↺', { ski
   assert.equal(herstelKnop, 1, 'hier heb je wél iets om terug te zetten')
   assert.match(cel, /11 nov\./, `en je eigen periode blijft staan: ${cel}`)
 })
+
+test('geen ↺ wanneer de subitems zelf geen datums hebben', { skip: skip ?? false }, async () => {
+  // De klacht: bij een item met twee datumloze subitems stond er toch
+  // een ↺. Klikken zou de periode leeghalen en er niets voor
+  // terugzetten, want er valt niets terug te vallen.
+  const bord = [{ id: 'g1', name: 'Groep', color: '#579bfc', items: [
+    { id: 'p1', name: 'Draaiboek doorspreken El Nino', ownerIds: ['menno'], status: 'Working on it',
+      estHours: 0.8, source: 'google', datesOverride: true,
+      startDate: '2026-10-21', endDate: '2026-10-21', subitems: [
+        { id: 's1', name: 'Draaiboek doorlezen', ownerIds: ['menno'], status: '', estHours: 0.3, startDate: null, endDate: null },
+        { id: 's2', name: 'Bespreken', ownerIds: ['menno'], status: '', estHours: 0.5, startDate: null, endDate: null },
+      ] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 950 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id="p1"]', { timeout: 20000 })
+  await page.waitForTimeout(1500)
+
+  const knoppen = await page.getByTitle(/Periode leegmaken/).count()
+  const rij = await page.locator('[data-item-id="p1"]').innerText()
+  await page.close()
+
+  assert.equal(knoppen, 0, `geen ↺ om op te klikken: ${rij.replace(/\n/g, ' | ')}`)
+  assert.match(rij, /okt\. 21/, 'en de periode staat er gewoon')
+})
