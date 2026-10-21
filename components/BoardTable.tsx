@@ -37,7 +37,7 @@ import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
 import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
-import { itemDatums } from '@/lib/itemDatums'
+import { itemDatums, subitemsGevenPeriode } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
 import { PersonalCompletionSection } from './PersonalCompletionSection'
@@ -1668,7 +1668,10 @@ function Cell({ item, col, onUpdate, statusExtra, avatarSize }: {
     // later een kort subitem bij komt. Maak je 'm leeg, dan volgt hij
     // weer de subitems (vroegste t/m laatste datum). De ↺-knop doet dat
     // leegmaken in één klik.
-    const hasSubsForDates = (item.subitems?.length ?? 0) > 0
+    // Alleen zinvol als de subitems zélf datums hebben. Staan er wel
+    // subitems onder maar zonder periode, dan valt er niets terug te
+    // vallen: de ↺ zou de datums leeghalen en er niets voor terugzetten.
+    const hasSubsForDates = subitemsGevenPeriode(item)
     const overridden = hasSubsForDates && !item.__datumsUitSubitems && !!(item.startDate || item.endDate)
     const hint = !hasSubsForDates ? undefined : overridden
       ? 'Eigen periode — blijft staan, ook als de subitems korter lopen. Klik ↺ om de periode leeg te maken en weer de subitems te volgen.'
