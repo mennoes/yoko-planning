@@ -1,5 +1,7 @@
 'use client'
 
+import { DatumVeld } from '@/components/DatumVeld'
+
 export function VacationModal({ fromDraft, setFromDraft, untilDraft, setUntilDraft, canClear, onClose, onSave, onClear }: {
   fromDraft: string; setFromDraft: (v: string) => void
   untilDraft: string; setUntilDraft: (v: string) => void
@@ -21,14 +23,14 @@ export function VacationModal({ fromDraft, setFromDraft, untilDraft, setUntilDra
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Vanaf
-            <input type="date" value={fromDraft} autoFocus
-              onChange={e => setFromDraft(e.target.value)}
+            <DatumVeld value={fromDraft} autoFocus ariaLabel="Vanaf"
+              onChange={v => setFromDraft(v ?? '')}
               style={{ padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Tot en met
-            <input type="date" value={untilDraft}
-              onChange={e => setUntilDraft(e.target.value)}
+            <DatumVeld value={untilDraft} ariaLabel="Tot en met"
+              onChange={v => setUntilDraft(v ?? '')}
               style={{ padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
           </label>
         </div>

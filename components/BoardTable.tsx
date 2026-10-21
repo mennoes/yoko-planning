@@ -13,6 +13,7 @@ import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { useTeam }        from './TeamContext'
 import { UserAvatar }     from './UserAvatar'
+import { DatumVeld }      from './DatumVeld'
 import { useUndo }        from './UndoContext'
 import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
@@ -380,10 +381,10 @@ function MobileCreateItemSheet({ kind, groups, onClose, onCreate }: {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <label style={labelStyle}>Startdatum
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={fieldStyle} />
+              <DatumVeld value={startDate} ariaLabel="Startdatum" onChange={v => setStartDate(v ?? '')} style={fieldStyle} />
             </label>
             <label style={labelStyle}>Einddatum
-              <input type="date" min={startDate || undefined} value={endDate} onChange={e => setEndDate(e.target.value)} style={fieldStyle} />
+              <DatumVeld min={startDate || undefined} value={endDate} ariaLabel="Einddatum" onChange={v => setEndDate(v ?? '')} style={fieldStyle} />
             </label>
           </div>
 
@@ -393,7 +394,7 @@ function MobileCreateItemSheet({ kind, groups, onClose, onCreate }: {
 
           {kind === 'item' && <>
             <label style={labelStyle}>Deadline
-              <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} style={fieldStyle} />
+              <DatumVeld value={deadline} ariaLabel="Deadline" onChange={v => setDeadline(v ?? '')} style={fieldStyle} />
             </label>
             <label style={labelStyle}>Notities
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} placeholder="Extra context, afspraken of vervolgstappen…" style={{ ...fieldStyle, resize: 'vertical' }} />
@@ -511,6 +512,12 @@ function EditableCell({
 
   const display = inputType === 'date' ? fmtDate(value as string) : value
 
+  if (editing && inputType === 'date') return (
+    <DatumVeld autoFocus value={draft || null}
+      onChange={gekozen => { onChange(gekozen); setDraft(gekozen ?? '') }}
+      onBlur={() => setEditing(false)}
+      style={editInput} />
+  )
   if (editing) return (
     <input autoFocus
       type={inputType === 'url' ? 'text' : inputType}
@@ -1269,12 +1276,12 @@ function RangeCalendar({
       </div>
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 14 }}>
-        <input type="date" value={selA ?? ''}
-          onChange={e => { setSelA(e.target.value || null); if (selB) onChange(e.target.value || null, selB) }}
+        <DatumVeld value={selA} ariaLabel="Van"
+          onChange={v => { setSelA(v); if (selB) onChange(v, selB) }}
           style={{ ...editInput, flex: 1 }} />
         <span style={{ color: 'var(--text-muted)', fontSize: 13, flexShrink: 0 }}>→</span>
-        <input type="date" value={selB ?? ''}
-          onChange={e => { setSelB(e.target.value || null); if (selA) onChange(selA, e.target.value || null) }}
+        <DatumVeld value={selB} ariaLabel="Tot"
+          onChange={v => { setSelB(v); if (selA) onChange(selA, v) }}
           style={{ ...editInput, flex: 1 }} />
       </div>
 
@@ -5100,8 +5107,8 @@ function AgendaFilterButton({ columns, owners, filters, onChange, color, menu = 
               </select>
             ) : field?.type === 'date' || field?.type === 'daterange' ? (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Vanaf</label><input type="date" value={value} onChange={event => setValue(event.target.value)} style={inputStyle} /></div>
-                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Tot</label><input type="date" value={value2} onChange={event => setValue2(event.target.value)} style={inputStyle} /></div>
+                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Vanaf</label><DatumVeld value={value} ariaLabel="Vanaf" onChange={v => setValue(v ?? '')} style={inputStyle} /></div>
+                <div><label style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Tot</label><DatumVeld value={value2} ariaLabel="Tot" onChange={v => setValue2(v ?? '')} style={inputStyle} /></div>
               </div>
             ) : field?.type === 'number' || field?.type === 'currency' ? (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -6612,10 +6619,10 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
         {open === 'timeline' && (
           <div style={{ ...popoverStyle, padding: 10, minWidth: 220 }}>
             <label style={popoverLabel}>Van
-              <input type="date" value={tlStart} onChange={e => setTlStart(e.target.value)} style={popoverInput} />
+              <DatumVeld value={tlStart} ariaLabel="Startdatum" onChange={v => setTlStart(v ?? '')} style={popoverInput} />
             </label>
             <label style={popoverLabel}>Tot
-              <input type="date" value={tlEnd}   onChange={e => setTlEnd(e.target.value)}   style={popoverInput} />
+              <DatumVeld value={tlEnd} ariaLabel="Einddatum" onChange={v => setTlEnd(v ?? '')} style={popoverInput} />
             </label>
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <button onClick={() => { onUpdate({ startDate: tlStart || null, endDate: tlEnd || null }); setOpen('') }}
@@ -6637,7 +6644,7 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
         {open === 'deadline' && (
           <div style={{ ...popoverStyle, padding: 10, minWidth: 200 }}>
             <label style={popoverLabel}>Datum
-              <input type="date" value={deadln} onChange={e => setDeadln(e.target.value)} style={popoverInput} />
+              <DatumVeld value={deadln} ariaLabel="Deadline" onChange={v => setDeadln(v ?? '')} style={popoverInput} />
             </label>
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <button onClick={() => { onUpdate({ deadline: deadln || null }); setOpen('') }}

@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { IconUsers } from '@/components/Icon'
 import { isTeamAdmin } from '@/lib/teamAdmin'
 import { setCapacity } from '@/lib/capacitiesStore'
+import { DatumVeld } from '@/components/DatumVeld'
 
 // Resultaat van een invite-poging. Gaat via een window-event naar de
 // InviteResultDialog op paginaniveau: sendInvite wordt vanuit twee losse
@@ -398,9 +399,9 @@ export default function TeamAdminPage() {
 
             <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Startdatum</label>
             <div>
-              <input value={draft.startDate ?? ''}
-                onChange={e => setDraft(d => ({ ...d, startDate: e.target.value || null }))}
-                type="date" style={{ ...inputStyle, width: 180 }} />
+              <DatumVeld value={draft.startDate} ariaLabel="Startdatum"
+                onChange={v => setDraft(d => ({ ...d, startDate: v }))}
+                style={{ ...inputStyle, width: 180 }} />
               <span style={{ marginLeft: 10, fontSize: 11.5, color: 'var(--text-muted)' }}>
                 Automatisch zichtbaar vanaf deze dag
               </span>
@@ -602,8 +603,8 @@ function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onO
         onBlur={() => blurField('weeklyCapacity', parseFloat(hours) || 0, member.weeklyCapacity)}
         type="number" min={0} max={80} step={4}
         style={{ ...cellInput, width: 70 }} />
-      <input value={member.startDate ?? ''} onChange={e => onChange({ startDate: e.target.value || null })}
-        type="date" title="Vanaf deze dag automatisch zichtbaar in de planner"
+      <DatumVeld value={member.startDate} onChange={v => onChange({ startDate: v })}
+        title="Vanaf deze dag automatisch zichtbaar in de planner"
         style={{ ...cellInput, fontSize: 11.5 }} />
       <select value={member.kind} disabled={member.id === 'unassigned'}
         onChange={e => onChange({ kind: e.target.value as TeamKind })}

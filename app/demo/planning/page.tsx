@@ -60,6 +60,7 @@ import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import type { BoardGroup } from '@/lib/boards'
 import { planningDetailHours } from '@/lib/planningDetailHours'
+import { DatumVeld } from '@/components/DatumVeld'
 
 const RAW: Record<string, { groups: unknown[] }> = buildDemoBoards()
 // Vaste, lokale lijst i.p.v. de registry-backed BOARD_NAMES uit
@@ -3663,9 +3664,9 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         </Row>
         <Row label="Timeline">
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="date" value={startDate} disabled={isGoogle}
-              onChange={e => {
-                const v = e.target.value
+            <DatumVeld value={startDate} disabled={isGoogle} ariaLabel="Startdatum"
+              onChange={gekozen => {
+                const v = gekozen ?? ''
                 setStartDate(v)
                 // Geen endDate? Vul 'm dan automatisch met startDate aan
                 // i.p.v. de browser default 'vandaag' bij 't openen van
@@ -3679,10 +3680,10 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
               }}
               style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
             <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
-            <input type="date" value={endDate} disabled={isGoogle}
+            <DatumVeld value={endDate} disabled={isGoogle} ariaLabel="Einddatum"
               min={startDate || undefined}
-              onChange={e => {
-                const v = e.target.value
+              onChange={gekozen => {
+                const v = gekozen ?? ''
                 setEndDate(v)
                 const patch = autofillEstFromDates(startDate, v, estHours)
                 commit({ endDate: v || null, ...patch })
@@ -4026,10 +4027,10 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId, defaultStart, defaul
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px', gap: 8 }}>
             <label style={popupLabel}>Start
-              <input type="date" value={start} onChange={e => setStart(e.target.value)} style={popupSelect} />
+              <DatumVeld value={start} ariaLabel="Startdatum" onChange={v => setStart(v ?? '')} style={popupSelect} />
             </label>
             <label style={popupLabel}>Eind
-              <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={popupSelect} />
+              <DatumVeld value={end} ariaLabel="Einddatum" onChange={v => setEnd(v ?? '')} style={popupSelect} />
             </label>
             <label style={popupLabel}>Uren
               <input type="number" step="0.5" min="0" value={hours}
@@ -4047,7 +4048,7 @@ function NewItemPopup({ onClose, onCreate, defaultMemberId, defaultStart, defaul
               <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={popupSelect} />
             </label>
             <label style={popupLabel}>Deadline
-              <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} style={popupSelect} />
+              <DatumVeld value={deadline} ariaLabel="Deadline" onChange={v => setDeadline(v ?? '')} style={popupSelect} />
             </label>
           </div>
 
