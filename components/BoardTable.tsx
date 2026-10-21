@@ -3113,10 +3113,18 @@ function DedupModal({ groups, onClose, onDelete }: {
 // kleur van die persoon en laat je via drag de uren-verdeling tussen
 // aangrenzende segmenten verschuiven. Lokale 'live'-state tijdens 't slepen,
 // DB-write pas op release.
-function OwnerDistributionSection({ item, owners, total, onUpdate, completionTarget }: {
+function OwnerDistributionSection({ item, owners, total, onUpdate, completionTarget, uitSubitems, nietVerdeeld = 0 }: {
   item: BoardItem; owners: string[]; total: number
   onUpdate: (u: Partial<BoardItem>) => void
   completionTarget: CompletionTarget
+  /** De uren komen uit de subitems. Dan valt hier niets te verslepen:
+   *  wat je hier typt wordt bij de eerstvolgende render overschreven
+   *  door de optelsom van de subitems. */
+  uitSubitems?: boolean
+  /** Uren die bij geen enkele eigenaar horen — een subitem zonder
+   *  eigenaar bijvoorbeeld. Zonder dit zou de taart minder tellen dan
+   *  het uren-veld ernaast, zonder te zeggen waarom. */
+  nietVerdeeld?: number
 }) {
   const { getPhoto } = useTeamPhotos()
   const { members: liveTeam } = useTeam()
@@ -3193,7 +3201,7 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
           segments={segments}
           total={total}
           size={120}
-          interactive
+          interactive={!uitSubitems}
           showAvatars
           innerLabel={`${round1(total)}u`}
           onChange={next => { setLive(next); setHourDrafts(ownerHoursDrafts(owners, next)) }}
@@ -3218,6 +3226,11 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
                     </span>
                   )}
                 </span>
+                {uitSubitems ? (
+                  <span style={{ flexShrink: 0, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {round1(val)}u · {pct}%
+                  </span>
+                ) : (
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                   <input type="text" inputMode="decimal" aria-label={`Uren voor ${m.name}`}
                     value={hourDrafts[oid] ?? String(round1(val))}
@@ -3236,13 +3249,25 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
                       font: 'inherit', fontVariantNumeric: 'tabular-nums', textAlign: 'right', outline: 'none' }} />
                   <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>u · {pct}%</span>
                 </label>
+                )}
               </div>
             )
           })}
+          {nietVerdeeld > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--border-strong)', flexShrink: 0 }} />
+              <span style={{ flex: 1, minWidth: 0 }}>Nog niemand</span>
+              <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                {round1(nietVerdeeld)}u · {total > 0 ? Math.round(nietVerdeeld / total * 100) : 0}%
+              </span>
+            </div>
+          )}
         </div>
       </div>
       <p style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-        Sleep de witte bolletjes of vul de uren per persoon rechtstreeks in.
+        {uitSubitems
+          ? 'Opgeteld uit de subitems — pas de uren daar aan, dan loopt dit mee.'
+          : 'Sleep de witte bolletjes of vul de uren per persoon rechtstreeks in.'}
       </p>
     </div>
   )
@@ -3277,6 +3302,21 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, editName])
+
+  // In dit venster kijk je naar de héle klus. De rij in de lijst rolt de
+  // uren op over wat er de komende vijf weken loopt — nuttig om te zien
+  // wie er nú op zit, maar hier staan de ringen om de avatars naast het
+  // uren-veld en de taart, en die moeten hetzelfde zeggen.
+  const volledig = useMemo(() => {
+    const subs = visibleRecurringSubitems(item.source, item.subitems ?? [])
+    const totaal = effectiveHours(item)
+    if (subs.length === 0) return { verdeling: item.ownerHours ?? {}, totaal, uitSubitems: false }
+    return { verdeling: relevantOwnerHours(subs), totaal, uitSubitems: true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item])
+  const vensterItem: BoardItem = volledig.uitSubitems && Object.keys(volledig.verdeling).length > 0
+    ? { ...item, ownerHours: volledig.verdeling, __relevantOwnerHoursTotal: volledig.totaal }
+    : item
 
   // Agenda › groep › hoofditem. Lege stukken vallen weg in plaats van een
   // los liggend pijltje achter te laten.
@@ -3440,7 +3480,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                   {col.key === 'status' ? 'Status' : col.key === 'timeline' ? 'Timeline' : col.label}
                 </span>
                 <div style={{ minHeight: 38, display: 'flex', alignItems: 'center', fontSize: 14 }}>
-                  <Cell item={item} col={col} onUpdate={onUpdate} avatarSize={44} />
+                  <Cell item={vensterItem} col={col} onUpdate={onUpdate} avatarSize={44} />
                 </div>
                 {col.key === 'status' && <PersonalCompletionSection
                   key={item.id}
@@ -3451,21 +3491,29 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
             ))}
           </div>
 
-          {/* Verdeling-pie — alleen wanneer meerdere eigenaren EN er uren zijn,
-              dan heeft 't visueel iets te zeggen. Anders skip 'm. */}
+          {/* Verdeling — alleen wanneer meerdere eigenaren EN er uren zijn,
+              dan heeft 't visueel iets te zeggen. Anders skip 'm.
+
+              Hier telt de héle klus, niet alleen wat er de komende vijf
+              weken loopt. De rij in de lijst toont bewust wie er nú op
+              zit; in dit venster staat de taart naast het uren-veld, en
+              dan hoort hij daarop uit te komen. Eerder stond er 52u
+              onder een klus van 84.3u zonder dat ergens te zeggen. */}
           {(() => {
             const activeIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
-            const relevant = item.__relevantOwnerIds as string[] | undefined
-            const owners = (relevant ?? item.ownerIds).filter(id => id && id !== 'unassigned' && activeIds.has(id))
-            const relevantTotal = relevant
-              ? owners.reduce((sum, id) => sum + (Number(item.ownerHours?.[id]) || 0), 0)
-              : 0
-            const total = relevantTotal > 0 ? relevantTotal : effectiveHours(item)
+            const { verdeling, totaal: total, uitSubitems } = volledig
+            const owners = (uitSubitems && Object.keys(verdeling).length > 0
+              ? Object.keys(verdeling)
+              : item.ownerIds ?? []
+            ).filter(id => id && id !== 'unassigned' && activeIds.has(id))
             if (owners.length < 2 || total <= 0) return null
+            const verdeeld = owners.reduce((som, id) => som + (Number(verdeling[id]) || 0), 0)
             return <OwnerDistributionSection
-              item={item}
+              item={uitSubitems ? { ...item, ownerHours: verdeling } : item}
               owners={owners}
               total={total}
+              uitSubitems={uitSubitems}
+              nietVerdeeld={Math.max(0, Math.round((total - verdeeld) * 10) / 10)}
               onUpdate={onUpdate}
               completionTarget={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
             />
