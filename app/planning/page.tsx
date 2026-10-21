@@ -4603,6 +4603,18 @@ export default function PlanningPage() {
   useEffect(() => {
     try { window.sessionStorage.setItem('planning-expanded-members', JSON.stringify([...expanded])) } catch {}
   }, [expanded])
+  /**
+   * Staat er een persoon open waar het beeld op mag scherpstellen?
+   *
+   * Unassigned telt niet mee. Dat is geen persoon maar een bak met werk
+   * dat nog verdeeld moet worden: klap je 'm open, dan wil je de rest
+   * juist goed kunnen lezen om er iets heen te slepen. Alles grijs
+   * maken is dan precies verkeerd om.
+   */
+  const heeftFocusPersoon = useMemo(
+    () => [...expanded].some(id => id !== 'unassigned'),
+    [expanded],
+  )
   const [detailProject, setDetailProject] = useState<Project | null>(null)
   // Sync detail-open flag naar window zodat de poll-loop pulls kan
   // skippen tijdens een actieve detail-edit (anders zou een refetch
@@ -6905,8 +6917,11 @@ export default function PlanningPage() {
 
             // Focus-mode: zelfde gedrag als in Overzicht — wanneer iemand
             // is uitgeklapt dempen we de andere rijen zodat de uitgevouwen
-            // persoon visueel naar voren springt.
-            const dagFocusMode = expanded.size > 0
+            // persoon visueel naar voren springt. Unassigned telt daar niet
+            // in mee: dat is geen persoon maar een bak werk dat nog verdeeld
+            // moet worden, en juist dan wil je de rest kunnen lezen om er
+            // iets heen te slepen.
+            const dagFocusMode = heeftFocusPersoon
             // De derde parameter komt gratis uit Array.map: dat is precies
             // de sectie waarin deze rij staat, en die bepaalt waar de
             // sorteerpijltjes naartoe mogen.
@@ -7340,7 +7355,9 @@ export default function PlanningPage() {
             // niet-uitgeklapte rijen zodat de uitgevouwen persoon visueel
             // pop't. Headers blijven op volle sterkte zodat de structuur
             // herkenbaar blijft.
-            const focusMode = expanded.size > 0
+            // Zie de toelichting bij dagFocusMode: Unassigned dempt de rest
+            // niet, want van daaruit sleep je werk naar de mensen eromheen.
+            const focusMode = heeftFocusPersoon
             const wrap = (m: TeamMember, key: string, i: number, section: TeamMember[]) => {
               const dim = focusMode && !expanded.has(m.id)
               return (
