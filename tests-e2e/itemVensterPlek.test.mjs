@@ -100,3 +100,45 @@ test('het venster geeft de velden lucht en de gezichten formaat', { skip: skip ?
   assert.notEqual(m.vakRand, '0px', 'elk veld staat in zijn eigen vlak')
   assert.ok(m.avatarPx >= 40, `de gezichten zijn groter dan in een rij (${m.avatarPx}px)`)
 })
+
+test('de taart telt op tot de uren die ernaast staan', { skip: skip ?? false }, async () => {
+  // De klacht: een klus van 84.3u met een taart van 52u eronder. De
+  // verdeling keek alleen naar subitems van de komende vijf weken, het
+  // uren-veld naar alle.
+  const ver = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+  const bord = [{ id: 'g1', name: 'Projecten', color: '#579bfc', items: [
+    { id: 'p1', name: 'Greenpeace – PFAS', ownerIds: ['menno', 'vincent'], status: 'Working on it',
+      startDate: null, endDate: null, subitems: [
+        { id: 's1', name: 'Nu', ownerIds: ['menno'], status: 'Working on it', estHours: 26, startDate: ver(0), endDate: ver(5) },
+        { id: 's2', name: 'Ook nu', ownerIds: ['vincent'], status: 'Working on it', estHours: 26, startDate: ver(0), endDate: ver(5) },
+        // Ver voorbij de vijf-wekenhorizon: dit viel uit de taart.
+        { id: 's3', name: 'Later', ownerIds: ['menno'], status: '', estHours: 32.3, startDate: ver(150), endDate: ver(160) },
+      ] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id="p1"]', { timeout: 20000 })
+  await page.waitForTimeout(1200)
+  await page.locator('[data-item-id="p1"]').getByTitle('Plaats opmerking').first().click()
+  await page.waitForTimeout(1200)
+
+  const m = await page.evaluate(() => {
+    const tekst = document.body.innerText
+    const taart = tekst.match(/(\d+(?:\.\d+)?)u\n/) // het getal in het hart van de taart
+    const regels = [...tekst.matchAll(/(\d+(?:\.\d+)?)u · (\d+)%/g)].map(r => [Number(r[1]), Number(r[2])])
+    return { taart: taart ? Number(taart[1]) : null, regels, heeftEstTime: /EST TIME/.test(tekst) }
+  })
+  await page.close()
+
+  assert.ok(m.heeftEstTime, 'het venster staat open')
+  assert.equal(m.taart, 84.3, `de taart telt alle subitems, niet alleen die van nu (${m.taart})`)
+  const somRegels = Math.round(m.regels.reduce((a, [u]) => a + u, 0) * 10) / 10
+  assert.equal(somRegels, 84.3, `en de regels ernaast ook (${m.regels.map(r => r.join('/')).join(', ')})`)
+  // Menno doet 26 + 32.3 = 58.3 van de 84.3, Vincent 26.
+  assert.deepEqual(m.regels.map(([u]) => u).sort((a, b) => a - b), [26, 58.3])
+})
