@@ -814,7 +814,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   const realOwners = project.ownerIds.filter(id => id !== 'unassigned')
   const ownerCount = realOwners.length
   const isMultiOwner = !isVrij && !isMeeting && !small && ownerCount > 1
-  const ownerSegments: { isMe: boolean; pct: number }[] = (() => {
+  const ownerSegments: { id: string; isMe: boolean; pct: number }[] = (() => {
     if (!isMultiOwner) return []
     const oh = project.ownerHours ?? {}
     const totalAssigned = realOwners.reduce((s, id) => s + (Number(oh[id]) || 0), 0)
@@ -827,11 +827,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
       return 0
     })
     const list = sorted.map(id => ({
+      id,
       isMe: id === memberId,
       hours: totalAssigned > 0 ? (Number(oh[id]) || 0) : fallback,
     }))
     const sum = list.reduce((s, x) => s + x.hours, 0) || 1
-    return list.map(x => ({ isMe: x.isMe, pct: (x.hours / sum) * 100 }))
+    return list.map(x => ({ id: x.id, isMe: x.isMe, pct: (x.hours / sum) * 100 }))
   })()
   const multiOwnerGradient = isMultiOwner && ownerSegments.length > 1
     ? (() => {
@@ -856,6 +857,27 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // de faded segmenten heen ziet — anders zou de faded helft visueel
   // 'wegvallen' tegen achtergronden van andere bars.
   const multiOwnerBorder = multiOwnerGradient ? `1px solid ${color}` : undefined
+  // Gezichtjes in ieders eigen stuk van de balk. De gradient verdeelt de
+  // balk al naar rato van de uren; met alleen een '3p'-pill zie je wél
+  // dát het gedeeld is maar niet mét wie, en al helemaal niet wiens stuk
+  // waar zit. Alleen tekenen als het stuk breed genoeg is voor een
+  // gezicht en de balk hoog genoeg — anders blijft de pill staan.
+  const GEZICHT = 15
+  const gezichtjesVoor = (barBreedte: number) => {
+    // Hoog genoeg voor een strook onderlangs; anders botst het gezicht
+    // met de titel en blijft de pill beter.
+    if (!multiOwnerGradient || barH < 34) return []
+    let acc = 0
+    const uit: { id: string; midden: number }[] = []
+    for (const seg of ownerSegments) {
+      const breedte = (seg.pct / 100) * barBreedte
+      if (breedte >= GEZICHT + 4) uit.push({ id: seg.id, midden: acc + breedte / 2 })
+      acc += breedte
+    }
+    // Alles of niets: met één gezicht zichtbaar en de rest weggevallen
+    // lijkt het alsof die persoon het alleen doet.
+    return uit.length === ownerSegments.length ? uit : []
+  }
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<DragGhost | null>(null)
   const ghostRafRef = useRef<number | null>(null)
@@ -1048,6 +1070,9 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // tekst niet pal tegen de sticky kolomrand plakt.
   const barLeftAbs = g.left + 2
   const maxShift   = Math.max(0, g.width - 90)
+  // Pas hier bekend: de balk kan tijdens het slepen breder of smaller
+  // zijn dan de oorspronkelijke geometrie.
+  const gezichten = gezichtjesVoor(g.width)
   // De grid houdt --planner-scroll-left rechtstreeks op het scrollende
   // DOM-element bij. CSS positioneert de titel daardoor zonder dat iedere
   // balk een eigen listener en React-render nodig heeft.
@@ -1120,14 +1145,29 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           // VANDAAG-lijn (z=3) wint ook nog.
           zIndex: ghost ? 2 : (hoverBar ? 2 : (projectDays <= 1 ? 1 : 'auto')) }}
         title={isReadOnly ? 'Bewerk in Google Calendar' : undefined}>
-        <span style={{ flex: 1, overflow: 'hidden', paddingLeft: 6, paddingRight: 4, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', paddingTop: scaleByHours ? 2 : 0, minWidth: 0, marginLeft: titleShift }}>
+        {/* Wie welk stuk doet. Onderlangs, zodat de titel erboven heel
+            blijft; elk gezicht staat midden in het eigen segment van de
+            gradient. */}
+        {gezichten.map(({ id, midden }) => (
+          <span key={id} aria-hidden data-bar-owner={id} title={team?.find(m => m.id === id)?.name ?? id}
+            style={{ position: 'absolute', left: midden - GEZICHT / 2, bottom: 2,
+              width: GEZICHT, height: GEZICHT, borderRadius: '50%',
+              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)', overflow: 'hidden',
+              display: 'inline-flex', pointerEvents: 'none', zIndex: 1 }}>
+            <UserAvatar memberId={id} size={GEZICHT} borderless />
+          </span>
+        ))}
+        <span style={{ flex: 1, overflow: 'hidden', paddingLeft: 6, paddingRight: 4, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', paddingTop: scaleByHours ? 2 : 0,
+          // Ruimte vrijhouden voor de strook met gezichten eronder.
+          paddingBottom: gezichten.length > 0 ? GEZICHT + 3 : 0,
+          minWidth: 0, marginLeft: titleShift }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.15 }}>
               {project.name}
             </span>
             {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
-            {isMultiOwner && (
+            {isMultiOwner && gezichten.length === 0 && (
               <span aria-label={`${ownerCount} mensen`} title={`${ownerCount} mensen werken aan dit item`}
                 style={{
                   flexShrink: 0, marginLeft: project.source === 'google' ? 4 : 'auto',

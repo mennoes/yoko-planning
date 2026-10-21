@@ -75,3 +75,79 @@ test('een persoon openklappen dempt de rest nog steeds wel', { skip: skip ?? fal
   assert.equal(vincent, 1, 'de uitgeklapte persoon staat op volle sterkte')
   assert.ok(odette < 1, `en de rest is gedempt (${odette})`)
 })
+
+test('een gedeelde balk toont ieders gezicht in zijn eigen stuk', { skip: skip ?? false }, async () => {
+  // De balk was al in stukken verdeeld naar rato van de uren, maar met
+  // alleen een '3p'-pill zag je wél dát het gedeeld was en niet mét wie,
+  // laat staan wiens stuk waar zat.
+  const bord = [{ id: 'g1', name: 'Projecten', color: '#e2445c', items: [
+    { id: 'i1', name: 'Landingspagina', ownerIds: ['menno', 'vincent', 'odette'],
+      status: 'Working on it', estHours: 120, ownerHours: { menno: 60, vincent: 40, odette: 20 },
+      startDate: iso(-2), endDate: iso(12), subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+    sessionStorage.removeItem('planning-expanded-members')
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/planning', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(3000)
+  await page.getByText('Menno', { exact: true }).last().click()
+  await page.waitForTimeout(1500)
+
+  const m = await page.evaluate(() => {
+    const gezichten = [...document.querySelectorAll('[data-bar-owner]')]
+    const balk = gezichten[0]?.parentElement?.getBoundingClientRect()
+    return {
+      ids: gezichten.map(e => e.getAttribute('data-bar-owner')),
+      // Waar staat ieder gezicht, als fractie van de balkbreedte?
+      posities: gezichten.map(e => {
+        const r = e.getBoundingClientRect()
+        return balk ? Math.round(((r.left + r.width / 2) - balk.left) / balk.width * 100) : -1
+      }),
+      pill: /\b3p\b/.test(document.body.innerText),
+    }
+  })
+  await page.close()
+
+  assert.deepEqual(m.ids, ['menno', 'vincent', 'odette'],
+    `eigen stuk eerst, dan de rest — kreeg ${m.ids.join(', ')}`)
+  // 60/40/20 van 120 → stukken van 50%, 33% en 17%, dus middens rond
+  // 25%, 67% en 92%.
+  const [a, b, c] = m.posities
+  assert.ok(Math.abs(a - 25) <= 4, `Menno staat midden in zijn halve balk (${a}%)`)
+  assert.ok(Math.abs(b - 67) <= 4, `Vincent in het zijne (${b}%)`)
+  assert.ok(Math.abs(c - 92) <= 4, `Odette in het hare (${c}%)`)
+  assert.equal(m.pill, false, 'en de 3p-pill is overbodig geworden')
+})
+
+test('een balk die te krap is houdt de pill', { skip: skip ?? false }, async () => {
+  // Past er geen gezicht in een stuk, dan zou je bij één zichtbaar
+  // gezicht denken dat die persoon het alleen doet.
+  const bord = [{ id: 'g1', name: 'Projecten', color: '#e2445c', items: [
+    { id: 'i1', name: 'Kort klusje', ownerIds: ['menno', 'vincent', 'odette'],
+      status: 'Working on it', estHours: 6, ownerHours: { menno: 2, vincent: 2, odette: 2 },
+      startDate: iso(0), endDate: iso(0), subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+    sessionStorage.removeItem('planning-expanded-members')
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/planning', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(3000)
+  await page.getByText('Menno', { exact: true }).last().click()
+  await page.waitForTimeout(1500)
+
+  const m = await page.evaluate(() => ({
+    gezichten: document.querySelectorAll('[data-bar-owner]').length,
+    pill: /\b3p\b/.test(document.body.innerText),
+  }))
+  await page.close()
+  assert.equal(m.gezichten, 0, 'geen half ingevulde strook')
+  assert.equal(m.pill, true, 'maar wel het aantal mensen')
+})
