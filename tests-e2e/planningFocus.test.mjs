@@ -76,10 +76,11 @@ test('een persoon openklappen dempt de rest nog steeds wel', { skip: skip ?? fal
   assert.ok(odette < 1, `en de rest is gedempt (${odette})`)
 })
 
-test('een gedeelde balk toont ieders gezicht in zijn eigen stuk', { skip: skip ?? false }, async () => {
+test('een gedeelde balk toont de gezichten van de anderen in hun eigen stuk', { skip: skip ?? false }, async () => {
   // De balk was al in stukken verdeeld naar rato van de uren, maar met
   // alleen een '3p'-pill zag je wél dát het gedeeld was en niet mét wie,
-  // laat staan wiens stuk waar zat.
+  // laat staan wiens stuk waar zat. Je eigen hoofd hoeft er niet bij:
+  // dit is jouw rij.
   const bord = [{ id: 'g1', name: 'Projecten', color: '#e2445c', items: [
     { id: 'i1', name: 'Landingspagina', ownerIds: ['menno', 'vincent', 'odette'],
       status: 'Working on it', estHours: 120, ownerHours: { menno: 60, vincent: 40, odette: 20 },
@@ -112,13 +113,12 @@ test('een gedeelde balk toont ieders gezicht in zijn eigen stuk', { skip: skip ?
   })
   await page.close()
 
-  assert.deepEqual(m.ids, ['menno', 'vincent', 'odette'],
-    `eigen stuk eerst, dan de rest — kreeg ${m.ids.join(', ')}`)
-  // 60/40/20 van 120 → stukken van 50%, 33% en 17%, dus middens rond
-  // 25%, 67% en 92%.
-  const [a, b, c] = m.posities
-  assert.ok(Math.abs(a - 25) <= 4, `Menno staat midden in zijn halve balk (${a}%)`)
-  assert.ok(Math.abs(b - 67) <= 4, `Vincent in het zijne (${b}%)`)
+  assert.deepEqual(m.ids, ['vincent', 'odette'],
+    `alleen de anderen, niet Menno zelf — kreeg ${m.ids.join(', ')}`)
+  // 60/40/20 van 120 → stukken van 50%, 33% en 17%. Menno's stuk staat
+  // vooraan en blijft leeg; Vincent en Odette staan midden in het hunne.
+  const [b, c] = m.posities
+  assert.ok(Math.abs(b - 67) <= 4, `Vincent in zijn stuk (${b}%)`)
   assert.ok(Math.abs(c - 92) <= 4, `Odette in het hare (${c}%)`)
   assert.equal(m.pill, false, 'en de 3p-pill is overbodig geworden')
 })

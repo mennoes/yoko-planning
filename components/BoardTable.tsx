@@ -14,6 +14,7 @@ import { useTeamPhotos }  from './TeamPhotosContext'
 import { useTeam }        from './TeamContext'
 import { UserAvatar }     from './UserAvatar'
 import { DatumVeld }      from './DatumVeld'
+import { ItemHistory }    from './ItemHistory'
 import { useUndo }        from './UndoContext'
 import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
@@ -3628,6 +3629,29 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Geschiedenis onderaan: wie het aanmaakte en wat er sindsdien
+              is veranderd. Het venster op /planning liet dit al zien; hier
+              stond je met een item dat je niet herkent zonder enig spoor. */}
+          <div style={{ marginTop: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                Geschiedenis
+              </div>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            </div>
+            {/* Wijzigingen aan een subitem worden op het hoofditem
+                bijgehouden, dus daar kijken we — en we zeggen het erbij,
+                anders lijkt het alsof er dingen bij staan die niet over
+                dit subitem gaan. */}
+            {parentItemId && (
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-muted)' }}>
+                Van het hele item{parentName ? ` '${parentName}'` : ''} — wijzigingen aan subitems worden daar bijgehouden.
+              </p>
+            )}
+            <ItemHistory itemId={parentItemId ?? item.id}
+              createdAt={typeof item.createdAt === 'string' ? item.createdAt : undefined} />
           </div>
         </div>
       </div>

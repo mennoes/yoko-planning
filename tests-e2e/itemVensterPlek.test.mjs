@@ -142,3 +142,34 @@ test('de taart telt op tot de uren die ernaast staan', { skip: skip ?? false }, 
   // Menno doet 26 + 32.3 = 58.3 van de 84.3, Vincent 26.
   assert.deepEqual(m.regels.map(([u]) => u).sort((a, b) => a - b), [26, 58.3])
 })
+
+test('onderaan het venster staat de geschiedenis van het item', { skip: skip ?? false }, async () => {
+  // Het venster op /planning liet dit al zien; hier stond je met een item
+  // dat je niet herkent zonder enig spoor van waar het vandaan komt.
+  const bord = [{ id: 'g1', name: 'Colleges', color: '#e2445c', items: [
+    { id: 'p1', name: 'NL College S04 E33', ownerIds: ['menno'], status: 'Working on it',
+      estHours: 16, createdAt: '2026-09-14T10:00:00Z', startDate: iso(-1), endDate: iso(4), subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1100 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-nederland', b)
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/projects/nederland', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id="p1"]', { timeout: 20000 })
+  await page.waitForTimeout(1200)
+  await page.locator('[data-item-id="p1"]').getByTitle('Plaats opmerking').first().click()
+  await page.waitForTimeout(1200)
+
+  const tekst = await page.evaluate(() => document.body.innerText)
+  const volgorde = await page.evaluate(() => {
+    const t = document.body.innerText
+    return { notities: t.indexOf('NOTITIES'), geschiedenis: t.indexOf('GESCHIEDENIS') }
+  })
+  await page.close()
+
+  assert.match(tekst, /GESCHIEDENIS/, 'de kop staat er')
+  assert.match(tekst, /Aangemaakt op 14 september 2026/, 'met wanneer het item is gemaakt')
+  assert.ok(volgorde.geschiedenis > volgorde.notities, 'onderaan, onder de notities')
+})
