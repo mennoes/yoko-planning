@@ -863,6 +863,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // dát het gedeeld is maar niet mét wie, en al helemaal niet wiens stuk
   // waar zit. Alleen tekenen als het stuk breed genoeg is voor een
   // gezicht en de balk hoog genoeg — anders blijft de pill staan.
+  //
+  // Je eigen hoofd slaan we over: dit is jouw rij, dat weet je. Het
+  // volle stuk links is sowieso al van jou, dus het gezicht erin voegt
+  // niets toe en neemt wel ruimte.
   const GEZICHT = 15
   const gezichtjesVoor = (barBreedte: number) => {
     // Hoog genoeg voor een strook onderlangs; anders botst het gezicht
@@ -870,14 +874,18 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     if (!multiOwnerGradient || barH < 34) return []
     let acc = 0
     const uit: { id: string; midden: number }[] = []
+    let teTonen = 0
     for (const seg of ownerSegments) {
       const breedte = (seg.pct / 100) * barBreedte
-      if (breedte >= GEZICHT + 4) uit.push({ id: seg.id, midden: acc + breedte / 2 })
+      if (!seg.isMe) {
+        teTonen++
+        if (breedte >= GEZICHT + 4) uit.push({ id: seg.id, midden: acc + breedte / 2 })
+      }
       acc += breedte
     }
     // Alles of niets: met één gezicht zichtbaar en de rest weggevallen
     // lijkt het alsof die persoon het alleen doet.
-    return uit.length === ownerSegments.length ? uit : []
+    return uit.length === teTonen ? uit : []
   }
   const dragRef = useRef<DragInfo | null>(null)
   const [ghost, setGhost] = useState<DragGhost | null>(null)
