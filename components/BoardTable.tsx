@@ -427,10 +427,23 @@ function EstHoursSummedCell({ own, ownEdit, subsSum, totalValue, isProrated, onC
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
+  // Waar de cel mee begon. Klik je erin en weer weg zonder iets te
+  // typen, dan hoort er niets te gebeuren — en dat ging mis: bij een
+  // item met subitems staat er 0 op het hoofditem, dus begon het veld
+  // leeg en schreef het bij het wegklikken een 0 terug. Daarmee
+  // verdween het getal én de hele urenverdeling.
+  const [beginDraft, setBeginDraft] = useState('')
   const celFont = useCelFont()
   const editV = ownEdit ?? own
-  function start() { setDraft(editV ? String(editV) : ''); setEditing(true) }
-  function save()  { onChange(parseFloat(draft) || 0); setEditing(false) }
+  function start() {
+    const begin = editV ? String(editV) : ''
+    setDraft(begin); setBeginDraft(begin); setEditing(true)
+  }
+  function save()  {
+    setEditing(false)
+    if (draft === beginDraft) return
+    onChange(parseFloat(draft) || 0)
+  }
   const round = (n: number) => Math.round(n * 10) / 10
   const total = round(totalValue ?? (subsSum > 0 ? subsSum : own))
   if (editing) return (
@@ -469,8 +482,17 @@ function ProRatableNumberCell({ displayValue, editValue, isProrated, onChange }:
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
-  function start() { setDraft(editValue ? String(editValue) : ''); setEditing(true) }
-  function save()  { onChange(parseFloat(draft) || 0); setEditing(false) }
+  // Zie EstHoursSummedCell: erin klikken en weer weg is geen wijziging.
+  const [beginDraft, setBeginDraft] = useState('')
+  function start() {
+    const begin = editValue ? String(editValue) : ''
+    setDraft(begin); setBeginDraft(begin); setEditing(true)
+  }
+  function save()  {
+    setEditing(false)
+    if (draft === beginDraft) return
+    onChange(parseFloat(draft) || 0)
+  }
   const round = (n: number) => Math.round(n * 10) / 10
   if (editing) return (
     <input autoFocus type="number" value={draft}
@@ -501,14 +523,21 @@ function EditableCell({
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
+  // Zie EstHoursSummedCell: erin klikken en weer weg is geen wijziging,
+  // dus schrijven we dan ook niets.
+  const [beginDraft, setBeginDraft] = useState('')
   const celFont = useCelFont()
 
-  function start() { setDraft(value?.toString() ?? ''); setEditing(true) }
+  function start() {
+    const begin = value?.toString() ?? ''
+    setDraft(begin); setBeginDraft(begin); setEditing(true)
+  }
   function save()  {
+    setEditing(false)
+    if (draft === beginDraft) return
     if (inputType === 'number') onChange(parseFloat(draft) || 0)
     else if (inputType === 'date') onChange(draft || null)
     else onChange(draft)
-    setEditing(false)
   }
 
   const display = inputType === 'date' ? fmtDate(value as string) : value
