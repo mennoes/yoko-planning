@@ -2179,6 +2179,22 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   dismissedInstanceIds?: string[]
   onUpdate: (u: SubItem[], itemPatch?: { dismissedInstanceIds?: string[] }) => void
 }) {
+  const { members } = useTeam()
+  const selectedSubs = subitems.filter(sub => selectedIds?.has(`sub:${sub.id}`))
+  const allSelected = subitems.length > 0 && selectedSubs.length === subitems.length
+  function selectAll() {
+    for (const sub of subitems) {
+      if (allSelected || !selectedIds?.has(`sub:${sub.id}`)) onToggleSelect?.(`sub:${sub.id}`)
+    }
+  }
+  function assignSelectedOwner(ownerId: string) {
+    const ownerIds = ownerId === '__clear' ? [] : [ownerId]
+    onUpdate(subitems.map(sub => selectedIds?.has(`sub:${sub.id}`) ? {
+      ...sub, ownerIds, ownerHours: undefined,
+      ...((sub.source === 'google' || !!sub.externalLink || sub.id.startsWith('si_g_'))
+        ? { ownerIdsLocked: true } : {}),
+    } : sub))
+  }
   const isMobile = useIsMobile()
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
   const [sortBy, setSortBy] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
@@ -2207,9 +2223,9 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
     // wijziging op alle geselecteerde subitems binnen dit item toe. Zo kun
     // je alle subitems aanvinken en met één klik op 'Done' alles meenemen.
-    const bulk = !!selectedIds && selectedIds.size > 1 && selectedIds.has(id)
+    const bulk = !!selectedIds && selectedIds.size > 1 && selectedIds.has(`sub:${id}`)
     onUpdate(subitems.map(s => {
-      if (bulk ? selectedIds!.has(s.id) : s.id === id) return { ...s, ...u }
+      if (bulk ? selectedIds!.has(`sub:${s.id}`) : s.id === id) return { ...s, ...u }
       return s
     }))
   }
@@ -2297,7 +2313,12 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
         border: '1px solid var(--border-strong)', overflow: 'hidden',
       }}>
         <div style={{ display: 'grid', gridTemplateColumns: gridTemplate, background: 'transparent', borderBottom: '1px solid var(--border)' }}>
-          <div />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <input type="checkbox" aria-label="Alle subitems selecteren"
+              checked={allSelected} disabled={!onToggleSelect || subitems.length === 0}
+              ref={node => { if (node) node.indeterminate = selectedSubs.length > 0 && !allSelected }}
+              onChange={selectAll} style={{ accentColor: rail, cursor: 'pointer' }} />
+          </div>
           <div style={{ position: 'relative', display: 'flex' }}>
             <button onClick={() => toggleSort('name')} style={{ flex: 1, border: 0, background: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', fontSize: 11.5, fontWeight: 600, color: sortBy?.key === 'name' ? 'var(--text-primary)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Subitem {sortBy?.key === 'name' ? (sortBy.dir === 'asc' ? '▲' : '▼') : ''}
@@ -2316,6 +2337,15 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
               <button disabled={isPersonalColumn(c.key)} onClick={() => toggleSort(c.key)} style={{ border: 0, padding: 0, background: 'none', cursor: isPersonalColumn(c.key) ? 'default' : 'pointer', color: sortBy?.key === c.key ? 'var(--text-primary)' : 'inherit', font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}>
                 {headerLabelFor(c.key, c.label)} {sortBy?.key === c.key ? (sortBy.dir === 'asc' ? '▲' : '▼') : ''}
               </button>
+              {(c.key === 'owner' || c.key === 'ownerIds') && selectedSubs.length > 0 && (
+                <select aria-label="Owner van geselecteerde subitems" value=""
+                  onChange={event => assignSelectedOwner(event.target.value)}
+                  style={{ display: 'block', width: '100%', marginTop: 6, color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, padding: 4 }}>
+                  <option value="" disabled>Wijzig owner ({selectedSubs.length})</option>
+                  {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
+                  <option value="__clear">Wis owner</option>
+                </select>
+              )}
               {onResizeCol && (
                 <div
                   title="Kolom breder/smaller slepen"
@@ -5955,7 +5985,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     // velden die het SubItem-schema kent kopiëren we mee.
     const subPatch: Partial<SubItem> = {}
     if ('status'    in patch) subPatch.status    = patch.status as string
-    if ('ownerIds'  in patch) subPatch.ownerIds  = patch.ownerIds as string[]
+    if ('ownerIds' in patch) {
+      subPatch.ownerIds = patch.ownerIds as string[]
+      subPatch.ownerHours = undefined
+    }
     if ('startDate' in patch) subPatch.startDate = patch.startDate as string | null
     if ('endDate'   in patch) subPatch.endDate   = patch.endDate as string | null
     if ('estHours'  in patch) subPatch.estHours  = patch.estHours as number
@@ -5996,11 +6029,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         }
         if (hasSubPatch && nextItem.subitems && nextItem.subitems.length > 0) {
           const subs = nextItem.subitems.map(s => {
-            if (!selectedIds.has(s.id)) return s
+            if (!selectedIds.has(`sub:${s.id}`)) return s
             const isGoogleSub = s.source === 'google' || !!s.externalLink || s.id.startsWith('si_g_')
             return {
               ...s,
               ...subPatch,
+              ...(isGoogleSub && 'ownerIds' in subPatch ? { ownerIdsLocked: true } : {}),
               ...(isGoogleSub && 'status' in subPatch
                 ? { statusOverride: subPatch.status === 'Done' ? 'done' as const : 'active' as const }
                 : {}),
@@ -6613,6 +6647,7 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
   boardId: string
   onMoveBoard: (boardId: string) => Promise<void>
 }) {
+  const { members } = useTeam()
   const [movingBoard, setMovingBoard] = useState(false)
   type OpenMenu = '' | 'status' | 'owner' | 'move' | 'timeline' | 'deadline' | 'est' | 'echt'
   const [open, setOpen] = useState<OpenMenu>('')
@@ -6658,7 +6693,7 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
         <button onClick={() => toggle('owner')} style={barBtn}>Owner…</button>
         {open === 'owner' && (
           <div style={popoverStyle}>
-            {teamData.members.map(m => (
+            {members.map(m => (
               <button key={m.id} onClick={() => { onUpdate({ ownerIds: [m.id] }); setOpen('') }}
                 style={{ ...popoverItem, color: m.color }}>
                 {m.name}
