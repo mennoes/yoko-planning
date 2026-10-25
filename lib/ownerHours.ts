@@ -1,8 +1,7 @@
 const round1 = (value: number) => Math.round(value * 10) / 10
 
 /** Maak een opgeslagen verdeling passend bij de geselecteerde owners.
- * Een geselecteerde owner met 0 uur is geen bruikbare verdeling: verdeel in
- * dat geval gelijk. Wie echt niet meedoet hoort uit de ownerselectie. */
+ * Ontbrekende aandelen worden gelijk verdeeld; expliciet nul blijft nul. */
 export function normalizeOwnerHours(
   ownerIds: string[],
   totalHours: number,
@@ -12,9 +11,9 @@ export function normalizeOwnerHours(
   if (ids.length === 0) return {}
   const total = Math.max(0, Number(totalHours) || 0)
   const raw = Object.fromEntries(ids.map(id => [id, Math.max(0, Number(stored?.[id]) || 0)]))
-  if (total <= 0) return raw
+  if (total <= 0) return Object.fromEntries(ids.map(id => [id, 0]))
   const rawSum = Object.values(raw).reduce((sum, hours) => sum + hours, 0)
-  if (rawSum <= 0 || ids.some(id => raw[id] <= 0)) {
+  if (rawSum <= 0 || ids.some(id => stored?.[id] === undefined)) {
     const equal = round1(total / ids.length)
     const next = Object.fromEntries(ids.map(id => [id, equal]))
     next[ids[0]] = round1(next[ids[0]] + round1(total - equal * ids.length))
@@ -98,4 +97,10 @@ export function scaleOwnerHours(
     if (grootste) next[grootste[0]] = round1(grootste[1] + rest)
   }
   return next
+}
+
+/** Alleen de owners die op iedere geselecteerde rij staan. */
+export function commonOwnerIds(items: { ownerIds?: string[] }[]): string[] {
+  return [...new Set(items[0]?.ownerIds ?? [])].filter(id =>
+    id !== 'unassigned' && items.every(item => item.ownerIds?.includes(id)))
 }
