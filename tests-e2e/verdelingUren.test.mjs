@@ -39,13 +39,16 @@ async function openPopup() {
   return page
 }
 
-/** De uren- en %-velden uit de Verdeling-rij, op volgorde: uren en % van
- *  de eerste persoon, daarna van de tweede. Het vijfde nummerveld is de
- *  uren van het item zelf. */
+/** De uren- en %-velden uit de Verdeling-rij: uren en % van de eerste
+ *  persoon, daarna van de tweede. Op label, niet op volgorde — de uren
+ *  van het item zelf staan nu bóven de verdeling. */
 const verdeling = page => page.evaluate(() =>
   [...document.querySelectorAll('input[type="number"]')]
+    .filter(i => /^(Uren|Percentage) /.test(i.getAttribute('aria-label') ?? ''))
     .map(i => i.value)
     .slice(0, 4))
+
+const itemUren = page => page.locator('input[aria-label="Geschatte uren"]')
 
 test('uren toevoegen laat de verdeling meegroeien', { skip: skip ?? false }, async () => {
   const page = await openPopup()
@@ -56,7 +59,7 @@ test('uren toevoegen laat de verdeling meegroeien', { skip: skip ?? false }, asy
   assert.deepEqual(voor, ['10', '50', '10', '50'], `start op 10u/50% per persoon, kreeg ${voor.join(',')}`)
 
   // De uren van het item naar 40.
-  const uren = page.locator('input[type="number"]').nth(4)
+  const uren = itemUren(page)
   await uren.fill('40')
   await uren.blur()
   await page.waitForTimeout(1200)
@@ -69,7 +72,7 @@ test('uren toevoegen laat de verdeling meegroeien', { skip: skip ?? false }, asy
 
 test('uren weghalen krimpt de verdeling net zo goed', { skip: skip ?? false }, async () => {
   const page = await openPopup()
-  const uren = page.locator('input[type="number"]').nth(4)
+  const uren = itemUren(page)
   await uren.fill('10')
   await uren.blur()
   await page.waitForTimeout(1200)
