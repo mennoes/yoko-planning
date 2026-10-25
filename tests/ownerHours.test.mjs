@@ -22,11 +22,11 @@ test('remaining hours stay proportional across other owners', () => {
   assert.equal(Object.values(result).reduce((sum, value) => sum + value, 0), 80)
 })
 
-test('selected zero-hour owners are normalized to a complete equal distribution', () => {
+test('missing owner shares are normalized to a complete equal distribution', () => {
   const result = exports.normalizeOwnerHours(
     ['take', 'menno', 'vincent'],
     25.6,
-    { take: 25.6, menno: 0, vincent: 0 },
+    { take: 25.6 },
   )
   assert.deepEqual({ ...result }, { take: 8.6, menno: 8.5, vincent: 8.5 })
   assert.equal(Object.values(result).reduce((sum, value) => sum + value, 0), 25.6)
@@ -71,4 +71,25 @@ test('stond alles op nul, dan is er geen verhouding en wordt het gelijk op', () 
 
 test('zonder eigenaren valt er niets te schalen', () => {
   assert.deepEqual({ ...exports.scaleOwnerHours({}, 40) }, {})
+})
+
+
+test('stale agenda distribution is scaled to the planning total', () => {
+  const next = exports.normalizeOwnerHours(['odette', 'loeta'], 80, { odette: 79.3, loeta: 40.7 })
+  assert.deepEqual({ ...next }, { odette: 52.9, loeta: 27.1 })
+  assert.equal(Object.values(next).reduce((a, b) => a + b, 0), 80)
+})
+
+test('a deliberate zero share survives a reload and zero total clears old hours', () => {
+  assert.deepEqual({ ...exports.normalizeOwnerHours(['a', 'b'], 80, { a: 80, b: 0 }) }, { a: 80, b: 0 })
+  assert.deepEqual({ ...exports.normalizeOwnerHours(['a', 'b'], 0, { a: 80, b: 0 }) }, { a: 0, b: 0 })
+})
+
+test('removing an owner redistributes their hours and drops stale entries', () => {
+  assert.deepEqual({ ...exports.normalizeOwnerHours(['a', 'b'], 80, { a: 20, b: 20, removed: 40 }) }, { a: 40, b: 40 })
+})
+
+test('bulk owners start with the shared selection, including multiple owners', () => {
+  assert.deepEqual([...exports.commonOwnerIds([{ ownerIds: ['a', 'b'] }, { ownerIds: ['a', 'b', 'c'] }])], ['a', 'b'])
+  assert.deepEqual([...exports.commonOwnerIds([])], [])
 })

@@ -42,7 +42,8 @@ import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useTeam } from '@/components/TeamContext'
 import { upsertTeamMember } from '@/lib/teamStore'
 import { DistributionPie } from '@/components/DistributionPie'
-import { scaleOwnerHours } from '@/lib/ownerHours'
+import { normalizeOwnerHours, rebalanceOwnerHours } from '@/lib/ownerHours'
+import { relevantOwnerHours } from '@/lib/relevantOwners'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
 import { logActivity }   from '@/lib/activityLog'
@@ -3246,7 +3247,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
 
   const [startDate, setStartDate] = useState(project.startDate ?? '')
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
-  const [estHours,  setEstHours]  = useState(String(project.estHours ?? 0))
+  const [estHours,  setEstHours]  = useState(String(rawItem?.estHours ?? project.estHours ?? 0))
   // Suggesteer estHours = werkdagen × 8 wanneer de gebruiker een
   // timeline kiest. Overschrijft ALTIJD bij datum-wijziging — user wil
   // dit als principe. Manueel aanpassen blijft mogelijk, maar bij een
@@ -3278,7 +3279,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const [ownerHours, setOwnerHours] = useState<Record<string, number>>(
     (rawItem?.ownerHours as Record<string, number> | undefined) ?? {}
   )
-  const [ownerIds, setOwnerIds] = useState<string[]>(project.ownerIds)
+  const [ownerIds, setOwnerIds] = useState<string[]>(rawItem?.ownerIds ?? project.ownerIds)
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const ownerPickerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -3314,17 +3315,21 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     ownerHours,
   )
 
+  const distributionFromSubs = effectiveDetailHours.source === 'subitems'
+  const distributionValues = distributionFromSubs
+    ? relevantOwnerHours(rawItem?.subitems ?? []) : ownerHours
+  const distributionOwners = distributionFromSubs
+    ? Object.keys(distributionValues) : ownerIds.filter(id => id !== 'unassigned')
+
   useEffect(() => {
     setStartDate(project.startDate ?? ''); setEndDate(project.endDate ?? '')
-    setEstHours(String(project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
+    setEstHours(String(rawItem?.estHours ?? project.estHours ?? 0)); setNotes((rawItem?.notes as string) ?? '')
     setContactpersoon((rawItem?.contactpersoon as string) ?? '')
     setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
     setLinks((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
     setOwnerHours((rawItem?.ownerHours as Record<string, number> | undefined) ?? {})
-    setOwnerIds(project.ownerIds)
-    setOwnerPickerOpen(false)
-    setNewEntry('')
-  }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    setOwnerIds(rawItem?.ownerIds ?? project.ownerIds)
+  }, [project.id, project.startDate, project.endDate, project.estHours, JSON.stringify(project.ownerIds), JSON.stringify(rawItem)]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
@@ -3386,16 +3391,15 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     // terwijl de taart hetzelfde hoorde te blijven en alleen de uren
     // groter moesten worden.
     let nextOwnerHours = patch.ownerHours !== undefined ? patch.ownerHours : ownerHours
-    if (patch.ownerHours === undefined && patch.estHours !== undefined && !hasSubitems
-        && Object.keys(nextOwnerHours).length > 0) {
-      nextOwnerHours = scaleOwnerHours(nextOwnerHours, nextEst)
-      setOwnerHours(nextOwnerHours)
-    }
     const nextLinks      = patch.links      !== undefined ? patch.links      : links
     const rawOwners      = patch.ownerIds   !== undefined ? patch.ownerIds   : ownerIds
     // 'unassigned' alleen behouden als enige owner; anders eruit filteren.
     const cleaned = rawOwners.length > 1 ? rawOwners.filter(id => id !== 'unassigned') : rawOwners
     const finalOwners = cleaned.length === 0 ? ['unassigned'] : cleaned
+    if (effectiveDetailHours.source !== 'subitems') {
+      nextOwnerHours = normalizeOwnerHours(finalOwners, nextEst, nextOwnerHours)
+      setOwnerHours(nextOwnerHours)
+    }
 
     const extra: Patch = {
       notes: nextNotes,
@@ -3409,7 +3413,8 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     if (patch.endTime            !== undefined) extra.endTime            = patch.endTime
     if (patch.status             !== undefined) extra.status             = patch.status
     if (patch.hiddenFromPlanning !== undefined) extra.hiddenFromPlanning = patch.hiddenFromPlanning
-    if (!hasSubitems) extra.estHours = nextEst
+    if (effectiveDetailHours.source !== 'subitems') extra.estHours = nextEst
+    else delete extra.ownerHours
     // Alles wat hierboven niet expliciet genoemd staat — de naam en de
     // eigen kolommen van de agenda — ging verloren: deze functie bouwde
     // een vast object op en liet losse sleutels vallen. Nu reizen ze mee.
@@ -3695,12 +3700,13 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         )
       })()}
       {!isMerged && <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: isMobile ? '16px 16px 28px' : '16px 18px' }}>
-        {!isGoogle && ownerIds.filter(id => id !== 'unassigned').length > 1 && (
+        {!isGoogle && distributionOwners.length > 1 && (
           <Row label="Verdeling">
             <DistributionEditor
-              owners={ownerIds.filter(id => id !== 'unassigned')}
+              owners={distributionOwners}
               total={effectiveDetailHours.total}
-              values={ownerHours}
+              values={distributionValues}
+              readOnly={distributionFromSubs}
               onLive={next => setOwnerHours(next)}
               onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
               teamLookup={oid => team.find(t => t.id === oid) ?? null}
@@ -4329,7 +4335,8 @@ function StatusPicker({ value, onChange, disabled = false, ariaLabel }: {
 // Wijzig je één persoon, dan herverdelen de overigen proportioneel zodat de
 // som klopt. Door uren én % zij-aan-zij te tonen kun je sneller schakelen
 // tussen "Vincent doet 60% hiervan" en absolute uren.
-function DistributionEditor({ owners, total, values, onChange, onLive, teamLookup, completionTarget }: {
+function DistributionEditor({ owners, total, values, onChange, onLive, teamLookup, completionTarget, readOnly = false }: {
+  readOnly?: boolean
   owners:     string[]
   total:      number
   values:     Record<string, number>
@@ -4344,31 +4351,10 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
 }) {
   const { getPhoto } = useTeamPhotos()
   const completedOwners = useCompletedOwners(completionTarget, owners)
-  const defaultPer = owners.length > 0 ? total / owners.length : 0
-  const current: Record<string, number> = {}
-  for (const o of owners) current[o] = values[o] ?? defaultPer
-
+  const current = readOnly ? values : normalizeOwnerHours(owners, total, values)
   function round1(n: number): number { return Math.round(n * 10) / 10 }
-
-  // Herverdeling: pas één owner aan op `newVal`, schaal de rest zodat de som
-  // weer `total` is. Als de rest 0 was, verdeel gelijkmatig over hen.
   function rebalance(changedId: string, newVal: number): Record<string, number> {
-    const clamped = Math.max(0, Math.min(total, newVal))
-    const others  = owners.filter(o => o !== changedId)
-    const remain  = Math.max(0, total - clamped)
-    const next: Record<string, number> = { [changedId]: round1(clamped) }
-    if (others.length === 0) return next
-    const otherSum = others.reduce((s, o) => s + (current[o] ?? 0), 0)
-    if (otherSum <= 0) {
-      const per = remain / others.length
-      for (const o of others) next[o] = round1(per)
-    } else {
-      for (const o of others) {
-        const cur = current[o] ?? 0
-        next[o]   = round1(remain * (cur / otherSum))
-      }
-    }
-    return next
+    return rebalanceOwnerHours(owners, current, total, changedId, newVal)
   }
 
   // Bouw segmenten voor de DistributionPie. Twee leden met dezelfde
@@ -4411,15 +4397,20 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        Sleep de witte bolletjes op de taart om uren tussen mensen te verschuiven —
-        of bewerk de cijfers per rij.
+        {readOnly ? 'Opgeteld uit subitems. Pas de verdeling aan bij de subitems.'
+          : 'Sleep de witte bolletjes op de taart om uren tussen mensen te verschuiven — of bewerk de cijfers per rij.'}
       </div>
+      {readOnly && total - Object.values(current).reduce((sum, hours) => sum + hours, 0) > 0.05 && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          {round1(total - Object.values(current).reduce((sum, hours) => sum + hours, 0))}u nog niet toegewezen
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <DistributionPie
           segments={segments}
           total={total}
           size={130}
-          interactive
+          interactive={!readOnly}
           showAvatars
           innerLabel={`${round1(total)}u`}
           onChange={onLive ?? onChange}
@@ -4449,12 +4440,12 @@ function DistributionEditor({ owners, total, values, onChange, onLive, teamLooku
                     </span>
                   )}
                 </span>
-                <input type="number" step="0.5" min="0" max={total}
+                <input disabled={readOnly} aria-label={`Uren ${m.name}`} type="number" step="0.5" min="0" max={total}
                   value={val}
                   onChange={e => setHours(parseFloat(e.target.value) || 0)}
                   style={{ ...dateInput, width: 56 }} />
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>u</span>
-                <input type="number" step="5" min="0" max={100}
+                <input disabled={readOnly} aria-label={`Percentage ${m.name}`} type="number" step="5" min="0" max={100}
                   value={pct}
                   onChange={e => setPct(parseFloat(e.target.value) || 0)}
                   style={{ ...dateInput, width: 44 }} />

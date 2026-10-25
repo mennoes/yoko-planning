@@ -35,7 +35,7 @@ import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
-import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours } from '@/lib/ownerHours'
+import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours, commonOwnerIds } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { itemDatums, subitemsGevenPeriode } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
@@ -842,7 +842,7 @@ function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<st
 const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
   Object.fromEntries(ids.map(id => [id, String(Math.round((hours[id] ?? 0) * 10) / 10)]))
 
-function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange, avatarSize = 34 }: {
+function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange, avatarSize = 34, triggerLabel }: {
   value: string[]
   onChange: (v: string[], distribution?: Record<string, number>) => void
   ownerHours?: Record<string, number>
@@ -851,6 +851,7 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   /** In een rij moet een gezicht klein blijven; in het item-venster is
    *  er ruimte zat en wil je gewoon zien wie het doet. */
   avatarSize?: number
+  triggerLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -867,12 +868,6 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
     const resolved = resolveOwnerHours(value, totalHours, ownerHours)
     setLiveHours(resolved)
     setHourDrafts(ownerHoursDrafts(value, resolved))
-    const assigned = value.filter(id => id && id !== 'unassigned')
-    const needsRepair = assigned.length > 1 && totalHours > 0 &&
-      assigned.some(id => Math.max(0, Number(ownerHours?.[id]) || 0) <= 0)
-    // Migreer oude selecties waarbij toegevoegde owners stilletjes 0 uur
-    // kregen. Eén persist maakt Agenda, Home en Planning daarna consistent.
-    if (needsRepair) onDistributionChange?.(resolved)
   }, [ownersKey, totalHours, hoursKey])
   // Bron-lijst: live team_members uit Supabase aangevuld met data/team.json
   // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
@@ -998,8 +993,9 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
 
   return (
     <div>
-      <div ref={trigRef} onClick={() => { setOpen(o => !o); setQuery('') }}
-        style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: 'nowrap', minWidth: 24 }}>
+      <div ref={trigRef} role="button" aria-label={triggerLabel ?? 'Owners wijzigen'} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) } }} onClick={() => { setOpen(o => !o); setQuery('') }}
+        style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: triggerLabel ? 'wrap' : 'nowrap', minWidth: 24 }}>
+        {triggerLabel && <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>{triggerLabel}</span>}
         {visibleOwners.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
           : visibleOwners.map(allocatedAvatar)
@@ -2179,7 +2175,6 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   dismissedInstanceIds?: string[]
   onUpdate: (u: SubItem[], itemPatch?: { dismissedInstanceIds?: string[] }) => void
 }) {
-  const { members } = useTeam()
   const selectedSubs = subitems.filter(sub => selectedIds?.has(`sub:${sub.id}`))
   const allSelected = subitems.length > 0 && selectedSubs.length === subitems.length
   function selectAll() {
@@ -2187,10 +2182,9 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
       if (allSelected || !selectedIds?.has(`sub:${sub.id}`)) onToggleSelect?.(`sub:${sub.id}`)
     }
   }
-  function assignSelectedOwner(ownerId: string) {
-    const ownerIds = ownerId === '__clear' ? [] : [ownerId]
+  function assignSelectedOwners(ownerIds: string[]) {
     onUpdate(subitems.map(sub => selectedIds?.has(`sub:${sub.id}`) ? {
-      ...sub, ownerIds, ownerHours: undefined,
+      ...sub, ownerIds, ownerHours: normalizeOwnerHours(ownerIds, Number(sub.estHours) || 0, sub.ownerHours),
       ...((sub.source === 'google' || !!sub.externalLink || sub.id.startsWith('si_g_'))
         ? { ownerIdsLocked: true } : {}),
     } : sub))
@@ -2338,13 +2332,11 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
                 {headerLabelFor(c.key, c.label)} {sortBy?.key === c.key ? (sortBy.dir === 'asc' ? '▲' : '▼') : ''}
               </button>
               {(c.key === 'owner' || c.key === 'ownerIds') && selectedSubs.length > 0 && (
-                <select aria-label="Owner van geselecteerde subitems" value=""
-                  onChange={event => assignSelectedOwner(event.target.value)}
-                  style={{ display: 'block', width: '100%', marginTop: 6, color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, padding: 4 }}>
-                  <option value="" disabled>Wijzig owner ({selectedSubs.length})</option>
-                  {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
-                  <option value="__clear">Wis owner</option>
-                </select>
+                <div style={{ marginTop: 6 }}>
+                  <OwnersCell value={commonOwnerIds(selectedSubs)}
+                    triggerLabel={`Wijzig owners (${selectedSubs.length})`}
+                    avatarSize={24} onChange={assignSelectedOwners} />
+                </div>
               )}
               {onResizeCol && (
                 <div
@@ -3214,21 +3206,20 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
   const { getPhoto } = useTeamPhotos()
   const { members: liveTeam } = useTeam()
   const completedOwners = useCompletedOwners(completionTarget, owners)
-  const defaultPer = owners.length > 0 ? total / owners.length : 0
   const ownersKey  = owners.join(',')
   const valuesKey  = JSON.stringify(item.ownerHours ?? {})
   const [live, setLive] = useState<Record<string, number>>(() => {
-    const next: Record<string, number> = {}
-    for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
+    const next = uitSubitems ? Object.fromEntries(owners.map(id => [id, item.ownerHours?.[id] ?? 0]))
+      : normalizeOwnerHours(owners, total, item.ownerHours)
     return next
   })
   const [hourDrafts, setHourDrafts] = useState<Record<string, string>>(() => ownerHoursDrafts(owners, live))
   useEffect(() => {
-    const next: Record<string, number> = {}
-    for (const o of owners) next[o] = item.ownerHours?.[o] ?? defaultPer
+    const next = uitSubitems ? Object.fromEntries(owners.map(id => [id, item.ownerHours?.[id] ?? 0]))
+      : normalizeOwnerHours(owners, total, item.ownerHours)
     setLive(next)
     setHourDrafts(ownerHoursDrafts(owners, next))
-  }, [item.id, ownersKey, total, valuesKey, defaultPer])
+  }, [item.id, ownersKey, total, valuesKey, uitSubitems])
 
   const round1 = (n: number) => Math.round(n * 10) / 10
 
@@ -6034,6 +6025,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             return {
               ...s,
               ...subPatch,
+              ...('ownerIds' in subPatch ? { ownerHours: normalizeOwnerHours(subPatch.ownerIds ?? [], Number(s.estHours) || 0, s.ownerHours) } : {}),
               ...(isGoogleSub && 'ownerIds' in subPatch ? { ownerIdsLocked: true } : {}),
               ...(isGoogleSub && 'status' in subPatch
                 ? { statusOverride: subPatch.status === 'Done' ? 'done' as const : 'active' as const }
@@ -6612,6 +6604,10 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
       {selectedIds.size > 0 && (
         <BulkActionBar
           count={selectedIds.size}
+          selectedOwners={commonOwnerIds(groups.flatMap(g => g.items.flatMap(i => [
+            ...(selectedIds.has(i.id) ? [i] : []),
+            ...(i.subitems ?? []).filter(s => selectedIds.has(`sub:${s.id}`)),
+          ])))}
           color={color}
           groups={groups}
           onClear={clearSelection}
@@ -6639,17 +6635,17 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
 // Toolbar wanneer er meerdere items in een groep aangevinkt zijn. Iedere
 // "waarde" die in een rij bewerkt kan worden, kan hier op alle geselecteerde
 // items in één keer worden gezet.
-function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMoveTo, boardId, onMoveBoard }: {
+function BulkActionBar({ count, color, groups, selectedOwners, onClear, onDelete, onUpdate, onMoveTo, boardId, onMoveBoard }: {
   count: number; color: string; groups: BoardGroup[]
+  selectedOwners: string[]
   onClear: () => void; onDelete: () => void
   onUpdate: (patch: Partial<BoardItem>) => void
   onMoveTo: (groupId: string) => void
   boardId: string
   onMoveBoard: (boardId: string) => Promise<void>
 }) {
-  const { members } = useTeam()
   const [movingBoard, setMovingBoard] = useState(false)
-  type OpenMenu = '' | 'status' | 'owner' | 'move' | 'timeline' | 'deadline' | 'est' | 'echt'
+  type OpenMenu = '' | 'status' | 'move' | 'timeline' | 'deadline' | 'est' | 'echt'
   const [open, setOpen] = useState<OpenMenu>('')
   const toggle = (m: OpenMenu) => setOpen(o => o === m ? '' : m)
 
@@ -6689,21 +6685,8 @@ function BulkActionBar({ count, color, groups, onClear, onDelete, onUpdate, onMo
         )}
       </div>
 
-      <div style={{ position: 'relative' }}>
-        <button onClick={() => toggle('owner')} style={barBtn}>Owner…</button>
-        {open === 'owner' && (
-          <div style={popoverStyle}>
-            {members.map(m => (
-              <button key={m.id} onClick={() => { onUpdate({ ownerIds: [m.id] }); setOpen('') }}
-                style={{ ...popoverItem, color: m.color }}>
-                {m.name}
-              </button>
-            ))}
-            <button onClick={() => { onUpdate({ ownerIds: [] }); setOpen('') }}
-              style={{ ...popoverItem, color: 'var(--text-muted)' }}>Wis owner</button>
-          </div>
-        )}
-      </div>
+      <OwnersCell value={selectedOwners} triggerLabel="Owners wijzigen" avatarSize={24}
+        onChange={ownerIds => onUpdate({ ownerIds })} />
 
       <div style={{ position: 'relative' }}>
         <button onClick={() => toggle('timeline')} style={barBtn}>Timeline…</button>
