@@ -29,7 +29,7 @@ function isOffDayInline(memberId: string, date: Date): boolean {
 }
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
-  CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
+  CAT_COLOR,
   effectiveCategory, isVrijTitle,
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
@@ -390,83 +390,26 @@ function WorkloadCircleSvg({ pct, cs, or: outerR }: { pct: number; cs: number; o
 }
 
 // ─── Workload cell ────────────────────────────────────────────────────────────
-type Contrib = { project: Project; hours: number }
-
-const NL_DAY_FULL = ['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag']
-
-function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenDetails }: {
-  contribs: Contrib[]; total: number; capacity: number
-  cs: number; or: number; zoom: ZoomLevel
-  onOpenDetails?: (p: Project) => void
+function WorkloadCell({ total, capacity, cs, or: outerR, onToggle, expanded }: {
+  total: number; capacity: number
+  cs: number; or: number
+  /** Klik op de bol klapt de persoon open of dicht. */
+  onToggle?: () => void
+  expanded?: boolean
 }) {
-  const [open, setOpen] = useState(false)
-  const [overrides, setOverrides] = useState<Record<string, WorkloadCategory>>({})
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const popoverId = useRef(`wc:${Math.random().toString(36).slice(2)}`).current
   const pct = capacity > 0 ? total / capacity : 0
-
-  function setOpenExclusive(next: boolean) {
-    setOpen(next)
-    if (next) openExclusivePopover(popoverId)
-    else      closeExclusivePopover(popoverId)
-  }
-
-  // Always keep overrides in sync — the tiny category breakdown bar shows
-  // even when the popover is closed, so it needs to react to changes from
-  // the home page or other cells.
-  useEffect(() => {
-    setOverrides(loadCategoryOverrides())
-    return onCategoryOverridesChange(() => setOverrides(loadCategoryOverrides()))
-  }, [])
-
-  // Close when another popover opens.
-  useEffect(() => {
-    if (!open) return
-    return onExclusivePopoverChange(activeId => {
-      if (activeId !== popoverId) setOpen(false)
-    })
-  }, [open, popoverId])
-
-  // Close on outside click / tap
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: Event) => {
-      const root = wrapRef.current
-      if (!root) return
-      if (!root.contains(e.target as Node)) setOpenExclusive(false)
-    }
-    document.addEventListener('mousedown', handler)
-    document.addEventListener('touchstart', handler)
-    return () => {
-      document.removeEventListener('mousedown', handler)
-      document.removeEventListener('touchstart', handler)
-    }
-  }, [open])
-
-  function setCat(id: string, cat: WorkloadCategory | null) {
-    setOverrides(setCategoryOverride(id, cat))
-  }
-
-  const popover = open && total > 0 && (
-    <WorkloadPopover
-      contribs={contribs} total={total} capacity={capacity}
-      overrides={overrides} setCat={setCat}
-      groupByDay={zoom !== 'dag'}
-      onClose={() => setOpenExclusive(false)}
-      onOpenDetails={onOpenDetails}
-    />
-  )
-
-  // Eén visualisatie voor alle zoom-niveaus: workload-cirkel met uren-
-  // label. Vroeger had dag-zoom een eigen volle-cel tint, maar dat brak
-  // de continuïteit met Overzicht — nu zie je per dag dezelfde bol als
-  // per week, alleen kleiner.
+  // De bol opende eerder een lijstje met een categoriekiezer (Maken /
+  // Overige maken / Meeting / Vrij). Dat is eruit: je wil het werk van
+  // die week gewoon zien staan, en dat is precies wat uitklappen doet.
   return (
-    <div ref={wrapRef} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}>
-      <button onClick={() => total > 0 && setOpenExclusive(!open)} style={{
-        background: 'none', border: 'none', cursor: total > 0 ? 'pointer' : 'default',
-        padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-      }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 1, position: 'relative' }}>
+      <button
+        onClick={event => { event.stopPropagation(); onToggle?.() }}
+        title={onToggle ? (expanded ? 'Inklappen' : 'Uitklappen') : undefined}
+        style={{
+          background: 'none', border: 'none', cursor: onToggle ? 'pointer' : 'default',
+          padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        }}>
         <WorkloadCircleSvg pct={pct} cs={cs} or={outerR} />
         {total > 0 && (
           <span style={{ fontSize: cs > 60 ? 12 : 10, fontWeight: 700, color: pct > 1 ? '#e2445c' : 'var(--text-muted)', lineHeight: 1 }}>
@@ -474,150 +417,6 @@ function WorkloadCell({ contribs, total, capacity, cs, or: outerR, zoom, onOpenD
           </span>
         )}
       </button>
-      {popover}
-    </div>
-  )
-}
-
-// Floating detail popover: items grouped by start-day, each with a category
-// (Maken / Overhead / Meeting) picker. Layout matches the home page workload
-// rows so the experience is the same across views.
-function WorkloadPopover({ contribs, total, capacity, overrides, setCat, groupByDay, onClose, onOpenDetails }: {
-  contribs: Contrib[]; total: number; capacity: number
-  overrides: Record<string, WorkloadCategory>
-  setCat: (id: string, cat: WorkloadCategory | null) => void
-  groupByDay: boolean
-  onClose: () => void
-  onOpenDetails?: (p: Project) => void
-}) {
-  const pct = capacity > 0 ? total / capacity : 0
-  const r   = (n: number) => Math.round(n * 10) / 10
-
-  type Group = { key: string; label: string; items: Contrib[]; total: number }
-  const groups: Group[] = (() => {
-    if (!groupByDay) return [{ key: 'all', label: '', items: contribs, total }]
-    const byDay: Record<number, Contrib[]> = {}
-    const undated: Contrib[] = []
-    for (const c of contribs) {
-      const sd = c.project.startDate ? new Date(c.project.startDate) : null
-      if (!sd || isNaN(sd.getTime())) { undated.push(c); continue }
-      const day = (sd.getDay() + 6) % 7  // Mon=0..Sun=6
-      ;(byDay[day] ??= []).push(c)
-    }
-    const out: Group[] = []
-    for (let d = 0; d < 7; d++) {
-      const items = byDay[d]
-      if (!items?.length) continue
-      out.push({ key: String(d), label: NL_DAY_FULL[d], items,
-        total: r(items.reduce((s, i) => s + i.hours, 0)) })
-    }
-    if (undated.length) out.push({ key: 'undated', label: 'Geen datum', items: undated,
-      total: r(undated.reduce((s, i) => s + i.hours, 0)) })
-    return out
-  })()
-
-  const catTotal: Record<WorkloadCategory, number> = { maken: 0, overhead: 0, meeting: 0, vrij: 0 }
-  for (const c of contribs) {
-    const cat = effectiveCategory({ name: c.project.name, hours: c.hours, source: c.project.source }, overrides[c.project.id])
-    catTotal[cat] += c.hours
-  }
-
-  return (
-    <div onClick={e => e.stopPropagation()} style={{
-      position: 'absolute', zIndex: 200, top: '100%', left: '50%',
-      transform: 'translateX(-50%)', marginTop: 4,
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 10, padding: '10px 12px',
-      width: 'max-content', minWidth: 280, maxWidth: 360,
-      boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
-      fontSize: 12, lineHeight: 1.45, color: 'var(--text-primary)',
-      textAlign: 'left',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
-        <strong style={{ fontSize: 14, fontWeight: 800 }}>{r(total)}u</strong>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>/ {capacity}u · {Math.round(pct * 100)}%</span>
-      </div>
-
-      {/* Category breakdown bar */}
-      <div style={{ display: 'flex', height: 5, borderRadius: 3, overflow: 'hidden', background: 'var(--border)', marginBottom: 6 }}>
-        {ALL_CATEGORIES.map(c => {
-          const w = total > 0 ? (catTotal[c] / total) * 100 : 0
-          return <div key={c} style={{ width: `${w}%`, background: CAT_COLOR[c], transition: 'width 0.3s' }} />
-        })}
-      </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-        {ALL_CATEGORIES.map(c => (
-          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: CAT_COLOR[c] }} />
-            <strong style={{ color: 'var(--text-primary)' }}>{r(catTotal[c])}u</strong> {CAT_LABEL[c].toLowerCase()}
-          </span>
-        ))}
-      </div>
-
-      {groups.map(g => (
-        <div key={g.key} style={{ marginTop: g.label ? 6 : 0 }}>
-          {g.label && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
-              <span>{g.label}</span>
-              <span style={{ fontWeight: 600 }}>{g.total}u</span>
-            </div>
-          )}
-          {g.items.map(({ project, hours }) => {
-            const override = overrides[project.id] ?? null
-            const cat      = effectiveCategory({ name: project.name, hours, source: project.source }, override)
-            return (
-              <div key={project.id} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-light)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
-                  <span title={CAT_LABEL[cat]} style={{ width: 8, height: 8, borderRadius: '50%', background: CAT_COLOR[cat], flexShrink: 0 }} />
-                  {onOpenDetails ? (
-                    <button type="button"
-                      onClick={(e) => { e.stopPropagation(); onOpenDetails(project); onClose() }}
-                      title="Open detailvenster"
-                      style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        textAlign: 'left', background: 'none', border: 'none', padding: 0, font: 'inherit',
-                        color: 'var(--text-primary)', cursor: 'pointer', textDecoration: 'underline',
-                        textDecorationColor: 'var(--border)', textUnderlineOffset: 3 }}>
-                      {project.name}
-                    </button>
-                  ) : (
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{project.name}</span>
-                  )}
-                  <span title={project.board} style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[project.board] ?? '#888', flexShrink: 0 }} />
-                  <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{r(hours)}u</span>
-                </div>
-                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                  {ALL_CATEGORIES.map(c => {
-                    const active = cat === c
-                    return (
-                      <button key={c} type="button"
-                        onClick={(e) => { e.stopPropagation(); setCat(project.id, c) }}
-                        style={{
-                          flex: 1, padding: '3px 5px', borderRadius: 5,
-                          border: active ? `1.5px solid ${CAT_COLOR[c]}` : '1px solid var(--border)',
-                          background: active ? `${CAT_COLOR[c]}22` : 'var(--bg-card)',
-                          color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                          fontSize: 10, fontWeight: active ? 700 : 500,
-                          cursor: 'pointer',
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                        }}>
-                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: CAT_COLOR[c] }} />
-                        {CAT_LABEL[c]}
-                      </button>
-                    )
-                  })}
-                  {override && (
-                    <button type="button" title="Reset naar automatisch"
-                      onClick={(e) => { e.stopPropagation(); setCat(project.id, null) }}
-                      style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>↺</button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      ))}
-
-      <button onClick={onClose} style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>sluiten</button>
     </div>
   )
 }
@@ -6392,7 +6191,7 @@ export default function PlanningPage() {
                             padding: 2,
                             background: col.isCurrent ? 'var(--accent-light)' : 'transparent', position: 'relative',
                             cursor: 'cell' }}>
-                          <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={Math.round(cs * 0.7)} or={Math.round(or * 0.7)} zoom={zoom} onOpenDetails={p => openDetail(p)} />
+                          <WorkloadCell total={total} capacity={cap} cs={Math.round(cs * 0.7)} or={Math.round(or * 0.7)} onToggle={() => toggleExpand(m.id)} expanded={isExp} />
                         </div>
                       )
                     })}
@@ -6588,7 +6387,7 @@ export default function PlanningPage() {
                         borderLeft: isWeekStart ? '3px solid var(--text-muted)' : '1px solid var(--border-strong)',
                         padding: 2,
                         background: col.isCurrent ? 'var(--accent-light)' : weekend ? 'var(--weekend-bg)' : 'transparent', position: 'relative' }}>
-                        <WorkloadCell contribs={contribs} total={total} capacity={cap} cs={cs} or={or} zoom={zoom} onOpenDetails={p => openDetail(p)} />
+                        <WorkloadCell total={total} capacity={cap} cs={cs} or={or} onToggle={() => toggleExpand(member.id)} expanded={isExp} />
                       </div>
                     )
                   })}
