@@ -55,6 +55,7 @@ import {
 import { GoogleBadge } from '@/components/GoogleBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { DatumVeld } from '@/components/DatumVeld'
+import { DateRangeCell } from '@/components/DateRangeCell'
 import { useTeamGroups } from '@/components/useTeamGroups'
 import { isBaseSectionId } from '@/lib/teamGroups'
 import { PersonalCompletionSection } from '@/components/PersonalCompletionSection'
@@ -1037,6 +1038,11 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
       if (m === 'move')       { ns = origStart ? addDays(origStart, ddays) : null; ne = origEnd ? addDays(origEnd, ddays) : null }
       else if (m === 'start') { ns = origStart ? addDays(origStart, ddays) : null; if (ns && ne && ns > ne) ns = ne }
       else                    { ne = origEnd ? addDays(origEnd, ddays) : null; if (ns && ne && ne < ns) ne = ns }
+      // Een gewone klik is ook een mouseup: zonder deze controle schreef
+      // elke klik op een balk dezelfde datums terug, met een
+      // 'Datums bijgewerkt'-melding erbij voor een wijziging die er niet
+      // was.
+      if (ns === origStart && ne === origEnd) return
       onDragEnd(ns, ne)
     }
     window.addEventListener('mousemove', onMove)
@@ -3891,33 +3897,27 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           )
         })()}
         <Row label="Timeline">
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <DatumVeld value={startDate} disabled={isGoogle} ariaLabel="Startdatum"
-              onChange={gekozen => {
-                const v = gekozen ?? ''
-                setStartDate(v)
-                // Geen endDate? Vul 'm dan automatisch met startDate aan
-                // i.p.v. de browser default 'vandaag' bij 't openen van
-                // de tweede picker te tonen. Voorkomt dat de gebruiker
-                // per ongeluk 'n meerdaagse range maakt van begin → nu.
-                const nextEnd = endDate || v
-                if (!endDate && v) setEndDate(v)
-                const patch = autofillEstFromDates(v, nextEnd, estHours)
-                commit({ startDate: v || null, endDate: nextEnd || null, ...patch })
+          {/* Dezelfde datumcel als op de agenda: een pil met de periode en
+              een echte kalender erachter. Hier stonden twee losse
+              invoervelden met een pijltje ertussen — ander ding, zelfde
+              taak. */}
+          <div style={{ opacity: isGoogle ? 0.6 : 1, pointerEvents: isGoogle ? 'none' : undefined, maxWidth: 320 }}>
+            <DateRangeCell
+              startDate={startDate || null}
+              endDate={endDate || null}
+              color={color}
+              fontScale={1.1}
+              onChange={(s, e) => {
+                // Alleen een startdatum? Laat de einddatum meelopen, anders
+                // maak je ongemerkt een meerdaagse klus van begin tot nu.
+                const nieuwStart = s ?? ''
+                const nieuwEind  = e ?? (s ?? '')
+                setStartDate(nieuwStart)
+                setEndDate(nieuwEind)
+                const patch = autofillEstFromDates(nieuwStart, nieuwEind, estHours)
+                commit({ startDate: nieuwStart || null, endDate: nieuwEind || null, ...patch })
                 if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
-              }}
-              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-            <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
-            <DatumVeld value={endDate} disabled={isGoogle} ariaLabel="Einddatum"
-              min={startDate || undefined}
-              onChange={gekozen => {
-                const v = gekozen ?? ''
-                setEndDate(v)
-                const patch = autofillEstFromDates(startDate, v, estHours)
-                commit({ endDate: v || null, ...patch })
-                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
-              }}
-              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+              }} />
           </div>
           {/* Tijd-of-dag inputs (HH:MM): nodig om 't event in 't uur-grid van
               Week-view te zien. Leeg laten = all-day. Werkt op manuele items;
