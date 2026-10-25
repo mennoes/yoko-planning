@@ -3511,6 +3511,76 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         )
       })()}
       {!isMerged && <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: isMobile ? '16px 16px 28px' : '16px 18px' }}>
+        {/* Eerst wanneer en hoeveel, dan pas hoe het verdeeld wordt.
+            Andersom las het van achter naar voren: je zag een
+            taartpunt-verdeling van uren die verderop pas werden
+            ingevuld. */}
+        <Row label="Timeline">
+          {/* Dezelfde datumcel als op de agenda: een pil met de periode en
+              een echte kalender erachter. Hier stonden twee losse
+              invoervelden met een pijltje ertussen — ander ding, zelfde
+              taak. */}
+          <div style={{ opacity: isGoogle ? 0.6 : 1, pointerEvents: isGoogle ? 'none' : undefined, maxWidth: 320 }}>
+            <DateRangeCell
+              startDate={startDate || null}
+              endDate={endDate || null}
+              color={color}
+              fontScale={1.1}
+              onChange={(s, e) => {
+                // Alleen een startdatum? Laat de einddatum meelopen, anders
+                // maak je ongemerkt een meerdaagse klus van begin tot nu.
+                const nieuwStart = s ?? ''
+                const nieuwEind  = e ?? (s ?? '')
+                setStartDate(nieuwStart)
+                setEndDate(nieuwEind)
+                const patch = autofillEstFromDates(nieuwStart, nieuwEind, estHours)
+                commit({ startDate: nieuwStart || null, endDate: nieuwEind || null, ...patch })
+                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
+              }} />
+          </div>
+          {/* Tijd-of-dag inputs (HH:MM): nodig om 't event in 't uur-grid van
+              Week-view te zien. Leeg laten = all-day. Werkt op manuele items;
+              Google-events nemen hun tijden uit de sync zelf. */}
+          {!isGoogle && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+              <input type="time" value={(rawItem?.startTime as string | undefined) ?? ''}
+                onChange={e => commit({ startTime: e.target.value || null } as Partial<BoardItem>)}
+                style={{ ...dateInput, width: 100 }} />
+              <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>tot</span>
+              <input type="time" value={(rawItem?.endTime as string | undefined) ?? ''}
+                onChange={e => commit({ endTime: e.target.value || null } as Partial<BoardItem>)}
+                style={{ ...dateInput, width: 100 }} />
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>laat leeg voor de hele dag</span>
+            </div>
+          )}
+          {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
+        </Row>
+        {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
+        <Row label="Est Time">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {hasSubitems ? (
+              <>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{effectiveDetailHours.total} uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {effectiveDetailHours.source === 'subitems' ? '(som van subitems)' : '(uren van hoofditem; subitems hebben nog 0u)'}
+                </span>
+              </>
+            ) : (
+              <>
+                <input type="number" value={estHours} disabled={isGoogle}
+                  aria-label="Geschatte uren"
+                  onChange={e => setEstHours(e.target.value)}
+                  onBlur={e => {
+                    const v = parseFloat(e.target.value) || 0
+                    if (v !== (project.estHours ?? 0)) commit({ estHours: v })
+                  }}
+                  style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>· {Math.round(((parseFloat(estHours) || 0) / 8) * 10) / 10} d</span>
+              </>
+            )}
+          </div>
+        </Row>
         {!isGoogle && distributionOwners.length > 1 && (
           <Row label="Verdeling">
             <DistributionEditor
@@ -3701,71 +3771,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
-        <Row label="Timeline">
-          {/* Dezelfde datumcel als op de agenda: een pil met de periode en
-              een echte kalender erachter. Hier stonden twee losse
-              invoervelden met een pijltje ertussen — ander ding, zelfde
-              taak. */}
-          <div style={{ opacity: isGoogle ? 0.6 : 1, pointerEvents: isGoogle ? 'none' : undefined, maxWidth: 320 }}>
-            <DateRangeCell
-              startDate={startDate || null}
-              endDate={endDate || null}
-              color={color}
-              fontScale={1.1}
-              onChange={(s, e) => {
-                // Alleen een startdatum? Laat de einddatum meelopen, anders
-                // maak je ongemerkt een meerdaagse klus van begin tot nu.
-                const nieuwStart = s ?? ''
-                const nieuwEind  = e ?? (s ?? '')
-                setStartDate(nieuwStart)
-                setEndDate(nieuwEind)
-                const patch = autofillEstFromDates(nieuwStart, nieuwEind, estHours)
-                commit({ startDate: nieuwStart || null, endDate: nieuwEind || null, ...patch })
-                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
-              }} />
-          </div>
-          {/* Tijd-of-dag inputs (HH:MM): nodig om 't event in 't uur-grid van
-              Week-view te zien. Leeg laten = all-day. Werkt op manuele items;
-              Google-events nemen hun tijden uit de sync zelf. */}
-          {!isGoogle && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
-              <input type="time" value={(rawItem?.startTime as string | undefined) ?? ''}
-                onChange={e => commit({ startTime: e.target.value || null } as Partial<BoardItem>)}
-                style={{ ...dateInput, width: 100 }} />
-              <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>tot</span>
-              <input type="time" value={(rawItem?.endTime as string | undefined) ?? ''}
-                onChange={e => commit({ endTime: e.target.value || null } as Partial<BoardItem>)}
-                style={{ ...dateInput, width: 100 }} />
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>laat leeg voor de hele dag</span>
-            </div>
-          )}
-          {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
-        </Row>
-        {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
-        <Row label="Est Time">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {hasSubitems ? (
-              <>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{effectiveDetailHours.total} uur</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {effectiveDetailHours.source === 'subitems' ? '(som van subitems)' : '(uren van hoofditem; subitems hebben nog 0u)'}
-                </span>
-              </>
-            ) : (
-              <>
-                <input type="number" value={estHours} disabled={isGoogle}
-                  onChange={e => setEstHours(e.target.value)}
-                  onBlur={e => {
-                    const v = parseFloat(e.target.value) || 0
-                    if (v !== (project.estHours ?? 0)) commit({ estHours: v })
-                  }}
-                  style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>· {Math.round(((parseFloat(estHours) || 0) / 8) * 10) / 10} d</span>
-              </>
-            )}
-          </div>
-        </Row>
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
             onChange={e => setNotes(e.target.value)}

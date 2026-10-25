@@ -3294,6 +3294,110 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         )
       })()}
       {!isMerged && <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+        {/* Eerst wanneer en hoeveel, dan pas wie en hoe verdeeld. */}
+        <Row label="Timeline">
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <DatumVeld value={startDate} disabled={isGoogle} ariaLabel="Startdatum"
+              onChange={gekozen => {
+                const v = gekozen ?? ''
+                setStartDate(v)
+                // Geen endDate? Vul 'm dan automatisch met startDate aan
+                // i.p.v. de browser default 'vandaag' bij 't openen van
+                // de tweede picker te tonen. Voorkomt dat de gebruiker
+                // per ongeluk 'n meerdaagse range maakt van begin → nu.
+                const nextEnd = endDate || v
+                if (!endDate && v) setEndDate(v)
+                const patch = autofillEstFromDates(v, nextEnd, estHours)
+                commit({ startDate: v || null, endDate: nextEnd || null, ...patch })
+                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
+              }}
+              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+            <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
+            <DatumVeld value={endDate} disabled={isGoogle} ariaLabel="Einddatum"
+              min={startDate || undefined}
+              onChange={gekozen => {
+                const v = gekozen ?? ''
+                setEndDate(v)
+                const patch = autofillEstFromDates(startDate, v, estHours)
+                commit({ endDate: v || null, ...patch })
+                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
+              }}
+              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+          </div>
+          {/* Tijd-of-dag inputs (HH:MM): nodig om 't event in 't uur-grid van
+              Week-view te zien. Leeg laten = all-day. Werkt op manuele items;
+              Google-events nemen hun tijden uit de sync zelf. */}
+          {!isGoogle && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+              <input type="time" value={rawStartTime ?? ''}
+                onChange={e => commit({ startTime: e.target.value || null } as Partial<BoardItem>)}
+                style={{ ...dateInput, width: 100 }} />
+              <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>tot</span>
+              <input type="time" value={rawEndTime ?? ''}
+                onChange={e => commit({ endTime: e.target.value || null } as Partial<BoardItem>)}
+                style={{ ...dateInput, width: 100 }} />
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>laat leeg voor de hele dag</span>
+            </div>
+          )}
+          {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
+        </Row>
+        {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
+        <Row label="Est Time">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {hasSubitems ? (
+              <>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{effectiveDetailHours.total} uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {effectiveDetailHours.source === 'subitems' ? '(som van subitems)' : '(uren van hoofditem; subitems hebben nog 0u)'}
+                </span>
+              </>
+            ) : (
+              <>
+                <input type="number" value={estHours} disabled={isGoogle}
+                  aria-label="Geschatte uren"
+                  onChange={e => setEstHours(e.target.value)}
+                  onBlur={e => {
+                    const v = parseFloat(e.target.value) || 0
+                    if (v !== (project.estHours ?? 0)) commit({ estHours: v })
+                  }}
+                  style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>· {Math.round(((parseFloat(estHours) || 0) / 8) * 10) / 10} d</span>
+              </>
+            )}
+          </div>
+        </Row>
+        {!isGoogle && ownerIds.filter(id => id !== 'unassigned').length > 1 && (
+          <Row label="Verdeling">
+            <DistributionEditor
+              owners={ownerIds.filter(id => id !== 'unassigned')}
+              total={effectiveDetailHours.total}
+              values={ownerHours}
+              onLive={next => setOwnerHours(next)}
+              onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
+              teamLookup={oid => team.find(t => t.id === oid) ?? null}
+            />
+          </Row>
+        )}
+        <Row label="Tijd">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {isTimingThis ? (
+              <button onClick={() => stopTimer()}
+                style={{ ...cancelBtn, background: '#e2445c', color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <IconStop size={13} /> Stop timer
+              </button>
+            ) : (
+              <button onClick={() => startTimer(project.id, project.name)}
+                style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <IconPlay size={13} /> Start timer
+              </button>
+            )}
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Gewerkt: <strong style={{ color: 'var(--text-secondary)' }}>{fmtMinutes(workedMin)}</strong>
+              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{effectiveDetailHours.total}u</strong>
+            </span>
+          </div>
+        </Row>
         <Row label="Owner">
           <div ref={ownerPickerRef} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
             {ownerIds.length > 0 && ownerIds.map(oid => {
@@ -3460,108 +3564,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             placeholder={isGoogle ? '' : 'Naam of contactgegevens…'}
             style={{ ...dateInput, width: '100%', maxWidth: 360, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }}
           />
-        </Row>
-        <Row label="Timeline">
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <DatumVeld value={startDate} disabled={isGoogle} ariaLabel="Startdatum"
-              onChange={gekozen => {
-                const v = gekozen ?? ''
-                setStartDate(v)
-                // Geen endDate? Vul 'm dan automatisch met startDate aan
-                // i.p.v. de browser default 'vandaag' bij 't openen van
-                // de tweede picker te tonen. Voorkomt dat de gebruiker
-                // per ongeluk 'n meerdaagse range maakt van begin → nu.
-                const nextEnd = endDate || v
-                if (!endDate && v) setEndDate(v)
-                const patch = autofillEstFromDates(v, nextEnd, estHours)
-                commit({ startDate: v || null, endDate: nextEnd || null, ...patch })
-                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
-              }}
-              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-            <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>→</span>
-            <DatumVeld value={endDate} disabled={isGoogle} ariaLabel="Einddatum"
-              min={startDate || undefined}
-              onChange={gekozen => {
-                const v = gekozen ?? ''
-                setEndDate(v)
-                const patch = autofillEstFromDates(startDate, v, estHours)
-                commit({ endDate: v || null, ...patch })
-                if (patch.estHours !== undefined) setEstHours(String(patch.estHours))
-              }}
-              style={{ ...dateInput, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-          </div>
-          {/* Tijd-of-dag inputs (HH:MM): nodig om 't event in 't uur-grid van
-              Week-view te zien. Leeg laten = all-day. Werkt op manuele items;
-              Google-events nemen hun tijden uit de sync zelf. */}
-          {!isGoogle && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
-              <input type="time" value={rawStartTime ?? ''}
-                onChange={e => commit({ startTime: e.target.value || null } as Partial<BoardItem>)}
-                style={{ ...dateInput, width: 100 }} />
-              <span style={{ color: 'var(--text-muted)', fontSize: 12, flexShrink: 0 }}>tot</span>
-              <input type="time" value={rawEndTime ?? ''}
-                onChange={e => commit({ endTime: e.target.value || null } as Partial<BoardItem>)}
-                style={{ ...dateInput, width: 100 }} />
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>laat leeg voor de hele dag</span>
-            </div>
-          )}
-          {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
-        </Row>
-        {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
-        <Row label="Est Time">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {hasSubitems ? (
-              <>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{effectiveDetailHours.total} uur</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {effectiveDetailHours.source === 'subitems' ? '(som van subitems)' : '(uren van hoofditem; subitems hebben nog 0u)'}
-                </span>
-              </>
-            ) : (
-              <>
-                <input type="number" value={estHours} disabled={isGoogle}
-                  onChange={e => setEstHours(e.target.value)}
-                  onBlur={e => {
-                    const v = parseFloat(e.target.value) || 0
-                    if (v !== (project.estHours ?? 0)) commit({ estHours: v })
-                  }}
-                  style={{ ...dateInput, width: 64, opacity: isGoogle ? 0.6 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>uur</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>· {Math.round(((parseFloat(estHours) || 0) / 8) * 10) / 10} d</span>
-              </>
-            )}
-          </div>
-        </Row>
-        {!isGoogle && ownerIds.filter(id => id !== 'unassigned').length > 1 && (
-          <Row label="Verdeling">
-            <DistributionEditor
-              owners={ownerIds.filter(id => id !== 'unassigned')}
-              total={effectiveDetailHours.total}
-              values={ownerHours}
-              onLive={next => setOwnerHours(next)}
-              onChange={next => { setOwnerHours(next); commit({ ownerHours: next }) }}
-              teamLookup={oid => team.find(t => t.id === oid) ?? null}
-            />
-          </Row>
-        )}
-        <Row label="Tijd">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {isTimingThis ? (
-              <button onClick={() => stopTimer()}
-                style={{ ...cancelBtn, background: '#e2445c', color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <IconStop size={13} /> Stop timer
-              </button>
-            ) : (
-              <button onClick={() => startTimer(project.id, project.name)}
-                style={{ ...cancelBtn, background: color, color: '#fff', border: 'none', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <IconPlay size={13} /> Start timer
-              </button>
-            )}
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Gewerkt: <strong style={{ color: 'var(--text-secondary)' }}>{fmtMinutes(workedMin)}</strong>
-              {' '}van <strong style={{ color: 'var(--text-secondary)' }}>{effectiveDetailHours.total}u</strong>
-            </span>
-          </div>
         </Row>
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
