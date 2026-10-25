@@ -804,14 +804,20 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
   // voor leden die nog niet in de DB staan. Zo verschijnen Manuel + andere
   // via /team-admin toegevoegde leden direct als owner-optie zonder dat
   // de hardcoded teamData.json hoeft te worden bijgewerkt.
+  //
+  // Wie gestopt is, blijft vindbaar. Oud werk heeft een eigenaar gehad en
+  // die wil je er soms alsnog bij zetten — een afgeronde klus van vorig
+  // jaar was echt van Manuel. Inactieve mensen staan daarom niet tussen
+  // de zes snelle gezichten, maar wél in de zoekregel, met 'inactief'
+  // erbij zodat je ziet wie je kiest.
   const team = (() => {
     const seen = new Set<string>()
     const knownLive = new Set(liveTeam.map(m => m.id))
-    const out: Array<{ id: string; name: string; color?: string }> = []
+    const out: Array<{ id: string; name: string; color?: string; inactive?: boolean }> = []
     for (const m of liveTeam) {
-      if (m.hidden || m.inactive) continue
+      if (m.hidden) continue
       seen.add(m.id)
-      out.push({ id: m.id, name: m.name, color: m.color })
+      out.push({ id: m.id, name: m.name, color: m.color, inactive: !!m.inactive })
     }
     for (const m of teamData.members) {
       if (seen.has(m.id) || knownLive.has(m.id)) continue
@@ -841,19 +847,22 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
     onChange(next, distribution)
   }
 
-  // Zes meest gebruikte of reeds geselecteerde actieve leden staan direct
-  // in beeld. Alle overige actieve leden zijn via de zevende zoekregel te
-  // vinden; inactieve leden worden nergens opnieuw aangeboden.
+  // Zes meest gebruikte of reeds geselecteerde leden staan direct in
+  // beeld. Al het andere, inclusief wie gestopt is, vind je via de
+  // zoekregel eronder.
   const sortedTeam = [...team].sort((a, b) => {
     const selectedDelta = Number(value.includes(b.id)) - Number(value.includes(a.id))
     return selectedDelta || (usage[b.id] ?? 0) - (usage[a.id] ?? 0) || a.name.localeCompare(b.name, 'nl')
   })
-  const quickMembers = sortedTeam.slice(0, 6)
+  const quickMembers = sortedTeam.filter(m => !m.inactive || value.includes(m.id)).slice(0, 6)
   const q             = query.trim().toLowerCase()
   const matchedOthers = q
     ? sortedTeam.filter(m => !quickMembers.some(top => top.id === m.id) && (m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)))
     : []
   const activeIds = new Set(team.map(member => member.id))
+  const inactiefLabel = (id: string) => team.find(member => member.id === id)?.inactive
+    ? <span style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>inactief</span>
+    : null
   // Een expliciet toegewezen owner is altijd een volwaardige contributor.
   // De eerdere 5-wekenheuristiek maakte owners buiten een subitem-window
   // bijna onzichtbaar (20% opacity), zelfs bij een project dat nog moest
@@ -1001,7 +1010,7 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
                   <MemberAvatar id={m.id} size={32} />
                   <span style={{ fontWeight: active ? 700 : 500 }}>
-                    {m.name}{isMe ? ' (jij)' : ''}
+                    {m.name}{isMe ? ' (jij)' : ''}{inactiefLabel(m.id)}
                   </span>
                   {active && <span style={{ marginLeft: 'auto', color: m.color, fontSize: 13, fontWeight: 700 }}>✓</span>}
                 </button>
@@ -1039,7 +1048,7 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                         onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
                         onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
                         <MemberAvatar id={m.id} size={24} />
-                        <span style={{ fontWeight: active ? 600 : 400 }}>{m.name}</span>
+                        <span style={{ fontWeight: active ? 600 : 400 }}>{m.name}{inactiefLabel(m.id)}</span>
                         {active && <span style={{ marginLeft: 'auto', color: m.color, fontSize: 12 }}>✓</span>}
                       </button>
                     )
@@ -3147,7 +3156,9 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
               dan hoort hij daarop uit te komen. Eerder stond er 52u
               onder een klus van 84.3u zonder dat ergens te zeggen. */}
           {(() => {
-            const activeIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
+            // Alleen verborgen accounts eruit: wie je zelf als owner hebt
+            // aangewezen hoort in de verdeling, ook als die gestopt is.
+            const activeIds = new Set(liveTeam.filter(member => !member.hidden).map(member => member.id))
             const { verdeling, totaal: total, uitSubitems } = volledig
             const owners = (uitSubitems && Object.keys(verdeling).length > 0
               ? Object.keys(verdeling)
