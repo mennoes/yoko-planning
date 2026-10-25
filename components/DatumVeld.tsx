@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { naarIso, naarNl } from '@/lib/datumInvoer'
+import { IconAgenda } from './Icon'
 
 export function DatumVeld({
   value, onChange, disabled, style, ariaLabel, title, autoFocus, onBlur, min,
@@ -74,9 +75,12 @@ export function DatumVeld({
               if (typeof el.showPicker === 'function') el.showPicker()
               else el.click()
             }}
-            style={{ border: 0, background: 'none', cursor: 'pointer', padding: '0 2px',
-              color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, flexShrink: 0 }}>
-            📅
+            style={{ border: 0, background: 'none', cursor: 'pointer', padding: '0 3px',
+              color: 'var(--text-muted)', lineHeight: 0, flexShrink: 0,
+              display: 'inline-flex', alignItems: 'center' }}>
+            {/* Een echt icoon uit de set, geen emoji: die rendert per
+                besturingssysteem anders en valt uit de toon. */}
+            <IconAgenda size={14} />
           </button>
           {/* Alleen voor de kalender zelf; de waarde lees je links af. */}
           <input ref={kalender} type="date" tabIndex={-1} aria-hidden min={min}

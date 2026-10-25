@@ -27,10 +27,13 @@ test('week parsing supports an explicit year and rolls early weeks forward near 
 })
 
 test('timeline calendar visibly includes ISO week numbers', () => {
+  // De kalender zelf staat sinds de verhuizing in DateRangeCell, zodat de
+  // agenda en het venster op /planning dezelfde cel gebruiken.
+  const kalender = readFileSync(new URL('../components/DateRangeCell.tsx', import.meta.url), 'utf8')
+  assert.match(kalender, />wk<\/div>/)
+  assert.match(kalender, /title="Weeknummer"/)
+  assert.match(kalender, /selectedWeekLabel/)
   const ui = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
-  assert.match(ui, />wk<\/div>/)
-  assert.match(ui, /title="Weeknummer"/)
-  assert.match(ui, /selectedWeekLabel/)
   assert.match(ui, /defaultEditName \? inferWeekPlanning\(nameDraft\) : null/)
 })
 

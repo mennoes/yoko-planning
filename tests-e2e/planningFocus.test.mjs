@@ -185,3 +185,41 @@ test('datumvelden beginnen met de dag, ook in een Engelse browser', { skip: skip
   await page.close()
   assert.equal(opgeslagen, '2026-12-25', '25-12 is 25 december, geen 12 mei')
 })
+
+test('de planning gebruikt dezelfde datumcel als de agenda', { skip: skip ?? false }, async () => {
+  // Het venster op /planning had zijn eigen, veel soberdere variant: twee
+  // losse invoervelden met een pijltje ertussen. Nu dezelfde pil met
+  // kalender als op het bord.
+  const bord = [{ id: 'g1', name: 'Projecten', color: '#579bfc', items: [
+    { id: 'p1', name: 'Testklus', ownerIds: ['menno'], status: 'Working on it',
+      estHours: 8, startDate: iso(0), endDate: iso(9), subitems: [] },
+  ] }]
+
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' })
+  await page.addInitScript(b => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', b)
+    sessionStorage.removeItem('planning-expanded-members')
+  }, JSON.stringify(bord))
+  await page.goto(BASE_URL + '/planning', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(3000)
+  await page.getByText('Menno', { exact: true }).last().click()
+  await page.waitForTimeout(1200)
+  await page.getByText('Testklus', { exact: false }).first().click()
+  await page.waitForTimeout(1500)
+
+  // Klikken op een balk is geen wijziging: eerder schreef elke klik
+  // dezelfde datums terug, mét melding.
+  const meldingNaKlik = await page.evaluate(() => /Datums bijgewerkt/.test(document.body.innerText))
+  assert.equal(meldingNaKlik, false, 'alleen openen is geen datumwijziging')
+
+  const pil = page.locator('button').filter({ hasText: /–|\dw/ }).first()
+  await pil.click()
+  await page.waitForTimeout(900)
+
+  const tekst = await page.evaluate(() => document.body.innerText)
+  await page.close()
+  assert.match(tekst, /Datums instellen/, 'de kalender van het bord staat er')
+  assert.match(tekst, /Vorige maand/, 'met dezelfde snelkeuzes')
+  assert.match(tekst, /\bwk\b/, 'en de weeknummers ernaast')
+})
