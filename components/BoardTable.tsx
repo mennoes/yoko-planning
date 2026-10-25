@@ -3110,11 +3110,17 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
         {/* Body: properties + comments */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 28px' }}>
           {/* Properties grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14, marginBottom: 28 }}>
+          {/* Smallere vakken dan eerst, want een datum of een getal heeft
+              geen 250px nodig. Zo passen Deadline, Est Time en Dagen op
+              één rij in plaats van dat Notes er in z'n eentje onder
+              bungelt. Vrije tekst krijgt juist twee plekken: daar typ je
+              zinnen in. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 14, marginBottom: 28 }}>
             {cols.filter(col => !isPersonalColumn(col.key)).map(col => (
               // Elk veld in een eigen vlak: eerder liepen label en waarde
               // van de buurman in elkaar over en was het één grijze soep.
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 8,
+                gridColumn: col.type === 'text' ? 'span 2' : undefined,
                 padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)',
                 border: '1px solid var(--border-light)' }}>
                 <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
