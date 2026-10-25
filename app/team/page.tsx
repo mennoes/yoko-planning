@@ -13,6 +13,9 @@ import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useProfile }    from '@/components/ProfileContext'
 import { UserAvatar }    from '@/components/UserAvatar'
 import { useTeamGroups } from '@/components/useTeamGroups'
+import { useActiveFreelancers } from '@/components/useActiveFreelancers'
+import { isBaseSectionId } from '@/lib/teamGroups'
+import { FREELANCER_ACTIVE_DAYS } from '@/lib/freelancerActivity'
 import { supabase }      from '@/lib/supabase'
 import {
   loadProfileDaysOff, setProfileDaysOff, onProfileDaysOffChange, pullProfileDaysOff,
@@ -454,7 +457,15 @@ export default function TeamPage() {
   // Live team-leden uit Supabase voor de kind-indeling (yoko/freelance).
   // Bij ontbreken vallen we terug op YOKO_IDS-set; zie de render hieronder.
   const { members: liveMembers } = useTeam()
-  const { groups: teamGroups } = useTeamGroups()
+  const {
+    groups: teamGroups, sections: teamSections,
+    moveGroup: moveTeamGroup, canMoveGroup: canMoveTeamGroup,
+  } = useTeamGroups()
+  // Wie heeft er in de afgelopen of komende drie weken werk bij ons? Dat
+  // bepaalt of een freelancer onder Freelancers of onder Inactief team
+  // staat — precies zoals in de planning.
+  const { activeIds: activeFreelancerIds, geladen: activiteitGeladen } = useActiveFreelancers()
+  const [volgordeFout, setVolgordeFout] = useState<string | null>(null)
   // Capaciteiten zijn gedeeld met de Planning-pagina via localStorage; we
   // luisteren ook live mee zodat een aanpassing in Planning hier direct
   // doorkomt (en andersom).
@@ -552,7 +563,9 @@ export default function TeamPage() {
       <div style={{ marginBottom: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
-            Studio Yoko
+            {/* Niet 'Studio Yoko': dat is nu één van de secties hieronder,
+                en die hoeft niet meer bovenaan te staan. */}
+            Mensen
           </div>
           <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
           <Link href={isDemo ? "/demo/team-admin" : "/team-admin"}
@@ -591,11 +604,20 @@ export default function TeamPage() {
             if (id === 'unassigned') return 'unassigned'
             return YOKO_IDS.has(id) ? 'yoko' : 'freelance'
           }
-          // Inactief = gestopt (bv. stage afgerond) — telt niet meer mee
-          // bij Studio Yoko/Freelance, staat apart onderaan. Beheren
-          // (aan/uit) gaat via Team beheren, net als de Yoko/Freelance-
-          // indeling zelf.
-          const isInactive = (id: string) => !!liveMembers.find(lm => lm.id === id)?.inactive
+          // Eigen team: het handmatige vinkje beslist — iemand die weggaat
+          // is weg, ook in een week zonder geplande uren. Beheren (aan/uit)
+          // gaat via Team beheren, net als de Yoko/Freelance-indeling zelf.
+          //
+          // Freelancers: het werk beslist, zoals in de planning. Werk in de
+          // afgelopen of komende drie weken → Freelancers, anders Inactief
+          // team. Zolang de agenda's nog niet binnen zijn verhuizen we
+          // niemand; anders staat iedereen eerst even onder Inactief.
+          const isInactive = (id: string) => {
+            if (kindOf(id) === 'freelance') {
+              return activiteitGeladen && !activeFreelancerIds.has(id)
+            }
+            return !!liveMembers.find(lm => lm.id === id)?.inactive
+          }
           const groupedIds    = new Set(teamGroups.flatMap(group => group.memberIds))
           const groupedCards  = teamGroups.map(group => ({
             group,
@@ -650,20 +672,52 @@ export default function TeamPage() {
             </div>
           )
 
-          return (
-            <>
-              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
-                Studio Yoko · {yokoCards.length}
-              </div>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-                {yokoCards.map(m => renderCard(m, false))}
-              </div>
-              {groupedCards.map(({ group, cards }) => (
+          // De pijltjes verschuiven een sectie in dezelfde lijst die de
+          // planning en de to do's gebruiken — wat je hier omhoog zet staat
+          // daar ook bovenaan.
+          const sectieKnoppen = (sectionId: string) => ([-1, 1] as const).map(richting => {
+            const kan = canMoveTeamGroup(sectionId, richting)
+            return (
+              <button key={richting} onClick={() => {
+                  if (!kan) return
+                  // Een mislukte opslag mag niet lijken op 'er gebeurt
+                  // niets': dan klik je tien keer en verandert er nooit wat.
+                  void moveTeamGroup(sectionId, richting).then(reden => setVolgordeFout(reden))
+                }}
+                disabled={!kan}
+                title={kan
+                  ? (richting === -1 ? 'Omhoog' : 'Omlaag')
+                  : (richting === -1 ? 'Staat al bovenaan' : 'Staat al onderaan')}
+                style={{ border: 0, background: 'transparent', fontSize: 13, lineHeight: 1, padding: '2px 3px',
+                  cursor: kan ? 'pointer' : 'default',
+                  color: kan ? 'var(--text-muted)' : 'var(--border-strong)', opacity: kan ? 1 : 0.6 }}>
+                {richting === -1 ? '↑' : '↓'}
+              </button>
+            )
+          })
+
+          const sectieKop = (sectionId: string, naam: string, aantal: number, kleur?: string) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
+              {kleur && <span style={{ width: 9, height: 9, borderRadius: '50%', background: kleur, flexShrink: 0 }} />}
+              <span>{naam} · {aantal}</span>
+              <span style={{ display: 'flex', gap: 2 }}>{sectieKnoppen(sectionId)}</span>
+            </div>
+          )
+
+          // Eén lijst, één volgorde: Studio Yoko, je eigen teams,
+          // Freelancers en Inactief team zijn hier dezelfde soort sectie,
+          // dus ze zijn allemaal te verplaatsen. Eerder stond de volgorde
+          // hard in de JSX en deed deze pagina niets met wat je in de
+          // planning had ingesteld.
+          const sectie = (sectionId: string, naam: string): React.ReactNode => {
+            if (!isBaseSectionId(sectionId)) {
+              const eigen = groupedCards.find(entry => entry.group.id === sectionId)
+              if (!eigen) return null
+              const { group, cards } = eigen
+              return (
                 <div key={group.id} style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
-                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
-                    {group.name} · {cards.length}
-                  </div>
+                  {sectieKop(group.id, group.name, cards.length, group.color)}
                   {cards.length > 0 ? (
                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                       {cards.map(m => renderCard(m, false))}
@@ -672,27 +726,61 @@ export default function TeamPage() {
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Nog geen teamleden in deze groep.</div>
                   )}
                 </div>
-              ))}
-              {freeCards.length > 0 && (
-                <>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
-                    Freelance · {freeCards.length}
+              )
+            }
+            if (sectionId === '__yoko__') {
+              return (
+                <div key="yoko" style={{ marginBottom: 24 }}>
+                  {sectieKop(sectionId, naam, yokoCards.length)}
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    {yokoCards.map(m => renderCard(m, false))}
                   </div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: inactiveCards.length > 0 ? 24 : 0 }}>
+                </div>
+              )
+            }
+            if (sectionId === '__freelance__') {
+              if (freeCards.length === 0) return null
+              return (
+                <div key="freelance" style={{ marginBottom: 24 }}>
+                  {sectieKop(sectionId, naam, freeCards.length)}
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {freeCards.map(m => renderCard(m, true))}
                   </div>
-                </>
-              )}
-              {inactiveCards.length > 0 && (
-                <>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '4px 0 10px' }}>
-                    Inactief · {inactiveCards.length}
-                  </div>
+                </div>
+              )
+            }
+            if (sectionId === '__inactive__') {
+              if (inactiveCards.length === 0) return null
+              return (
+                <div key="inactive" style={{ marginBottom: 24 }}>
+                  {sectieKop(sectionId, naam, inactiveCards.length)}
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', opacity: 0.7 }}>
                     {inactiveCards.map(m => renderCard(m, true))}
                   </div>
-                </>
+                </div>
+              )
+            }
+            // 'Overig' is er voor de planning: daar staat het werk zonder
+            // eigenaar. Hier hoort iedereen al bij Studio Yoko, een eigen
+            // team, Freelancers of Inactief team, dus valt er niets over.
+            return null
+          }
+
+          return (
+            <>
+              {volgordeFout && (
+                <div role="alert" style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8,
+                  background: 'var(--overlay-faint)', border: '1px solid var(--border)',
+                  fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {volgordeFout}
+                </div>
               )}
+              {teamSections.map(section => sectie(section.id, section.name))}
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                Freelancers met werk in de afgelopen of komende {FREELANCER_ACTIVE_DAYS / 7} weken staan onder
+                Freelancers, de rest onder Inactief team · met ↑ en ↓ zet je een sectie op z&apos;n plek,
+                dezelfde volgorde als in Planning en To do&apos;s.
+              </div>
             </>
           )
         })()}
