@@ -9,6 +9,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/components/ProfileContext'
 import { useTeam } from '@/components/TeamContext'
+import { useTeamGroups } from '@/components/useTeamGroups'
+import { TeamTodayCard } from '@/components/TeamTodayCard'
 import { useMemberPopup } from '@/components/MemberPopup'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconAlert } from '@/components/Icon'
@@ -322,6 +324,7 @@ const cardLink: React.CSSProperties = {
 export default function HomePage() {
   const { profile }    = useProfile()
   const { members: liveTeam } = useTeam()
+  const { sections: teamSections } = useTeamGroups()
   const { showMember } = useMemberPopup()
   const router         = useRouter()
   const isMobile       = useIsMobile()
@@ -1274,71 +1277,17 @@ export default function HomePage() {
       // project waarvan today binnen [startDate, endDate] valt). Anders
       // wordt de lijst een onbruikbaar lange waslijst van inactieve
       // freelancers waarmee je nooit hebt gewerkt.
-      const todayIso = new Date().toISOString().slice(0, 10)
+      const now = new Date()
+      const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       const hasWorkToday = (memberId: string) => allProjects.some(p => {
         if (!p.ownerIds.includes(memberId)) return false
         const s = p.startDate; const e = p.endDate ?? s
         if (!s) return false
         return todayIso >= s && todayIso <= (e ?? s)
       })
-      const activeFreelancers = allMembersForHome.filter(m =>
-        !isYokoCrew(m.id) && m.id !== 'unassigned' && hasWorkToday(m.id)
-      )
-      const yokoAvail = yokoMembers.filter(m => statusFor(m.id, m.name).kind === 'available').length
-      const flAvail   = activeFreelancers.filter(m => statusFor(m.id, m.name).kind === 'available').length
-      const totalCount = yokoMembers.length + activeFreelancers.length
-      const totalAvail = yokoAvail + flAvail
-      const renderRow = (m: { id: string; name: string; color?: string; email?: string; weeklyCapacity?: number }) => {
-        const s = statusFor(m.id, m.name)
-        const tone = s.kind === 'vacation' ? { bg: 'rgba(255,123,36,0.15)', fg: '#a05400', label: '🏝 ' + (s.detail ?? 'op vakantie') }
-                   : s.kind === 'free'     ? { bg: 'rgba(154,149,144,0.18)', fg: 'var(--text-muted)', label: s.detail ?? 'vrij' }
-                   :                          { bg: 'rgba(95,160,110,0.15)', fg: '#3b7a4b', label: 'beschikbaar' }
-        return (
-          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 18px' }}>
-            <UserAvatar memberId={m.id} size={22} />
-            <Link href={`/profile/${m.id}`} style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {m.name}
-            </Link>
-            <span style={{ fontSize: 11, fontWeight: 600, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
-              {tone.label}
-            </span>
-          </div>
-        )
-      }
-      const subHeader = (label: string, count: number, avail: number) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 18px 2px', marginTop: 2 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {avail}/{count}</span>
-        </div>
-      )
-      return (
-        <div style={card}>
-          {/* Header klikbaar — springt naar /team waar je werkdagen + cap
-              kunt aanpassen. Voorheen moest je dat zelf opzoeken. */}
-          <Link href="/team" style={{ textDecoration: 'none', color: 'inherit' }}
-            title="Open Team-pagina (werkdagen + capaciteit)">
-            <div style={{ ...cardHeader, cursor: 'pointer', transition: 'background 0.12s' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-              <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 14, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <IconUsers size={isMobile ? 17 : 15} />Team vandaag
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>({totalAvail}/{totalCount})</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>›</span>
-              </h2>
-            </div>
-          </Link>
-          <div style={{ padding: '6px 0 10px' }}>
-            {subHeader('Studio Yoko', yokoMembers.length, yokoAvail)}
-            {yokoMembers.map(renderRow)}
-            {activeFreelancers.length > 0 && (
-              <>
-                {subHeader('Freelancers vandaag', activeFreelancers.length, flAvail)}
-                {activeFreelancers.map(renderRow)}
-              </>
-            )}
-          </div>
-        </div>
-      )
+      return <TeamTodayCard
+        members={allMembersForHome.map(member => ({ ...member, yoko: isYokoCrew(member.id), activeToday: hasWorkToday(member.id) }))}
+        sections={teamSections} statusFor={statusFor} />
     })(),
     deadlines: (
       <div style={card}>
