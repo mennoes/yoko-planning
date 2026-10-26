@@ -278,8 +278,6 @@ function WorkloadItemRow({ item, override, onToggleDone, readOnly }: {
             boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
             fontSize: 12, lineHeight: 1.5 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{catLabel}</span>
             <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{item.board}</span>
           </div>
           {item.parentName && item.parentName !== item.name && (
