@@ -3321,8 +3321,13 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const isMobile = vw < 740
   // Eigen kolommen van het bord waar dit item op staat ('custom_…',
   // aangemaakt via Kolomvolgorde → + Kolom toevoegen in de agenda).
-  const customColumns = (getBoardConfig(project.board)?.columns ?? [])
+  const boardColumns = getBoardConfig(project.board)?.columns ?? []
+  const customColumns = boardColumns
     .filter((col: ColumnDef) => col.key.startsWith('custom_') && !col.hidden)
+  // Contactpersoon staat al jaren op de agenda's die 'm hebben, maar was
+  // hier niet in te vullen — terwijl de waarde wél werd meegeschreven.
+  // Alleen tonen op een agenda die die kolom heeft, net als daar.
+  const contactKolom = boardColumns.find((col: ColumnDef) => col.key === 'contactpersoon' && !col.hidden)
   // Achtergrond vastzetten zolang het venster open staat. Samen met
   // overscroll-behavior houdt dit de browser-refresh tegen die opdook
   // zodra je in het venster naar boven veegde.
@@ -3771,6 +3776,20 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
+        {contactKolom && (
+          <Row label={contactKolom.label}>
+            <input type="text" value={contactpersoon} disabled={isGoogle}
+              onChange={e => setContactpersoon(e.target.value)}
+              onBlur={() => {
+                const begin = (rawItem?.contactpersoon as string) ?? ''
+                if (contactpersoon !== begin) commit({ contactpersoon })
+              }}
+              placeholder={isGoogle ? '' : 'Naam of mailadres'}
+              style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6,
+                padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+          </Row>
+        )}
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
             onChange={e => setNotes(e.target.value)}

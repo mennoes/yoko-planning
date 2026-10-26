@@ -22,7 +22,8 @@ test('eigen kolommen blijven gewoon te maken', () => {
 })
 
 test('een eigen kolom is ook in het planning-venster in te vullen', () => {
-  assert.match(planning, /const customColumns = \(getBoardConfig\(project\.board\)\?\.columns \?\? \[\]\)/)
+  assert.match(planning, /const boardColumns = getBoardConfig\(project\.board\)\?\.columns \?\? \[\]/)
+  assert.match(planning, /const customColumns = boardColumns/)
   assert.match(planning, /col\.key\.startsWith\('custom_'\) && !col\.hidden/)
   assert.match(planning, /commit\(\{ \[col\.key\]: value \}\)/)
   // De waarde moet als losse sleutel door de update-keten passen.
