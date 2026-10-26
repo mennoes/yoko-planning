@@ -26,15 +26,15 @@ test('custom groups override Yoko kind and retain section order without duplicat
     ['Studio Yoko', ['menno']], ['Onderzoek / stage', ['job', 'ilse']], ['Freelancers vandaag', ['take']],
   ])
 })
-test('visibility overrides hide custom members and show otherwise unscheduled freelancers', () => {
-  const result = exports.teamTodaySections(members, sections, { job: false, ilse: false, kars: true })
-  assert.deepEqual(plain(result.flatMap(s => s.members.map(m => m.id))), ['menno', 'take', 'kars'])
+test('group visibility hides every member of a group and retains today-only freelancers', () => {
+  const result = exports.teamTodaySections(members, sections, { onderzoek: false })
+  assert.deepEqual(plain(result.flatMap(s => s.members.map(m => m.id))), ['menno', 'take'])
   assert.equal(result.some(s => s.id === 'onderzoek'), false)
 })
 test('picker includes hidden members and reset returns defaults', () => {
-  assert.equal(exports.teamTodaySections(members, sections, { job: false }, true).flatMap(s => s.members).length, 5)
+  assert.equal(exports.teamTodaySections(members, sections, { onderzoek: false }, true).flatMap(s => s.members).length, 5)
   assert.equal(exports.teamTodaySections(members, sections).flatMap(s => s.members).length, 4)
-  assert.equal(exports.teamTodaySections(members, sections, Object.fromEntries(members.map(m => [m.id, false]))).length, 0)
+  assert.equal(exports.teamTodaySections(members, sections, Object.fromEntries(sections.map(s => [s.id, false]))).length, 0)
 })
 test('saved visibility preserves false and rejects malformed preferences', () => {
   assert.deepEqual(plain(exports.parseTeamTodayVisibility('{"job":false,"ilse":true,"bad":"yes"}')), { job: false, ilse: true })

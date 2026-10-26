@@ -22,7 +22,7 @@ export function teamTodaySections(
       if (member.id === 'unassigned') return false
       const customId = membership.get(member.id)
       const groupId = customId ?? (member.yoko ? '__yoko__' : '__freelance__')
-      const visible = visibility[member.id] ?? (!!customId || member.yoko || member.activeToday)
+      const visible = visibility[section.id] !== false && (!!customId || member.yoko || member.activeToday)
       return groupId === section.id && (all || visible)
     }),
   })).filter(section => section.members.length > 0)
