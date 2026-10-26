@@ -3331,15 +3331,20 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const vw = typeof window !== 'undefined' ? window.innerWidth  : 1280
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800
   const isMobile = vw < 740
-  // Eigen kolommen van het bord waar dit item op staat ('custom_…',
-  // aangemaakt via Kolomvolgorde → + Kolom toevoegen in de agenda).
+  // De kolommen van het bord waar dit item op staat. Wat je op de agenda
+  // ziet, hoort hier ook te staan: eerder kwamen alleen zelfgemaakte
+  // 'custom_…'-kolommen door en bleven vaste kolommen als Contactpersoon
+  // onzichtbaar, terwijl hun waarde wél werd meegeschreven.
   const boardColumns = getBoardConfig(project.board)?.columns ?? []
-  const customColumns = boardColumns
-    .filter((col: ColumnDef) => col.key.startsWith('custom_') && !col.hidden)
-  // Contactpersoon staat al jaren op de agenda's die 'm hebben, maar was
-  // hier niet in te vullen — terwijl de waarde wél werd meegeschreven.
-  // Alleen tonen op een agenda die die kolom heeft, net als daar.
-  const contactKolom = boardColumns.find((col: ColumnDef) => col.key === 'contactpersoon' && !col.hidden)
+  // Deze hebben hierboven een eigen rij; die zou je anders dubbel zien.
+  // 'dagen' staat als '· 0,6 d' naast Est Time en is sowieso afgeleid.
+  const eigenRijen = new Set(['ownerIds', 'status', 'timeline', 'deadline', 'estHours', 'dagen', 'notes'])
+  const extraColumns = boardColumns.filter((col: ColumnDef) => !col.hidden
+    && !eigenRijen.has(col.key)
+    // Owners, status en een periode vragen om een eigen besturing; die
+    // kolommen hebben hun rij al. Wat overblijft is tekst of een getal.
+    && col.type !== 'owners' && col.type !== 'status' && col.type !== 'daterange')
+  const deadlineKolom = boardColumns.some((col: ColumnDef) => col.key === 'deadline' && !col.hidden)
   // Achtergrond vastzetten zolang het venster open staat. Samen met
   // overscroll-behavior houdt dit de browser-refresh tegen die opdook
   // zodra je in het venster naar boven veegde.
@@ -3572,7 +3577,18 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           )}
           {startDate && endDate && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtIso(startDate)} → {fmtIso(endDate)}</div>}
         </Row>
-        {rawItem?.deadline && <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>}
+        {deadlineKolom && !isGoogle ? (
+          <Row label="Deadline">
+            {/* Stond hier alleen als er al een deadline was, en dan nog
+                alleen om naar te kijken. Op de agenda vul je 'm gewoon in. */}
+            <DatumVeld value={(rawItem?.deadline as string | undefined) ?? null}
+              ariaLabel="Deadline"
+              onChange={iso => commit({ deadline: iso })}
+              style={{ ...dateInput, width: 150 }} />
+          </Row>
+        ) : rawItem?.deadline ? (
+          <Row label="Deadline"><span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{fmtIso(rawItem.deadline as string)}</span></Row>
+        ) : null}
         <Row label="Est Time">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {hasSubitems ? (
@@ -3788,20 +3804,43 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })()}
-        {contactKolom && (
-          <Row label={contactKolom.label}>
-            <input type="text" value={contactpersoon} disabled={isGoogle}
-              onChange={e => setContactpersoon(e.target.value)}
-              onBlur={() => {
-                const begin = (rawItem?.contactpersoon as string) ?? ''
-                if (contactpersoon !== begin) commit({ contactpersoon })
-              }}
-              placeholder={isGoogle ? '' : 'Naam of mailadres'}
-              style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6,
-                padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
-                opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-          </Row>
-        )}
+        {/* De overige kolommen van dit bord, in dezelfde volgorde als op
+            de agenda. Voeg je daar een kolom toe, dan kun je 'm hier
+            meteen invullen. */}
+        {extraColumns.map((col: ColumnDef) => {
+          const current = (rawItem as Record<string, unknown> | undefined)?.[col.key]
+          const asText = current === undefined || current === null ? '' : String(current)
+          const isGetal = col.type === 'number' || col.type === 'currency'
+          return (
+            <Row key={col.key} label={col.label}>
+              {col.type === 'date' ? (
+                <DatumVeld value={asText || null} disabled={isGoogle}
+                  ariaLabel={col.label}
+                  onChange={iso => commit({ [col.key]: iso })}
+                  style={{ ...dateInput, width: 150 }} />
+              ) : (
+                <input
+                  type={isGetal ? 'number' : 'text'}
+                  aria-label={col.label}
+                  defaultValue={asText}
+                  key={`${col.key}:${asText}`}
+                  disabled={isGoogle}
+                  placeholder={isGoogle ? '' : col.type === 'url' ? 'https://…' : ''}
+                  onBlur={event => {
+                    const raw = event.target.value
+                    if (raw === asText) return
+                    const value = isGetal
+                      ? (raw === '' ? null : Number(raw.replace(',', '.')))
+                      : (raw === '' ? null : raw)
+                    commit({ [col.key]: value })
+                  }}
+                  style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6,
+                    padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
+              )}
+            </Row>
+          )
+        })}
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
             onChange={e => setNotes(e.target.value)}
@@ -3809,34 +3848,6 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             rows={3} placeholder={isGoogle ? '' : 'Notities…'}
             style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box', opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
         </Row>
-        {/* Eigen kolommen uit de agenda. Voeg je daar een kolom toe, dan
-            kun je 'm hier meteen invullen — eerder moest je daarvoor
-            terug naar de agenda. */}
-        {customColumns.map((col: ColumnDef) => {
-          const current = (rawItem as Record<string, unknown> | undefined)?.[col.key]
-          const asText = current === undefined || current === null ? '' : String(current)
-          const inputType = col.type === 'date' ? 'date' : col.type === 'number' || col.type === 'currency' ? 'number' : 'text'
-          return (
-            <Row key={col.key} label={col.label}>
-              <input
-                type={inputType}
-                defaultValue={asText}
-                disabled={isGoogle}
-                placeholder={isGoogle ? '' : col.type === 'url' ? 'https://…' : ''}
-                onBlur={event => {
-                  const raw = event.target.value
-                  if (raw === asText) return
-                  const value = inputType === 'number'
-                    ? (raw === '' ? null : Number(raw.replace(',', '.')))
-                    : (raw === '' ? null : raw)
-                  commit({ [col.key]: value })
-                }}
-                style={{ width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6,
-                  padding: '6px 8px', color: 'var(--text-primary)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
-                  opacity: isGoogle ? 0.7 : 1, cursor: isGoogle ? 'not-allowed' : undefined }} />
-            </Row>
-          )
-        })}
         {/* 'Activiteit' heet het ook op de agendapagina; twee namen voor
             dezelfde lijst was alleen maar verwarrend. */}
         <Row label="Activiteit">
