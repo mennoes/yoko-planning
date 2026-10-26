@@ -45,7 +45,7 @@ export type Project = {
 import { getBoardColor } from './boardsRegistry'
 import type { BoardGroup } from './boards'
 import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
-import { blockedHoursForWorkdays } from './freeCapacity'
+import { vrijHoursForOverlap } from './freeCapacity'
 import { visibleRecurringSubitems } from './recurringMeetingWindow'
 import { itemRollupHours } from './itemHours'
 
@@ -412,6 +412,22 @@ function countWorkdays(startMs: number, endMs: number): number {
 }
 
 /**
+ * De uren die op een vrij-item staan voor deze persoon.
+ *
+ * Niet delen door het aantal mensen: twee collega's die samen een dag
+ * reizen zijn allebei die dag weg, ieder een hele dag. Staat er niets,
+ * dan geeft dit 0 en valt de berekening terug op de hele werkdag.
+ */
+export function vrijOwnHours(
+  project: Pick<Project, 'ownerHours' | 'estHours'>, memberId: string,
+): number {
+  const eigen = project.ownerHours && memberId in project.ownerHours
+    ? Number(project.ownerHours[memberId])
+    : NaN
+  return Number.isFinite(eigen) ? eigen : (Number(project.estHours) || 0)
+}
+
+/**
  * Hours a specific project contributes to `memberId` in the week starting `weekStart`.
  * Hours are distributed evenly across WORKING DAYS (Mon-Fri) of the project timeline,
  * then the overlap with the given week is taken, split equally among owners.
@@ -464,8 +480,14 @@ export function projectHoursInWeek(
 
   // Vrij blokkeert beschikbaarheid: reken 8u per vrije werkdag voor iedere
   // toegewezen persoon. Google all-day events hebben vaak estHours=0 en
-  // verdwenen daardoor eerder ten onrechte uit de belasting.
-  if (isVrij) return blockedHoursForWorkdays(overlapWork)
+  // verdwenen daardoor eerder ten onrechte uit de belasting. Staan er op
+  // een eigen item wél uren, dan tellen die — zie vrijHoursForOverlap.
+  if (isVrij) return vrijHoursForOverlap({
+    overlapWorkdays: overlapWork,
+    totalWorkdays: totalWork,
+    ownHours: vrijOwnHours(project, memberId),
+    allowOwnHours: project.source !== 'google',
+  })
 
   // Per-owner override: if ownerHours[memberId] is set, that's this owner's
   // share. Otherwise split estHours evenly across owners.

@@ -39,8 +39,12 @@ test('desktop sidebar has a persistent compact mode and keeps primary navigation
 test('planning and shared workload totals both use blocked vrij hours', () => {
   const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
   const workload = readFileSync(new URL('../lib/workload.ts', import.meta.url), 'utf8')
-  assert.match(planning, /if \(isVrij\) return blockedHoursForWorkdays\(overlapWork\)/)
-  assert.match(workload, /if \(isVrij\) return blockedHoursForWorkdays\(overlapWork\)/)
+  // Beide kanten rekenen vrij via dezelfde helper: standaard de hele
+  // werkdag, en wie er zelf uren op zet krijgt die uren terug.
+  assert.match(planning, /if \(isVrij\) return vrijHoursForOverlap\(\{/)
+  assert.match(workload, /if \(isVrij\) return vrijHoursForOverlap\(\{/)
+  assert.match(planning, /allowOwnHours: project\.source !== 'google'/)
+  assert.match(workload, /allowOwnHours: project\.source !== 'google'/)
   assert.match(planning, /memberHours \+= hours/)
   assert.match(planning, /const totalWork = countWorkdaysMs\(pS\.getTime\(\), pE\.getTime\(\)\)/)
   assert.match(planning, /const overlapWork = countWorkdaysMs\(oS\.getTime\(\), oE\.getTime\(\)\)/)
