@@ -50,18 +50,18 @@ export function ItemHistory({ itemId, createdAt }: { itemId: string; createdAt?:
   // wijziging is die datum het enige houvast, dus die tonen we onderaan —
   // de oudste regel, waar hij chronologisch hoort.
   const aangemaakt = createdAt ? (
-    <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
       Aangemaakt op {new Date(createdAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
       {items.length === 0 && ' · wie dat deed is van vóór we dat bijhielden'}
     </div>
   ) : null
 
   if (items.length === 0) {
-    return aangemaakt ?? <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Nog geen wijzigingen.</span>
+    return aangemaakt ?? <span style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>Nog geen wijzigingen.</span>
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {items.map(a => {
         const profile = a.user_id ? profiles[a.user_id] : null
         const name = profile?.name ?? 'Iemand'
@@ -72,22 +72,22 @@ export function ItemHistory({ itemId, createdAt }: { itemId: string; createdAt?:
         return (
           <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             {photo ? (
-              <img src={photo} alt={name} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              <img src={photo} alt={name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
             ) : (
               <span style={{
-                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9.5, fontWeight: 700,
+                fontSize: 11, fontWeight: 700,
                 background: memberColor + '22', color: memberColor,
               }}>{initials || '?'}</span>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 <strong style={{ color: 'var(--text-primary)' }}>{name.split(' ')[0]}</strong>{' '}
                 <span>{a.action}</span>
                 {a.detail && <span style={{ color: 'var(--text-muted)' }}> · {a.detail}</span>}
               </div>
-              <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 1 }}>{fmtRelative(a.ts)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{fmtRelative(a.ts)}</div>
             </div>
           </div>
         )

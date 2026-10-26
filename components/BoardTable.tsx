@@ -3052,9 +3052,8 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
   return createPortal(
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 9000 }} />
-      {/* Alles in dit venster een maatje groter dan in een rij: hier is
-          ruimte zat, en op een groot scherm las het als kleine lettertjes. */}
-      <CelSchaalCtx.Provider value={1.18}>
+      {/* Compacte velden met dezelfde schaal in het hele detailvenster. */}
+      <CelSchaalCtx.Provider value={1.05}>
       <div onClick={e => e.stopPropagation()} style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: `min(${breedte}px, 96vw)`, zIndex: 9001,
@@ -3071,7 +3070,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
             cursor: 'ew-resize', zIndex: 2 }} />
         {/* Header */}
         <div style={{
-          padding: '22px 28px 18px', borderBottom: '1px solid var(--border)',
+          padding: '18px 22px 14px', borderBottom: '1px solid var(--border)',
           display: 'flex', alignItems: 'flex-start', gap: 14,
           background: 'var(--bg-card)',
         }}>
@@ -3100,11 +3099,11 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                   if (e.key === 'Enter') { onUpdate({ name: nameDraft }); setEditName(false) }
                   if (e.key === 'Escape') { setNameDraft(item.name); setEditName(false) }
                 }}
-                style={{ ...editInput, fontSize: 24, fontWeight: 700, width: '100%' }} />
+                style={{ ...editInput, fontSize: 22, fontWeight: 700, width: '100%' }} />
             ) : (
               <h2 onClick={() => { if (!isGoogle) { setNameDraft(item.name); setEditName(true) } }}
                 title={isGoogle ? 'Bewerk in Google Calendar' : 'Klik om te bewerken'}
-                style={{ margin: 0, fontSize: 24, fontWeight: 700, color: 'var(--text-primary)',
+                style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-primary)',
                   cursor: isGoogle ? 'default' : 'text', lineHeight: 1.22, letterSpacing: '-0.01em' }}>
                 {item.name}
               </h2>
@@ -3117,26 +3116,25 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
         </div>
 
         {/* Body: properties + comments */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 28px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 22px' }}>
           {/* Properties grid */}
           {/* Smallere vakken dan eerst, want een datum of een getal heeft
               geen 250px nodig. Zo passen Deadline, Est Time en Dagen op
-              één rij in plaats van dat Notes er in z'n eentje onder
-              bungelt. Vrije tekst krijgt juist twee plekken: daar typ je
-              zinnen in. */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 14, marginBottom: 28 }}>
+              één rij. Alle velden gebruiken één kolom; langere tekst
+              blijft binnen het eigen vlak. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginBottom: 20 }}>
             {cols.filter(col => !isPersonalColumn(col.key)).map(col => (
               // Elk veld in een eigen vlak: eerder liepen label en waarde
               // van de buurman in elkaar over en was het één grijze soep.
-              <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 8,
-                gridColumn: col.type === 'text' ? 'span 2' : undefined,
-                padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)',
+              <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6,
+                minWidth: 0,
+                padding: '9px 11px', borderRadius: 8, background: 'var(--bg-card)',
                 border: '1px solid var(--border-light)' }}>
                 <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                   {col.key === 'status' ? 'Status' : col.key === 'timeline' ? 'Timeline' : col.label}
                 </span>
-                <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', fontSize: 15 }}>
-                  <Cell item={vensterItem} col={col} onUpdate={onUpdate} avatarSize={44} />
+                <div style={{ minHeight: 32, display: 'flex', alignItems: 'center', fontSize: 15 }}>
+                  <Cell item={vensterItem} col={col} onUpdate={onUpdate} avatarSize={32} />
                 </div>
                 {col.key === 'status' && <PersonalCompletionSection
                   key={item.id}
@@ -3249,7 +3247,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                 onMentionsChange={setMentionIds}
                 onSubmit={addReply}
                 placeholder="Schrijf een opmerking… (typ @ om iemand te taggen, ⌘+Enter om te plaatsen)"
-                rows={3}
+                rows={2}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
                 <button onClick={addReply} disabled={!newReply.trim()}
@@ -3266,7 +3264,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
           {/* Geschiedenis onderaan: wie het aanmaakte en wat er sindsdien
               is veranderd. Het venster op /planning liet dit al zien; hier
               stond je met een item dat je niet herkent zonder enig spoor. */}
-          <div style={{ marginTop: 28 }}>
+          <div style={{ marginTop: 22 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                 Geschiedenis
