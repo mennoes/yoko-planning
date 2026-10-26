@@ -16,7 +16,7 @@ export function TeamTodayCard({ members, sections, statusFor }: {
   statusFor: (id: string, name: string) => Availability
 }) {
   const { profile } = useProfile()
-  const storageKey = `yoko-team-today-visibility:${profile?.memberId ?? 'anonymous'}`
+  const storageKey = `yoko-team-today-group-visibility:${profile?.memberId ?? 'anonymous'}`
   const [saved, setSaved] = useState<{ key: string; values: Record<string, boolean> }>({ key: '', values: {} })
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState('')
@@ -38,7 +38,6 @@ export function TeamTodayCard({ members, sections, statusFor }: {
   }
   const shown = teamTodaySections(members, sections, visibility)
   const options = teamTodaySections(members, sections, {}, true)
-  const shownIds = new Set(shown.flatMap(section => section.members.map(member => member.id)))
   const available = (people: TodayMember[]) => people.filter(member => statusFor(member.id, member.name).kind === 'available').length
   const shownMembers = shown.flatMap(section => section.members)
   return (
@@ -55,19 +54,17 @@ export function TeamTodayCard({ members, sections, statusFor }: {
         </button>
       </div>
       {editing && <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border-light)' }}>
-        <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-muted)' }}>Kies wie je hier ziet. Dit verandert alleen jouw overzicht.</p>
-        {options.map(section => <fieldset key={section.id} style={{ border: 0, margin: '0 0 12px', padding: 0 }}>
-          <legend style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>{section.name === 'Freelancers vandaag' ? 'Freelancers' : section.name}</legend>
-          {section.members.map(member => <label key={member.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 0', cursor: 'pointer', fontSize: 13 }}>
-            <input type="checkbox" checked={shownIds.has(member.id)} onChange={event => save({ ...visibility, [member.id]: event.target.checked })} />
-            <UserAvatar memberId={member.id} size={22} />{member.name}
-          </label>)}
-        </fieldset>)}
+        <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-muted)' }}>Kies welke groepen je hier ziet. Dit verandert alleen jouw overzicht.</p>
+        {options.map(section => <label key={section.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 0', cursor: 'pointer', fontSize: 13 }}>
+          <input type="checkbox" checked={visibility[section.id] !== false} onChange={event => save({ ...visibility, [section.id]: event.target.checked })} />
+          <IconUsers size={16} />
+          {section.name === 'Freelancers vandaag' ? 'Freelancers' : section.name}
+        </label>)}
         <button type="button" style={buttonStyle} onClick={() => save({})}>Standaard herstellen</button>
       </div>}
       {error && <p role="alert" style={{ padding: '0 18px', fontSize: 12 }}>{error}</p>}
       <div style={{ padding: '6px 0 10px' }}>
-        {shown.length === 0 && <p style={{ padding: '0 18px', fontSize: 13, color: 'var(--text-muted)' }}>Niemand zichtbaar. Kies personen via Zichtbaarheid.</p>}
+        {shown.length === 0 && <p style={{ padding: '0 18px', fontSize: 13, color: 'var(--text-muted)' }}>Niemand zichtbaar. Kies groepen via Zichtbaarheid.</p>}
         {shown.map(section => <div key={section.id}>
           <h3 style={{ display: 'flex', gap: 8, margin: '2px 0 0', padding: '6px 18px 2px', fontSize: 11, color: 'var(--text-muted)' }}>
             <span style={{ textTransform: 'uppercase', letterSpacing: '0.07em' }}>{section.name}</span>
