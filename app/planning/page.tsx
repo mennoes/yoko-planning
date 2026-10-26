@@ -8,9 +8,9 @@ import { useUndo } from '@/components/UndoContext'
 import teamData          from '@/data/team.json'
 import { loadGroups, saveGroups, addDays, BOARD_NAMES, moveItemToBoard, subscribeRemoteBoard, pullBoardFromRemote, softDeleteItem, restoreTrashItem } from '@/lib/boardStore'
 import { BOARD_CONFIGS, type BoardItem } from '@/lib/boards'
-import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, countsAsAcceptedWork, type Project, type TeamMember } from '@/lib/workload'
+import { getWeekStart, getWeeks, getWeekLabel, BOARD_COLORS, groupsToProjects, countsAsAcceptedWork, vrijOwnHours, type Project, type TeamMember } from '@/lib/workload'
 import { setVrijDaysFromProjects, isVrijDayForMember } from '@/lib/vrijDays'
-import { blockedHoursForWorkdays } from '@/lib/freeCapacity'
+import { vrijHoursForOverlap } from '@/lib/freeCapacity'
 import { planningBarHeightRatio, planningBarPixelHeight } from '@/lib/planningBarHeight'
 import { loadOwnerExcludes, excludeOwner, onOwnerExcludesChange } from '@/lib/ownerOverrides'
 
@@ -184,9 +184,15 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   const overlapWork = countWorkdaysMs(oS.getTime(), oE.getTime())
   if (overlapWork === 0) return 0
   // Vrij is geen projectinspanning maar geblokkeerde capaciteit. Een hele
-  // vrije werkdag telt daarom altijd als 8u per toegewezen persoon, ook als
-  // het agenda-item zelf 0 geschatte uren heeft (zoals Google all-day events).
-  if (isVrij) return blockedHoursForWorkdays(overlapWork)
+  // vrije werkdag telt daarom als 8u per toegewezen persoon, ook als het
+  // agenda-item zelf 0 geschatte uren heeft (zoals Google all-day events).
+  // Vul je er zelf uren in, dan tellen die — zie vrijHoursForOverlap.
+  if (isVrij) return vrijHoursForOverlap({
+    overlapWorkdays: overlapWork,
+    totalWorkdays: totalWork,
+    ownHours: vrijOwnHours(project, memberId),
+    allowOwnHours: project.source !== 'google',
+  })
   const fraction  = overlapWork / totalWork
   // Per-owner override: als ownerHours[memberId] is gezet (via de pie-chart),
   // dan is dát het deel van deze persoon. Anders gelijkmatig verdelen.
@@ -288,8 +294,14 @@ function contributionsPerCell(
       const myShare = project.ownerHours && memberId in project.ownerHours
         ? Number(project.ownerHours[memberId]) || 0
         : project.estHours / Math.max(project.ownerIds.length, 1)
+      const vrijUren = vrijOwnHours(project, memberId)
       const hoursByOverlap = overlaps.map(overlap => isVrij
-        ? blockedHoursForWorkdays(overlap.workdays)
+        ? vrijHoursForOverlap({
+            overlapWorkdays: overlap.workdays,
+            totalWorkdays: totalWork,
+            ownHours: vrijUren,
+            allowOwnHours: project.source !== 'google',
+          })
         : Math.round((overlap.workdays / totalWork) * myShare * 10) / 10)
 
       // Als de zichtbare kolommen het hele project beslaan, corrigeer dan de
