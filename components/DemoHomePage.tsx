@@ -34,9 +34,9 @@ import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type
 import { homeWeekTone } from '@/lib/homeWeekTone'
 import { setVrijDaysFromProjects } from '@/lib/vrijDays'
 import {
-  CAT_COLOR, CAT_LABEL, ALL_CATEGORIES,
+  CAT_COLOR, CAT_LABEL,
   effectiveCategory,
-  loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
+  loadCategoryOverrides, onCategoryOverridesChange,
   isVrijTitle,
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
@@ -138,13 +138,12 @@ type WorkloadItem = { id: string; rawItemId: string; name: string; board: string
 
 type Category = WorkloadCategory
 
-// Workload row. Click → opens the detail popover (with a category picker
-// and an explicit "Open agenda" link). Hover on desktop also previews the
-// popover. The row never navigates by itself — only the link inside does.
-function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
+// Workload row. Click → opens the detail popover (met een expliciete
+// "Open agenda"-link). Hover on desktop also previews the popover. The row
+// never navigates by itself — only the link inside does.
+function WorkloadItemRow({ item, override, onToggleDone }: {
   item: WorkloadItem
   override: Category | null
-  onSetCategory: (id: string, cat: Category | null) => void
   onToggleDone: (item: WorkloadItem, next: boolean) => void
 }) {
   const router = useRouter()
@@ -293,36 +292,6 @@ function WorkloadItemRow({ item, override, onSetCategory, onToggleDone }: {
             <span>{range}</span>
             <span><strong style={{ color: 'var(--text-primary)' }}>{item.hours}u</strong> deze week</span>
           </div>
-          <div style={{ marginTop: 10, marginBottom: 5, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Categorie</div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {ALL_CATEGORIES.map(c => {
-              const active = cat === c
-              const color  = CAT_COLOR[c]
-              return (
-                <button key={c} type="button"
-                  onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, c) }}
-                  style={{
-                    flex: '1 1 calc(50% - 3px)', padding: '5px 6px', borderRadius: 6,
-                    border: active ? `1.5px solid ${color}` : '1px solid var(--border)',
-                    background: active ? `${color}22` : 'var(--bg-card)',
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: 11, fontWeight: active ? 700 : 500,
-                    cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
-                  {CAT_LABEL[c]}
-                </button>
-              )
-            })}
-          </div>
-          {override && (
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); onSetCategory(item.id, null) }}
-              style={{ marginTop: 6, fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-              Reset naar automatisch
-            </button>
-          )}
           <Link href={`/projects/${item.board}`}
             style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
               fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
@@ -593,10 +562,6 @@ export default function DemoHomePage() {
   // DEMO: geen Supabase-profielen-pull — nep-team heeft geen vakantie/
   // dagen-off-data, profilesById blijft leeg (widgets degraderen netjes).
   void setProfilesById
-
-  function setItemCategory(id: string, cat: Category | null) {
-    setCategoryOverrides(setCategoryOverride(id, cat))
-  }
 
   // Voeg een nieuwe todo toe vanuit de home 'Jouw taken'-kaart aan de eigen
   // sectie in de todosStore. Houdt dezelfde data-bron aan als /todos zodat
@@ -1172,7 +1137,6 @@ export default function DemoHomePage() {
                           {dayItems.map((item, i) => (
                             <WorkloadItemRow key={i} item={item}
                               override={categoryOverrides[item.id] ?? null}
-                              onSetCategory={setItemCategory}
                               onToggleDone={toggleWorkloadDone} />
                           ))}
                         </ul>
