@@ -773,12 +773,16 @@ function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<st
 const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
   Object.fromEntries(ids.map(id => [id, String(Math.round((hours[id] ?? 0) * 10) / 10)]))
 
-function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange, avatarSize = 34, triggerLabel }: {
+function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange, avatarSize = 34, triggerLabel, distributionFromSubitems = false }: {
   value: string[]
   onChange: (v: string[], distribution?: Record<string, number>) => void
   ownerHours?: Record<string, number>
   totalHours?: number
   onDistributionChange?: (v: Record<string, number>) => void
+  /** De verdeling is opgeteld uit de subitems. Dan valt er hier niets
+   *  te verschuiven: een wijziging op het hoofditem wordt bij de
+   *  volgende render overschreven door die optelsom. */
+  distributionFromSubitems?: boolean
   /** In een rij moet een gezicht klein blijven; in het item-venster is
    *  er ruimte zat en wil je gewoon zien wie het doet. */
   avatarSize?: number
@@ -955,7 +959,8 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                   Verdeling
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <DistributionPie segments={segments} total={totalHours} size={94} interactive showAvatars
+                  <DistributionPie segments={segments} total={totalHours} size={94}
+                    interactive={!distributionFromSubitems} showAvatars
                     innerLabel={`${Math.round(totalHours * 10) / 10}u`}
                     onChange={next => { setLiveHours(next); setHourDrafts(ownerHoursDrafts(visibleOwners, next)) }}
                     onCommit={commitDistribution} />
@@ -966,6 +971,11 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                         <div key={segment.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
                           <span style={{ width: 8, height: 8, borderRadius: 2, background: segment.color, flexShrink: 0 }} />
                           <span style={{ flex: 1, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{segment.label}</span>
+                          {distributionFromSubitems ? (
+                            <span style={{ flexShrink: 0, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                              {Math.round(segment.value * 10) / 10}u · {pct}%
+                            </span>
+                          ) : (
                           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                             <input type="text" inputMode="decimal" aria-label={`Uren voor ${segment.label}`}
                               value={hourDrafts[segment.id] ?? String(Math.round(segment.value * 10) / 10)}
@@ -985,13 +995,16 @@ function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributio
                                 font: 'inherit', fontVariantNumeric: 'tabular-nums', textAlign: 'right', outline: 'none' }} />
                             <span style={{ color: 'var(--text-muted)' }}>u · {pct}%</span>
                           </label>
+                          )}
                         </div>
                       )
                     })}
                   </div>
                 </div>
                 <div style={{ marginTop: 7, fontSize: 10.5, color: 'var(--text-muted)' }}>
-                  Sleep de witte bolletjes of vul de uren per persoon in.
+                  {distributionFromSubitems
+                    ? 'Opgeteld uit de subitems — pas de uren daar aan, dan loopt dit mee.'
+                    : 'Sleep de witte bolletjes of vul de uren per persoon in.'}
                 </div>
               </div>
             )}
@@ -1202,6 +1215,7 @@ function Cell({ item, col, onUpdate, statusExtra, avatarSize }: {
   if (col.type === 'owners')    return <OwnersCell value={item.ownerIds} avatarSize={avatarSize}
     ownerHours={item.ownerHours}
     totalHours={Number.isFinite(rolledOwnerTotal) ? rolledOwnerTotal : effectiveHours(item)}
+    distributionFromSubitems={item.__ownerHoursUitSubitems === true}
     onDistributionChange={hours => onUpdate({
       ownerHours: hours,
       ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
@@ -2343,6 +2357,11 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
     // eigenaren)? Dan blijft de handmatige verdeling van het hoofditem
     // staan in plaats van 'm weg te gooien.
     updates.ownerHours = Object.keys(rolled).length > 0 ? rolled : item.ownerHours
+    // Komt de verdeling uit de subitems, dan valt er op de hoofdregel
+    // niets aan te slepen: die uren worden bij de volgende render weer
+    // opgeteld uit de subitems. De cel laat 'm daarom alleen zien, net
+    // als het detailvenster al deed.
+    updates.__ownerHoursUitSubitems = Object.keys(rolled).length > 0
     updates.__relevantOwnerHoursTotal = ownerRollup.displaySubitems.length > 0
       ? ownerRollup.displaySubitems.reduce((sum, sub) => sum + (Number(sub.estHours) || 0), 0)
       : undefined
@@ -2962,7 +2981,9 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item])
   const vensterItem: BoardItem = volledig.uitSubitems && Object.keys(volledig.verdeling).length > 0
-    ? { ...item, ownerHours: volledig.verdeling, __relevantOwnerHoursTotal: volledig.totaal }
+    // Ook hier geldt: deze uren komen uit de subitems, dus de owner-kaart
+    // in dit venster laat ze zien en laat je er niet aan sleuren.
+    ? { ...item, ownerHours: volledig.verdeling, __relevantOwnerHoursTotal: volledig.totaal, __ownerHoursUitSubitems: true }
     : item
 
   // Agenda › groep › hoofditem. Lege stukken vallen weg in plaats van een

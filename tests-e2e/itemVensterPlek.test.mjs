@@ -95,10 +95,15 @@ test('het venster geeft de velden lucht en de gezichten formaat', { skip: skip ?
   })
   await page.close()
 
-  assert.ok(m.titelPx >= 23, `de titel is niet meer muizig (${m.titelPx}px)`)
+  // 22px sinds het venster compacter werd; het punt blijft dat de titel
+  // groter is dan de tekst in een rij.
+  assert.ok(m.titelPx >= 22, `de titel is niet meer muizig (${m.titelPx}px)`)
   assert.ok(m.vensterBreed >= 860, `en het venster heeft breedte (${m.vensterBreed}px)`)
   assert.notEqual(m.vakRand, '0px', 'elk veld staat in zijn eigen vlak')
-  assert.ok(m.avatarPx >= 40, `de gezichten zijn groter dan in een rij (${m.avatarPx}px)`)
+  // Sinds het venster compacter werd zijn de gezichten 32px. Waar het om
+  // gaat is dat ze een eigen formaat houden en niet terugvallen op de
+  // 24px van een drukke rij.
+  assert.ok(m.avatarPx >= 32, `de gezichten houden formaat (${m.avatarPx}px)`)
 })
 
 test('de taart telt op tot de uren die ernaast staan', { skip: skip ?? false }, async () => {
