@@ -114,3 +114,42 @@ test('een eindeloze lijst wordt afgekapt', () => {
   const veel = Array.from({ length: 80 }, (_, i) => `Stap ${i}`).join('\n')
   assert.equal(tekstNaarStappen(veel).length, MAX_STAPPEN)
 })
+
+// ── Slepen in het voorstel ────────────────────────────────────────────
+const { verplaatsStap, rekStap, werkdagenIn } = laad()
+// Objecten uit de vm hebben een andere prototype-keten; overtikken
+// zodat deepEqual over de inhoud gaat en niet over de herkomst.
+const vlak = o => ({ startDate: o.startDate, endDate: o.endDate })
+
+test('een stap verslepen houdt de lengte en mijdt het weekend', () => {
+  // Ma 16 t/m di 17 november 2026, drie dagen naar achteren: do 19 – vr 20.
+  assert.deepEqual(vlak(verplaatsStap('2026-11-16', '2026-11-17', 3)),
+    { startDate: '2026-11-19', endDate: '2026-11-20' })
+  // Naar vrijdag: de tweede werkdag valt dan op maandag, niet in het
+  // weekend.
+  assert.deepEqual(vlak(verplaatsStap('2026-11-16', '2026-11-17', 4)),
+    { startDate: '2026-11-20', endDate: '2026-11-23' })
+  // En terug in de tijd mag net zo goed.
+  assert.deepEqual(vlak(verplaatsStap('2026-11-16', '2026-11-17', -3)),
+    { startDate: '2026-11-13', endDate: '2026-11-16' })
+})
+
+test('aan een rand trekken verandert alleen die kant', () => {
+  assert.deepEqual(vlak(rekStap('2026-11-16', '2026-11-20', 'eind', -2)),
+    { startDate: '2026-11-16', endDate: '2026-11-18' })
+  assert.deepEqual(vlak(rekStap('2026-11-16', '2026-11-20', 'start', 2)),
+    { startDate: '2026-11-18', endDate: '2026-11-20' })
+})
+
+test('een stap blijft minstens één werkdag', () => {
+  assert.deepEqual(vlak(rekStap('2026-11-16', '2026-11-17', 'eind', -9)),
+    { startDate: '2026-11-16', endDate: '2026-11-16' })
+  assert.deepEqual(vlak(rekStap('2026-11-16', '2026-11-17', 'start', 9)),
+    { startDate: '2026-11-17', endDate: '2026-11-17' })
+})
+
+test('werkdagen tellen slaat het weekend over', () => {
+  assert.equal(werkdagenIn('2026-11-16', '2026-11-20'), 5)
+  assert.equal(werkdagenIn('2026-11-16', '2026-11-23'), 6)
+  assert.equal(werkdagenIn('2026-11-20', '2026-11-16'), 0)
+})

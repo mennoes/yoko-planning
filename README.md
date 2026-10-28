@@ -46,19 +46,29 @@ Voer `supabase/0038_login_devices.sql` eenmalig uit en configureer deze server-s
 
 Na iedere geldige login registreert de server de browser. Een onbekende browser ontvangt één waarschuwing op het e-mailadres van de ingelogde gebruiker. IP-adressen worden alleen in die waarschuwing gebruikt en niet opgeslagen.
 
-## Klus uitzetten
+## Item aanmaken
 
-Op een agenda staat een knop **✨ Klus uitzetten**, met twee manieren om
-een item met subitems te maken. Je ziet altijd eerst een voorstel; pas
-een klik op *Aanmaken* zet het op het bord, langs dezelfde weg als een
-item dat je met de hand maakt.
+Op een agenda staat een knop **Item aanmaken** (met het vonkje), en
+hetzelfde vonkje verschijnt naast *+ Voeg item toe* zodra je daar met de
+muis bent. Beide openen hetzelfde venster, met twee manieren om een item
+met subitems te maken. Je ziet altijd eerst een voorstel: de stappen
+staan als balkjes op een tijdlijn die je versleept — pak het midden om
+een stap te verschuiven, een rand om 'm korter of langer te maken, en de
+uren lopen mee met het aantal werkdagen. Pas een klik op *Aanmaken* zet
+het op het bord, langs dezelfde weg als een item dat je met de hand
+maakt.
 
 **Uit een sjabloon** (altijd beschikbaar, gratis, niets gaat de deur
 uit). Kies het soort klus, pas de stappen aan — één per regel, met het
 aantal werkdagen erachter — en geef de datum waarop het af moet. De
 werkdagen worden teruggeteld vanaf die datum, weekenden overgeslagen,
-acht uur per dag. De sjablonen staan in `lib/sjabloonPlan.ts`; ze zijn
-een beginpunt dat je in het venster aanpast.
+acht uur per dag. De sjablonen staan in `lib/sjabloonPlan.ts`.
+
+**Uit een mail** (ook gratis). Plak een mail en `lib/mailNaarStappen.ts`
+haalt eruit wat er staat: het onderwerp, een datum (woorden als
+'uiterlijk' of 'deadline' wegen mee) en de punten die als lijstje met
+streepjes zijn opgeschreven, inclusief '(2 dagen)' erachter. Staat er
+geen lijstje in, dan komt er niets uit — hij verzint niets.
 
 **Laten uitschrijven** (alleen met een sleutel). Je typt of plakt een
 briefing en een model schrijft het voorstel. Dit tabblad verschijnt

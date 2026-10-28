@@ -13,6 +13,16 @@ function base({ size = 18, strokeWidth = 1.5, style, className, children }: Prop
   )
 }
 
+// Gevuld vonkje voor de plek waar de app iets voor je uitschrijft.
+// Dichte vorm, want als los lijntje-icoon viel 'ie weg tussen de rest.
+export const IconSpark = ({ size = 18, style, className }: Props) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none"
+    style={{ flexShrink: 0, display: 'inline-block', ...style }} className={className}>
+    <path d="M12 2.6l1.9 5.1a4 4 0 0 0 2.4 2.4l5.1 1.9-5.1 1.9a4 4 0 0 0-2.4 2.4L12 21.4l-1.9-5.1a4 4 0 0 0-2.4-2.4L2.6 12l5.1-1.9a4 4 0 0 0 2.4-2.4z" />
+    <path d="M18.5 2.4l.7 1.9c.1.3.3.5.6.6l1.9.7-1.9.7c-.3.1-.5.3-.6.6l-.7 1.9-.7-1.9a1.2 1.2 0 0 0-.6-.6l-1.9-.7 1.9-.7c.3-.1.5-.3.6-.6z" />
+  </svg>
+)
+
 export const IconMenu       = (p: Props) => base({ ...p, children: <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></> })
 export const IconBell       = (p: Props) => base({ ...p, children: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8" /><path d="M10 21a2 2 0 0 0 4 0" /></> })
 export const IconClose      = (p: Props) => base({ ...p, children: <><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></> })

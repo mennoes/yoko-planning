@@ -22,7 +22,7 @@ import { ItemHistory }    from './ItemHistory'
 import { useUndo }        from './UndoContext'
 import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
-import { IconComment, IconSearch, IconActivity, IconHistory } from './Icon'
+import { IconComment, IconSearch, IconActivity, IconHistory, IconSpark } from './Icon'
 import { BoardTrashDrawer } from './BoardTrashDrawer'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity, logItemCreated } from '@/lib/itemActivity'
@@ -3328,7 +3328,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 }
 
 // ─── Groep ────────────────────────────────────────────────────────────────────
-function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onMoveItemToGroup, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest }: {
+function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colWidths, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selectedIds, onToggleSelect, sortBy, onToggleSort, reorderMode, onMoveColumn, onUpdateGroup, onMoveItemHere, onMoveItemsHere, onMoveItemToGroup, onNestItem, onReparentSubitem, onUnnestSubitemHere, onDeleteGroup, onResizeCol, openRequest, onCloseRequest, onPlanItem }: {
   boardId: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   group: BoardGroup; cols: ColumnDef[]; colWidths: Record<string, number>; gridTemplate: string
@@ -3354,8 +3354,12 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
   onUnnestSubitemHere: (subitemId: string, parentItemId: string, fromGroupId: string, toGroupId: string) => void
   onDeleteGroup: () => void
   onResizeCol: (key: string, width: number) => void
+  /** Opent het venster dat een item met subitems uitschrijft, met deze
+   *  groep al gekozen. */
+  onPlanItem?: () => void
 }) {
   const isMobile = useIsMobile()
+  const [toonPlanKnop, setToonPlanKnop] = useState(false)
   // Vasthouden-om-te-slepen op touch; zie lib/touchItemDrag.
   const longPressTimer = useRef<number | undefined>(undefined)
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
@@ -4389,11 +4393,31 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
               zIndex: isMobile ? 10 : undefined, background: 'var(--bg-card)',
               borderLeft: isMobile ? `4px solid ${group.color}` : undefined,
               boxSizing: 'border-box' }}>
-              <button onClick={addItem} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: 0 }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-                + Voeg item toe
-              </button>
+              {/* Naast de gewone regel het vonkje: dezelfde plek waar je
+                  een item begint, maar dan met subitems en datums in één
+                  keer. Verschijnt zodra je hier bent met de muis, zodat
+                  het niet altijd staat te schreeuwen. */}
+              <span onMouseEnter={() => setToonPlanKnop(true)} onMouseLeave={() => setToonPlanKnop(false)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={addItem} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                  + Voeg item toe
+                </button>
+                {onPlanItem && (
+                  <button onClick={onPlanItem} aria-label="Item met subitems aanmaken"
+                    title="Item met subitems, datums en uren in één keer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
+                      border: '1px solid var(--border-light)', borderRadius: 7, padding: '3px 9px 3px 7px',
+                      background: 'var(--bg-hover)', color: 'var(--accent)', cursor: 'pointer',
+                      fontSize: 11.5, fontWeight: 650, lineHeight: 1.6,
+                      opacity: toonPlanKnop ? 1 : 0, transition: 'opacity 0.14s',
+                      pointerEvents: toonPlanKnop ? 'auto' : 'none' }}>
+                    <IconSpark size={13} />
+                    <span style={{ color: 'var(--text-secondary)' }}>met subitems</span>
+                  </button>
+                )}
+              </span>
             </div>
 
             {mobileCreateOpen && <MobileCreateItemSheet kind="item" onClose={() => setMobileCreateOpen(false)} onCreate={createMobileItem} />}
@@ -5089,6 +5113,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // dezelfde manier op het bord komt als een item dat je met de hand
   // maakt, inclusief sync en regel in de geschiedenis.
   const [aiOpen, setAiOpen] = useState(false)
+  // Vanuit welke groep het venster is geopend; die staat dan voorgekozen.
+  const [planGroupId, setPlanGroupId] = useState<string | null>(null)
   function maakAiItem(groupId: string, item: BoardItem) {
     onChange(groups.map(groep => groep.id === groupId
       ? { ...groep, items: [...groep.items, item] }
@@ -5818,9 +5844,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               verschijnt als tabblad zodra daar een sleutel voor staat. */}
           {!isMobile && groups.length > 0 && (
             <button onClick={() => setAiOpen(true)} className="yoko-control-button"
-              title="Stappen uitzetten vanaf een deadline, of een briefing laten uitschrijven"
+              title="Item met subitems, datums en uren in één keer"
               style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-              ✨ Klus uitzetten
+              <IconSpark size={13} style={{ marginRight: 5, verticalAlign: '-2px', color: 'var(--accent)' }} />Item aanmaken
             </button>
           )}
           {!isMobile && (
@@ -6022,8 +6048,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           boardId={boardId}
           boardName={title}
           groups={groups}
+          startGroupId={planGroupId}
           onCreate={maakAiItem}
-          onClose={() => setAiOpen(false)} />
+          onClose={() => { setAiOpen(false); setPlanGroupId(null) }} />
       )}
 
       {dedupOpen && (
@@ -6186,7 +6213,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               onNestItem={nestItemUnder}
               onReparentSubitem={reparentSubitem}
               onUnnestSubitemHere={unnestSubitemHere}
-              onDeleteGroup={() => handleDeleteGroup(group.id)} />
+              onDeleteGroup={() => handleDeleteGroup(group.id)}
+              onPlanItem={isMobile ? undefined : () => { setPlanGroupId(group.id); setAiOpen(true) }} />
           </div>
           )
         })}

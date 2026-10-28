@@ -27,7 +27,7 @@ async function openPlanner({ aiAan = false } = {}) {
   await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
   await page.waitForSelector('[data-item-id]')
   await page.waitForTimeout(800)
-  await page.getByRole('button', { name: /Klus uitzetten/ }).first().click()
+  await page.getByRole('button', { name: /Item aanmaken/ }).first().click()
   await page.waitForTimeout(400)
   return page
 }
@@ -66,7 +66,7 @@ test('de stappen worden teruggeteld vanaf de datum en komen op het bord', { skip
   assert.match(voorstel, /20-11-2026/)
   assert.match(voorstel, /40u/, 'vijf werkdagen van acht uur')
 
-  await page.getByRole('button', { name: 'Aanmaken' }).click()
+  await page.getByRole('button', { name: 'Aanmaken', exact: true }).click()
   await page.waitForTimeout(900)
 
   const opHetBord = await page.evaluate(() => {
@@ -94,5 +94,101 @@ test('een vergeten datum levert uitleg op, geen halve planning', { skip: skip ??
   await page.waitForTimeout(400)
   assert.equal(await page.locator('[data-ai-voorstel]').count(), 0)
   assert.match(await page.getByRole('alert').first().innerText(), /datum/i)
+  await page.close()
+})
+
+test('het vonkje bij "+ Voeg item toe" opent hetzelfde venster', { skip: skip ?? false }, async () => {
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' })
+  await page.route('**/api/ai/plan', route => route.fulfill({ json: { available: false } }))
+  await page.addInitScript(board => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', board)
+  }, JSON.stringify(boardFixture()))
+  await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id]')
+  await page.waitForTimeout(600)
+
+  const vonkje = page.getByRole('button', { name: 'Item met subitems aanmaken' })
+  assert.equal(await vonkje.count(), 1, 'de knop staat er')
+  // Pas zichtbaar als je er met de muis bij bent; daarvoor hoort hij
+  // niet te staan schreeuwen.
+  assert.equal(await vonkje.evaluate(el => getComputedStyle(el).opacity), '0')
+  await page.getByText('+ Voeg item toe').hover()
+  await page.waitForTimeout(300)
+  assert.equal(await vonkje.evaluate(el => getComputedStyle(el).opacity), '1')
+
+  await vonkje.click()
+  await page.waitForTimeout(400)
+  assert.equal(await page.getByRole('dialog', { name: 'Item aanmaken' }).count(), 1)
+  await page.close()
+})
+
+test('een balkje verslepen verzet de stap en de uren lopen mee', { skip: skip ?? false }, async () => {
+  const page = await openPlanner()
+  await page.getByLabel('Naam van de klus').fill('Explainer')
+  await page.getByLabel('Af op').first().fill('11-12-2026')
+  await page.getByLabel('Af op').first().blur()
+  await page.getByLabel('Stappen').fill('Script · 2d\nStoryboard · 1d\nAnimatie · 5d')
+  await page.getByRole('button', { name: 'Zet de stappen uit' }).click()
+  await page.waitForSelector('[data-voorstel-tijdlijn]')
+
+  const regels = () => page.locator('[data-ai-voorstel] li').allInnerTexts()
+  const voor = await regels()
+  assert.match(voor[1], /Storyboard/)
+
+  // De balk van Storyboard twee dagen naar achteren.
+  const balk = page.locator('[data-stap-balk="1"]')
+  const box = await balk.boundingBox()
+  const baan = await page.locator('[data-voorstel-tijdlijn] [data-stap-balk="0"]').evaluate(
+    el => el.parentElement.getBoundingClientRect().width)
+  const dagBreedte = baan / 15 // 11 dagen periode plus twee dagen lucht aan weerskanten
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + dagBreedte * 2, box.y + box.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(400)
+
+  const na = await regels()
+  assert.notEqual(na[1], voor[1], `Storyboard is verzet (was "${voor[1]}", nu "${na[1]}")`)
+  assert.doesNotMatch(na[1], /05-12-2026|06-12-2026/, 'en niet het weekend in')
+
+  // Aan de rechterrand trekken maakt 'm langer, inclusief de uren.
+  const animatie = page.locator('[data-stap-balk="2"]')
+  const animatieBox = await animatie.boundingBox()
+  await page.mouse.move(animatieBox.x + animatieBox.width - 3, animatieBox.y + animatieBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(animatieBox.x + animatieBox.width - 3 - dagBreedte * 2, animatieBox.y + animatieBox.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(400)
+  const korter = (await regels())[2]
+  assert.match(korter, /24u|32u/, `minder dagen is minder uren, kreeg "${korter}"`)
+  await page.close()
+})
+
+test('een geplakte mail vult de naam, de datum en de stappen', { skip: skip ?? false }, async () => {
+  const page = await openPlanner()
+  await page.getByRole('button', { name: 'Uit een mail halen' }).click()
+  await page.getByLabel('Plak de mail').fill([
+    'Onderwerp: Explainer zonnepanelen',
+    '',
+    'Hoi Menno,',
+    '',
+    'We willen de video uiterlijk 11 december 2026 live zetten.',
+    '',
+    '- Script schrijven (2 dagen)',
+    '- Storyboard',
+    '- Animatie maken (5 werkdagen)',
+    '',
+    'Met vriendelijke groet,',
+    'Joris',
+  ].join('\n'))
+  await page.getByRole('button', { name: 'Haal de stappen eruit' }).click()
+  await page.waitForTimeout(400)
+
+  assert.equal(await page.getByLabel('Naam van de klus').inputValue(), 'Explainer zonnepanelen')
+  assert.equal(await page.getByLabel('Af op').first().inputValue(), '11-12-2026')
+  const stappen = await page.getByLabel('Stappen').inputValue()
+  assert.equal(stappen, 'Script schrijven · 2d\nStoryboard · 1d\nAnimatie maken · 5d')
+  assert.match(await page.getByRole('status').innerText(), /Uit de mail gehaald/)
   await page.close()
 })
