@@ -1,15 +1,21 @@
 // Een mail uitpluizen tot stappen.
 //
 // Je plakt een mail van een klant en hier komt uit wat er bruikbaar in
-// staat: waar het over gaat, wanneer het af moet, en de punten die als
-// lijstje in de mail stonden. Geen model, geen netwerk — het leest
-// opsommingen en datums, meer niet.
+// staat: waar het over gaat, wanneer het af moet, wie erbij genoemd
+// worden, en de stappen. Geen model, geen netwerk — het leest tekst met
+// regels die je kunt nalopen.
 //
-// Daarom is het bewust karig: staat er geen lijstje in, dan geeft dit
-// geen stappen terug in plaats van een verzonnen planning. Wat er wél
-// uit komt is een beginpunt dat je in het venster bijwerkt.
+// Het kijkt op drie manieren naar stappen, in deze volgorde:
+//   1. een lijstje met streepjes, bolletjes of nummers;
+//   2. een zin met 'eerst … daarna … tot slot', of een opsomming op één
+//      regel ('1) script 2) storyboard');
+//   3. losse regels die met een werkwoord beginnen ('Script schrijven').
+// Levert geen van drieën iets op, dan geeft dit geen stappen terug in
+// plaats van een verzonnen planning. Herkent het wel waar de mail over
+// gaat ('explainer', 'podcast'), dan noemt het dat sjabloon als
+// beginpunt — als suggestie, niet als uitkomst.
 
-import type { SjabloonStap } from './sjabloonPlan'
+import { SJABLONEN, type Sjabloon, type SjabloonStap } from './sjabloonPlan'
 
 export type UitMail = {
   /** Het onderwerp, of de eerste zinnige regel. */
@@ -17,6 +23,14 @@ export type UitMail = {
   /** jjjj-mm-dd, als er een datum in staat. */
   deadline: string | null
   stappen: SjabloonStap[]
+  /** Waar die stappen vandaan komen: uit de mail zelf, of een sjabloon
+   *  dat bij het onderwerp past. */
+  bron: 'lijstje' | 'zinnen' | 'regels' | 'sjabloon' | 'geen'
+  /** Namen uit de mail die ook teamlid zijn. */
+  ownerNamen: string[]
+  /** Het sjabloon dat bij deze mail lijkt te passen, als we er een
+   *  herkennen. */
+  sjabloonId: string | null
 }
 
 const MAANDEN: Record<string, number> = {
@@ -125,6 +139,79 @@ export function naamUitMail(tekst: string): string | null {
   return null
 }
 
+/** Geschreven getallen, zoals ze in een mail staan. */
+const GETALWOORD: Record<string, number> = {
+  een: 1, één: 1, twee: 2, drie: 3, vier: 4, vijf: 5,
+  zes: 6, zeven: 7, acht: 8, negen: 9, tien: 10,
+}
+
+/** Werkwoorden waarmee een regel een stap is en geen zin uit de mail.
+ *  Bewust kort: liever een stap missen dan een beleefdheid planner. */
+const WERKWOORD = new RegExp('^(' + [
+  'script(en)?', 'schrijven', 'uitwerken', 'maken', 'ontwerpen', 'vormgeven',
+  'animeren', 'monteren', 'opnemen', 'filmen', 'tekenen', 'storyboarden',
+  'opleveren', 'aanleveren', 'presenteren', 'publiceren', 'plannen',
+  'voorbereiden', 'verzamelen', 'inlezen', 'reviewen', 'nakijken', 'testen',
+  'bouwen', 'opzetten', 'uitzoeken', 'briefen', 'casten', 'inspreken',
+].join('|') + ')\\b', 'i')
+
+/** Woorden die een sjabloon verraden. */
+const SJABLOONWOORDEN: Array<{ id: string; woorden: RegExp }> = [
+  { id: 'explainer', woorden: /\b(explainer|uitleg(video)?|animatievideo|whiteboard)\b/i },
+  { id: 'podcast', woorden: /\b(podcast|aflevering|episode|opname|audio)\b/i },
+  { id: 'campagne', woorden: /\b(campagne|socials?|advertentie|ads?|kanalen)\b/i },
+  { id: 'ontwerp', woorden: /\b(ontwerp|huisstijl|logo|moodboard|vormgeving|design)\b/i },
+]
+
+/** Het aantal dagen achter een stap: '(2 dagen)', '3 werkdagen',
+ *  'twee dagen', 'halve dag'. Geeft terug wat er stond én de naam zonder
+ *  die toevoeging. */
+function dagenUitNaam(naam: string): { naam: string; dagen: number } {
+  const cijfers = naam.match(/[([]?\s*(\d{1,2}(?:[.,]5)?)\s*(?:werk)?dag(?:en)?\s*[)\]]?\s*$/i)
+  if (cijfers) {
+    const getal = Number(cijfers[1].replace(',', '.'))
+    return {
+      naam: naam.slice(0, cijfers.index).trim(),
+      dagen: Number.isFinite(getal) && getal >= 1 ? Math.round(getal) : 1,
+    }
+  }
+  const woorden = naam.match(/[([]?\s*(een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|halve)\s*(?:werk)?dag(?:en)?\s*[)\]]?\s*$/i)
+  if (woorden) {
+    const woord = woorden[1].toLowerCase()
+    return {
+      naam: naam.slice(0, woorden.index).trim(),
+      // Een halve dag is in dit raster nog steeds één werkdag; de uren
+      // pas je daarna aan.
+      dagen: woord === 'halve' ? 1 : (GETALWOORD[woord] ?? 1),
+    }
+  }
+  const weken = naam.match(/[([]?\s*(\d{1,2}|een|één|twee|drie|vier)\s*we(?:ek|ken)\s*[)\]]?\s*$/i)
+  if (weken) {
+    const ruw = weken[1].toLowerCase()
+    const getal = GETALWOORD[ruw] ?? Number(ruw)
+    return {
+      naam: naam.slice(0, weken.index).trim(),
+      dagen: Number.isFinite(getal) && getal >= 1 ? Math.min(60, Math.round(getal) * 5) : 5,
+    }
+  }
+  return { naam, dagen: 1 }
+}
+
+function alsStap(ruweNaam: string): SjabloonStap | null {
+  // Eerst de punt aan het eind weg: anders staat die tussen '(3 dagen)'
+  // en het einde van de regel, en zien we het aantal dagen niet meer.
+  const { naam, dagen } = dagenUitNaam(schoon(ruweNaam).replace(/[.!?]+$/, '').trim())
+  const schoneNaam = naam
+    // 'We beginnen met het script schrijven' → 'Het script schrijven'.
+    .replace(/^(?:we|wij|je|jullie|ik)\s+(?:beginnen|begin|starten|start|gaan)\s+(?:met|aan)\s+(?:de\s+|het\s+)?/i, '')
+    .replace(/^(en|ook|dan|daarna|vervolgens|tot slot|ten slotte|eerst)\b[\s,]*/i, '')
+    .replace(/[\s:;,.·\-–]+$/, '').trim()
+  if (!schoneNaam || schoneNaam.length < 2 || isBeleefdheid(schoneNaam)) return null
+  // Een halve alinea is geen stap.
+  if (schoneNaam.length > 90) return null
+  return { naam: schoneNaam.slice(0, 160).charAt(0).toUpperCase() + schoneNaam.slice(1, 160), dagen: Math.min(dagen, 60) }
+}
+
 /**
  * De opsomming uit een mail als stappen.
  *
@@ -138,27 +225,127 @@ export function stappenUitMail(tekst: string): SjabloonStap[] {
   for (const ruwe of tekst.split('\n')) {
     const regel = schoon(ruwe)
     if (!BULLET.test(regel)) continue
-    let naam = regel.replace(BULLET, '').trim()
-    if (!naam || isBeleefdheid(naam)) continue
-    let dagen = 1
-    const metDagen = naam.match(/[([]?\s*(\d{1,2}(?:[.,]5)?)\s*(?:werk)?dag(?:en)?\s*[)\]]?\s*$/i)
-    if (metDagen) {
-      const getal = Number(metDagen[1].replace(',', '.'))
-      if (Number.isFinite(getal) && getal >= 1) dagen = Math.round(getal)
-      naam = naam.slice(0, metDagen.index).trim()
-    }
-    // Een afsluitend leesteken hoort niet in de naam van een subitem.
-    naam = naam.replace(/[\s:;,.·\-–]+$/, '').trim()
-    if (!naam) continue
-    uit.push({ naam: naam.slice(0, 160), dagen: Math.min(dagen, 60) })
+    const stap = alsStap(regel.replace(BULLET, ''))
+    if (stap) uit.push(stap)
   }
   return uit
 }
 
-export function mailNaarStappen(tekst: string, vandaag = new Date()): UitMail {
+/**
+ * Stappen uit lopende tekst.
+ *
+ * Twee vormen die klanten echt schrijven: 'eerst het script, dan
+ * storyboard, daarna animeren' en een opsomming op één regel, '1)
+ * script 2) storyboard'. Alleen stukken die met een werkwoord beginnen
+ * of na zo'n volgorde-woord komen tellen mee — anders wordt elke
+ * bijzin een subitem.
+ */
+export function stappenUitZinnen(tekst: string): SjabloonStap[] {
+  const uit: SjabloonStap[] = []
+  const zieEerst = /\b(eerst|daarna|vervolgens|dan|tot slot|ten slotte|als laatste|afsluitend)\b/i
+
+  for (const ruweZin of tekst.split(/(?<=[.!?])\s+|\n/)) {
+    const zin = schoon(ruweZin)
+    if (!zin || isBeleefdheid(zin) || BULLET.test(zin)) continue
+
+    // '1) script 2) storyboard 3) animeren' — ook zonder regeleindes.
+    const genummerd = zin.split(/\s(?=\d{1,2}[.)]\s)/).filter(deel => /^\d{1,2}[.)]\s/.test(deel))
+    if (genummerd.length >= 2) {
+      for (const deel of genummerd) {
+        const stap = alsStap(deel.replace(/^\d{1,2}[.)]\s*/, ''))
+        if (stap) uit.push(stap)
+      }
+      continue
+    }
+
+    if (!zieEerst.test(zin)) continue
+    // Knippen op komma's en volgorde-woorden; wat overblijft is per stuk
+    // een stap, zolang er een werkwoord in staat.
+    for (const deel of zin.split(/,|;| en (?=\w)|\b(?:daarna|vervolgens|tot slot|ten slotte|als laatste|afsluitend)\b/i)) {
+      const kaal = schoon(deel).replace(/^(eerst|dan)\b[\s,]*/i, '')
+      if (!kaal) continue
+      const woorden = kaal.split(' ')
+      const heeftWerkwoord = woorden.some(woord => WERKWOORD.test(woord))
+      if (!heeftWerkwoord) continue
+      const stap = alsStap(kaal)
+      if (stap) uit.push(stap)
+    }
+  }
+  return uit
+}
+
+/** Losse regels die met een werkwoord beginnen: 'Script schrijven',
+ *  'Animatie maken'. Veel mails zetten hun lijstje zo neer, zonder
+ *  streepjes ervoor. */
+export function stappenUitRegels(tekst: string): SjabloonStap[] {
+  const uit: SjabloonStap[] = []
+  for (const ruwe of tekst.split('\n')) {
+    const regel = schoon(ruwe)
+    // Eerst stoppen bij de groet: daaronder staat alleen nog een
+    // ondertekening. De beleefdheden-check hierna zou 'm overslaan in
+    // plaats van te stoppen.
+    if (AFSLUITING.some(patroon => patroon.test(regel))) break
+    if (!regel || BULLET.test(regel) || isBeleefdheid(regel)) continue
+    if (/[.!?]$/.test(regel) || regel.split(' ').length > 8) continue
+    const woorden = regel.split(' ')
+    if (!woorden.some(woord => WERKWOORD.test(woord))) continue
+    const stap = alsStap(regel)
+    if (stap) uit.push(stap)
+  }
+  return uit
+}
+
+/** Welk sjabloon past bij deze mail? */
+export function sjabloonUitMail(tekst: string): Sjabloon | null {
+  for (const kandidaat of SJABLOONWOORDEN) {
+    if (!kandidaat.woorden.test(tekst)) continue
+    const sjabloon = SJABLONEN.find(entry => entry.id === kandidaat.id)
+    if (sjabloon) return sjabloon
+  }
+  return null
+}
+
+/** Teamleden die in de mail genoemd worden. Op voornaam, want zo
+ *  schrijven mensen. */
+export function ownersUitMail(tekst: string, leden: Array<{ name: string }>): string[] {
+  const uit: string[] = []
+  for (const lid of leden) {
+    const voornaam = lid.name.split(' ')[0]
+    if (!voornaam || voornaam.length < 3) continue
+    const patroon = new RegExp(`\\b${voornaam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+    if (patroon.test(tekst) && !uit.includes(lid.name)) uit.push(lid.name)
+  }
+  return uit
+}
+
+export function mailNaarStappen(
+  tekst: string,
+  opties: { vandaag?: Date; leden?: Array<{ name: string }> } = {},
+): UitMail {
+  const vandaag = opties.vandaag ?? new Date()
+  const sjabloon = sjabloonUitMail(tekst)
+
+  // In deze volgorde, want een lijstje dat er staat is altijd beter dan
+  // iets wat wij eruit afleiden.
+  const lijstje = stappenUitMail(tekst)
+  const zinnen = lijstje.length > 0 ? [] : stappenUitZinnen(tekst)
+  const regels = lijstje.length + zinnen.length > 0 ? [] : stappenUitRegels(tekst)
+  const gevonden = lijstje.length > 0 ? lijstje : zinnen.length > 0 ? zinnen : regels
+
+  const bron: UitMail['bron'] = lijstje.length > 0 ? 'lijstje'
+    : zinnen.length > 0 ? 'zinnen'
+    : regels.length > 0 ? 'regels'
+    : sjabloon ? 'sjabloon'
+    : 'geen'
+
   return {
     naam: naamUitMail(tekst),
     deadline: deadlineUitMail(tekst, vandaag),
-    stappen: stappenUitMail(tekst),
+    // Niets gevonden maar wel herkend waar het over gaat? Dan is het
+    // sjabloon een beginpunt — met de melding erbij dat het een gok is.
+    stappen: gevonden.length > 0 ? gevonden : (sjabloon ? [...sjabloon.stappen] : []),
+    bron,
+    ownerNamen: ownersUitMail(tekst, opties.leden ?? []),
+    sjabloonId: sjabloon?.id ?? null,
   }
 }

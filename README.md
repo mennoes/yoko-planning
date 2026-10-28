@@ -66,9 +66,23 @@ acht uur per dag. De sjablonen staan in `lib/sjabloonPlan.ts`.
 
 **Uit een mail** (ook gratis). Plak een mail en `lib/mailNaarStappen.ts`
 haalt eruit wat er staat: het onderwerp, een datum (woorden als
-'uiterlijk' of 'deadline' wegen mee) en de punten die als lijstje met
-streepjes zijn opgeschreven, inclusief '(2 dagen)' erachter. Staat er
-geen lijstje in, dan komt er niets uit — hij verzint niets.
+'uiterlijk' of 'deadline' wegen zwaarder dan de datum van het bericht
+zelf) en de stappen. Die zoekt hij op drie manieren, in deze volgorde:
+
+1. een lijstje met streepjes, bolletjes of nummers;
+2. een zin met 'eerst … daarna … tot slot', of een opsomming op één
+   regel ('1) script 2) storyboard');
+3. losse regels die met een werkwoord beginnen ('Script schrijven').
+
+Een aantal dagen achter een stap telt mee, in cijfers of woorden:
+'(2 dagen)', '3 werkdagen', 'twee dagen', '1 week'. Namen van teamleden
+die in de mail staan worden erbij genoemd. Levert geen van de drie iets
+op maar herkent hij wel waar het over gaat ('explainer', 'podcast'), dan
+komt dat sjabloon als beginpunt — met de melding dat het een gok is.
+
+Staat er een `ANTHROPIC_API_KEY`, dan leest het model de mail (dat snapt
+lopende tekst) en nemen de regels het over zodra dat niet lukt. De
+melding zegt welke van de twee het was.
 
 **Laten uitschrijven** (alleen met een sleutel). Je typt of plakt een
 briefing en een model schrijft het voorstel. Dit tabblad verschijnt
