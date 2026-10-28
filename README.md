@@ -58,7 +58,16 @@ De knop verschijnt alleen als deze server-side omgevingsvariabele in
 Vercel staat:
 
 - `ANTHROPIC_API_KEY`
-- optioneel `ANTHROPIC_MODEL` (standaard `claude-sonnet-5-5`)
+- optioneel `ANTHROPIC_MODEL` (standaard `claude-opus-5-5`)
+
+Welk model je kiest bepaalt wat een voorstel kost. Ruwweg per voorstel,
+bij een briefing van een paar zinnen:
+
+| `ANTHROPIC_MODEL` | per voorstel | $5 aan tegoed |
+| --- | --- | --- |
+| `claude-haiku-5-5` | ongeveer een tiende cent | duizenden voorstellen |
+| `claude-sonnet-5-5` | ongeveer 1 cent | honderden voorstellen |
+| `claude-opus-5-5` (standaard) | ongeveer 2 cent | honderden voorstellen |
 
 De sleutel blijft op de server: de browser praat met `/api/ai/plan`, nooit
 rechtstreeks met de API. De route vraagt een ingelogde gebruiker en
