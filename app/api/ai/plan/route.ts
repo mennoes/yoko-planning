@@ -20,7 +20,10 @@ import { normalizePlan, planSystemPrompt, PLAN_TOOL, type PlanContext } from '@/
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5'
+// Welk model het voorstel schrijft. Te kiezen met ANTHROPIC_MODEL;
+// claude-haiku-5-5 is veruit het goedkoopst voor dit soort werk,
+// claude-opus-5-5 het sterkst.
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5'
 const API = 'https://api.anthropic.com/v1/messages'
 /** Een briefing mag lang zijn, maar een boek plakken heeft geen zin. */
 const MAX_PROMPT = 8000
@@ -78,10 +81,17 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2000,
+        // De huidige modellen denken eerst na, en dat telt mee in de
+        // uitvoer. Te krap betekent een afgekapt voorstel.
+        max_tokens: 8000,
+        // Dit is invulwerk, geen puzzel: lage denkdiepte scheelt tijd en
+        // geld zonder dat het voorstel er minder van wordt.
+        output_config: { effort: 'low' },
         system: planSystemPrompt(context),
         tools: [PLAN_TOOL],
-        tool_choice: { type: 'tool', name: PLAN_TOOL.name },
+        // Géén tool_choice die het model dwingt: dat geeft op de huidige
+        // modellen een 400. De opdracht zegt dat het de tool moet
+        // aanroepen, en gebeurt dat niet, dan melden we dat gewoon.
         messages: [{ role: 'user', content: prompt }],
       }),
       // Een traag antwoord is vervelend, een hangende request erger.
