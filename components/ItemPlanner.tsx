@@ -220,6 +220,7 @@ export function ItemPlanner({ boardId, boardName, groups, startGroupId, onCreate
   const [mailOpen, setMailOpen] = useState(false)
   const [mail, setMail] = useState('')
   const [mailUitleg, setMailUitleg] = useState('')
+  const [mailBezig, setMailBezig] = useState(false)
 
   useEffect(() => { veld.current?.focus() }, [])
   useEffect(() => {
@@ -283,8 +284,8 @@ export function ItemPlanner({ boardId, boardName, groups, startGroupId, onCreate
   /** Een geplakte mail uitpluizen: onderwerp, datum en het lijstje dat
    *  erin staat. Vult de velden hierboven in; wat er niet in stond laat
    *  hij met rust. */
-  function leesMail() {
-    const uit = mailNaarStappen(mail)
+  /** Zet een uitkomst in de velden en vertel wat er gevonden is. */
+  function vulVelden(uit: { naam: string | null; deadline: string | null; stappen: Array<{ naam: string; dagen: number }> }, hoe: string, extra = '') {
     const gevonden: string[] = []
     if (uit.naam && !klusNaam.trim()) { setKlusNaam(uit.naam); gevonden.push('een naam') }
     if (uit.deadline) { setDeadline(uit.deadline); gevonden.push('een datum') }
@@ -293,9 +294,77 @@ export function ItemPlanner({ boardId, boardName, groups, startGroupId, onCreate
       gevonden.push(`${uit.stappen.length} stappen`)
     }
     setMailUitleg(gevonden.length > 0
-      ? `Uit de mail gehaald: ${gevonden.join(', ')}. Loop het even na.`
-      : 'Hier kon ik niets uit halen. Een lijstje met streepjes ervoor leest hij wel.')
+      ? `${hoe}: ${gevonden.join(', ')}.${extra} Loop het even na.`
+      : 'Hier kon ik niets uit halen. Zet de stappen er zelf in, of plak een mail met een lijstje.')
     if (gevonden.length > 0) setMailOpen(false)
+    return gevonden.length > 0
+  }
+
+  /**
+   * De mail uitpluizen.
+   *
+   * Staat er een sleutel op de server, dan leest het model de mail —
+   * dat snapt lopende tekst. Lukt dat niet (geen sleutel, geen
+   * verbinding, geen bruikbaar antwoord), dan doen de regels in
+   * lib/mailNaarStappen het werk, en zeggen we welke van de twee het
+   * was.
+   */
+  async function leesMail() {
+    if (!mail.trim() || mailBezig) return
+    setMailBezig(true); setMailUitleg('')
+    try {
+      if (aiAan) {
+        const gelukt = await leesMailMetModel()
+        if (gelukt) return
+      }
+      const uit = mailNaarStappen(mail, { leden: members.map(lid => ({ name: lid.name })) })
+      const namen = uit.ownerNamen.length > 0 ? ` Genoemd: ${uit.ownerNamen.join(', ')}.` : ''
+      const zoals = uit.bron === 'sjabloon'
+        ? 'Geen stappen gevonden, maar dit lijkt op een bekend soort klus — als beginpunt'
+        : 'Uit de mail gelezen'
+      vulVelden(uit, zoals, namen)
+    } finally {
+      setMailBezig(false)
+    }
+  }
+
+  /** De mail door het model laten lezen. Geeft terug of dat iets
+   *  opleverde; zo niet, dan nemen de regels het over. */
+  async function leesMailMetModel(): Promise<boolean> {
+    try {
+      const sessie = await supabase?.auth.getSession().catch(() => null)
+      const token = sessie?.data.session?.access_token
+      const res = await fetch('/api/ai/plan', {
+        method: 'POST',
+        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Hieronder staat een mail. Maak er een planning van.\n\n${mail}`,
+          context: {
+            today: new Date().toISOString().slice(0, 10),
+            boardName,
+            groupNames: groups.map(groep => groep.name),
+            members: members.map(m => ({ id: m.id, name: m.name })),
+          },
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.ok) return false
+      const voorstel = data.plan as AiItemPlan
+      // Het model levert datums per stap; hier hebben we werkdagen
+      // nodig, want de velden hierboven rekenen terug vanaf de deadline.
+      const stappen = voorstel.subitems.map(sub => ({
+        naam: sub.name,
+        dagen: Math.max(1, Math.round((sub.estHours || UREN_PER_DAG) / UREN_PER_DAG)),
+      }))
+      return vulVelden(
+        { naam: voorstel.name, deadline: voorstel.endDate, stappen },
+        'Het model las de mail',
+        voorstel.ownerIds.length > 0
+          ? ` Genoemd: ${voorstel.ownerIds.map(id => naamVan(id)).join(', ')}.`
+          : '')
+    } catch {
+      return false
+    }
   }
 
   function maakSjabloonVoorstel() {
@@ -428,15 +497,17 @@ export function ItemPlanner({ boardId, boardName, groups, startGroupId, onCreate
                     style={{ ...vak, marginTop: 4, resize: 'vertical', fontSize: 13, lineHeight: 1.45 }} />
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                  <button onClick={leesMail} disabled={!mail.trim()}
+                  <button onClick={() => void leesMail()} disabled={!mail.trim() || mailBezig}
                     style={{ border: 0, borderRadius: 8, padding: '7px 12px', fontSize: 12.5, fontWeight: 700,
-                      background: mail.trim() ? 'var(--accent)' : 'var(--bg-hover)',
-                      color: mail.trim() ? '#171717' : 'var(--text-muted)',
-                      cursor: mail.trim() ? 'pointer' : 'default' }}>
-                    Haal de stappen eruit
+                      background: mail.trim() && !mailBezig ? 'var(--accent)' : 'var(--bg-hover)',
+                      color: mail.trim() && !mailBezig ? '#171717' : 'var(--text-muted)',
+                      cursor: mail.trim() && !mailBezig ? 'pointer' : 'default' }}>
+                    {mailBezig ? 'Bezig…' : 'Haal de stappen eruit'}
                   </button>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Leest het onderwerp, een datum en het lijstje — meer niet.
+                    {aiAan
+                      ? 'Het model leest de mail; lukt dat niet, dan zoekt hij zelf naar een lijstje en een datum.'
+                      : 'Zoekt het onderwerp, een datum en de stappen — een lijstje, een opsomming of regels met een werkwoord.'}
                   </span>
                 </div>
               </div>

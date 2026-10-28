@@ -189,6 +189,88 @@ test('een geplakte mail vult de naam, de datum en de stappen', { skip: skip ?? f
   assert.equal(await page.getByLabel('Af op').first().inputValue(), '11-12-2026')
   const stappen = await page.getByLabel('Stappen').inputValue()
   assert.equal(stappen, 'Script schrijven · 2d\nStoryboard · 1d\nAnimatie maken · 5d')
-  assert.match(await page.getByRole('status').innerText(), /Uit de mail gehaald/)
+  const uitleg = await page.getByRole('status').innerText()
+  assert.match(uitleg, /Uit de mail gelezen/)
+  // Namen uit de mail worden erbij genoemd, zodat je weet wie je nog
+  // moet toewijzen.
+  assert.match(uitleg, /Menno/)
+  await page.close()
+})
+
+test('zonder lijstje leest hij de zinnen, en noemt het sjabloon als er niets staat', { skip: skip ?? false }, async () => {
+  const page = await openPlanner()
+  await page.getByRole('button', { name: 'Uit een mail halen' }).click()
+  await page.getByLabel('Plak de mail').fill(
+    'Hoi, we willen een explainer. We beginnen met het script schrijven, '
+    + 'daarna storyboard maken en tot slot animeren (3 dagen). Graag voor 11 december 2026.')
+  await page.getByRole('button', { name: 'Haal de stappen eruit' }).click()
+  await page.waitForTimeout(400)
+
+  assert.equal(await page.getByLabel('Stappen').inputValue(),
+    'Script schrijven · 1d\nStoryboard maken · 1d\nAnimeren · 3d')
+  assert.equal(await page.getByLabel('Af op').first().inputValue(), '11-12-2026')
+  await page.close()
+})
+
+test('staat er niets bruikbaars in, dan komt het sjabloon als beginpunt', { skip: skip ?? false }, async () => {
+  const page = await openPlanner()
+  await page.getByRole('button', { name: 'Uit een mail halen' }).click()
+  await page.getByLabel('Plak de mail').fill(
+    'Hoi Menno, kunnen jullie een explainer voor ons maken? Uiterlijk 11 december 2026.')
+  await page.getByRole('button', { name: 'Haal de stappen eruit' }).click()
+  await page.waitForTimeout(400)
+
+  const uitleg = await page.getByRole('status').innerText()
+  assert.match(uitleg, /beginpunt/i, 'het zegt erbij dat dit een gok is')
+  assert.match(await page.getByLabel('Stappen').inputValue(), /Storyboard/)
+  await page.close()
+})
+
+test('met een sleutel leest het model de mail, en vallen we anders terug op de regels', { skip: skip ?? false }, async () => {
+  const page = await browser.newPage({ viewport: { width: 1500, height: 1100 }, colorScheme: 'light' })
+  let gevraagd = 0
+  await page.route('**/api/ai/plan', async route => {
+    if (route.request().method() === 'GET') { await route.fulfill({ json: { available: true } }); return }
+    gevraagd++
+    // Eerste poging: het model antwoordt. Tweede: het gaat mis, en dan
+    // horen de regels het over te nemen.
+    if (gevraagd === 1) {
+      await route.fulfill({ json: { ok: true, plan: {
+        name: 'Explainer zonnepanelen', groupName: null,
+        startDate: '2026-12-01', endDate: '2026-12-11', estHours: 40, ownerIds: [], notes: null,
+        subitems: [
+          { name: 'Research', startDate: null, endDate: null, estHours: 8, ownerIds: [] },
+          { name: 'Animatie', startDate: null, endDate: null, estHours: 24, ownerIds: [] },
+        ],
+      } } })
+      return
+    }
+    await route.fulfill({ status: 502, json: { ok: false, error: 'model_error' } })
+  })
+  await page.addInitScript(board => {
+    localStorage.setItem('yoko-profile', JSON.stringify({ memberId: 'menno', name: 'Menno', color: '#579bfc', photo: null }))
+    localStorage.setItem('yoko-board-yoko', board)
+  }, JSON.stringify(boardFixture()))
+  await page.goto(BASE_URL + '/projects/yoko', { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-item-id]')
+  await page.getByRole('button', { name: /Item aanmaken/ }).first().click()
+  await page.waitForTimeout(400)
+
+  const mail = 'Hoi, graag een explainer. Uiterlijk 11 december 2026.\n- Script schrijven (2 dagen)'
+  await page.getByRole('button', { name: 'Uit een mail halen' }).click()
+  await page.getByLabel('Plak de mail').fill(mail)
+  await page.getByRole('button', { name: 'Haal de stappen eruit' }).click()
+  await page.waitForTimeout(800)
+
+  assert.match(await page.getByRole('status').innerText(), /Het model las de mail/)
+  // Uren van het model worden werkdagen in het stappenveld.
+  assert.equal(await page.getByLabel('Stappen').inputValue(), 'Research · 1d\nAnimatie · 3d')
+
+  // Nog een keer, nu met een fout uit de route: de regels nemen het over.
+  await page.getByRole('button', { name: 'Uit een mail halen' }).click()
+  await page.getByRole('button', { name: 'Haal de stappen eruit' }).click()
+  await page.waitForTimeout(800)
+  assert.match(await page.getByRole('status').innerText(), /Uit de mail gelezen/)
+  assert.equal(await page.getByLabel('Stappen').inputValue(), 'Script schrijven · 2d')
   await page.close()
 })
