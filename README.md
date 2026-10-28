@@ -46,16 +46,23 @@ Voer `supabase/0038_login_devices.sql` eenmalig uit en configureer deze server-s
 
 Na iedere geldige login registreert de server de browser. Een onbekende browser ontvangt één waarschuwing op het e-mailadres van de ingelogde gebruiker. IP-adressen worden alleen in die waarschuwing gebruikt en niet opgeslagen.
 
-## Item laten uitschrijven (AI)
+## Klus uitzetten
 
-Op een agenda staat een knop **✨ Item uitschrijven**: je typt wat er moet
-gebeuren en krijgt een voorstel voor één item met subitems, datums, uren
-en eigenaren. Je ziet het voorstel eerst; pas een klik op *Aanmaken* zet
-het op het bord, langs dezelfde weg als een item dat je met de hand
-maakt.
+Op een agenda staat een knop **✨ Klus uitzetten**, met twee manieren om
+een item met subitems te maken. Je ziet altijd eerst een voorstel; pas
+een klik op *Aanmaken* zet het op het bord, langs dezelfde weg als een
+item dat je met de hand maakt.
 
-De knop verschijnt alleen als deze server-side omgevingsvariabele in
-Vercel staat:
+**Uit een sjabloon** (altijd beschikbaar, gratis, niets gaat de deur
+uit). Kies het soort klus, pas de stappen aan — één per regel, met het
+aantal werkdagen erachter — en geef de datum waarop het af moet. De
+werkdagen worden teruggeteld vanaf die datum, weekenden overgeslagen,
+acht uur per dag. De sjablonen staan in `lib/sjabloonPlan.ts`; ze zijn
+een beginpunt dat je in het venster aanpast.
+
+**Laten uitschrijven** (alleen met een sleutel). Je typt of plakt een
+briefing en een model schrijft het voorstel. Dit tabblad verschijnt
+alleen als deze server-side omgevingsvariabele in Vercel staat:
 
 - `ANTHROPIC_API_KEY`
 - optioneel `ANTHROPIC_MODEL` (standaard `claude-opus-5-5`)
@@ -71,5 +78,4 @@ bij een briefing van een paar zinnen:
 
 De sleutel blijft op de server: de browser praat met `/api/ai/plan`, nooit
 rechtstreeks met de API. De route vraagt een ingelogde gebruiker en
-schrijft zelf niets naar een bord. Zonder sleutel antwoordt hij dat de
-planner uitstaat en blijft de knop weg.
+schrijft zelf niets naar een bord.

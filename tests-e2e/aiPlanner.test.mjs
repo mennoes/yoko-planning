@@ -54,18 +54,23 @@ async function openAgenda({ available = true } = {}) {
   return page
 }
 
-test('zonder sleutel op de server is er geen knop', { skip: skip ?? false }, async () => {
+test('zonder sleutel op de server is er geen tabblad om te laten uitschrijven', { skip: skip ?? false }, async () => {
   const page = await openAgenda({ available: false })
-  assert.equal(await page.getByRole('button', { name: /Item uitschrijven/ }).count(), 0)
+  // De knop blijft: het sjabloon werkt altijd, ook zonder sleutel.
+  await page.getByRole('button', { name: /Klus uitzetten/ }).first().click()
+  await page.waitForTimeout(400)
+  assert.equal(await page.getByRole('tab', { name: 'Laten uitschrijven' }).count(), 0)
   await page.close()
 })
 
 test('een voorstel is eerst te zien en komt pas na Aanmaken op het bord', { skip: skip ?? false }, async () => {
   const page = await openAgenda()
-  await page.getByRole('button', { name: /Item uitschrijven/ }).first().click()
+  await page.getByRole('button', { name: /Klus uitzetten/ }).first().click()
   await page.waitForTimeout(400)
+  await page.getByRole('tab', { name: 'Laten uitschrijven' }).click()
+  await page.waitForTimeout(300)
 
-  await page.getByRole('dialog', { name: 'Item laten uitschrijven' })
+  await page.getByRole('dialog', { name: 'Klus uitzetten' })
     .getByRole('textbox').first()
     .fill('Explainer van 2 minuten voor NKO, aanleveren over twee weken.')
   await page.getByRole('button', { name: 'Maak een voorstel' }).click()
