@@ -993,6 +993,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
         <span style={{ flex: 1, overflow: 'hidden', paddingLeft: 6, paddingRight: 4, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', paddingTop: scaleByHours ? 2 : 0,
           // Ruimte vrijhouden voor de strook met gezichten eronder.
           paddingBottom: gezichten.length > 0 ? GEZICHT + 3 : 0,
+          // Witte letters op een lichte balk — de kleur van een collega,
+          // een afgezwakte week — waren bijna niet te lezen. Een zachte
+          // schaduw eronder houdt ze leesbaar op elke achtergrond.
+          textShadow: '0 1px 2px rgba(0,0,0,0.45)',
           minWidth: 0, marginLeft: titleShift }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             {isVrij && <span style={{ flexShrink: 0, fontSize: small ? 12 : 14, lineHeight: 1 }} aria-label="Vrij">🌴</span>}
@@ -1018,7 +1022,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
                 want dat wéét je al aan de kleur/rij; welk project 't
                 subitem bij hoort is de nuttigere context).
               - Anders → agenda-naam (bord van herkomst). */}
-          {scaleByHours && !small && barH >= 26 && (
+          {/* Alleen als er ook echt ruimte is: staan er gezichten
+              onderlangs, dan gaat daar 18px af en liep deze regel eerder
+              dwars achter die gezichten langs. */}
+          {scaleByHours && !small && barH >= (gezichten.length > 0 ? 44 : 26) && (
             project.parentName && project.parentName !== project.name ? (
               <span style={{
                 fontSize: 9.5, fontWeight: 500,
