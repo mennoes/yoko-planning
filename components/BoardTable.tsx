@@ -45,6 +45,7 @@ import { itemDatums, subitemsGevenPeriode } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
 import { PersonalCompletionSection } from './PersonalCompletionSection'
+import { AiItemPlanner, useAiPlannerAvailable } from './AiItemPlanner'
 import { useCompletedOwners } from './useCompletedOwners'
 import type { CompletionTarget } from '@/lib/personalCompletion'
 import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
@@ -5084,6 +5085,18 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     try { localStorage.setItem(storageKey, JSON.stringify(updated)) } catch { /* ignore */ }
   }
 
+  // De planner schrijft zelf niets: hij levert een item af dat hier op
+  // dezelfde manier op het bord komt als een item dat je met de hand
+  // maakt, inclusief sync en regel in de geschiedenis.
+  const aiBeschikbaar = useAiPlannerAvailable()
+  const [aiOpen, setAiOpen] = useState(false)
+  function maakAiItem(groupId: string, item: BoardItem) {
+    onChange(groups.map(groep => groep.id === groupId
+      ? { ...groep, items: [...groep.items, item] }
+      : groep))
+    void logItemCreated(item.id, item.name, boardId)
+  }
+
   function addGroup() {
     // Append aan het einde — saveBoard schrijft position = array-index,
     // dus de nieuwe groep krijgt de hoogste position en verschijnt
@@ -5802,6 +5815,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               ↓ CSV
             </button>
           )}
+          {/* Alleen zichtbaar als er een sleutel op de server staat; zonder
+              die sleutel heeft de knop niets om aan te vragen. */}
+          {!isMobile && aiBeschikbaar && groups.length > 0 && (
+            <button onClick={() => setAiOpen(true)} className="yoko-control-button"
+              title="Vertel wat er moet gebeuren; je krijgt een voorstel met subitems, datums en uren"
+              style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              ✨ Item uitschrijven
+            </button>
+          )}
           {!isMobile && (
             <button onClick={addGroup} className="yoko-primary-button"
               style={{ padding: '7px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
@@ -5995,6 +6017,15 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         groups={groups}
         open={recoveryOpen}
         onClose={() => setRecoveryOpen(false)} />
+
+      {aiOpen && (
+        <AiItemPlanner
+          boardId={boardId}
+          boardName={title}
+          groups={groups}
+          onCreate={maakAiItem}
+          onClose={() => setAiOpen(false)} />
+      )}
 
       {dedupOpen && (
         <DedupModal groups={groups} onClose={() => setDedupOpen(false)}

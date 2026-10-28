@@ -45,3 +45,22 @@ Voer `supabase/0038_login_devices.sql` eenmalig uit en configureer deze server-s
 - optioneel `NEXT_PUBLIC_APP_URL` (de productie-URL, zonder slash aan het einde)
 
 Na iedere geldige login registreert de server de browser. Een onbekende browser ontvangt één waarschuwing op het e-mailadres van de ingelogde gebruiker. IP-adressen worden alleen in die waarschuwing gebruikt en niet opgeslagen.
+
+## Item laten uitschrijven (AI)
+
+Op een agenda staat een knop **✨ Item uitschrijven**: je typt wat er moet
+gebeuren en krijgt een voorstel voor één item met subitems, datums, uren
+en eigenaren. Je ziet het voorstel eerst; pas een klik op *Aanmaken* zet
+het op het bord, langs dezelfde weg als een item dat je met de hand
+maakt.
+
+De knop verschijnt alleen als deze server-side omgevingsvariabele in
+Vercel staat:
+
+- `ANTHROPIC_API_KEY`
+- optioneel `ANTHROPIC_MODEL` (standaard `claude-sonnet-5-5`)
+
+De sleutel blijft op de server: de browser praat met `/api/ai/plan`, nooit
+rechtstreeks met de API. De route vraagt een ingelogde gebruiker en
+schrijft zelf niets naar een bord. Zonder sleutel antwoordt hij dat de
+planner uitstaat en blijft de knop weg.
