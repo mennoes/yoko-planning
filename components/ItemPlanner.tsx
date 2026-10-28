@@ -1,11 +1,16 @@
 'use client'
 
-// Vertel wat er moet gebeuren, krijg een item met subitems terug.
+// Een klus uitzetten zonder alles met de hand te tikken.
 //
-// Het voorstel komt van de server (/api/ai/plan) en blijft een voorstel:
-// je ziet eerst wat er zou komen te staan, kunt subitems weggooien en de
-// groep kiezen, en pas op Aanmaken gaat het naar het bord — langs
-// dezelfde weg als een item dat je met de hand maakt.
+// Twee manieren, hetzelfde venster: uit een sjabloon (stappen die je
+// zelf aanpast, werkdagen teruggeteld vanaf de deadline — gratis en
+// meteen klaar) of laten uitschrijven door een model, als daar een
+// sleutel voor staat.
+//
+// Beide leveren een vóórstel: je ziet eerst wat er zou komen te staan,
+// kunt subitems weggooien en de groep kiezen, en pas op Aanmaken gaat
+// het naar het bord — langs dezelfde weg als een item dat je met de
+// hand maakt.
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -14,6 +19,8 @@ import { useTeam } from './TeamContext'
 import { UserAvatar } from './UserAvatar'
 import { naarNl } from '@/lib/datumInvoer'
 import { planToBoardItem, type AiItemPlan } from '@/lib/aiPlan'
+import { planUitSjabloon, stappenNaarTekst, tekstNaarStappen, SJABLONEN } from '@/lib/sjabloonPlan'
+import { DatumVeld } from './DatumVeld'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
 
 /** Is de planner aangezet op deze installatie? Zonder sleutel op de
@@ -37,7 +44,7 @@ const vak: React.CSSProperties = {
   boxSizing: 'border-box', width: '100%',
 }
 
-export function AiItemPlanner({ boardId, boardName, groups, onCreate, onClose }: {
+export function ItemPlanner({ boardId, boardName, groups, onCreate, onClose }: {
   boardId: string
   boardName: string
   groups: BoardGroup[]
@@ -46,12 +53,21 @@ export function AiItemPlanner({ boardId, boardName, groups, onCreate, onClose }:
   onClose: () => void
 }) {
   const { members } = useTeam()
+  const aiAan = useAiPlannerAvailable()
+  // Zonder sleutel bestaat het AI-tabblad niet; dan is het sjabloon het
+  // hele venster.
+  const [tab, setTab] = useState<'sjabloon' | 'ai'>('sjabloon')
   const [prompt, setPrompt] = useState('')
   const [bezig, setBezig] = useState(false)
   const [fout, setFout] = useState('')
   const [plan, setPlan] = useState<AiItemPlan | null>(null)
   const [groupId, setGroupId] = useState(groups[0]?.id ?? '')
   const veld = useRef<HTMLTextAreaElement>(null)
+
+  const [klusNaam, setKlusNaam] = useState('')
+  const [sjabloonId, setSjabloonId] = useState(SJABLONEN[0].id)
+  const [stappenTekst, setStappenTekst] = useState(() => stappenNaarTekst(SJABLONEN[0].stappen))
+  const [deadline, setDeadline] = useState<string | null>(null)
 
   useEffect(() => { veld.current?.focus() }, [])
   useEffect(() => {
@@ -106,6 +122,23 @@ export function AiItemPlanner({ boardId, boardName, groups, onCreate, onClose }:
     }
   }
 
+  function kiesSjabloon(id: string) {
+    setSjabloonId(id)
+    const sjabloon = SJABLONEN.find(entry => entry.id === id)
+    if (sjabloon) setStappenTekst(stappenNaarTekst(sjabloon.stappen))
+  }
+
+  function maakSjabloonVoorstel() {
+    setFout(''); setPlan(null)
+    const uitkomst = planUitSjabloon({
+      naam: klusNaam,
+      stappen: tekstNaarStappen(stappenTekst),
+      deadline: deadline ?? '',
+    })
+    if (!uitkomst.ok) { setFout(uitkomst.error); return }
+    setPlan(uitkomst.plan)
+  }
+
   function maakAan() {
     if (!plan || !groupId) return
     let teller = Date.now()
@@ -121,17 +154,83 @@ export function AiItemPlanner({ boardId, boardName, groups, onCreate, onClose }:
   return createPortal(
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 9400 }} />
-      <div role="dialog" aria-label="Item laten uitschrijven" style={{
+      <div role="dialog" aria-label="Klus uitzetten" style={{
         position: 'fixed', top: '8vh', left: '50%', transform: 'translateX(-50%)',
         width: 'min(620px, 94vw)', maxHeight: '84vh', overflowY: 'auto', zIndex: 9401,
         background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 14,
         boxShadow: '0 24px 60px rgba(0,0,0,0.38)', padding: 20,
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
-          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: 'var(--text-primary)' }}>Item laten uitschrijven</h2>
+          <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: 'var(--text-primary)' }}>Klus uitzetten</h2>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>op {boardName}</span>
           <button onClick={onClose} aria-label="Sluiten" style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, cursor: 'pointer' }}>×</button>
         </div>
+        {/* Alleen een keuze als er iets te kiezen valt. */}
+        {aiAan && (
+          <div role="tablist" aria-label="Manier van uitschrijven"
+            style={{ display: 'flex', gap: 4, margin: '10px 0 12px', padding: 3, borderRadius: 9, background: 'var(--bg-hover)', width: 'fit-content' }}>
+            {([['sjabloon', 'Uit een sjabloon'], ['ai', 'Laten uitschrijven']] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={tab === id}
+                onClick={() => { setTab(id); setFout(''); setPlan(null) }}
+                style={{ border: 0, borderRadius: 7, padding: '6px 12px', fontSize: 12.5, fontWeight: 650, cursor: 'pointer',
+                  background: tab === id ? 'var(--bg-card)' : 'transparent',
+                  color: tab === id ? 'var(--text-primary)' : 'var(--text-muted)',
+                  boxShadow: tab === id ? '0 1px 3px rgba(0,0,0,0.18)' : 'none' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'sjabloon' ? (
+          <>
+            <p style={{ margin: '0 0 12px', fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              Kies het soort klus, pas de stappen aan en zeg wanneer het af moet. De werkdagen
+              worden teruggeteld vanaf die datum — weekenden slaat hij over.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 10 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Naam van de klus
+                <input value={klusNaam} onChange={event => setKlusNaam(event.target.value)}
+                  aria-label="Naam van de klus" placeholder="NKO Explainer"
+                  style={{ ...vak, marginTop: 4 }} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Af op
+                <div style={{ marginTop: 4 }}>
+                  <DatumVeld value={deadline} onChange={setDeadline} ariaLabel="Af op"
+                    style={{ ...vak, width: '100%' }} />
+                </div>
+              </label>
+            </div>
+
+            <label style={{ display: 'block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+              Soort klus
+              <select value={sjabloonId} onChange={event => kiesSjabloon(event.target.value)} aria-label="Soort klus"
+                style={{ ...vak, marginTop: 4 }}>
+                {SJABLONEN.map(sjabloon => <option key={sjabloon.id} value={sjabloon.id}>{sjabloon.naam}</option>)}
+              </select>
+            </label>
+
+            <label style={{ display: 'block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+              Stappen — één per regel, met het aantal werkdagen erachter
+              <textarea value={stappenTekst} onChange={event => setStappenTekst(event.target.value)}
+                aria-label="Stappen" rows={7}
+                style={{ ...vak, marginTop: 4, resize: 'vertical', fontSize: 13.5, lineHeight: 1.5, fontVariantNumeric: 'tabular-nums' }} />
+            </label>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <button onClick={maakSjabloonVoorstel}
+                style={{ border: 0, borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13,
+                  background: 'var(--accent)', color: '#171717', cursor: 'pointer' }}>
+                {plan ? 'Opnieuw uitzetten' : 'Zet de stappen uit'}
+              </button>
+              <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Gratis, geen model — puur werkdagen tellen.</span>
+            </div>
+          </>
+        ) : (
+          <>
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
           Plak een briefing of vertel in een paar zinnen wat er moet gebeuren. Je krijgt een
           voorstel met subitems, datums en uren — pas als je op Aanmaken klikt komt het op het bord.
@@ -152,6 +251,8 @@ export function AiItemPlanner({ boardId, boardName, groups, onCreate, onClose }:
           </button>
           <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>⌘/Ctrl + Enter</span>
         </div>
+          </>
+        )}
 
         {fout && <p role="alert" style={{ marginTop: 12, marginBottom: 0, fontSize: 12.5, color: 'var(--red, #e2445c)' }}>{fout}</p>}
 

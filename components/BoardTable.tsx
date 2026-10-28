@@ -45,7 +45,7 @@ import { itemDatums, subitemsGevenPeriode } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
 import { BoardRecoveryDrawer } from './BoardRecoveryDrawer'
 import { PersonalCompletionSection } from './PersonalCompletionSection'
-import { AiItemPlanner, useAiPlannerAvailable } from './AiItemPlanner'
+import { ItemPlanner } from './ItemPlanner'
 import { useCompletedOwners } from './useCompletedOwners'
 import type { CompletionTarget } from '@/lib/personalCompletion'
 import { inferWeekPlanning, isoWeekNumber } from '@/lib/weekPlanning'
@@ -5088,7 +5088,6 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // De planner schrijft zelf niets: hij levert een item af dat hier op
   // dezelfde manier op het bord komt als een item dat je met de hand
   // maakt, inclusief sync en regel in de geschiedenis.
-  const aiBeschikbaar = useAiPlannerAvailable()
   const [aiOpen, setAiOpen] = useState(false)
   function maakAiItem(groupId: string, item: BoardItem) {
     onChange(groups.map(groep => groep.id === groupId
@@ -5815,13 +5814,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
               ↓ CSV
             </button>
           )}
-          {/* Alleen zichtbaar als er een sleutel op de server staat; zonder
-              die sleutel heeft de knop niets om aan te vragen. */}
-          {!isMobile && aiBeschikbaar && groups.length > 0 && (
+          {/* Het sjabloon werkt altijd; laten uitschrijven door een model
+              verschijnt als tabblad zodra daar een sleutel voor staat. */}
+          {!isMobile && groups.length > 0 && (
             <button onClick={() => setAiOpen(true)} className="yoko-control-button"
-              title="Vertel wat er moet gebeuren; je krijgt een voorstel met subitems, datums en uren"
+              title="Stappen uitzetten vanaf een deadline, of een briefing laten uitschrijven"
               style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-              ✨ Item uitschrijven
+              ✨ Klus uitzetten
             </button>
           )}
           {!isMobile && (
@@ -6019,7 +6018,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         onClose={() => setRecoveryOpen(false)} />
 
       {aiOpen && (
-        <AiItemPlanner
+        <ItemPlanner
           boardId={boardId}
           boardName={title}
           groups={groups}
