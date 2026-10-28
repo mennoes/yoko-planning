@@ -45,6 +45,31 @@ export function completionState(threads: CommentThread[], target: CompletionTarg
   return latest
 }
 
+/**
+ * Ben jij de laatste die zijn eigen deel afvinkt?
+ *
+ * Zo ja, dan is de klus klaar en hoort het item dat ook te zijn. Zonder
+ * die regel bleef een meeting waar iedereen al had afgevinkt op
+ * 'Working on...' staan en kwam 'ie telkens terug in de week van
+ * iedereen.
+ *
+ * Losse functie omdat het een regel is, geen knop: zo is 'ie te lezen en
+ * te testen zonder scherm.
+ */
+export function isLaatsteVinkje(options: {
+  /** Iedereen die aan het item staat, zonder 'unassigned'. */
+  owners: string[]
+  memberId: string
+  nieuweStatus: PersonalTaskStatus
+  /** Is deze collega al klaar? */
+  klaar: (memberId: string) => boolean
+}): boolean {
+  const { owners, memberId, nieuweStatus, klaar } = options
+  if (nieuweStatus !== 'Done') return false
+  if (owners.length < 2 || !owners.includes(memberId)) return false
+  return owners.filter(id => id !== memberId).every(klaar)
+}
+
 export function completionReply(eventId: string, actor: { memberId: string; name: string }, target: CompletionTarget,
   done: boolean, taskName: string, recipients: Array<{ id: string; name: string }>, createdAt: string,
   status?: PersonalTaskStatus, reopened = !done): CommentReply {

@@ -209,3 +209,34 @@ test('legacy completion records and To do boolean toggles remain compatible', as
   assert.equal(rules.personalTaskStatus(reopened.comment.thread[0].personalCompletion), 'Not started')
   assert.match(done.comment.thread[0].body, /afgerond/)
 })
+
+// De laatste die afvinkt sluit de klus.
+//
+// Bij een meeting met z'n tweeën stond 2/2 klaar, maar het item zelf
+// bleef op 'Working on...' en kwam telkens terug in ieders week.
+test('de laatste die zijn eigen deel afvinkt sluit het item', () => {
+  const owners = ['menno', 'odette']
+  const klaar = new Set(['odette'])
+  assert.equal(rules.isLaatsteVinkje({
+    owners, memberId: 'menno', nieuweStatus: 'Done', klaar: id => klaar.has(id),
+  }), true)
+})
+
+test('zolang er nog iemand bezig is blijft het item open', () => {
+  const owners = ['menno', 'odette', 'vincent']
+  const klaar = new Set(['odette'])
+  assert.equal(rules.isLaatsteVinkje({
+    owners, memberId: 'menno', nieuweStatus: 'Done', klaar: id => klaar.has(id),
+  }), false)
+})
+
+test('alleen Done sluit af, en alleen voor wie zelf meedoet', () => {
+  const owners = ['menno', 'odette']
+  const allemaal = () => true
+  // Een andere eigen status is geen afronding.
+  assert.equal(rules.isLaatsteVinkje({ owners, memberId: 'menno', nieuweStatus: 'Stuck', klaar: allemaal }), false)
+  // Wie er niet aan staat, sluit niets af.
+  assert.equal(rules.isLaatsteVinkje({ owners, memberId: 'kars', nieuweStatus: 'Done', klaar: allemaal }), false)
+  // In je eentje bestaat dit vinkje niet; dan is de gewone status genoeg.
+  assert.equal(rules.isLaatsteVinkje({ owners: ['menno'], memberId: 'menno', nieuweStatus: 'Done', klaar: allemaal }), false)
+})

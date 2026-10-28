@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useProfile } from './ProfileContext'
 import { useTeam } from './TeamContext'
 import { loadCommentsFor, newCommentId, onCommentsUpdate, saveComment, type CommentThread } from '@/lib/commentsStore'
-import { completionContext, completionState, personalTaskStatus, isPersonalTaskStatus, type PersonalTaskStatus, type CompletionTarget } from '@/lib/personalCompletion'
+import { completionContext, completionState, isLaatsteVinkje, personalTaskStatus, isPersonalTaskStatus, type PersonalTaskStatus, type CompletionTarget } from '@/lib/personalCompletion'
 import { updatePersonalCompletion } from '@/lib/personalCompletionClient'
 import { createNotification } from '@/lib/notificationsStore'
 import { handoffCommentBody } from '@/lib/handoff'
@@ -26,6 +26,9 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
   const [error, setError] = useState('')
   const [retryNotification, setRetryNotification] = useState<PersonalTaskStatus | null>(null)
   const [handoffOpen, setHandoffOpen] = useState(false)
+  // Het item is zojuist dichtgegaan omdat jij de laatste was. Alleen om
+  // dat één keer te melden; daarna vertelt de gezamenlijke status het.
+  const [vanzelfAfgerond, setVanzelfAfgerond] = useState(false)
   const [handoffNote, setHandoffNote] = useState('')
   const [nextOwnerId, setNextOwnerId] = useState('')
   const context = completionContext(target)
@@ -43,9 +46,20 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
     if (!profile?.memberId || pending || allDone || !isPersonalTaskStatus(value)) return
     setPending(true); setError('')
     try {
+      // Vóór het opslaan vastleggen hoe de anderen ervoor stonden; daarna
+      // is de lijst alweer aan het verversen. Overdragen heeft geen zin
+      // meer als jij de laatste was.
+      const sluiten = !!onAllDone && isLaatsteVinkje({
+        owners, memberId: profile.memberId, nieuweStatus: value,
+        klaar: id => !!completionState(threads, target, id)?.done,
+      })
       const result = await updatePersonalCompletion(target, profile.memberId, value === 'Done', value)
       setRetryNotification(result.notificationError ? value : null)
-      if (value === 'Done' && !mine?.done) {
+      if (sluiten && onAllDone) {
+        setHandoffOpen(false)
+        setVanzelfAfgerond(true)
+        onAllDone()
+      } else if (value === 'Done' && !mine?.done) {
         setHandoffNote('')
         setNextOwnerId('')
         setHandoffOpen(true)
@@ -99,7 +113,9 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
       : { fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Jouw status</span>
     <div style={{ minWidth: 0 }}>
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, minHeight: 28 }}>
-    <div style={{ minHeight: 28, ...(layout === 'field' ? { width: '100%', height: 28 } : {}) }} aria-busy={pending}>
+    {/* Niet over de volle breedte van het menu: dit is één veld, geen
+        banner. */}
+    <div style={{ minHeight: 28, maxWidth: 220, ...(layout === 'field' ? { width: 180, height: 28 } : { flex: '0 1 180px' }) }} aria-busy={pending}>
       {renderStatus(personalTaskStatus(mine), change, pending || allDone)}
     </div>
     <span title={ownerSummary} aria-label={ownerSummary} style={{ fontSize: 11, color: 'var(--text-muted)' }}>{completedCount}/{owners.length} klaar</span>
@@ -126,7 +142,11 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
         Voor iedereen afronden
       </button>
     )}
-    {allDone && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 0 }}>Het hele item staat op Done. Heropen eerst de gezamenlijke status.</p>}
+    {allDone && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 0 }}>
+      {vanzelfAfgerond
+        ? 'Iedereen was klaar, dus het item staat nu op Done.'
+        : 'Het hele item staat op Done. Heropen eerst de gezamenlijke status.'}
+    </p>}
     {error && <p role="alert" style={{ color: 'var(--red, #e2445c)', fontSize: 12 }}>{error}</p>}
     {retryNotification !== null && <p role="alert" style={{ fontSize: 12 }}>Je status is opgeslagen, maar de melding is nog niet verstuurd. <button disabled={pending} onClick={() => change(retryNotification)}>Melding opnieuw versturen</button></p>}
     {handoffOpen && <div style={{ marginTop: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 9, background: 'var(--bg-card)' }}>
