@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
-function render({ ownerIds = ['menno', 'odette'], memberId = 'menno', demo = false, done = false, status = '', personalStatus, layout = 'row' } = {}) {
+function render({ ownerIds = ['menno', 'odette'], memberId = 'menno', demo = false, done = false, status = '', personalStatus, layout = 'row', onAllDone } = {}) {
   const exports = {}
   const source = readFileSync(new URL('../components/PersonalCompletionSection.tsx', import.meta.url), 'utf8')
   const js = ts.transpileModule(source, { compilerOptions: {
@@ -31,6 +31,7 @@ function render({ ownerIds = ['menno', 'odette'], memberId = 'menno', demo = fal
   runInNewContext(js, { exports, require: id => id in mocks ? mocks[id] : require(id) })
   return renderToStaticMarkup(createElement(exports.PersonalCompletionSection, {
     target: { parentItemId: 'item' }, ownerIds, status, layout,
+    ...(onAllDone ? { onAllDone } : {}),
     renderStatus: (value, _onChange, disabled) => createElement('button', { disabled, 'aria-label': 'Status mijn taak' }, value),
   }))
 }
@@ -55,6 +56,19 @@ test('Planning and Agenda use a compact property instead of a separate card', ()
   }
   assert.match(render(), /grid-template-columns:90px minmax\(0, 1fr\)/)
   assert.match(render({ layout: 'field' }), /text-transform:uppercase/)
+})
+// De verwarring op de weekstart: je vinkt voor jezelf af, bij de rest
+// verandert niets, en nergens stond dat dat de bedoeling is.
+test('het vinkje zegt erbij dat het alleen over jou gaat', () => {
+  assert.match(render(), /alleen over jouw deel/)
+  // Zonder knop verwijst de uitleg naar de gezamenlijke status.
+  assert.match(render(), /gezamenlijke status geldt voor het hele item/)
+  // Met knop: één plek om het voor iedereen af te ronden.
+  const metKnop = render({ onAllDone: () => {} })
+  assert.match(metKnop, /Voor iedereen afronden/)
+  assert.match(metKnop, /Gebruik de knop hieronder/)
+  // Staat alles al op Done, dan heeft die knop niets meer te doen.
+  assert.doesNotMatch(render({ status: 'Done', onAllDone: () => {} }), /Voor iedereen afronden/)
 })
 test('shared personal tasks can still reopen and respect global Done', () => {
   const done = render({ done: true })
