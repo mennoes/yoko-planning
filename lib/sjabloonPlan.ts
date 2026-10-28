@@ -179,3 +179,85 @@ export function planUitSjabloon(opties: {
     },
   }
 }
+
+// ── De planning met de muis bijstellen ───────────────────────────────
+//
+// In het voorstel kun je elke stap verslepen of aan de randen uitrekken.
+// Dat rekenwerk staat hier, zodat het te lezen en te testen is zonder
+// scherm. Twee regels gelden overal: een stap begint en eindigt op een
+// werkdag, en hij is minstens één dag lang.
+
+function parse(iso: string): Date | null {
+  if (!DATUM.test(iso)) return null
+  const datum = new Date(`${iso}T00:00:00`)
+  return Number.isNaN(datum.getTime()) ? null : datum
+}
+
+function plusDagen(datum: Date, dagen: number): Date {
+  const uit = new Date(datum)
+  uit.setDate(uit.getDate() + dagen)
+  return uit
+}
+
+/** De eerstvolgende werkdag vanaf deze datum, vooruit. */
+function werkdagVooruit(datum: Date): Date {
+  const uit = new Date(datum)
+  while (isWeekend(uit)) uit.setDate(uit.getDate() + 1)
+  return uit
+}
+
+/** Hoeveel werkdagen beslaat deze periode? */
+export function werkdagenIn(startIso: string, eindIso: string): number {
+  const start = parse(startIso)
+  const eind = parse(eindIso)
+  if (!start || !eind || eind < start) return 0
+  let aantal = 0
+  for (const dag = new Date(start); dag <= eind; dag.setDate(dag.getDate() + 1)) {
+    if (!isWeekend(dag)) aantal++
+  }
+  return aantal
+}
+
+/** `aantal` werkdagen vooruit vanaf deze werkdag; 1 betekent dezelfde dag. */
+function werkdagenVooruit(start: Date, aantal: number): Date {
+  const uit = werkdagVooruit(start)
+  let over = Math.max(1, aantal) - 1
+  while (over > 0) {
+    uit.setDate(uit.getDate() + 1)
+    if (!isWeekend(uit)) over--
+  }
+  return uit
+}
+
+/** De hele stap opschuiven. Het aantal wérkdagen blijft gelijk: sleep je
+ *  een klus van twee dagen naar vrijdag, dan loopt hij door tot maandag
+ *  in plaats van het weekend in. */
+export function verplaatsStap(startIso: string, eindIso: string, dagen: number):
+  { startDate: string; endDate: string } {
+  const start = parse(startIso)
+  const eind = parse(eindIso)
+  if (!start || !eind) return { startDate: startIso, endDate: eindIso }
+  const lengte = Math.max(1, werkdagenIn(startIso, eindIso))
+  const nieuweStart = werkdagVooruit(plusDagen(start, dagen))
+  return {
+    startDate: naarIso(nieuweStart),
+    endDate: naarIso(werkdagenVooruit(nieuweStart, lengte)),
+  }
+}
+
+/** Eén kant van de stap verslepen. De andere kant blijft staan, en de
+ *  stap blijft minstens één werkdag lang. */
+export function rekStap(startIso: string, eindIso: string, kant: 'start' | 'eind', dagen: number):
+  { startDate: string; endDate: string } {
+  const start = parse(startIso)
+  const eind = parse(eindIso)
+  if (!start || !eind) return { startDate: startIso, endDate: eindIso }
+  if (kant === 'start') {
+    let nieuw = werkdagVooruit(plusDagen(start, dagen))
+    if (nieuw > eind) nieuw = werkdagTerug(eind)
+    return { startDate: naarIso(nieuw), endDate: naarIso(werkdagTerug(eind)) }
+  }
+  let nieuw = werkdagTerug(plusDagen(eind, dagen))
+  if (nieuw < start) nieuw = werkdagVooruit(start)
+  return { startDate: naarIso(werkdagVooruit(start)), endDate: naarIso(nieuw) }
+}

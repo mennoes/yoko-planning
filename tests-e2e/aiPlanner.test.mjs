@@ -57,7 +57,7 @@ async function openAgenda({ available = true } = {}) {
 test('zonder sleutel op de server is er geen tabblad om te laten uitschrijven', { skip: skip ?? false }, async () => {
   const page = await openAgenda({ available: false })
   // De knop blijft: het sjabloon werkt altijd, ook zonder sleutel.
-  await page.getByRole('button', { name: /Klus uitzetten/ }).first().click()
+  await page.getByRole('button', { name: /Item aanmaken/ }).first().click()
   await page.waitForTimeout(400)
   assert.equal(await page.getByRole('tab', { name: 'Laten uitschrijven' }).count(), 0)
   await page.close()
@@ -65,12 +65,12 @@ test('zonder sleutel op de server is er geen tabblad om te laten uitschrijven', 
 
 test('een voorstel is eerst te zien en komt pas na Aanmaken op het bord', { skip: skip ?? false }, async () => {
   const page = await openAgenda()
-  await page.getByRole('button', { name: /Klus uitzetten/ }).first().click()
+  await page.getByRole('button', { name: /Item aanmaken/ }).first().click()
   await page.waitForTimeout(400)
   await page.getByRole('tab', { name: 'Laten uitschrijven' }).click()
   await page.waitForTimeout(300)
 
-  await page.getByRole('dialog', { name: 'Klus uitzetten' })
+  await page.getByRole('dialog', { name: 'Item aanmaken' })
     .getByRole('textbox').first()
     .fill('Explainer van 2 minuten voor NKO, aanleveren over twee weken.')
   await page.getByRole('button', { name: 'Maak een voorstel' }).click()
@@ -88,7 +88,7 @@ test('een voorstel is eerst te zien en komt pas na Aanmaken op het bord', { skip
 
   // Eén subitem weglaten en dan pas aanmaken.
   await page.getByRole('button', { name: 'Animatie weglaten' }).click()
-  await page.getByRole('button', { name: 'Aanmaken' }).click()
+  await page.getByRole('button', { name: 'Aanmaken', exact: true }).click()
   await page.waitForTimeout(900)
 
   const opHetBord = await page.evaluate(() => {
