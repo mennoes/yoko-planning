@@ -3721,6 +3721,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             ownerIds={ownerIds}
             status={(rawItem?.status as string) ?? project.status ?? personalCompletion.status}
             layout="row"
+            onAllDone={() => commit({ status: 'Done' })}
             renderStatus={(value, onChange, disabled) => (
               <StatusPicker
                 value={value}

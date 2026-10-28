@@ -1432,6 +1432,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
         return <div style={{ borderLeft: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', alignSelf: 'stretch', overflow: 'hidden', flex: 1, minWidth: 0 }}>
           <StatusCell value={subitem.status} menuLabel="Status project" extraContent={parentItemId && new Set((subitem.ownerIds ?? []).filter(id => id && id !== 'unassigned')).size > 1 && !!profile?.memberId && (subitem.ownerIds ?? []).includes(profile.memberId) ? <PersonalCompletionSection
             target={{ parentItemId, subitemId: subitem.id }} ownerIds={subitem.ownerIds ?? []} status={subitem.status}
+            onAllDone={() => onUpdate({
+              status: 'Done',
+              ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
+                ? { statusOverride: 'done' as const }
+                : {}),
+            })}
             renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : null} onChange={v => onUpdate({
             status: v,
             ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_'))
@@ -2569,6 +2575,10 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
               <Cell item={effectiveItem} col={col} onUpdate={onUpdate}
                 statusExtra={col.key === 'status' && shared && !!profile?.memberId && effectiveOwners.includes(profile.memberId) ? <PersonalCompletionSection
                   target={personalTarget} ownerIds={effectiveOwners} status={effectiveItem.status}
+                  onAllDone={() => {
+                    onUpdate({ status: 'Done' })
+                    notifyOwnersOfStatusChange(effectiveItem, effectiveItem.status, 'Done')
+                  }}
                   renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} /> : undefined} />
             )}
           </div>
@@ -3161,6 +3171,10 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                   key={item.id}
                   target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
                   ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status}
+                  onAllDone={() => {
+                    onUpdate({ status: 'Done' })
+                    notifyOwnersOfStatusChange(item, item.status, 'Done')
+                  }}
                   renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} />}
               </div>
             ))}

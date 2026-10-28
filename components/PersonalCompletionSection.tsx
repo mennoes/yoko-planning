@@ -10,9 +10,13 @@ import { updatePersonalCompletion } from '@/lib/personalCompletionClient'
 import { createNotification } from '@/lib/notificationsStore'
 import { handoffCommentBody } from '@/lib/handoff'
 
-export function PersonalCompletionSection({ target, ownerIds, status, renderStatus, showMessages = false, layout = 'field' }: {
+export function PersonalCompletionSection({ target, ownerIds, status, renderStatus, showMessages = false, layout = 'field', onAllDone }: {
   target: CompletionTarget; ownerIds: string[]; status: string; showMessages?: boolean; layout?: 'field' | 'row' | 'cell'
   renderStatus: (value: string, onChange: (value: string) => void, disabled: boolean) => ReactNode
+  /** Zet de gezamenlijke status van het item op Done. Dat is de enige
+   *  knop die voor iedereen geldt; een persoonlijk vinkje zetten namens
+   *  een collega kan bewust niet. */
+  onAllDone?: () => void
 }) {
   const { profile } = useProfile()
   const demo = usePathname()?.startsWith('/demo')
@@ -100,6 +104,28 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
     </div>
     <span title={ownerSummary} aria-label={ownerSummary} style={{ fontSize: 11, color: 'var(--text-muted)' }}>{completedCount}/{owners.length} klaar</span>
     </div>
+    {/* Waarom dit vinkje niets doet bij de anderen. Dat was niet te zien:
+        je vinkte af, bij je collega's veranderde niets, en er stond
+        nergens dat dat de bedoeling is. */}
+    {!allDone && (
+      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+        Dit gaat alleen over jouw deel; ieder vinkt voor zichzelf af.
+        {onAllDone ? ' Klaar voor iedereen? Gebruik de knop hieronder.' : ' De gezamenlijke status geldt voor het hele item.'}
+      </span>
+    )}
+    {!allDone && onAllDone && (
+      <button type="button"
+        onClick={() => {
+          // Dit raakt iedereen, dus niet per ongeluk: even bevestigen.
+          if (!window.confirm(`Het hele item op Done zetten? Dat geldt voor alle ${owners.length} mensen die eraan staan.`)) return
+          onAllDone()
+        }}
+        style={{ alignSelf: 'flex-start', border: '1px solid var(--border)', borderRadius: 7,
+          background: 'var(--bg-hover)', color: 'var(--text-primary)', cursor: 'pointer',
+          padding: '5px 10px', fontSize: 12, fontWeight: 650 }}>
+        Voor iedereen afronden
+      </button>
+    )}
     {allDone && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 0 }}>Het hele item staat op Done. Heropen eerst de gezamenlijke status.</p>}
     {error && <p role="alert" style={{ color: 'var(--red, #e2445c)', fontSize: 12 }}>{error}</p>}
     {retryNotification !== null && <p role="alert" style={{ fontSize: 12 }}>Je status is opgeslagen, maar de melding is nog niet verstuurd. <button disabled={pending} onClick={() => change(retryNotification)}>Melding opnieuw versturen</button></p>}
