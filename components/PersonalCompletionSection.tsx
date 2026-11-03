@@ -115,20 +115,11 @@ export function PersonalCompletionSection({ target, ownerIds, status, renderStat
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, minHeight: 28 }}>
     {/* Niet over de volle breedte van het menu: dit is één veld, geen
         banner. */}
-    <div style={{ minHeight: 28, maxWidth: 220, ...(layout === 'field' ? { width: 180, height: 28 } : { flex: '0 1 180px' }) }} aria-busy={pending}>
+    <div title={allDone ? 'Het hele item staat op Done. Heropen eerst de gezamenlijke status.' : `Dit gaat alleen over jouw deel; ieder vinkt voor zichzelf af.${onAllDone ? ' Klaar voor iedereen? Gebruik de knop hieronder.' : ' De gezamenlijke status geldt voor het hele item.'}`} style={{ minHeight: 28, width: 'var(--personal-status-width, 120px)', maxWidth: '100%', height: 28, flexShrink: 0 }} aria-busy={pending}>
       {renderStatus(personalTaskStatus(mine), change, pending || allDone)}
     </div>
     <span title={ownerSummary} aria-label={ownerSummary} style={{ fontSize: 11, color: 'var(--text-muted)' }}>{completedCount}/{owners.length} klaar</span>
     </div>
-    {/* Waarom dit vinkje niets doet bij de anderen. Dat was niet te zien:
-        je vinkte af, bij je collega's veranderde niets, en er stond
-        nergens dat dat de bedoeling is. */}
-    {!allDone && (
-      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-        Dit gaat alleen over jouw deel; ieder vinkt voor zichzelf af.
-        {onAllDone ? ' Klaar voor iedereen? Gebruik de knop hieronder.' : ' De gezamenlijke status geldt voor het hele item.'}
-      </span>
-    )}
     {!allDone && onAllDone && (
       <button type="button"
         onClick={() => {
