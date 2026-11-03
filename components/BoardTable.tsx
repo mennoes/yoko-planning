@@ -514,6 +514,7 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel, menuLabel, e
   extraContent?: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
+  const [triggerWidth, setTriggerWidth] = useState(120)
   const [hover, setHover] = useState(false)
   const celFont = useCelFont()
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -524,7 +525,7 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel, menuLabel, e
       {/* Vol-cel status-tag: vult de hele rij-cel met de status-kleur
           zodat de kolom in één oogopslag visueel scant. Geen rond pilletje
           meer met witruimte eromheen. */}
-      <button ref={btnRef} disabled={disabled} aria-label={ariaLabel} aria-expanded={open && !disabled} onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} disabled={disabled} aria-label={ariaLabel} aria-expanded={open && !disabled} onClick={event => { setTriggerWidth(event.currentTarget.getBoundingClientRect().width); setOpen(o => !o) }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
@@ -554,9 +555,11 @@ function StatusCell({ value, onChange, disabled = false, ariaLabel, menuLabel, e
         <PortalDropdown anchor={btnRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: 4, minWidth: extraContent ? 220 : 168,
+            borderRadius: 8, padding: 4, boxSizing: 'border-box',
+            width: extraContent ? Math.max(220, triggerWidth + 30) : 168, maxWidth: 'calc(100vw - 24px)',
+            '--personal-status-width': `${triggerWidth}px`,
             boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
-          }}>
+          } as React.CSSProperties}>
             {menuLabel && <div style={{ padding: '6px 10px 5px', fontSize: 10.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{menuLabel}</div>}
             {STATUS_OPTIONS.map(o => (
               <button key={o.label || '_'} onClick={() => { onChange(o.label); setOpen(false) }} style={{
