@@ -3,8 +3,9 @@ import { getBoardIds } from '@/lib/boardsRegistry'
 import { completeLinkedTask, completionTargetForProject, loadPersonalCompletion } from '@/lib/personalCompletionClient'
 import { onCommentsUpdate } from '@/lib/commentsStore'
 
-import { useState, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
+const LinkedItemDetailDrawer = dynamic(() => import('@/components/BoardTable').then(module => module.LinkedItemDetailDrawer), { ssr: false })
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useProfile } from '@/components/ProfileContext'
@@ -130,14 +131,11 @@ function helpHint({ slack, others }: { slack: number; others: { member: { name: 
   return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
 }
 
-type WorkloadItem = { id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean; parentName?: string }
+type WorkloadItem = { parentItemId?: string; subitemId?: string; id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean; parentName?: string }
 
 type Category = WorkloadCategory
 
-// Workload row. Click → opens the detail popover (met een expliciete
-// "Open agenda"-link; de categoriekiezer die hier zat is eruit, die werd
-// niet gebruikt). Hover on desktop also previews the popover. The row
-// never navigates by itself — only the link inside does.
+// Open the shared detail drawer in place; only its agenda link navigates.
 function WorkloadItemRow({ item, override, onToggleDone, readOnly }: {
   item: WorkloadItem
   override: Category | null
@@ -145,49 +143,11 @@ function WorkloadItemRow({ item, override, onToggleDone, readOnly }: {
   /** Je kijkt bij een collega: afvinken hoort dan niet te kunnen. */
   readOnly?: boolean
 }) {
-  const router = useRouter()
   const [hoverRow, setHoverRow] = useState(false)
-  const [hoverPop, setHoverPop] = useState(false)
-  const rowRef = useRef<HTMLLIElement>(null)
-  const [popPos, setPopPos] = useState<{ top: number; left: number; placeAbove: boolean } | null>(null)
-  const cat       = effectiveCategory(item, override)
-  const dotColor  = CAT_COLOR[cat]
-  const catLabel  = CAT_LABEL[cat]
-  const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }) : '—'
-  const range = item.startDate || item.endDate
-    ? `${fmt(item.startDate)} – ${fmt(item.endDate)}`
-    : 'Geen datums'
-
-  // Popover blijft alleen open op hover (desktop). Tap/klik op de row
-  // navigeert naar de bord-pagina en opent daar de volledige detail-drawer
-  // — dat is wat de gebruiker echt nodig heeft, niet alleen een mini-popup.
-  const popoverOpen = hoverRow || hoverPop
-
-  // Bereken positie op basis van de row: voorkomt clipping door card-overflow
-  // (we renderen de popover via een portal in document.body) en flipt boven
-  // de row als-ie anders onder de viewport zou vallen.
-  useEffect(() => {
-    if (!popoverOpen || !rowRef.current) { setPopPos(null); return }
-    const place = () => {
-      const r = rowRef.current?.getBoundingClientRect()
-      if (!r) return
-      const popH = 260   // geschatte hoogte — flip-trigger is een kwestie van smaak
-      const room = window.innerHeight - r.bottom
-      const placeAbove = room < popH && r.top > popH
-      setPopPos({
-        top:  placeAbove ? r.top - 4 : r.bottom + 4,
-        left: r.left,
-        placeAbove,
-      })
-    }
-    place()
-    window.addEventListener('scroll', place, true)
-    window.addEventListener('resize', place)
-    return () => {
-      window.removeEventListener('scroll', place, true)
-      window.removeEventListener('resize', place)
-    }
-  }, [popoverOpen])
+  const [detail, setDetail] = useState<{ parentItemId: string; subitemId?: string } | null>(null)
+  const cat = effectiveCategory(item, override)
+  const dotColor = CAT_COLOR[cat]
+  const catLabel = CAT_LABEL[cat]
 
   const rowVisualStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 8,
@@ -202,11 +162,10 @@ function WorkloadItemRow({ item, override, onToggleDone, readOnly }: {
   }
 
   function openDetail() {
-    // Naar de bord-pagina met focus + drawer-param. BoardRow leest 'drawer'
-    // uit de URL en opent zijn detail-drawer automatisch zodra de juiste
-    // rij gerenderd is — geen extra klik nodig.
-    const url = `/projects/${item.board}?focus=${encodeURIComponent(item.rawItemId)}&drawer=${encodeURIComponent(item.rawItemId)}`
-    router.push(url)
+    const target = item.parentItemId ? { parentItemId: item.parentItemId, subitemId: item.subitemId }
+      : completionTargetForProject({ board: item.board, itemId: item.rawItemId })
+    if (target) setDetail({ parentItemId: target.parentItemId, subitemId: target.subitemId })
+    else setDetail({ parentItemId: item.rawItemId })
   }
 
   const rowContent = (
@@ -253,7 +212,7 @@ function WorkloadItemRow({ item, override, onToggleDone, readOnly }: {
   )
 
   return (
-    <li ref={rowRef} data-workload-row={item.id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}
+    <li data-workload-row={item.id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}
         onMouseEnter={() => setHoverRow(true)} onMouseLeave={() => setHoverRow(false)}>
       {/* Checkbox: project Done/onDone togglen vanuit de werkdruk-widget.
           stopPropagation zodat de row-klik niet ook navigeert. */}
@@ -268,38 +227,7 @@ function WorkloadItemRow({ item, override, onToggleDone, readOnly }: {
       <button type="button" onClick={openDetail} style={rowVisualStyle}>
         {rowContent}
       </button>
-      {popoverOpen && popPos && typeof document !== 'undefined' && createPortal(
-        <div data-workload-row={item.id}
-          onMouseEnter={() => setHoverPop(true)} onMouseLeave={() => setHoverPop(false)}
-          style={{ position: 'fixed', top: popPos.top, left: popPos.left,
-            transform: popPos.placeAbove ? 'translateY(-100%)' : 'none', zIndex: 9050,
-            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
-            padding: '10px 12px', minWidth: 240, maxWidth: 320,
-            boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.08)',
-            fontSize: 12, lineHeight: 1.5 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{item.board}</span>
-          </div>
-          {item.parentName && item.parentName !== item.name && (
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
-              ↳ in {item.parentName}
-            </div>
-          )}
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{item.name}</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-            <span>{range}</span>
-            <span><strong style={{ color: 'var(--text-primary)' }}>{item.hours}u</strong> deze week</span>
-          </div>
-          <Link href={`/projects/${item.board}`}
-            style={{ display: 'block', marginTop: 8, padding: '6px 10px', textAlign: 'center',
-              fontSize: 12, fontWeight: 600, color: 'var(--text-primary)',
-              background: 'var(--bg-hover)', borderRadius: 6, textDecoration: 'none' }}>
-            Open agenda →
-          </Link>
-        </div>,
-        document.body,
-      )}
+      {detail && <LinkedItemDetailDrawer boardId={item.board} {...detail} onClose={() => setDetail(null)} />}
     </li>
   )
 }
@@ -559,6 +487,7 @@ export default function HomePage() {
       return {
         id: c.project.id,
         rawItemId,
+        parentItemId: c.project.completionParentItemId, subitemId: c.project.completionSubitemId,
         name: c.project.name, board: c.project.board, hours: c.hours, day,
         startDate: c.project.startDate, endDate: c.project.endDate,
         startTime: c.project.startTime, endTime: c.project.endTime,
