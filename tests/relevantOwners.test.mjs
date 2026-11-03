@@ -52,7 +52,9 @@ test('agenda UI persists pie metadata and supports custom columns', () => {
   const registry = readFileSync(new URL('../lib/boardsRegistry.ts', import.meta.url), 'utf8')
   assert.match(board, /ownerHours: distribution/)
   assert.match(board, /nameOverride: true/)
-  assert.match(board, /!\('ownerHours' in updates\)/)
+  const patch = readFileSync(new URL('../lib/boardItemPatch.ts', import.meta.url), 'utf8')
+  assert.match(board, /return mergeDetailPatch\(i, updates\)/)
+  assert.match(patch, /!\('ownerHours' in updates\)/)
   // Zes snelle namen, en wie gestopt is hoort daar niet tussen — die
   // vind je via de zoekregel eronder.
   assert.match(board, /quickMembers = sortedTeam\.filter\(m => !m\.inactive \|\| value\.includes\(m\.id\)\)\.slice\(0, 6\)/)

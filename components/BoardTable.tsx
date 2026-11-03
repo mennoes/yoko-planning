@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom'
 // veilig.
 import teamData from '@/data/team.json'
 import type { BoardItem, BoardGroup, ColumnDef, ColumnType, SubItem } from '@/lib/boards'
-import { setBoardColumns, getBoards } from '@/lib/boardsRegistry'
+import { setBoardColumns, getBoards, getBoardConfig } from '@/lib/boardsRegistry'
 import { useProfile }     from './ProfileContext'
 import { useTeamPhotos }  from './TeamPhotosContext'
 import { useTeam }        from './TeamContext'
@@ -32,7 +32,7 @@ import {
   toggleReaction, type CommentThread,
 } from '@/lib/commentsStore'
 import { addRule as addSubitemRule } from '@/lib/subitemRules'
-import { softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard, persistItemNesting, persistGoogleSubitemPromotion } from '@/lib/boardStore'
+import { loadGroups, saveGroups, subscribeRemoteBoard, softDeleteItem, hardDeleteItems, softDeleteGroup, pullBoardFromRemote, markItemInProgress, isItemInProgress, purgeNieuwItemPlaceholders, moveItemToBoard, persistItemNesting, persistGoogleSubitemPromotion } from '@/lib/boardStore'
 import { routeOmdenkenNow } from '@/lib/googleClient'
 import { supabase } from '@/lib/supabase'
 import { MentionTextarea } from './MentionTextarea'
@@ -55,6 +55,7 @@ import { boardItemToNestedSubitem } from '@/lib/nestBoardItem'
 import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
 import { startTouchItemDrag } from '@/lib/touchItemDrag'
 import { visibleRecurringSubitems } from '@/lib/recurringMeetingWindow'
+import { mergeDetailPatch } from '@/lib/boardItemPatch'
 import { itemRollupHours } from '@/lib/itemHours'
 
 const OwnerUsageCtx = createContext<Record<string, number>>({})
@@ -2950,7 +2951,70 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
   )
 }
 
-function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentItemId, parentStatus, parentName }: {
+
+/** The same editable drawer can open from Home without changing routes. */
+export function LinkedItemDetailDrawer({ boardId, parentItemId, subitemId, onClose }: {
+  boardId: string; parentItemId: string; subitemId?: string; onClose: () => void
+}) {
+  const [groups, setGroups] = useState(() => loadGroups(boardId, []))
+  const { pushUndo } = useUndo()
+  const { members: liveTeam } = useTeam()
+  useEffect(() => {
+    const refresh = () => setGroups(loadGroups(boardId, []))
+    const changed = (event: Event) => {
+      const detail = (event as CustomEvent<{ boardName: string }>).detail
+      if (!detail || detail.boardName === boardId) refresh()
+    }
+    window.addEventListener('yoko-board-update', changed)
+    const stop = subscribeRemoteBoard(boardId)
+    void pullBoardFromRemote(boardId).then(refresh)
+    return () => { window.removeEventListener('yoko-board-update', changed); stop() }
+  }, [boardId])
+  const config = getBoardConfig(boardId)
+  const group = groups.find(group => group.items.some(item => item.id === parentItemId))
+  const parent = group?.items.find(item => item.id === parentItemId)
+  const sub = subitemId ? parent?.subitems?.find(sub => sub.id === subitemId) : undefined
+  const dates = parent ? itemDatums(parent) : null
+  const activeIds = new Set(liveTeam.filter(member => !member.hidden && !member.inactive).map(member => member.id))
+  const item = sub ? {
+    ...subitemAsItem(sub), ...sub, source: sub.source ?? parent?.source,
+    ownerIds: sub.ownerIds?.some(id => id && id !== 'unassigned') ? sub.ownerIds : parent!.ownerIds,
+    externalLink: sub.externalLink ?? parent!.externalLink,
+  } : parent ? { ...parent,
+    ...(dates?.bron === 'subitems' ? { startDate: dates.startDate, endDate: dates.endDate, __datumsUitSubitems: true } : {}),
+    ...(parent.subitems?.length ? { ownerIds: relevantOwnerRollup(parent, activeIds).displayOwnerIds } : {}),
+  } : undefined
+  const agendaHref = `/projects/${encodeURIComponent(boardId)}?focus=${encodeURIComponent(parentItemId)}`
+  if (!config || !group || !item || (subitemId && !sub)) return createPortal(
+    <div role="dialog" aria-label="Itemdetails" style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 'min(480px, 96vw)', zIndex: 9001, padding: 24, background: 'var(--bg-card)', boxShadow: '-12px 0 40px rgba(0,0,0,.25)' }}>
+      <button onClick={onClose}>Sluiten</button><p>Dit item is niet meer beschikbaar.</p><Link href={agendaHref}>Open agenda →</Link>
+    </div>, document.body)
+  function update(patch: Partial<BoardItem>) {
+    // Read the latest snapshot, so updates from another open view are retained.
+    const latest = loadGroups(boardId, [])
+    const previous = latest.flatMap(group => group.items).find(item => item.id === parentItemId)
+    if (!previous || (subitemId && !previous.subitems?.some(sub => sub.id === subitemId))) return
+    const next = latest.map(group => ({ ...group, items: group.items.map(item => {
+      if (item.id !== parentItemId) return item
+      if (!subitemId) return mergeDetailPatch(item, patch)
+      return { ...item, subitems: item.subitems?.map(sub => sub.id === subitemId
+        ? { ...sub, ...mergeDetailPatch({ ...subitemAsItem(sub), ...sub, externalLink: sub.externalLink ?? undefined, source: sub.source ?? item.source }, patch) } as SubItem : sub) }
+    }) }))
+    saveGroups(boardId, next)
+    pushUndo(() => {
+      const current = loadGroups(boardId, [])
+      saveGroups(boardId, current.map(group => ({ ...group, items: group.items.map(item => item.id === parentItemId ? previous : item) })))
+    }, 'Item bijgewerkt')
+  }
+  return <GroupCtx.Provider value={{ color: group.color, boardName: config.name, groupName: group.name }}>
+    <ItemDetailDrawer item={item} cols={config.columns.filter(col => !col.hidden)} accentColor={group.color}
+      parentItemId={sub ? parentItemId : undefined} parentName={sub ? parent?.name : undefined}
+      parentStatus={sub ? parent?.status : undefined} agendaHref={agendaHref} onUpdate={update} onClose={onClose} />
+  </GroupCtx.Provider>
+}
+
+function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentItemId, parentStatus, parentName, agendaHref }: {
+  agendaHref?: string
   item: BoardItem; cols: ColumnDef[]; accentColor?: string
   parentItemId?: string; parentStatus?: string
   /** De naam van het hoofditem, als dit venster een subitem toont. */
@@ -3086,7 +3150,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 9000 }} />
       {/* Compacte velden met dezelfde schaal in het hele detailvenster. */}
       <CelSchaalCtx.Provider value={1.05}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div role="dialog" aria-label="Itemdetails" aria-modal="true" onClick={e => e.stopPropagation()} style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: `min(${breedte}px, 96vw)`, zIndex: 9001,
         background: 'var(--bg-base)', borderLeft: '1px solid var(--border)',
@@ -3146,6 +3210,10 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
               cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 20, lineHeight: 1,
               width: 32, height: 32, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
+
+        {agendaHref && <div style={{ padding: '10px 22px', borderBottom: '1px solid var(--border-light)' }}>
+          <Link href={agendaHref} style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 7, background: 'var(--bg-hover)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Open agenda →</Link>
+        </div>}
 
         {/* Body: properties + comments */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 22px' }}>
@@ -3424,46 +3492,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
       ...group,
       items: group.items.map(i => {
         if (!(bulk ? selectedIds.has(i.id) : i.id === itemId)) return i
-        const merged: BoardItem = {
-          ...i,
-          ...updates,
-          ...(i.source === 'google' && 'status' in updates
-            ? { statusOverride: updates.status === 'Done' ? 'done' : 'active' }
-            : {}),
-          ...(i.source === 'google' && 'name' in updates ? { nameOverride: true } : {}),
-          ...(i.source === 'google' && ('startDate' in updates || 'endDate' in updates)
-            ? { datesOverride: updates.datesOverride === false ? false : true }
-            : {}),
-          ...(i.source === 'google' && 'estHours' in updates ? { hoursOverride: true } : {}),
-          ...(i.source === 'google' && 'notes' in updates ? { notesOverride: true } : {}),
-          ...(i.source === 'google' && 'deadline' in updates ? { deadlineOverride: true } : {}),
-        }
-        // estHours veranderd én item heeft ownerHours? Schaal de
-        // verdeling proportioneel zodat de verhoudingen kloppen
-        // met de nieuwe totalen — pie + cijfers blijven in sync.
-        if ('estHours' in updates && i.ownerHours && Object.keys(i.ownerHours).length > 0) {
-          const oldSum = Object.values(i.ownerHours).reduce((s, v) => s + (Number(v) || 0), 0)
-          const newTotal = Number(updates.estHours) || 0
-          if (oldSum > 0 && newTotal > 0 && Math.abs(oldSum - newTotal) > 0.01) {
-            merged.ownerHours = scaleOwnerHours(i.ownerHours, newTotal)
-          } else if (newTotal === 0) {
-            // Naar 0u: leeg de verdeling, anders blijft de pie
-            // verkeerd staan met som > 0.
-            merged.ownerHours = undefined
-          }
-        }
-        // ownerIds veranderd → cleanup stale ownerHours-entries (zelfde
-        // safeguard als in OwnersCell, voor bulk-updates die rechtstreeks
-        // updateItem aanroepen zonder het Cell-pad).
-        if ('ownerIds' in updates && !('ownerHours' in updates) && i.ownerHours && Object.keys(i.ownerHours).length > 0) {
-          const active = new Set(updates.ownerIds ?? [])
-          const cleaned: Record<string, number> = {}
-          for (const [oid, hrs] of Object.entries(i.ownerHours)) {
-            if (active.has(oid)) cleaned[oid] = hrs
-          }
-          merged.ownerHours = Object.keys(cleaned).length > 0 ? cleaned : undefined
-        }
-        return merged
+        return mergeDetailPatch(i, updates)
       }),
     })
     // Toast + undo. Cell-handlers zelf zijn silent, dus we maken hier per
