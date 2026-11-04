@@ -1034,10 +1034,10 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               }}>↳ {project.parentName}</span>
             ) : project.board && (
               <span style={{
-                fontSize: 9.5, fontWeight: 500, textTransform: 'capitalize',
+                fontSize: 9.5, fontWeight: 500,
                 opacity: 0.78, lineHeight: 1.1, marginTop: 1,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{project.board}</span>
+              }}>{getBoardConfig(project.board)?.name ?? project.board}</span>
             )
           )}
         </span>
@@ -2872,7 +2872,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
             {timeStr && <span style={{ opacity: 0.4 }}>·</span>}
             <span>{hours}u</span>
             <span style={{ opacity: 0.4 }}>·</span>
-            <span style={{ textTransform: 'capitalize' }}>{project.board}</span>
+            <span>{getBoardConfig(project.board)?.name ?? project.board}</span>
           </div>
           {project.status && project.status !== 'active' && (
             <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
@@ -3457,7 +3457,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
                 style={{ color, fontWeight: 600, textDecoration: 'none' }}
                 onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
                 onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
-                {project.board}
+                {getBoardConfig(project.board)?.name ?? project.board}
               </Link>{project.group ? <> · {project.group}</> : null}
               {rawItem?.source === 'google' && <span style={{ marginLeft: 8, color: '#a05400' }}>· Bewerk in Google Calendar</span>}
             </div>
@@ -3736,7 +3736,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
               <span style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[project.board] ?? '#888' }} />
-              {project.board}
+              {getBoardConfig(project.board)?.name ?? project.board}
             </span>
             <select
               defaultValue=""
