@@ -367,3 +367,7 @@ select:focus {
 @media (max-width: 700px) {
   .board-save-indicator { top: auto; right: 12px; bottom: 14px; left: 12px; max-width: none; }
 }
+
+/* Quiet handles, visible on hover and keyboard focus. */
+.account-drag-handle { opacity: .28; transition: opacity .15s ease; }
+.account-drag-handle:hover, .account-drag-handle:focus-visible, .account-drag-handle:active { opacity: .85; }
