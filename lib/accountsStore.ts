@@ -57,9 +57,13 @@ export async function pullAccountsDetailed(): Promise<{
   rows:    Account[] | null
   error?:  { message: string; code?: string; hint?: string }
   noAuth?: boolean
+  forbidden?: boolean
 }> {
   if (!supabase) return { rows: null, error: { message: 'Supabase niet geconfigureerd' } }
   if (!await getCurrentUserId()) return { rows: null, noAuth: true }
+  const access = await supabase.rpc('can_access_accounts')
+  if (access.error) return { rows: null, error: { message: 'Accounttoegang kon niet worden gecontroleerd.' } }
+  if (access.data !== true) return { rows: null, forbidden: true }
   const { data, error } = await supabase
     .from('accounts')
     .select('id, account, url, username, password, license_by, position')
