@@ -153,3 +153,16 @@ test('werkdagen tellen slaat het weekend over', () => {
   assert.equal(werkdagenIn('2026-11-16', '2026-11-23'), 6)
   assert.equal(werkdagenIn('2026-11-20', '2026-11-16'), 0)
 })
+
+test('een startdatum plant vooruit over weekenden en bewaart de stapduur', () => {
+ const result=planUitSjabloon({naam:'Vooruit',startDate:'2026-11-06',deadline:'2026-11-30',stappen:[{naam:'A',dagen:2},{naam:'B',dagen:1}]})
+ assert.equal(result.ok,true)
+ assert.equal(result.plan.startDate,'2026-11-06')
+ assert.equal(result.plan.endDate,'2026-11-10')
+ assert.equal(result.plan.estHours,24)
+})
+test('startdatum werkt zonder deadline en wijst start na deadline af', () => {
+ const options={naam:'Vooruit',startDate:'2026-11-07',deadline:'',stappen:[{naam:'A',dagen:1}]}
+ assert.equal(planUitSjabloon(options).plan.startDate,'2026-11-09')
+ assert.equal(planUitSjabloon({...options,deadline:'2026-11-05'}).ok,false)
+})

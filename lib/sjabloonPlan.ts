@@ -131,13 +131,14 @@ export function planUitSjabloon(opties: {
   stappen: SjabloonStap[]
   /** jjjj-mm-dd: de dag waarop het af moet. */
   deadline: string
+  startDate?: string | null
   ownerIds?: string[]
   urenPerDag?: number
 }): { ok: true; plan: AiItemPlan } | { ok: false; error: string } {
   const naam = opties.naam.trim().slice(0, 160)
   if (!naam) return { ok: false, error: 'Geef de klus een naam.' }
-  if (!DATUM.test(opties.deadline)) return { ok: false, error: 'Kies een datum waarop het af moet.' }
-  const deadline = new Date(`${opties.deadline}T00:00:00`)
+  if (!DATUM.test(opties.startDate || opties.deadline)) return { ok: false, error: 'Kies een datum waarop het af moet.' }
+  const deadline = new Date(`${opties.startDate || opties.deadline}T00:00:00`)
   if (Number.isNaN(deadline.getTime())) return { ok: false, error: 'Die datum begrijp ik niet.' }
   const stappen = opties.stappen.filter(stap => stap.naam.trim()).slice(0, MAX_STAPPEN)
   if (stappen.length === 0) return { ok: false, error: 'Zet er minstens één stap in.' }
@@ -146,7 +147,10 @@ export function planUitSjabloon(opties: {
   const ownerIds = [...new Set((opties.ownerIds ?? []).filter(id => id && id !== 'unassigned'))]
 
   const subitems: AiSubitemPlan[] = []
-  let cursor = werkdagTerug(deadline)
+  if (opties.startDate && opties.deadline && opties.startDate > opties.deadline) return { ok: false, error: 'De startdatum ligt na de deadline.' }
+  let cursor = opties.startDate
+    ? werkdagenVooruit(deadline, stappen.reduce((sum, stap) => sum + Math.max(1, Math.round(stap.dagen)), 0))
+    : werkdagTerug(deadline)
   for (const stap of [...stappen].reverse()) {
     const dagen = Math.max(1, Math.round(stap.dagen))
     const eind = werkdagTerug(cursor)

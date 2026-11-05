@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useTeam } from './TeamContext'
+import { changePlanPeriod, daysBetween } from '@/lib/planTimeline'
 import { PlanTimeline } from './PlanTimeline'
 import { planToBoardItem, type AiItemPlan } from '@/lib/aiPlan'
 import {
@@ -73,6 +74,7 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   const [klusNaam, setKlusNaam] = useState('')
   const [sjabloonId, setSjabloonId] = useState(SJABLONEN[0].id)
   const [stappenTekst, setStappenTekst] = useState(() => stappenNaarTekst(SJABLONEN[0].stappen))
+  const [startDate, setStartDate] = useState<string | null>(null)
   const [deadline, setDeadline] = useState<string | null>(null)
   const [mailOpen, setMailOpen] = useState(false)
   const [mail, setMail] = useState('')
@@ -230,8 +232,10 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
       naam: klusNaam,
       stappen: tekstNaarStappen(stappenTekst),
       deadline: deadline ?? '',
+      startDate,
     })
     if (!uitkomst.ok) { setFout(uitkomst.error); return }
+    setStartDate(uitkomst.plan.startDate)
     setPlan({ ...uitkomst.plan, ownerIds: plan?.ownerIds ?? [], subitems: uitkomst.plan.subitems.map(sub => ({
       ...sub, ownerIds: plan?.subitems.find(previous => previous.name === sub.name)?.ownerIds ?? [],
     })) })
@@ -279,12 +283,25 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
 
         {tab === 'sjabloon' ? (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 10 }}>
+            <style>{`.planner-dates { display:grid; grid-template-columns:minmax(120px,1fr) repeat(2,minmax(120px,170px));gap:10px; } @media(max-width:650px){.planner-dates{grid-template-columns:repeat(2,minmax(0,1fr));}.planner-dates>label:first-child{grid-column:1/-1;}}`}</style>
+            <div className="planner-dates">
               <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Naam
                 <input value={klusNaam} onChange={event => { setKlusNaam(event.target.value); setPlan(current => current && { ...current, name: event.target.value }) }}
                   aria-label="Naam van de klus" placeholder="NKO Explainer"
                   style={{ ...vak, marginTop: 4 }} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Startdatum
+                <div style={{ marginTop: 4 }}>
+                  <DatumVeld value={startDate} onChange={value => {
+                    setStartDate(value)
+                    if (value && plan?.startDate) {
+                      const next = changePlanPeriod(plan, -1, 'move', daysBetween(plan.startDate, value))
+                      setPlan(next); setStartDate(next.startDate)
+                    }
+                  }} ariaLabel="Startdatum" style={{ ...vak, width: '100%' }} />
+                </div>
               </label>
               <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Deadline
@@ -385,8 +402,9 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
 
         {plan && (
           <div data-ai-voorstel style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 12, padding: 14, background: 'var(--bg-card)' }}>
+            {deadline && plan.endDate && plan.endDate > deadline && <p role="status" style={{ color: 'var(--text-secondary)', fontSize: 12 }}>De stappen lopen voorbij de deadline. Pas de startdatum of de duur aan.</p>}
             <PlanTimeline plan={plan} onChange={next => {
-              setPlan(next); setKlusNaam(next.name)
+              setPlan(next); setKlusNaam(next.name); setStartDate(next.startDate)
               setStappenTekst(stappenNaarTekst(next.subitems.map(sub => ({ naam: sub.name, dagen: sub.startDate && sub.endDate ? werkdagenIn(sub.startDate, sub.endDate) : Math.max(1, sub.estHours / UREN_PER_DAG) }))))
             }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
