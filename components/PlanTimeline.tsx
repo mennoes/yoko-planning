@@ -102,8 +102,8 @@ export function PlanTimeline({ plan, onChange }: { plan: AiItemPlan; onChange: (
         }} style={{ outline: ownerDrag ? '1px dashed var(--accent)' : undefined, borderRadius: 8, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--border-light)' }}>
           <div style={{ minWidth: 0, paddingLeft: index < 0 ? 0 : 12 }}>
             <input aria-label={index < 0 ? 'Naam hoofditem' : `Naam subitem ${rowIndex}`} value={row.name} onChange={e => onChange(index < 0 ? { ...plan, name: e.target.value } : { ...plan, subitems: plan.subitems.map((s,i) => i === index ? { ...s, name: e.target.value } : s) })}
-              style={{ border: 0, padding: 0, width: '100%', background: 'transparent', color: 'var(--text-primary)', fontWeight: index < 0 ? 750 : 500, fontSize: index < 0 ? 15 : 12 }} />
-            <div style={{ marginTop: 4, fontSize: 10.5, color: active ? 'var(--accent)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{naarNl(row.startDate)} → {naarNl(row.endDate)} · {row.estHours}u</div>
+              style={{ border: 0, padding: 0, width: '100%', background: 'transparent', color: 'var(--text-primary)', fontWeight: index < 0 ? 750 : 500, fontSize: index < 0 ? 15 : 13 }} />
+            <div style={{ marginTop: 4, fontSize: 11.5, color: active ? 'var(--accent)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{naarNl(row.startDate)} → {naarNl(row.endDate)} · {row.estHours}u</div>
           </div>
           <div className="plan-track" ref={index < 0 ? track : undefined} style={{ position: 'relative', height: index < 0 ? 36 : 30, background: 'var(--bg-hover)', borderRadius: 8 }}>
             {Array.from({ length }, (_,i) => werkdagenIn(addDays(from,i), addDays(from,i)) === 0 && <span key={i} style={{ position: 'absolute', top: 0, bottom: 0, left: `${i / length * 100}%`, width: `${100 / length}%`, background: 'var(--overlay-faint)' }} />)}

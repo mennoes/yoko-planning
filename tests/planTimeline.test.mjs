@@ -45,3 +45,9 @@ test('deleting steps recomputes bounds and keeps an editable parent after last d
  assert.ok(empty.startDate && empty.endDate)
 })
 test('calendar-day distance stays stable across daylight saving', () => assert.equal(daysBetween('2026-10-24','2026-10-26'),2))
+
+test('stretching consecutive steps does not introduce overlapping days', () => {
+ const next=changePlanPeriod(sample(),-1,'days',9)
+ assert.ok(next.subitems[0].endDate < next.subitems[1].startDate)
+ assert.equal(next.estHours,9*8)
+})
