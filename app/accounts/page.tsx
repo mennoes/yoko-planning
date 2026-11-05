@@ -1,5 +1,6 @@
 'use client'
 
+import { AccountGroups } from '@/components/AccountGroups'
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { IconKey, IconEye, IconEyeOff, IconCopy, IconCheck } from '@/components/Icon'
@@ -125,9 +126,9 @@ export default function AccountsPage() {
   const columns: { key: keyof Account; label: string; width?: number }[] = [
     { key: 'account', label: 'Account', width: 260 },
     { key: 'url', label: 'URL', width: 200 },
-    { key: 'username', label: 'Username', width: 270 },
-    { key: 'password', label: 'Password', width: 280 },
-    { key: 'licensedBy', label: 'License van', width: 150 },
+    { key: 'username', label: 'Gebruikersnaam', width: 270 },
+    { key: 'password', label: 'Wachtwoord', width: 280 },
+    { key: 'licensedBy', label: 'Licentie', width: 150 },
   ]
 
   if (loading) {
@@ -206,19 +207,11 @@ export default function AccountsPage() {
         </button>
       </div>
 
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          borderRadius: 12,
-          border: '1px solid var(--border)',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Table header */}
+      <AccountGroups accounts={accounts} header={
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: columns.map((c) => `${c.width || 150}px`).join(' ') + ' 40px',
+            gridTemplateColumns: 'minmax(160px, 1.1fr) minmax(140px, 1fr) minmax(190px, 1.2fr) minmax(170px, 1fr) 110px 32px',
             borderBottom: '1px solid var(--border)',
             background: 'var(--bg-hover)',
           }}
@@ -227,7 +220,7 @@ export default function AccountsPage() {
             <div
               key={col.key}
               style={{
-                padding: '14px 18px',
+                padding: '10px 14px',
                 fontSize: 13,
                 fontWeight: 700,
                 color: 'var(--text-muted)',
@@ -241,13 +234,12 @@ export default function AccountsPage() {
           <div />
         </div>
 
-        {/* Rows */}
-        {accounts.map((account, idx) => (
+      } renderRow={(account, idx) => (
           <div
             key={account.id}
             style={{
               display: 'grid',
-              gridTemplateColumns: columns.map((c) => `${c.width || 150}px`).join(' ') + ' 40px',
+              gridTemplateColumns: 'minmax(160px, 1.1fr) minmax(140px, 1fr) minmax(190px, 1.2fr) minmax(170px, 1fr) 110px 32px',
               borderBottom: idx < accounts.length - 1 ? '1px solid var(--border)' : 'none',
               transition: 'background 0.1s',
             }}
@@ -275,7 +267,7 @@ export default function AccountsPage() {
               return (
                 <div
                   key={col.key}
-                  style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', minHeight: 52 }}
+                  style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', minHeight: 38 }}
                   onDoubleClick={() => startEdit(account, col.key)}
                 >
                   {isEditing ? (
@@ -378,7 +370,7 @@ export default function AccountsPage() {
               </button>
             </div>
           </div>
-        ))}
+        )} />
 
         {/* Add row */}
         <div
@@ -406,10 +398,9 @@ export default function AccountsPage() {
             + Voeg account toe
           </button>
         </div>
-      </div>
 
       <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 12 }}>
-        Klik op een cel om de waarde te kopiëren · dubbelklik om te bewerken · wachtwoorden staan in Supabase achter login (RLS).
+        Klik op een cel om de waarde te kopiëren · dubbelklik om te bewerken.
       </p>
 
       <style>{`
