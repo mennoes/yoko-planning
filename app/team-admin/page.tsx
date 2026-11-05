@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { IconUsers } from '@/components/Icon'
 import { isTeamAdmin } from '@/lib/teamAdmin'
 import { setCapacity } from '@/lib/capacitiesStore'
+import { ACCOUNT_TEAM_ROLES, type AccountTeamRole } from '@/lib/accountAccess'
 import { AccountRoleControl } from '@/components/AccountRoleControl'
 import { useAccountPermissions } from '@/lib/useAccountPermissions'
 import { DatumVeld } from '@/components/DatumVeld'
@@ -26,7 +27,7 @@ function reportInvite(result: InviteResult): void {
 
 // Stuur invite naar de geconfigureerde Supabase auth — maakt user aan
 // (of stuurt magic-link als-ie al bestaat) zodat 'ie kan inloggen.
-async function sendInvite(email: string, name: string): Promise<void> {
+async function sendInvite(email: string, name: string, role?: AccountTeamRole): Promise<void> {
   if (!supabase) { reportInvite({ ok: false, title: 'Niet geconfigureerd', body: 'Supabase is niet geconfigureerd.' }); return }
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -35,7 +36,7 @@ async function sendInvite(email: string, name: string): Promise<void> {
     const res = await fetch('/api/team/invite', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name }),
+      body: JSON.stringify({ email, name, role }),
     })
     const json = await res.json() as { ok: boolean; status?: string; error?: string; actionLink?: string }
     if (!json.ok) {
@@ -174,6 +175,7 @@ export default function TeamAdminPage() {
   const { isAuthenticated, authChecked, profile } = useProfile()
   const canChangeStatus = isTeamAdmin(profile?.memberId)
   const { allMembers: members, refresh } = useTeam()
+  const [newRole, setNewRole] = useState<AccountTeamRole>('team')
   const [adding, setAdding] = useState(false)
   const [filter, setFilter] = useState<FilterKind>('all')
   const dragFromRef = useRef<string | null>(null)
@@ -191,6 +193,7 @@ export default function TeamAdminPage() {
 
   async function saveNew() {
     if (!draft.name.trim()) return
+    if (newRole !== 'team' && !draft.email.trim()) { alert('Vul een e-mailadres in om de stagefunctie aan de login te koppelen.'); return }
     const id = draft.id || slugify(draft.name)
     if (!id) return
     if (members.some(m => m.id === id)) {
@@ -224,8 +227,9 @@ export default function TeamAdminPage() {
     // dashboard hoeft. Alleen wanneer er een email staat én 't lid niet
     // 'systeem' is.
     if (email && draft.kind !== 'unassigned') {
-      sendInvite(email, draft.name).catch(() => {})
+      sendInvite(email, draft.name, permissions.canManage ? newRole : undefined).catch(() => {})
     }
+    setNewRole('team')
     setDraft({ id: '', name: '', email: '', color: PRESET_COLORS[0], weeklyCapacity: 40, position: 999, hidden: false, kind: 'yoko', startDate: null, inactive: false })
   }
 
@@ -388,6 +392,11 @@ export default function TeamAdminPage() {
                 </button>
               ))}
             </div>
+
+            <label htmlFor="new-member-role" style={{fontSize:12,color:'var(--text-muted)'}}>Functie</label>
+            <div><select id="new-member-role" value={newRole} disabled={!permissions.canManage} onChange={e=>setNewRole(e.target.value as AccountTeamRole)} style={inputStyle}>
+              {Object.entries(ACCOUNT_TEAM_ROLES).map(([value,label])=><option key={value} value={value}>{label}</option>)}
+            </select><p style={{fontSize:11,color:'var(--text-muted)',margin:'5px 0 0'}}>Nieuwe logins hebben geen toegang tot Accounts. Bij een stagefunctie blijft die toegang geblokkeerd.</p></div>
 
             <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Email</label>
             <input value={draft.email}
