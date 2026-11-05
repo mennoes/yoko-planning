@@ -6,6 +6,7 @@
 //
 // POST { email, name?, redirectTo? } → { ok, status: 'invited' | 'exists' }
 
+import { accountAccessAdmin, ACCOUNT_TEAM_ROLES } from '@/lib/accountAccess'
 import { NextRequest } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -24,11 +25,26 @@ export async function POST(req: NextRequest) {
   const denied = await requireTeamAdmin(req)
   if (denied) return denied
 
-  let body: { email?: string; name?: string; redirectTo?: string }
+  let body: { email?: string; name?: string; redirectTo?: string; role?: string }
   try {
     body = await req.json()
   } catch {
     return Response.json({ ok: false, error: 'invalid_body' }, { status: 400 })
+  }
+  if (body.role !== undefined) {
+    if (!Object.hasOwn(ACCOUNT_TEAM_ROLES, body.role)) return Response.json({ok:false,error:'invalid_role'}, {status:400})
+    const token=req.headers.get('authorization')?.replace(/^Bearer /,'') ?? ''
+    const actor=await supabaseAdmin.auth.getUser(token)
+    if (actor.error || !accountAccessAdmin(actor.data.user?.app_metadata)) return Response.json({ok:false,error:'forbidden'}, {status:403})
+  }
+  async function assignRole(userId: string | undefined) {
+    if (body.role === undefined) return null
+    if (!userId) return 'Login ontbreekt; functie niet opgeslagen.'
+    const current=await supabaseAdmin!.auth.admin.getUserById(userId)
+    if(current.error || !current.data.user) return 'Login kon niet worden gecontroleerd.'
+    if(accountAccessAdmin(current.data.user.app_metadata)) return 'De functie van een accountbeheerder staat vast.'
+    const saved=await supabaseAdmin!.auth.admin.updateUserById(userId,{app_metadata:{...current.data.user.app_metadata,team_role:body.role,accounts_access:false}})
+    return saved.error ? 'Functie niet opgeslagen. Controleer de login bij Accounts.' : null
   }
   const email = (body.email ?? '').trim().toLowerCase()
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -58,6 +74,8 @@ export async function POST(req: NextRequest) {
     : `${origin}/`
 
   if (existingUserId) {
+    const roleError=await assignRole(existingUserId)
+    if(roleError)return Response.json({ok:false,error:roleError},{status:500})
     // Bestaande user → stuur een nieuwe magic-link/password-reset zodat
     // ze opnieuw in kunnen loggen. We gebruiken generateLink type='magiclink'
     // en sturen 'm zelf NIET — Supabase doet dat automatisch via SMTP als
@@ -96,6 +114,8 @@ export async function POST(req: NextRequest) {
     })
     const actionLink = linkData?.properties?.action_link ?? null
     if (actionLink) {
+      const roleError=await assignRole(linkData?.user?.id)
+      if(roleError)return Response.json({ok:false,error:roleError},{status:500})
       return Response.json({
         ok: true, status: 'invited_no_mail',
         actionLink,
@@ -104,6 +124,8 @@ export async function POST(req: NextRequest) {
     }
     return Response.json({ ok: false, error: error.message }, { status: 500 })
   }
+  const roleError=await assignRole(data?.user?.id)
+  if(roleError)return Response.json({ok:false,error:roleError},{status:500})
   return Response.json({
     ok: true, status: 'invited',
     userId: data?.user?.id ?? null,
