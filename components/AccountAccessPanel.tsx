@@ -24,7 +24,7 @@ export function AccountAccessPanel() {
  }
  return <section aria-label="Toegang tot accounts" style={{marginBottom:20,padding:16,border:'1px solid var(--border)',borderRadius:10,background:'var(--bg-card)'}}>
   <h2 style={{fontSize:15,margin:'0 0 5px'}}>Toegang tot accounts</h2>
-  <p style={{fontSize:12,color:'var(--text-muted)',margin:'0 0 12px'}}>Per persoonlijke login. Stage geeft standaard geen toegang; je kunt dit per persoon aanpassen.</p>
+  <p style={{fontSize:12,color:'var(--text-muted)',margin:'0 0 12px'}}>Nieuwe logins hebben standaard geen toegang. Productiestagiairs en onderzoeksstagiairs zijn altijd uitgesloten.</p>
   {error&&<p role="alert" style={{color:'var(--red)',fontSize:12}}>{error}</p>}
   {busy==='loading'&&<p>Laden…</p>}
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,400px),1fr))',gap:8}}>
@@ -32,7 +32,7 @@ export function AccountAccessPanel() {
    <span style={{flex:'1 1 170px',fontSize:12,overflowWrap:'anywhere'}}>{user.email}</span>
    {user.admin?<span style={{fontSize:12,color:'var(--text-muted)'}}>Beheerder · toegang</span>:<>
     <select aria-label={`Functie van ${user.email}`} value={user.role} disabled={!!busy} style={control} onChange={e=>{const role=e.target.value as AccountTeamRole;void save({...user,role,allowed:role==='team'?user.allowed:false})}}>{Object.entries(ACCOUNT_TEAM_ROLES).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
-    <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12}}><input type="checkbox" aria-label={`Accounts bekijken voor ${user.email}`} checked={user.allowed} disabled={!!busy} onChange={e=>void save({...user,allowed:e.target.checked})}/>Accounts bekijken</label>
+    <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12}}><input type="checkbox" aria-label={`Accounts bekijken voor ${user.email}`} checked={user.allowed} disabled={!!busy || user.role !== 'team'} onChange={e=>void save({...user,allowed:e.target.checked})}/>Accounts bekijken</label>
    </>}
   </div>)}
   </div>

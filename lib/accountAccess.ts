@@ -5,10 +5,10 @@ export const ACCOUNT_TEAM_ROLES: Record<AccountTeamRole, string> = {
   team: 'Teamlid', production_intern: 'Productiestage', research_intern: 'Onderzoeksstage',
 }
 export function accountAccess(metadata: Record<string, unknown> | undefined) {
-  return metadata?.accounts_access === true
+  return metadata?.team_role === 'team' && metadata?.accounts_access === true
 }
 export function accountAccessAdmin(metadata: Record<string, unknown> | undefined) {
-  return metadata?.accounts_admin === true
+  return accountAccess(metadata) && metadata?.accounts_admin === true
 }
 export function accountTeamRole(value: unknown): AccountTeamRole {
   return value === 'production_intern' || value === 'research_intern' ? value : 'team'

@@ -35,6 +35,7 @@ export async function PATCH(req: NextRequest) {
   let body
   try { body = await req.json() } catch { return respond({ error: 'Ongeldige wijziging.' }, 400) }
   if (!body || typeof body.userId !== 'string' || typeof body.allowed !== 'boolean' || !Object.hasOwn(ACCOUNT_TEAM_ROLES, body.role)) return respond({ error: 'Ongeldige wijziging.' }, 400)
+  if (body.allowed && body.role !== 'team') return respond({ error: 'Stagiairs hebben geen toegang tot accounts.' }, 400)
   const { data, error } = await supabaseAdmin!.auth.admin.getUserById(body.userId)
   if (error || !data.user) return respond({ error: 'Login niet gevonden.' }, 404)
   // Admin rights cannot be created or removed through this endpoint.
