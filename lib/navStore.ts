@@ -24,7 +24,6 @@ const PROJECTS_KEY = 'yoko-nav-projects'
 
 const DEFAULT_DOCS: NavItem[] = [
   { id: 'team',        label: 'Team',        href: '/team',        icon: '👥' },
-  { id: 'team-admin',  label: 'Team beheren', href: '/team-admin',  icon: '⚙️' },
   { id: 'kantoor',     label: 'Kantoor',     href: '/kantoor',     icon: '🏢' },
   { id: 'budget',      label: 'Budget',      href: '/budget',      icon: '💰', visibleTo: ['menno', 'vincent'] },
   { id: 'accounts',    label: 'Accounts',    href: '/accounts',    icon: '🔑' },
@@ -59,7 +58,6 @@ const DEMO_PROJECTS: NavItem[] = [
 // voor iedere demo-bezoeker onzichtbaar in de sidebar zou blijven staan.
 const DEMO_DOCS: NavItem[] = [
   { id: 'team',        label: 'Team',        href: '/demo/team',        icon: '👥' },
-  { id: 'team-admin',  label: 'Team beheren', href: '/demo/team-admin',  icon: '⚙️' },
   { id: 'kantoor',     label: 'Kantoor',     href: '/demo/kantoor',     icon: '🏢' },
   { id: 'budget',      label: 'Budget',      href: '/demo/budget',      icon: '💰' },
   { id: 'accounts',    label: 'Accounts',    href: '/demo/accounts',    icon: '🔑' },
@@ -83,7 +81,7 @@ function reconcileDocsList(items: NavItem[]): NavItem[] {
   // Verwijder de oude losse standaardlink ook uit bestaande lokale
   // sidebar-caches en actualiseer de standaardnaam van Geschiedenis.
   const withoutLegacyTrash = items
-    .filter(item => item.id !== 'papierbak')
+    .filter(item => item.id !== 'papierbak' && item.id !== 'team-admin' && item.href !== '/team-admin')
     .map(item => item.id === 'snapshots' && item.label === 'Geschiedenis'
       ? { ...item, label: 'Geschiedenis & herstel', href: '/geschiedenis' }
       : item)
@@ -129,7 +127,7 @@ export function setAgendaHidden(boardId: string, hidden: boolean): void {
 function defaultSections(): SidebarSection[] {
   return [
     { id: 'agendas', name: "Agenda's",   type: 'projects', items: loadProjects() },
-    { id: 'pagina',  name: "Pagina's",   type: 'docs',     items: load(DOCS_KEY,     DEFAULT_DOCS)     },
+    { id: 'pagina',  name: "Pagina's",   type: 'docs',     items: loadDocs()     },
     { id: 'docs2',   name: 'Documenten', type: 'pages',    items: [] },
   ]
 }
