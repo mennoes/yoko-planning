@@ -9,6 +9,8 @@ import { supabase } from '@/lib/supabase'
 import { IconUsers } from '@/components/Icon'
 import { isTeamAdmin } from '@/lib/teamAdmin'
 import { setCapacity } from '@/lib/capacitiesStore'
+import { AccountRoleControl } from '@/components/AccountRoleControl'
+import { useAccountPermissions } from '@/lib/useAccountPermissions'
 import { DatumVeld } from '@/components/DatumVeld'
 
 // Resultaat van een invite-poging. Gaat via een window-event naar de
@@ -168,6 +170,7 @@ type FilterKind = 'all' | 'yoko' | 'freelance' | 'unassigned' | 'hidden' | 'inac
 
 export default function TeamAdminPage() {
   const router = useRouter()
+  const permissions = useAccountPermissions()
   const { isAuthenticated, authChecked, profile } = useProfile()
   const canChangeStatus = isTeamAdmin(profile?.memberId)
   const { allMembers: members, refresh } = useTeam()
@@ -337,6 +340,8 @@ export default function TeamAdminPage() {
 
   return (
     <Shell>
+      {permissions.error&&<p role="alert" style={{color:'var(--red)',fontSize:13}}>{permissions.error} <button onClick={()=>void permissions.refresh()}>Opnieuw proberen</button></p>}
+      <p style={{fontSize:12,color:'var(--text-muted)',margin:'0 0 12px'}}>Een stagefunctie blokkeert Accounts automatisch. Terug naar Teamlid geeft niet vanzelf toegang; vink Accounts bekijken dan bewust aan.</p>
       <div style={{ marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0, maxWidth: 580, lineHeight: 1.5 }}>
           Bewerk gegevens direct in de rij. Via <strong>Acties</strong> open je het profiel,
@@ -473,12 +478,12 @@ export default function TeamAdminPage() {
           <div key={label} style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 6, padding: '0 2px' }}>{label} · {rows.length}</div>
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflowX: 'auto' }}>
-              <div style={{ display: 'grid', minWidth: 1060, gridTemplateColumns: '20px 28px minmax(120px, 1.1fr) minmax(150px, 1.3fr) 90px 76px 112px 98px 94px 150px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'grid', minWidth: 1140, gridTemplateColumns: '20px 28px minmax(110px, 1.1fr) minmax(150px, 1.3fr) 160px 70px 108px 98px 84px 130px', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>
                 <span></span>
                 <span></span>
                 <span>Naam</span>
                 <span>Email</span>
-                <span>Id</span>
+                <span>Functie / accounts</span>
                 <span>Uren/wk</span>
                 <span>Start</span>
                 <span>Team</span>
@@ -487,6 +492,15 @@ export default function TeamAdminPage() {
               </div>
               {rows.map(m => (
                 <Row key={m.id} member={m}
+                  accountRole={(() => {
+                    if(m.id==='unassigned')return <span>—</span>
+                    if(permissions.loading)return <span style={{fontSize:11,color:'var(--text-muted)'}}>Laden…</span>
+                    if(permissions.error)return <span style={{fontSize:11,color:'var(--red)'}}>Niet geladen</span>
+                    if(!permissions.canManage)return <span style={{fontSize:11,color:'var(--text-muted)'}}>Alleen beheerders</span>
+                    const matches=permissions.users.filter(u=>u.email.trim().toLowerCase()===m.email.trim().toLowerCase())
+                    const login=m.email.trim()&&matches.length===1?matches[0]:undefined
+                    return login?<AccountRoleControl user={login} name={m.name} busy={!!permissions.saving} onSave={permissions.save}/>:<span style={{fontSize:11,color:'var(--text-muted)'}}>Nog geen login · geen toegang</span>
+                  })()}
                   onChange={patch => updateField(m.id, patch)}
                   onDelete={() => remove(m.id)}
                   onToggleHidden={() => toggleHidden(m.id)}
@@ -519,8 +533,9 @@ export default function TeamAdminPage() {
   )
 }
 
-function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onOpenProfile, canChangeStatus, onDragStart, onDropOn, onDragEnd }: {
+function Row({ accountRole, member, onChange, onDelete, onToggleHidden, onToggleInactive, onOpenProfile, canChangeStatus, onDragStart, onDropOn, onDragEnd }: {
   member: TeamMember
+  accountRole: React.ReactNode
   onChange: (patch: Partial<TeamMember>) => void
   onDelete: () => void
   onToggleHidden: () => void
@@ -584,7 +599,7 @@ function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onO
         onDropOn()
       }}
       onDragEnd={() => { setDropHover(false); onDragEnd?.() }}
-      style={{ display: 'grid', minWidth: 1060, gridTemplateColumns: '20px 28px minmax(120px, 1.1fr) minmax(150px, 1.3fr) 90px 76px 112px 98px 94px 150px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
+      style={{ display: 'grid', minWidth: 1140, gridTemplateColumns: '20px 28px minmax(110px, 1.1fr) minmax(150px, 1.3fr) 160px 70px 108px 98px 84px 130px', gap: 8, padding: '10px 14px', alignItems: 'center', opacity: member.hidden ? 0.55 : 1,
         borderBottom: dropHover ? '2px solid var(--accent)' : '1px solid var(--border-light)',
         background: dropHover ? 'var(--accent-light)' : 'transparent',
         cursor: draggable ? 'grab' : 'default',
@@ -598,7 +613,7 @@ function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onO
         style={{ width: 22, height: 22, borderRadius: '50%', background: member.color, border: '2px solid var(--border)', cursor: 'pointer', padding: 0 }} />
       <input value={name} onChange={e => setName(e.target.value)} onBlur={() => blurField('name', name, member.name)} style={cellInput} />
       <input value={email} onChange={e => setEmail(e.target.value)} onBlur={() => blurField('email', email, member.email)} type="email" style={cellInput} />
-      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{member.id}</span>
+      <div>{accountRole}</div>
       <input value={hours} onChange={e => setHours(e.target.value)}
         onBlur={() => blurField('weeklyCapacity', parseFloat(hours) || 0, member.weeklyCapacity)}
         type="number" min={0} max={80} step={4}
@@ -633,7 +648,7 @@ function Row({ member, onChange, onDelete, onToggleHidden, onToggleInactive, onO
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ maxWidth: 1100, padding: '40px 32px' }}>
+    <div style={{ maxWidth: 1500, padding: '40px 28px', margin:'0 auto' }}>
       <h1 style={{ fontSize: 30, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 24px', display: 'flex', alignItems: 'center', gap: 10, letterSpacing: '-0.02em' }}>
         <IconUsers size={26} /> Team beheren
       </h1>
