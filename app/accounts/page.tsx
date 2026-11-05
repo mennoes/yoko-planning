@@ -1,5 +1,7 @@
 'use client'
 
+import { AccountAccessPanel } from '@/components/AccountAccessPanel'
+import { accountAccessAdmin } from '@/lib/accountAccess'
 import { AccountCard } from '@/components/AccountCard'
 import { AccountGroups } from '@/components/AccountGroups'
 import { useState, useEffect } from 'react'
@@ -10,7 +12,7 @@ import { useUndo } from '@/components/UndoContext'
 import { requiresAuth, supabase } from '@/lib/supabase'
 import { clearAuthCache } from '@/lib/sync'
 import {
-  pullAccounts, pullAccountsDetailed, upsertAccount, deleteAccount, subscribeRemoteAccounts,
+  pullAccountsDetailed, upsertAccount, deleteAccount, subscribeRemoteAccounts,
   type Account,
 } from '@/lib/accountsStore'
 
@@ -21,6 +23,9 @@ export default function AccountsPage() {
   const pathname = usePathname()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
+  const [accessDenied, setAccessDenied] = useState(false)
+  const [manageAccess, setManageAccess] = useState(false)
+  const [accessOpen, setAccessOpen] = useState(false)
   const [authBlocked, setAuthBlocked] = useState(false)
   const [sessionInfo, setSessionInfo] = useState<{ hasSession: boolean; email?: string | null; dbError?: string }>({ hasSession: false })
   const [retrying, setRetrying] = useState(false)
@@ -42,14 +47,18 @@ export default function AccountsPage() {
       let sessEmail: string | null | undefined
       let sessHas = false
       if (supabase) {
-        const { data } = await supabase.auth.getSession()
-        sessHas = !!data.session
-        sessEmail = data.session?.user?.email
+        const { data } = await supabase.auth.getUser()
+        if (cancelled) return
+        sessHas = !!data.user
+        sessEmail = data.user?.email
+        setManageAccess(accountAccessAdmin(data.user?.app_metadata))
       }
       clearAuthCache()
       const result = await pullAccountsDetailed()
       if (cancelled) return
+      setAccessDenied(!!result.forbidden)
       if (!result.rows) {
+        setAccounts([])
         setSessionInfo({
           hasSession: sessHas,
           email:      sessEmail,
@@ -64,10 +73,12 @@ export default function AccountsPage() {
       setAccounts(result.rows); setLoading(false)
     }
     load()
-    const off = subscribeRemoteAccounts(() => {
-      pullAccounts().then(rows => { if (rows && !cancelled) setAccounts(rows) })
-    })
-    return () => { cancelled = true; off() }
+    const off = subscribeRemoteAccounts(() => { void load() })
+    const refresh = () => { if (document.visibilityState === 'visible') void load() }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    const timer = window.setInterval(refresh, 30000)
+    return () => { cancelled = true; off(); window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
   }, [isAuthenticated, authChecked, retrying])
 
   async function retry() {
@@ -111,6 +122,11 @@ export default function AccountsPage() {
     )
   }
 
+  if (accessDenied) return <div style={{maxWidth:700,padding:'40px 28px'}}>
+    <h1 style={{fontSize:28}}>Accounts</h1>
+    <p style={{fontSize:15,color:'var(--text-secondary)'}}>Je hebt geen toegang tot de accountgegevens en wachtwoorden. Vraag een beheerder als je een account nodig hebt.</p>
+  </div>
+
   if (authBlocked) {
     return (
       <div style={{ maxWidth: 1400, padding: '48px 36px' }}>
@@ -153,8 +169,11 @@ export default function AccountsPage() {
   return <div style={{ padding: '28px 28px', maxWidth: 1600, margin: '0 auto' }}>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
       <h1 style={{ margin: 0, fontSize: 28, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-primary)' }}><IconKey size={24} />Accounts</h1>
-      <button onClick={addRow} style={{ border: 0, borderRadius: 8, padding: '8px 12px', background: 'var(--accent)', color: '#171717', fontSize: 12, fontWeight: 650, cursor: 'pointer' }}>+ Account</button>
+      <div style={{display:'flex',gap:8}}>
+      {manageAccess&&<button onClick={()=>setAccessOpen(!accessOpen)} aria-expanded={accessOpen} style={{border:'1px solid var(--border)',borderRadius:8,padding:'8px 12px',background:'var(--bg-card)',color:'var(--text-primary)',fontSize:12,cursor:'pointer'}}>Toegang beheren</button>}
+      <button onClick={addRow} style={{ border: 0, borderRadius: 8, padding: '8px 12px', background: 'var(--accent)', color: '#171717', fontSize: 12, fontWeight: 650, cursor: 'pointer' }}>+ Account</button></div>
     </div>
+    {manageAccess&&accessOpen&&<AccountAccessPanel/>}
     <AccountGroups accounts={accounts} renderCard={(account,handle,categoryPicker) => <AccountCard account={account} handle={handle} categoryPicker={categoryPicker} onSave={saveAccount} onDelete={() => deleteRow(account.id)} />} />
   </div>
 }
