@@ -6039,8 +6039,8 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         <MobileCreateItemSheet kind="item" groups={groups} onClose={() => setMobileBoardCreateOpen(false)} onCreate={createMobileBoardItem} />
       )}
 
-      {isMobile && !mobileBoardCreateOpen && (
-        <button type="button" onClick={() => setMobileBoardCreateOpen(true)}
+      {!mobileBoardCreateOpen && !aiOpen && (
+        <button type="button" onClick={() => { setPlanGroupId(null); setAiOpen(true) }}
           aria-label="Nieuw item" title="Nieuw item"
           style={{
             position: 'fixed', right: 16,
