@@ -40,7 +40,7 @@ export function changePlanPeriod(plan: AiItemPlan, index: number, kind: 'move' |
     if (!s.startDate || !s.endDate) return s
     const offset = Math.max(0, werkdagenIn(row.startDate!, s.startDate) - 1)
     const endOffset = Math.max(offset + 1, werkdagenIn(row.startDate!, s.endDate))
-    const first = Math.min(newLength - 1, Math.floor(offset * newLength / oldLength))
+    const first = Math.min(newLength - 1, Math.round(offset * newLength / oldLength))
     const last = Math.min(newLength, Math.max(first + 1, Math.round(endOffset * newLength / oldLength)))
     const startDate = endAfterWorkdays(period.startDate, first + 1)
     const endDate = endAfterWorkdays(period.startDate, last)
