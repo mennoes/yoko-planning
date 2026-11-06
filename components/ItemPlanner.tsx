@@ -143,7 +143,7 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   function kiesSjabloon(id: string) {
     setSjabloonId(id)
     const sjabloon = SJABLONEN.find(entry => entry.id === id)
-    setStepOwners([])
+    setStepOwners(sjabloon?.stappen.map(() => [...projectOwners]) ?? [])
     if (sjabloon) setStappenTekst(stappenNaarTekst(sjabloon.stappen))
   }
 
@@ -245,14 +245,14 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
     if (!uitkomst.ok) { setFout(uitkomst.error); return }
     setStartDate(uitkomst.plan.startDate)
     setPlan({ ...uitkomst.plan, ownerIds: projectOwners, subitems: uitkomst.plan.subitems.map((sub, index) => ({
-      ...sub, ownerIds: stepOwners[index] ?? [],
+      ...sub, ownerIds: stepOwners[index] ?? projectOwners,
     })) })
   }
 
   function maakAan() {
     if (!plan || !groupId) return
     let teller = Date.now()
-    const ownedPlan = tab === 'sjabloon' ? {...plan, ownerIds: projectOwners, subitems: plan.subitems.map((sub, index) => ({...sub, ownerIds: stepOwners[index] ?? []}))} : plan
+    const ownedPlan = tab === 'sjabloon' ? {...plan, ownerIds: projectOwners, subitems: plan.subitems.map((sub, index) => ({...sub, ownerIds: stepOwners[index] ?? projectOwners}))} : plan
     const item = applyClientMoments({ ...planToBoardItem(ownedPlan, () => String(teller++)), deadline },clientMoments,tab==='sjabloon'&&sjabloonId==='explainer')
     onCreate(groupId, item)
     onClose()
@@ -261,13 +261,13 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   const steps = tekstNaarStappen(stappenTekst)
   const totalDays = steps.reduce((sum, step) => sum + step.dagen, 0)
   function updateSteps(nextSteps: typeof steps, nextStart = startDate, nextDeadline = deadline, owners = stepOwners) {
-    setStepOwners(nextSteps.map((_, index) => owners[index] ?? []))
+    setStepOwners(nextSteps.map((_, index) => owners[index] ?? projectOwners))
     setStappenTekst(stappenNaarTekst(nextSteps))
     setStartDate(nextStart)
     setDeadline(nextDeadline)
     if (plan) {
       const result = planUitSjabloon({naam: klusNaam, stappen: nextSteps, deadline: nextDeadline ?? '', startDate: nextStart})
-      if (result.ok) setPlan({...result.plan, ownerIds: projectOwners, subitems: result.plan.subitems.map((sub, index) => ({...sub, ownerIds: owners[index] ?? []}))})
+      if (result.ok) setPlan({...result.plan, ownerIds: projectOwners, subitems: result.plan.subitems.map((sub, index) => ({...sub, ownerIds: owners[index] ?? projectOwners}))})
       else setPlan(null)
     }
   }
@@ -346,7 +346,8 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
               <span>Owners hoofditem</span>
               <OwnersCell value={projectOwners} avatarSize={24} onChange={ids => {
                 setProjectOwners(ids)
-                setPlan(current => current && {...current, ownerIds: ids})
+                setStepOwners(steps.map(() => [...ids]))
+                setPlan(current => current && {...current, ownerIds: ids, subitems: current.subitems.map(sub => ({...sub, ownerIds: [...ids]}))})
               }}/>
             </div>
 
@@ -362,7 +363,7 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
 
             <PlannerStepTable steps={steps} dates={clientRows} settings={clientMoments} onSettings={setClientMoments} suggest={sjabloonId==='explainer'} datesReady={!!deadline && clientPreview.ok} owners={stepOwners} onOwnersChange={owners => {
               setStepOwners(owners)
-              setPlan(current => current && {...current, subitems: current.subitems.map((sub, index) => ({...sub, ownerIds: owners[index] ?? []}))})
+              setPlan(current => current && {...current, subitems: current.subitems.map((sub, index) => ({...sub, ownerIds: owners[index] ?? projectOwners}))})
             }} onChange={(next, owners) => updateSteps(next, startDate, deadline, owners)}/>
 
 
@@ -441,6 +442,8 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
           <div data-ai-voorstel style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 12, padding: 14, background: 'var(--bg-card)' }}>
             {deadline && plan.endDate && plan.endDate > deadline && <p role="status" style={{ color: 'var(--text-secondary)', fontSize: 12 }}>De stappen lopen voorbij de deadline. Pas de startdatum of de duur aan.</p>}
             <PlanTimeline plan={plan} onChange={next => {
+              const ownersChanged = next.ownerIds.length !== plan.ownerIds.length || next.ownerIds.some(id => !plan.ownerIds.includes(id))
+              if (ownersChanged) next = {...next, subitems: next.subitems.map(sub => ({...sub, ownerIds: [...next.ownerIds]}))}
               setPlan(next); setProjectOwners(next.ownerIds); setStepOwners(next.subitems.map(sub => sub.ownerIds)); setKlusNaam(next.name); setStartDate(next.startDate)
               setStappenTekst(stappenNaarTekst(next.subitems.map(sub => ({ naam: sub.name, dagen: sub.startDate && sub.endDate ? werkdagenIn(sub.startDate, sub.endDate) : Math.max(1, sub.estHours / UREN_PER_DAG) }))))
             }} />
