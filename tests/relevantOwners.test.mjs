@@ -57,7 +57,7 @@ test('agenda UI persists pie metadata and supports custom columns', () => {
   assert.match(patch, /!\('ownerHours' in updates\)/)
   // Zes snelle namen, en wie gestopt is hoort daar niet tussen — die
   // vind je via de zoekregel eronder.
-  assert.match(board, /quickMembers = sortedTeam\.filter\(m => !m\.inactive \|\| value\.includes\(m\.id\)\)\.slice\(0, 6\)/)
+  assert.match(readFileSync(new URL('../components/OwnersCell.tsx', import.meta.url), 'utf8'), /quickMembers = sortedTeam\.filter\(m => !m\.inactive \|\| value\.includes\(m\.id\)\)\.slice\(0, 6\)/)
   assert.match(board, /Eigen kolom/)
   assert.match(registry, /id === 'omdenken'/)
   assert.match(registry, /key: 'dagen'/)
