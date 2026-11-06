@@ -18,11 +18,11 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useTeam } from './TeamContext'
-import { changePlanPeriod, daysBetween } from '@/lib/planTimeline'
+
 import { PlanTimeline } from './PlanTimeline'
 import { planToBoardItem, type AiItemPlan } from '@/lib/aiPlan'
 import {
-  planUitSjabloon, stappenNaarTekst, tekstNaarStappen, SJABLONEN,
+  planUitSjabloon, verdeelWerkdagen, stappenNaarTekst, tekstNaarStappen, SJABLONEN,
   UREN_PER_DAG, werkdagenIn,
 } from '@/lib/sjabloonPlan'
 import { mailNaarStappen } from '@/lib/mailNaarStappen'
@@ -231,6 +231,7 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
 
   function maakSjabloonVoorstel() {
     setFout(''); setPlan(null)
+    if (!deadline) { setFout('Vul eerst de deadline in.'); return }
     const uitkomst = planUitSjabloon({
       naam: klusNaam,
       stappen: tekstNaarStappen(stappenTekst),
@@ -252,8 +253,20 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
     onClose()
   }
 
+  const steps = tekstNaarStappen(stappenTekst)
+  const totalDays = steps.reduce((sum, step) => sum + step.dagen, 0)
+  function updateSteps(nextSteps: typeof steps, nextStart = startDate, nextDeadline = deadline) {
+    setStappenTekst(stappenNaarTekst(nextSteps))
+    setStartDate(nextStart)
+    setDeadline(nextDeadline)
+    if (plan) {
+      const result = planUitSjabloon({naam: klusNaam, stappen: nextSteps, deadline: nextDeadline ?? '', startDate: nextStart})
+      if (result.ok) setPlan({...result.plan, ownerIds: plan.ownerIds, subitems: result.plan.subitems.map(sub => ({...sub, ownerIds: plan.subitems.find(old => old.name === sub.name)?.ownerIds ?? []}))})
+      else setPlan(null)
+    }
+  }
   const clientPreview=planUitSjabloon({naam:klusNaam||'Klantplanning',stappen:tekstNaarStappen(stappenTekst),deadline:deadline??'',startDate})
-  const clientRows=plan?.subitems??(clientPreview.ok?clientPreview.plan.subitems:tekstNaarStappen(stappenTekst).map(s=>({name:s.naam,endDate:null})))
+  const clientRows=!deadline?steps.map(s=>({name:s.naam,endDate:null})):plan?.subitems??(clientPreview.ok?clientPreview.plan.subitems:tekstNaarStappen(stappenTekst).map(s=>({name:s.naam,endDate:null})))
   if (typeof document === 'undefined') return null
   return createPortal(
     <>
@@ -288,7 +301,7 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
 
         {tab === 'sjabloon' ? (
           <>
-            <style>{`.planner-dates { display:grid; grid-template-columns:minmax(120px,1fr) repeat(2,minmax(120px,170px));gap:10px; } @media(max-width:650px){.planner-dates{grid-template-columns:repeat(2,minmax(0,1fr));}.planner-dates>label:first-child{grid-column:1/-1;}}`}</style>
+            <style>{`.planner-dates { display:grid; grid-template-columns:minmax(120px,1fr) 90px repeat(2,minmax(120px,150px));gap:10px; } @media(max-width:650px){.planner-dates{grid-template-columns:repeat(2,minmax(0,1fr));}.planner-dates>label:first-child{grid-column:1/-1;}}`}</style>
             <div className="planner-dates">
               <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Naam
@@ -297,21 +310,27 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
                   style={{ ...vak, marginTop: 4 }} />
               </label>
               <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Totaal dagen
+                <input key={totalDays} type="number" min={steps.length || 1} max={steps.length * 60 || 60}
+                  aria-label="Totaal dagen" defaultValue={totalDays} style={{ ...vak, marginTop: 4 }}
+                  onBlur={event => {
+                    const next = verdeelWerkdagen(steps, Number(event.target.value))
+                    event.target.value = String(next.reduce((sum, step) => sum + step.dagen, 0))
+                    updateSteps(next, deadline ? null : startDate)
+                  }} />
+              </label>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Startdatum
                 <div style={{ marginTop: 4 }}>
-                  <DatumVeld value={startDate} onChange={value => {
-                    setStartDate(value)
-                    if (value && plan?.startDate) {
-                      const next = changePlanPeriod(plan, -1, 'move', daysBetween(plan.startDate, value))
-                      setPlan(next); setStartDate(next.startDate)
-                    }
+                  <DatumVeld value={startDate ?? (deadline && clientPreview.ok ? clientPreview.plan.startDate : null)} onChange={value => {
+                    updateSteps(steps, value)
                   }} ariaLabel="Startdatum" style={{ ...vak, width: '100%' }} />
                 </div>
               </label>
               <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Deadline
                 <div style={{ marginTop: 4 }}>
-                  <DatumVeld value={deadline} onChange={setDeadline} ariaLabel="Deadline"
+                  <DatumVeld value={deadline} onChange={value => updateSteps(steps, null, value)} ariaLabel="Deadline"
                     style={{ ...vak, width: '100%' }} />
                 </div>
               </label>
@@ -327,13 +346,8 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
               </select>
             </label>
 
-            <PlannerStepTable steps={tekstNaarStappen(stappenTekst)} dates={clientRows} settings={clientMoments} onSettings={setClientMoments} suggest={sjabloonId==='explainer'} onChange={steps=>{
-              setStappenTekst(stappenNaarTekst(steps))
-              if(plan){
-                const result=planUitSjabloon({naam:klusNaam,stappen:steps,deadline:deadline??'',startDate})
-                if(result.ok)setPlan({...result.plan,ownerIds:plan.ownerIds,subitems:result.plan.subitems.map(sub=>({...sub,ownerIds:plan.subitems.find(old=>old.name===sub.name)?.ownerIds??[]}))})
-              }
-            }}/>
+            <PlannerStepTable steps={steps} dates={clientRows} settings={clientMoments} onSettings={setClientMoments} suggest={sjabloonId==='explainer'} datesReady={!!deadline && clientPreview.ok} onChange={next => updateSteps(next)}/>
+
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
               <button onClick={maakSjabloonVoorstel}

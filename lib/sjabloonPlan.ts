@@ -265,3 +265,21 @@ export function rekStap(startIso: string, eindIso: string, kant: 'start' | 'eind
   if (nieuw < start) nieuw = werkdagVooruit(start)
   return { startDate: naarIso(werkdagVooruit(start)), endDate: naarIso(nieuw) }
 }
+
+
+// Allocate whole workdays proportionally, keeping every step at least one day.
+export function verdeelWerkdagen(stappen: SjabloonStap[], totaal: number): SjabloonStap[] {
+  if (!stappen.length) return []
+  const target = Math.max(stappen.length, Math.min(stappen.length * 60, Math.round(totaal) || stappen.length))
+  const days = stappen.map(() => 1)
+  // Highest averages allocation avoids rounding drift and respects each step's weight.
+  for (let remaining = target - stappen.length; remaining > 0; remaining--) {
+    let best = -1
+    for (let i = 0; i < stappen.length; i++) {
+      if (days[i] >= 60) continue
+      if (best < 0 || stappen[i].dagen / (days[i] + 0.5) > stappen[best].dagen / (days[best] + 0.5)) best = i
+    }
+    days[best]++
+  }
+  return stappen.map((step, i) => ({ ...step, dagen: days[i] }))
+}
