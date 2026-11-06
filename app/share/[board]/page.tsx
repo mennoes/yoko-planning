@@ -408,20 +408,12 @@ export default function ShareBoardPage() {
         <span aria-hidden style={{ width: 1, height: 24, background: 'var(--border-light)', marginRight: 2 }} />
         {([
           { id: 'all',       label: 'Alles' },
-          { id: 'prevMonth', label: 'Vorige maand' },
-          { id: 'month',     label: 'Deze maand' },
-          { id: 'next',      label: 'Volgende maand' },
           { id: 'quarter',   label: '3 maanden' },
           { id: 'custom',    label: 'Eigen range' },
         ] as { id: Preset; label: string }[]).map(p => {
           const active = preset === p.id
           return (
-            <button key={p.id} onClick={() => {
-              setPreset(p.id)
-              if (p.id === 'prevMonth' || p.id === 'month' || p.id === 'next') {
-                setMonthCursor(p.id === 'prevMonth' ? -1 : p.id === 'next' ? 1 : 0)
-              }
-            }}
+            <button key={p.id} onClick={() => setPreset(p.id)}
               style={{
                 padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 600,
                 background: active ? color : 'var(--bg-card)',
