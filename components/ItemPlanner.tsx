@@ -73,7 +73,6 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   const [groupId, setGroupId] = useState(startGroupId ?? groups[0]?.id ?? '')
   const veld = useRef<HTMLTextAreaElement>(null)
 
-  const [stepTab,setStepTab]=useState<'steps'|'client'>('steps')
   const [clientMoments,setClientMoments]=useState<ClientMoments>({})
   const [klusNaam, setKlusNaam] = useState('')
   const [sjabloonId, setSjabloonId] = useState(SJABLONEN[0].id)
@@ -328,13 +327,15 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
               </select>
             </label>
 
-            <div role="tablist" aria-label="Stappen en klantmomenten" style={{display:'flex',gap:6,marginTop:16}}>{([['steps','Stappen'],['client','Klantmomenten']] as const).map(([value,label])=><button key={value} role="tab" aria-selected={stepTab===value} onClick={()=>setStepTab(value)} style={{padding:'7px 13px',borderRadius:7,border:'1px solid var(--border)',background:stepTab===value?'var(--accent)':'var(--bg-card)',color:stepTab===value?'#171717':'var(--text-secondary)',cursor:'pointer',fontWeight:600}}>{label}</button>)}</div>
-            {stepTab==='client'?<ClientMilestones rows={clientRows} settings={clientMoments} onChange={setClientMoments} suggest={sjabloonId==='explainer'}/>:<label style={{ display: 'block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:20,marginTop:16,alignItems:'start'}}>
+            <label style={{display:'block',fontSize:12,color:'var(--text-muted)',minWidth:0}}>
               Stappen
               <textarea value={stappenTekst} onChange={event => setStappenTekst(event.target.value)}
-                aria-label="Stappen" rows={8}
+                aria-label="Stappen" rows={12}
                 style={{ ...vak, marginTop: 4, resize: 'vertical', fontSize: 13.5, lineHeight: 1.5, fontVariantNumeric: 'tabular-nums' }} />
-            </label>}
+            </label>
+            <div style={{minWidth:0}}><div style={{fontSize:12,color:'var(--text-muted)'}}>Klantmomenten</div><ClientMilestones rows={clientRows} settings={clientMoments} onChange={setClientMoments} suggest={sjabloonId==='explainer'}/></div>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
               <button onClick={maakSjabloonVoorstel}
