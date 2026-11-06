@@ -10,6 +10,6 @@ test('shared photo resolver falls back to static team avatars', () => {
 })
 
 test('distribution pies use the shared photo resolver', () => {
-  assert.match(board, /avatarUrl: getPhoto\(id\)/)
+  assert.match(readFileSync(new URL('../components/OwnersCell.tsx', import.meta.url), 'utf8'), /avatarUrl: getPhoto\(id\)/)
   assert.match(board, /avatarUrl: m \? getPhoto\(m\.id\) : null/)
 })

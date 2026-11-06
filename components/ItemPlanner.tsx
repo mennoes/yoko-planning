@@ -12,6 +12,7 @@
 // het naar het bord — langs dezelfde weg als een item dat je met de
 // hand maakt.
 
+import { OwnersCell } from './OwnersCell'
 import { PlannerStepTable } from './PlannerStepTable'
 import { applyClientMoments, type ClientMoments } from '@/lib/clientMilestones'
 import { useEffect, useRef, useState } from 'react'
@@ -77,6 +78,8 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   const [klusNaam, setKlusNaam] = useState('')
   const [sjabloonId, setSjabloonId] = useState(SJABLONEN[0].id)
   const [stappenTekst, setStappenTekst] = useState(() => stappenNaarTekst(SJABLONEN[0].stappen))
+  const [projectOwners, setProjectOwners] = useState<string[]>([])
+  const [stepOwners, setStepOwners] = useState<string[][]>([])
   const [startDate, setStartDate] = useState<string | null>(null)
   const [deadline, setDeadline] = useState<string | null>(null)
   const [mailOpen, setMailOpen] = useState(false)
@@ -140,6 +143,7 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   function kiesSjabloon(id: string) {
     setSjabloonId(id)
     const sjabloon = SJABLONEN.find(entry => entry.id === id)
+    setStepOwners([])
     if (sjabloon) setStappenTekst(stappenNaarTekst(sjabloon.stappen))
   }
 
@@ -240,28 +244,30 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
     })
     if (!uitkomst.ok) { setFout(uitkomst.error); return }
     setStartDate(uitkomst.plan.startDate)
-    setPlan({ ...uitkomst.plan, ownerIds: plan?.ownerIds ?? [], subitems: uitkomst.plan.subitems.map(sub => ({
-      ...sub, ownerIds: plan?.subitems.find(previous => previous.name === sub.name)?.ownerIds ?? [],
+    setPlan({ ...uitkomst.plan, ownerIds: projectOwners, subitems: uitkomst.plan.subitems.map((sub, index) => ({
+      ...sub, ownerIds: stepOwners[index] ?? [],
     })) })
   }
 
   function maakAan() {
     if (!plan || !groupId) return
     let teller = Date.now()
-    const item = applyClientMoments({ ...planToBoardItem(plan, () => String(teller++)), deadline },clientMoments,tab==='sjabloon'&&sjabloonId==='explainer')
+    const ownedPlan = tab === 'sjabloon' ? {...plan, ownerIds: projectOwners, subitems: plan.subitems.map((sub, index) => ({...sub, ownerIds: stepOwners[index] ?? []}))} : plan
+    const item = applyClientMoments({ ...planToBoardItem(ownedPlan, () => String(teller++)), deadline },clientMoments,tab==='sjabloon'&&sjabloonId==='explainer')
     onCreate(groupId, item)
     onClose()
   }
 
   const steps = tekstNaarStappen(stappenTekst)
   const totalDays = steps.reduce((sum, step) => sum + step.dagen, 0)
-  function updateSteps(nextSteps: typeof steps, nextStart = startDate, nextDeadline = deadline) {
+  function updateSteps(nextSteps: typeof steps, nextStart = startDate, nextDeadline = deadline, owners = stepOwners) {
+    setStepOwners(nextSteps.map((_, index) => owners[index] ?? []))
     setStappenTekst(stappenNaarTekst(nextSteps))
     setStartDate(nextStart)
     setDeadline(nextDeadline)
     if (plan) {
       const result = planUitSjabloon({naam: klusNaam, stappen: nextSteps, deadline: nextDeadline ?? '', startDate: nextStart})
-      if (result.ok) setPlan({...result.plan, ownerIds: plan.ownerIds, subitems: result.plan.subitems.map(sub => ({...sub, ownerIds: plan.subitems.find(old => old.name === sub.name)?.ownerIds ?? []}))})
+      if (result.ok) setPlan({...result.plan, ownerIds: projectOwners, subitems: result.plan.subitems.map((sub, index) => ({...sub, ownerIds: owners[index] ?? []}))})
       else setPlan(null)
     }
   }
@@ -336,6 +342,14 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
               </label>
             </div>
 
+            <div style={{display:'flex',alignItems:'center',gap:12,marginTop:12,fontSize:12,color:'var(--text-muted)'}}>
+              <span>Owners hoofditem</span>
+              <OwnersCell value={projectOwners} avatarSize={24} onChange={ids => {
+                setProjectOwners(ids)
+                setPlan(current => current && {...current, ownerIds: ids})
+              }}/>
+            </div>
+
             <details open={!plan} style={{ marginTop: 12 }}>
               <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}>Sjabloon & stappen</summary>
             <label style={{ display: 'block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
@@ -346,7 +360,10 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
               </select>
             </label>
 
-            <PlannerStepTable steps={steps} dates={clientRows} settings={clientMoments} onSettings={setClientMoments} suggest={sjabloonId==='explainer'} datesReady={!!deadline && clientPreview.ok} onChange={next => updateSteps(next)}/>
+            <PlannerStepTable steps={steps} dates={clientRows} settings={clientMoments} onSettings={setClientMoments} suggest={sjabloonId==='explainer'} datesReady={!!deadline && clientPreview.ok} owners={stepOwners} onOwnersChange={owners => {
+              setStepOwners(owners)
+              setPlan(current => current && {...current, subitems: current.subitems.map((sub, index) => ({...sub, ownerIds: owners[index] ?? []}))})
+            }} onChange={(next, owners) => updateSteps(next, startDate, deadline, owners)}/>
 
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
@@ -424,7 +441,7 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
           <div data-ai-voorstel style={{ marginTop: 16, border: '1px solid var(--border)', borderRadius: 12, padding: 14, background: 'var(--bg-card)' }}>
             {deadline && plan.endDate && plan.endDate > deadline && <p role="status" style={{ color: 'var(--text-secondary)', fontSize: 12 }}>De stappen lopen voorbij de deadline. Pas de startdatum of de duur aan.</p>}
             <PlanTimeline plan={plan} onChange={next => {
-              setPlan(next); setKlusNaam(next.name); setStartDate(next.startDate)
+              setPlan(next); setProjectOwners(next.ownerIds); setStepOwners(next.subitems.map(sub => sub.ownerIds)); setKlusNaam(next.name); setStartDate(next.startDate)
               setStappenTekst(stappenNaarTekst(next.subitems.map(sub => ({ naam: sub.name, dagen: sub.startDate && sub.endDate ? werkdagenIn(sub.startDate, sub.endDate) : Math.max(1, sub.estHours / UREN_PER_DAG) }))))
             }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
