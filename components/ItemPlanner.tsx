@@ -12,7 +12,7 @@
 // het naar het bord — langs dezelfde weg als een item dat je met de
 // hand maakt.
 
-import { ClientMilestones } from './ClientMilestones'
+import { PlannerStepTable } from './PlannerStepTable'
 import { applyClientMoments, type ClientMoments } from '@/lib/clientMilestones'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -327,15 +327,13 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
               </select>
             </label>
 
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:20,marginTop:16,alignItems:'start'}}>
-            <label style={{display:'block',fontSize:12,color:'var(--text-muted)',minWidth:0}}>
-              Stappen
-              <textarea value={stappenTekst} onChange={event => setStappenTekst(event.target.value)}
-                aria-label="Stappen" rows={12}
-                style={{ ...vak, marginTop: 4, resize: 'vertical', fontSize: 13.5, lineHeight: 1.5, fontVariantNumeric: 'tabular-nums' }} />
-            </label>
-            <div style={{minWidth:0}}><div style={{fontSize:12,color:'var(--text-muted)'}}>Klantmomenten</div><ClientMilestones rows={clientRows} settings={clientMoments} onChange={setClientMoments} suggest={sjabloonId==='explainer'}/></div>
-            </div>
+            <PlannerStepTable steps={tekstNaarStappen(stappenTekst)} dates={clientRows} settings={clientMoments} onSettings={setClientMoments} suggest={sjabloonId==='explainer'} onChange={steps=>{
+              setStappenTekst(stappenNaarTekst(steps))
+              if(plan){
+                const result=planUitSjabloon({naam:klusNaam,stappen:steps,deadline:deadline??'',startDate})
+                if(result.ok)setPlan({...result.plan,ownerIds:plan.ownerIds,subitems:result.plan.subitems.map(sub=>({...sub,ownerIds:plan.subitems.find(old=>old.name===sub.name)?.ownerIds??[]}))})
+              }
+            }}/>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
               <button onClick={maakSjabloonVoorstel}
