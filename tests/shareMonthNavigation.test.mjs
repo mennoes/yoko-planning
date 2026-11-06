@@ -12,13 +12,14 @@ test('shared monthly overview can move backward, forward and with the wheel', ()
 })
 
 test('clicking any visible month filters to that exact calendar month', () => {
-  assert.match(share, /setPreset\('custom'\); setFrom\(monthFrom\); setUntil\(monthUntil\)/)
+  assert.match(share, /setPreset\('selectedMonth'\); setFrom\(monthFrom\); setUntil\(monthUntil\)/)
   assert.match(share, /date\.toLocaleDateString\('nl-NL', \{ month: 'long', year: 'numeric' \}\)/)
 })
 
-test('relative month wording is only used for the actual adjacent calendar months', () => {
-  assert.match(share, /function relativeMonthLabel/)
-  assert.match(share, /relativeMonthLabel\(m\.key\) \?\? m\.label/)
-  assert.doesNotMatch(share, /idx === 0 \? 'Vorige maand'/)
-  assert.doesNotMatch(share, /Geselecteerde maand/)
+test('month cards use calendar titles and a separate current-month label', () => {
+  assert.doesNotMatch(share, /relativeMonthLabel/)
+  assert.match(share, /\{m\.label\}/)
+  assert.match(share, /m\.isCurrent \? 'Deze maand'/)
+  assert.match(share, /aria-pressed=\{active\}/)
+  assert.match(share, /Terug naar deze maand/)
 })

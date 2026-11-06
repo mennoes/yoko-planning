@@ -46,27 +46,14 @@ function fmtDate(iso: string | null): string {
   return `${d.getDate()} ${NL_MON[d.getMonth()]}`
 }
 
-function relativeMonthLabel(key: string): string | null {
-  const now = new Date()
-  const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const previousDate = addMonths(now, -1)
-  const nextDate = addMonths(now, 1)
-  const previous = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, '0')}`
-  const next = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`
-  if (key === current) return 'Deze maand'
-  if (key === previous) return 'Vorige maand'
-  if (key === next) return 'Volgende maand'
-  return null
-}
-
-type Preset = 'all' | 'prevMonth' | 'month' | 'next' | 'quarter' | 'custom'
+type Preset = 'all' | 'prevMonth' | 'month' | 'next' | 'quarter' | 'custom' | 'selectedMonth'
 
 function monthStart(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 function monthEnd(d: Date): string {
   const e = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-  return e.toISOString().slice(0, 10)
+  return `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, '0')}-${String(e.getDate()).padStart(2, '0')}`
 }
 function addMonths(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth() + n, 1)
@@ -307,7 +294,7 @@ export default function ShareBoardPage() {
   const color = BOARD_COLORS[board] ?? 'var(--accent)'
 
   return (
-    <main style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px 80px' }}>
+    <main style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', maxWidth: 960, margin: '0 auto', padding: '40px 24px 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
         <Image src="/yoko-logo.png" alt="Studio Yoko" width={34} height={34} priority unoptimized
           style={{ display: 'block', width: 34, height: 34 }} />
@@ -325,10 +312,20 @@ export default function ShareBoardPage() {
         {stats.total} items · {stats.done} afgerond · {stats.pct}% klaar
       </p>
 
-      {/* Uren per maand — het belangrijkste dat een klant in één oogopslag
-          moet kunnen zien: hoeveel tijd is er vorige maand aan besteed,
-          hoeveel deze maand, en hoeveel staat er volgende maand gepland.
-          Klikbaar: filtert de lijst eronder meteen op die maand. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+        <span aria-live="polite" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          Periode: {from && until === monthEnd(new Date(`${from}T12:00:00`)) && from.endsWith('-01')
+            ? new Date(`${from}T12:00:00`).toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })
+            : from || until ? `${from ? fmtDate(from) : 'begin'} – ${until ? fmtDate(until) : 'nu'}` : 'alle datums'}
+        </span>
+        <button type="button" onClick={() => {
+          const today = new Date()
+          setMonthCursor(0); setPreset('month'); setFrom(monthStart(today)); setUntil(monthEnd(today))
+        }} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          Terug naar deze maand
+        </button>
+      </div>
+      {/* De pijlen bladeren; een kaart selecteert de periode voor de lijst. */}
       {visibleMonthlyHours.length === 3 && (
         <div onWheel={event => {
           const direction = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
@@ -345,28 +342,25 @@ export default function ShareBoardPage() {
             const monthUntil = monthEnd(new Date(year, month - 1, 1))
             const active = from === monthFrom && until === monthUntil
             return (
-              <button key={m.key} onClick={() => { setPreset('custom'); setFrom(monthFrom); setUntil(monthUntil) }}
+              <button key={m.key} aria-pressed={active} onClick={() => { setPreset('selectedMonth'); setFrom(monthFrom); setUntil(monthUntil) }}
                 style={{
                   textAlign: 'left', cursor: 'pointer',
-                  padding: '18px 20px', borderRadius: 12,
+                  padding: 'clamp(10px, 2vw, 18px) clamp(7px, 2vw, 20px)', borderRadius: 12, minWidth: 0,
                   background: active ? 'var(--yellow)' : 'var(--bg-card)',
                   border: `1px solid ${active ? 'var(--yellow)' : 'var(--border-light)'}`,
                 }}>
                 <div style={{
-                  fontSize: 12, fontWeight: 700, letterSpacing: '0.055em', textTransform: 'uppercase',
+                  fontSize: 'clamp(10px, 1.6vw, 12px)', fontWeight: 700, letterSpacing: '0.025em', textTransform: 'uppercase', overflowWrap: 'anywhere',
                   color: active ? '#1A1714' : m.isCurrent ? color : 'var(--text-secondary)', marginBottom: 8,
-                  display: 'flex', alignItems: 'center', gap: 6,
+                  minHeight: '2.5em',
                 }}>
-                  {relativeMonthLabel(m.key) ?? m.label}
-                  {m.isCurrent && (
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: active ? '#1A1714' : color }} />
-                  )}
+                  {m.label}
                 </div>
-                <div style={{ fontSize: 30, lineHeight: 1.08, fontWeight: 700, color: active ? '#1A1714' : 'var(--text-primary)', letterSpacing: '-0.025em' }}>
+                <div style={{ fontSize: 'clamp(22px, 3vw, 30px)', lineHeight: 1.08, fontWeight: 700, color: active ? '#1A1714' : 'var(--text-primary)', letterSpacing: '-0.025em' }}>
                   {m.hours > 0 ? `${m.hours}u` : '—'}
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.35, color: active ? 'rgba(26,23,20,0.72)' : 'var(--text-secondary)', textTransform: 'capitalize', marginTop: 5 }}>
-                  {m.label}
+                <div style={{ minHeight: '1.4em', fontSize: 10, fontWeight: 600, color: active ? '#1A1714' : color, marginTop: 7 }}>
+                  {m.isCurrent ? 'Deze maand' : '\u00a0'}
                 </div>
               </button>
             )
@@ -422,7 +416,12 @@ export default function ShareBoardPage() {
         ] as { id: Preset; label: string }[]).map(p => {
           const active = preset === p.id
           return (
-            <button key={p.id} onClick={() => setPreset(p.id)}
+            <button key={p.id} onClick={() => {
+              setPreset(p.id)
+              if (p.id === 'prevMonth' || p.id === 'month' || p.id === 'next') {
+                setMonthCursor(p.id === 'prevMonth' ? -1 : p.id === 'next' ? 1 : 0)
+              }
+            }}
               style={{
                 padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 600,
                 background: active ? color : 'var(--bg-card)',
