@@ -12,6 +12,8 @@
 // het naar het bord — langs dezelfde weg als een item dat je met de
 // hand maakt.
 
+import { ClientMilestones } from './ClientMilestones'
+import { applyClientMoments, type ClientMoments } from '@/lib/clientMilestones'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
@@ -71,6 +73,8 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   const [groupId, setGroupId] = useState(startGroupId ?? groups[0]?.id ?? '')
   const veld = useRef<HTMLTextAreaElement>(null)
 
+  const [stepTab,setStepTab]=useState<'steps'|'client'>('steps')
+  const [clientMoments,setClientMoments]=useState<ClientMoments>({})
   const [klusNaam, setKlusNaam] = useState('')
   const [sjabloonId, setSjabloonId] = useState(SJABLONEN[0].id)
   const [stappenTekst, setStappenTekst] = useState(() => stappenNaarTekst(SJABLONEN[0].stappen))
@@ -244,11 +248,13 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
   function maakAan() {
     if (!plan || !groupId) return
     let teller = Date.now()
-    const item = { ...planToBoardItem(plan, () => String(teller++)), deadline }
+    const item = applyClientMoments({ ...planToBoardItem(plan, () => String(teller++)), deadline },clientMoments,tab==='sjabloon'&&sjabloonId==='explainer')
     onCreate(groupId, item)
     onClose()
   }
 
+  const clientPreview=planUitSjabloon({naam:klusNaam||'Klantplanning',stappen:tekstNaarStappen(stappenTekst),deadline:deadline??'',startDate})
+  const clientRows=plan?.subitems??(clientPreview.ok?clientPreview.plan.subitems:tekstNaarStappen(stappenTekst).map(s=>({name:s.naam,endDate:null})))
   if (typeof document === 'undefined') return null
   return createPortal(
     <>
@@ -322,12 +328,13 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
               </select>
             </label>
 
-            <label style={{ display: 'block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+            <div role="tablist" aria-label="Stappen en klantmomenten" style={{display:'flex',gap:6,marginTop:16}}>{([['steps','Stappen'],['client','Klantmomenten']] as const).map(([value,label])=><button key={value} role="tab" aria-selected={stepTab===value} onClick={()=>setStepTab(value)} style={{padding:'7px 13px',borderRadius:7,border:'1px solid var(--border)',background:stepTab===value?'var(--accent)':'var(--bg-card)',color:stepTab===value?'#171717':'var(--text-secondary)',cursor:'pointer',fontWeight:600}}>{label}</button>)}</div>
+            {stepTab==='client'?<ClientMilestones rows={clientRows} settings={clientMoments} onChange={setClientMoments} suggest={sjabloonId==='explainer'}/>:<label style={{ display: 'block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
               Stappen
               <textarea value={stappenTekst} onChange={event => setStappenTekst(event.target.value)}
-                aria-label="Stappen" rows={4}
+                aria-label="Stappen" rows={8}
                 style={{ ...vak, marginTop: 4, resize: 'vertical', fontSize: 13.5, lineHeight: 1.5, fontVariantNumeric: 'tabular-nums' }} />
-            </label>
+            </label>}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
               <button onClick={maakSjabloonVoorstel}
