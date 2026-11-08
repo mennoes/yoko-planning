@@ -56,6 +56,7 @@ import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
 import { startTouchItemDrag } from '@/lib/touchItemDrag'
 import { visibleRecurringSubitems } from '@/lib/recurringMeetingWindow'
 import { mergeDetailPatch } from '@/lib/boardItemPatch'
+import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
 
 import { OwnersCell, OwnerUsageCtx, MemberAvatar, ownerHoursDrafts } from './OwnersCell'
@@ -3306,6 +3307,8 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
   const currentItems  = renderItems.filter(i => i.id === openRequest?.id || (!isOpkomendItem(i) && (isDoneGroup || i.status !== 'Done')))
   const doneItems     = isDoneGroup ? [] : renderItems.filter(i => i.id !== openRequest?.id && !isOpkomendItem(i) && i.status === 'Done')
   const opkomendItems = renderItems.filter(i => i.id !== openRequest?.id && isOpkomendItem(i))
+  const { recent: recentDoneItems, older: olderDoneItems } = splitCompletedArchive(doneItems, item => itemDatums(item).endDate)
+  const [olderDoneOpen, setOlderDoneOpen] = useState(false)
   const [opkomendOpen, setOpkomendOpen] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)
   // Onthoud welk item zojuist via 'Voeg item toe' is aangemaakt zodat de
@@ -3984,7 +3987,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                *  desktop volgt hij hetzelfde kolomraster als de rijen, zodat
                *  het urentotaal recht onder de Est-kolom staat in plaats van
                *  los achter de tekst te bungelen. */
-              function bucketKop(kleur: string, label: string, items: BoardItem[], open: boolean, toggle: () => void) {
+              function bucketKop(kleur: string, label: string, items: BoardItem[], open: boolean, toggle: () => void, nested = false) {
                 const uren  = items.reduce((som, i) => som + effectiveHours(i), 0)
                 const dagen = Math.round((uren / 8) * 10) / 10
                 const basis: React.CSSProperties = {
@@ -4013,13 +4016,13 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                 // Mobiel is er geen kolomraster om op uit te lijnen; daar
                 // blijft het totaal gewoon achter de tekst staan.
                 if (isMobile) return (
-                  <button type="button" onClick={klik}
-                    style={{ ...basis, padding: '9px 14px 9px 32px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button type="button" onClick={klik} aria-expanded={open}
+                    style={{ ...basis, padding: nested ? '9px 14px 9px 52px' : '9px 14px 9px 32px', display: 'flex', alignItems: 'center', gap: 10 }}>
                     {titel}{urenLabel(uren)}
                   </button>
                 )
                 return (
-                  <button type="button" onClick={klik}
+                  <button type="button" onClick={klik} aria-expanded={open}
                     style={{ ...basis, display: 'grid', gridTemplateColumns: gridTemplate, alignItems: 'center', padding: 0 }}>
                     {/* De pijl hoort in de selectiekolom, zoals hij stond; de
                         naam begint in de naamkolom. Zo verschuift er niets
@@ -4027,7 +4030,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                     <span style={{ display: 'flex', alignItems: 'center', paddingLeft: 32 }}>
                       <span style={{ fontSize: 9, lineHeight: 1, display: 'inline-block', width: 10 }}>{open ? '▼' : '▶'}</span>
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 9px 4px',
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: nested ? '9px 14px 9px 24px' : '9px 14px 9px 4px',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <span style={{ width: 9, height: 9, borderRadius: 2, background: kleur, flexShrink: 0 }} />
                       {label} ({items.length})
@@ -4058,7 +4061,13 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                   {doneItems.length > 0 && (
                     <>
                       {bucketKop('var(--green)', 'Afgerond', doneItems, doneOpen, () => setDoneOpen(o => !o))}
-                      {doneOpen && doneItems.map(renderRow)}
+                      {doneOpen && <>
+                        {recentDoneItems.map(renderRow)}
+                        {olderDoneItems.length > 0 && <>
+                          {bucketKop('var(--text-muted)', 'Ouder dan 3 maanden', olderDoneItems, olderDoneOpen, () => setOlderDoneOpen(o => !o), true)}
+                          {olderDoneOpen && olderDoneItems.map(renderRow)}
+                        </>}
+                      </>}
                     </>
                   )}
                 </>
