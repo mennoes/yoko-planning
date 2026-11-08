@@ -56,6 +56,7 @@ import { relevantOwnerRollup, relevantOwnerHours } from '@/lib/relevantOwners'
 import { startTouchItemDrag } from '@/lib/touchItemDrag'
 import { visibleRecurringSubitems } from '@/lib/recurringMeetingWindow'
 import { mergeDetailPatch } from '@/lib/boardItemPatch'
+import { sortSubitems, type AgendaSort } from '@/lib/sortSubitems'
 import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
 
@@ -1403,7 +1404,8 @@ function dismissTombstones(
   return [...new Set([...(existing ?? []), id, ...(subitem?.sourceItemId ? [subitem.sourceItemId] : [])])]
 }
 
-function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
+function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
+  agendaSort?: AgendaSort
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
@@ -1434,28 +1436,19 @@ function SubItemsSection({ subitems, cols, gridTemplate, accentColor, selectedId
   }
   const isMobile = useIsMobile()
   const [mobileCreateOpen, setMobileCreateOpen] = useState(false)
-  const [sortBy, setSortBy] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+  const { members: sortingMembers } = useTeam()
+  const parentSortKey = JSON.stringify(agendaSort ?? null)
+  const [localSort, setLocalSort] = useState<{parent:string;value:AgendaSort}|null>(null)
+  const sortBy = localSort?.parent === parentSortKey ? localSort.value : agendaSort ?? null
   function toggleSort(key: string) {
-    setSortBy(previous => previous?.key === key
-      ? previous.dir === 'asc' ? { key, dir: 'desc' } : null
-      : { key, dir: 'asc' })
+    const next: AgendaSort = sortBy?.key === key
+      ? sortBy.dir === 'asc' ? {key,dir:'desc'} : null
+      : {key,dir:'asc'}
+    setLocalSort({parent:parentSortKey,value:next})
   }
-  const sortedSubitems = useMemo(() => {
-    if (!sortBy) return subitems
-    const value = (subitem: SubItem): string | number => {
-      if (sortBy.key === 'name') return subitem.name.toLowerCase()
-      if (sortBy.key === 'owner' || sortBy.key === 'ownerIds') return subitem.ownerIds?.[0] ?? '~'
-      if (sortBy.key === 'status') return STATUS_OPTIONS.findIndex(option => option.label === subitem.status)
-      if (sortBy.key === 'timeline') return subitem.startDate ?? subitem.endDate ?? '9999-99-99'
-      const raw = (subitem as unknown as Record<string, unknown>)[sortBy.key]
-      return typeof raw === 'number' ? raw : String(raw ?? '').toLowerCase()
-    }
-    const direction = sortBy.dir === 'asc' ? 1 : -1
-    return [...subitems].sort((a, b) => {
-      const av = value(a); const bv = value(b)
-      return (typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv), 'nl')) * direction
-    })
-  }, [sortBy, subitems])
+  const sortedSubitems = useMemo(() => sortSubitems(subitems, sortBy, id =>
+    sortingMembers.find(member => member.id === id)?.name ?? teamData.members.find(member => member.id === id)?.name ?? id
+  ), [subitems, sortBy, sortingMembers])
   function updateOne(id: string, u: Partial<SubItem>) {
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
     // wijziging op alle geselecteerde subitems binnen dit item toe. Zo kun
@@ -1836,7 +1829,8 @@ function NotesPreview({ value, onOpen, onSave }: {
 
 // ─── Item rij ─────────────────────────────────────────────────────────────────
 type OpenItemRequest = { id: string; subitemId?: string }
-function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName, openRequest, onCloseRequest }: {
+function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subColWidths, onResizeSubCol, selected, accentColor, onToggleSelect, selectedIds, onToggleSubitem, groupId, reorderMode, isFirst, isLast, onMoveUp, onMoveDown, colWidths, onResizeCol, onUpdate, onDelete, defaultEditName, openRequest, onCloseRequest }: {
+  agendaSort?: AgendaSort
   item: BoardItem; cols: ColumnDef[]; gridTemplate: string
   openRequest?: OpenItemRequest | null; onCloseRequest?: () => void
   // Subitem-tabel gebruikt eigen breedtes zodat resizen daar de parent-
@@ -2254,7 +2248,7 @@ function BoardRow({ item, cols, gridTemplate, subGridTemplate, subColWidths, onR
       </div>
 
       {expanded && (
-        <SubItemsSection subitems={subitems} cols={cols} gridTemplate={subGridTemplate ?? gridTemplate}
+        <SubItemsSection agendaSort={agendaSort} subitems={subitems} cols={cols} gridTemplate={subGridTemplate ?? gridTemplate}
           accentColor={accentColor}
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
@@ -3307,7 +3301,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
   const currentItems  = renderItems.filter(i => i.id === openRequest?.id || (!isOpkomendItem(i) && (isDoneGroup || i.status !== 'Done')))
   const doneItems     = isDoneGroup ? [] : renderItems.filter(i => i.id !== openRequest?.id && !isOpkomendItem(i) && i.status === 'Done')
   const opkomendItems = renderItems.filter(i => i.id !== openRequest?.id && isOpkomendItem(i))
-  const { recent: recentDoneItems, older: olderDoneItems } = splitCompletedArchive(doneItems, item => itemDatums(item).endDate)
+  const { recent: recentDoneItems, older: olderDoneItems } = splitCompletedArchive(doneItems, item => itemDatums(item).endDate, new Date(), !sortBy)
   const [olderDoneOpen, setOlderDoneOpen] = useState(false)
   const [opkomendOpen, setOpkomendOpen] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)
@@ -3962,7 +3956,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                       }}>⠿</span>
                   )
                 })()}
-                <BoardRow item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
+                <BoardRow agendaSort={sortBy} item={item} cols={cols} gridTemplate={gridTemplate} groupId={group.id}
                   openRequest={openRequest} onCloseRequest={onCloseRequest}
                   subGridTemplate={subGridTemplate}
                   subColWidths={subColWidths}
@@ -4064,7 +4058,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                       {doneOpen && <>
                         {recentDoneItems.map(renderRow)}
                         {olderDoneItems.length > 0 && <>
-                          {bucketKop('var(--text-muted)', 'Ouder dan 3 maanden', olderDoneItems, olderDoneOpen, () => setOlderDoneOpen(o => !o), true)}
+                          {bucketKop('var(--text-muted)', 'Ouder dan 2 maanden', olderDoneItems, olderDoneOpen, () => setOlderDoneOpen(o => !o), true)}
                           {olderDoneOpen && olderDoneItems.map(renderRow)}
                         </>}
                       </>}
