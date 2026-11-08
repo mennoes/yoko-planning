@@ -278,7 +278,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
       const target = e.target as HTMLElement | null
       if (target?.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]') || document.querySelector('[role="dialog"]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (!['+','=','-','_'].includes(e.key)) return
+      if (dragCleanup.current || !['+','=','-','_'].includes(e.key)) return
       e.preventDefault()
       const el = scrollRef.current
       if (!el) return
@@ -383,15 +383,39 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
     const startScroll = scrollRef.current?.scrollLeft ?? 0
     const origin = dateToPx(cols, periode.van) ?? 0
     let dagen = 0
+    let pointerX = startX
+    let frame = 0
+    const updatePreview = () => {
+      dagen = pxNaarDagen(cols, origin, origin + pointerX - startX + (scrollRef.current?.scrollLeft ?? 0) - startScroll)
+      setSleep({ rijKey: rij.key, soort, dagen })
+    }
+    const autoScroll = () => {
+      const el = scrollRef.current
+      if (el) {
+        const bounds = el.getBoundingClientRect()
+        const leftEdge = bounds.left + NAAM_W + 24
+        const rightEdge = bounds.left + el.clientWidth - 24
+        const delta = pointerX < leftEdge ? -8 : pointerX > rightEdge ? 8 : 0
+        if (delta) { el.scrollLeft += delta; updatePreview() }
+      }
+      frame = requestAnimationFrame(autoScroll)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel() }
+    }
 
     const beweeg = (move: PointerEvent) => {
-      dagen = pxNaarDagen(cols, origin, origin + move.clientX - startX + (scrollRef.current?.scrollLeft ?? 0) - startScroll)
-      setSleep({ rijKey: rij.key, soort, dagen })
+      pointerX = move.clientX
+      updatePreview()
+      if (!frame) frame = requestAnimationFrame(autoScroll)
     }
     const los = () => {
       window.removeEventListener('pointermove', beweeg)
       window.removeEventListener('pointerup', los)
       window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('blur', cancel)
+      cancelAnimationFrame(frame)
       dragCleanup.current = null
       setSleep(null)
       if (dagen === 0) return
@@ -406,9 +430,14 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
       onMoveItem(rij.itemId, lokaleIso(van), lokaleIso(tot), rij.subitemId)
     }
     const cancel = () => {
+      netGesleept.current = true
+      window.setTimeout(() => { netGesleept.current = false }, 0)
       window.removeEventListener('pointermove', beweeg)
       window.removeEventListener('pointerup', los)
       window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('blur', cancel)
+      cancelAnimationFrame(frame)
       dragCleanup.current = null
       setSleep(null)
     }
@@ -416,6 +445,8 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
     window.addEventListener('pointermove', beweeg)
     window.addEventListener('pointerup', los)
     window.addEventListener('pointercancel', cancel)
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('blur', cancel)
   }
 
   const totaleBreedte = cols.reduce((som, col) => som + col.widthPx, 0)
@@ -531,7 +562,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
             {toonAfgerond ? '✓ ' : ''}Afgerond ({afgerondAantal})
           </button>
         )}
-          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Breedte = looptijd · hoogte = uren per werkdag<br/>Gestreept = wachtstatus · ? = nog niet geschat<br/>Veeg of sleep de achtergrond om te scrollen.<br/>+ / −: in- en uitzoomen</div>
+          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Breedte = looptijd · hoogte = uren per werkdag<br/>Gestreept = wachtstatus · ? = nog niet geschat<br/>Veeg of sleep de achtergrond om te scrollen.<br/>+ / −: in- en uitzoomen<br/>Sleep de randen voor start/einde · Escape annuleert</div>
           </div>
         </details>
       </div>
@@ -545,6 +576,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
           // komen; anders springt het beeld.
           const el = e.currentTarget
           setScrollX(el.scrollLeft)
+          if (sleep) return
           if (el.scrollWidth - el.clientWidth - el.scrollLeft < 120 && extraVooruit < 104) setExtraVooruit(n => n + 12)
           if (el.scrollLeft > 40 || ladenBezig.current) return
           // Niet eindeloos doorladen: twee jaar historie is ruim, en zonder
@@ -782,10 +814,10 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                                 whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
                               <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(18,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? `repeating-linear-gradient(135deg, ${barColor}, ${barColor} 4px, var(--bg-card) 4px, var(--bg-card) 6px)` : barColor,border:segmentHours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
                               {bezig && <span role="status" style={{position:'absolute',bottom:'calc(100% + 5px)',left:0,padding:'4px 7px',background:'var(--text-primary)',color:'var(--bg-card)',borderRadius:5,fontSize:11,zIndex:5,pointerEvents:'none'}}>{datum(previewStart)} – {datum(previewEnd)}</span>}
-                              {sleepbaar && !heeftSubs && (
-                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
-                                  title="Sleep om de startdatum te verzetten"
-                                  style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
+                              {sleepbaar && (segment || !heeftSubs) && (
+                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, dragRow, stuk, 'start') }}
+                                  title="Sleep startdatum · Escape annuleert" onClick={e => e.stopPropagation()}
+                                  style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: Math.min(8,width/3), zIndex:3, borderLeft:'2px solid #ffffff88', borderRadius:3, cursor: 'ew-resize' }} />
                               )}
                               {/* De naam schuift mee met het scrollen en blijft
                                   binnen zijn eigen balk. Bij een klus van een
@@ -797,10 +829,10 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                                 overflow: 'hidden', textOverflow: 'ellipsis', zIndex:1, background:hoogte < 16 ? 'var(--bg-card)' : undefined,borderRadius:3,padding:'0 3px' }}>
                                 {width > 42 ? barLabel : ''}
                               </span>
-                              {sleepbaar && !heeftSubs && (
-                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'eind') }}
-                                  title="Sleep om de einddatum te verzetten"
-                                  style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
+                              {sleepbaar && (segment || !heeftSubs) && (
+                                <span onPointerDown={e => { e.stopPropagation(); startSleep(e, dragRow, stuk, 'eind') }}
+                                  title="Sleep einddatum · Escape annuleert" onClick={e => e.stopPropagation()}
+                                  style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: Math.min(8,width/3), zIndex:3, borderRight:'2px solid #ffffff88', borderRadius:3, cursor: 'ew-resize' }} />
                               )}
                             </div>
                           )
