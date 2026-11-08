@@ -173,3 +173,15 @@ test('subPeriode leest de datums van het subitem zelf', () => {
   assert.equal(p.tot.getDate(), 13)
   assert.equal(tl.subPeriode({ id: 's', name: 'x', startDate: null, endDate: null }), null)
 })
+
+test('parent segments follow child dates and effort even with explicit parent dates', () => {
+  const item={id:'i1',name:'Project',startDate:'2026-03-01',endDate:'2026-03-31',estHours:80,subitems:[sub('a','Script','2026-03-02','2026-03-03',{estHours:4}),sub('b','Animatie','2026-03-09','2026-03-12',{estHours:24})]}
+  for (const uitgeklapt of [new Set(),OPEN]) {
+    const [parent]=tl.bouwRegels([{item,periode:periode('2026-03-01','2026-03-31')}],{toonAfgerond:false,rasterStart:RASTER,uitgeklapt})
+    assert.equal(parent.segmenten.length,2)
+    assert.equal(parent.segmenten[0].name,'Script')
+    assert.equal(parent.segmenten[0].hours,4)
+    assert.equal(parent.segmenten[1].van.getDate(),9)
+    assert.equal(parent.segmenten[1].hours,24)
+  }
+})

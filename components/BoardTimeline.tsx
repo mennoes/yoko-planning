@@ -98,7 +98,7 @@ export type TijdlijnRegel = {
    *  van een ingeklapt item alleen uit zijn subitems, dan zou één balk
    *  van oktober tot maart iets beweren wat niet waar is: er wordt alleen
    *  gewerkt op de dagen van de subitems. */
-  segmenten?: { van: Date; tot: Date }[]
+  segmenten?: { van: Date; tot: Date; id: string; name: string; hours: number; status: string }[]
   isDone: boolean
   deadline?: string | null
   hours: number
@@ -131,10 +131,6 @@ export function bouwRegels(
       .filter(e => e.periode.tot >= opties.rasterStart)
       .sort((a, b) => opties.sortBy === undefined ? a.periode.van.getTime() - b.periode.van.getTime() : 0)
     const open = subs.length > 0 && (opties.uitgeklapt?.has(item.id) ?? false)
-    // Heeft het item geen eigen periode, dan is zijn balk geleend van de
-    // subitems. Die tekenen we dan ook als losse stukjes in plaats van
-    // als één lange balk van de eerste tot de laatste dag.
-    const geleend = subs.length > 0 && !item.startDate && !item.endDate
     const effort = timelineEffort(item)
     const moment = nextClientMoment(item.subitems, lokaleIso(new Date()))
     regels.push({
@@ -143,7 +139,7 @@ export function bouwRegels(
       key: item.id, itemId: item.id, naam: item.name || '(naamloos)',
       ownerIds: item.ownerIds ?? [], periode, deadline: item.deadline,
       isOuder: open, subAantal: subs.length, isDone: item.status === 'Done',
-      ...(!open && geleend ? { segmenten: subs.map(e => e.periode) } : {}),
+      ...(item.subitems?.length ? { segmenten: subs.map(({sub,periode}) => ({...periode,id:sub.id,name:sub.name,hours:Math.max(0,Number(sub.estHours)||0),status:sub.status})) } : {}),
     })
     if (!open) continue
     for (const { sub, periode: subTijd } of subs) {
@@ -584,9 +580,15 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                 </div>
                 {!ingeklapteGroepen.has(groep.id) && regelsVan(metDatum).map(regel => {
                   const balk = rangeToPx(cols, regel.periode.van, regel.periode.tot)
-                  const hoog = regel.subAantal > 0 ? OUDER_RIJ_H : RIJ_H
-                  const dailyHours = regel.hours / Math.max(1, werkdagenIn(lokaleIso(regel.periode.van), lokaleIso(regel.periode.tot)))
-                  const hoogte = planningBarPixelHeight(regel.subAantal > 0 ? OUDER_H : BALK_H, planningBarHeightRatio({hours:regel.hours,startDate:lokaleIso(regel.periode.van),endDate:lokaleIso(regel.periode.tot)}), 6)
+                  const laneEnds: number[] = []
+                  const segmentLanes = new Map<string,number>()
+                  for (const segment of [...(regel.segmenten ?? [])].sort((a,b) => a.van.getTime()-b.van.getTime())) {
+                    let lane = laneEnds.findIndex(end => end < segment.van.getTime())
+                    if (lane < 0) lane = laneEnds.length
+                    laneEnds[lane] = segment.tot.getTime()
+                    segmentLanes.set(segment.id,lane)
+                  }
+                  const hoog = Math.max(regel.subAantal > 0 ? OUDER_RIJ_H : RIJ_H, laneEnds.length * 36 + 12)
                   const hoursLabel = regel.hours > 0 ? `${regel.hours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur${regel.missingEstimates ? ' + ?' : ''}` : 'Nog niet geschat'
                   const waiting = isWaitingStatus(regel.status)
                   const alerts = [
@@ -680,9 +682,16 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                             van oktober tot maart beweert dat er een half
                             jaar aan gewerkt wordt, terwijl het om drie
                             losse dagen gaat. */}
-                        {(balk ? [regel.periode] : []).map((stuk, stukIdx) => {
-                          const vak = balk
+                        {(regel.segmenten ?? (balk ? [regel.periode] : [])).map((stuk, stukIdx) => {
+                          const vak = rangeToPx(cols,stuk.van,stuk.tot)
                           if (!vak) return null
+                          const segment = regel.segmenten?.[stukIdx] ?? null
+                          const segmentHours = segment ? segment.hours : regel.hours
+                          const segmentLabel = segmentHours > 0 ? `${segmentHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur` : 'Nog niet geschat'
+                          const barLabel = segment ? `${segment.name} · ${segmentLabel}` : hoursLabel
+                          const waiting = isWaitingStatus(segment?.status ?? regel.status)
+                          const hoogte = segment ? planningBarPixelHeight(OUDER_H, planningBarHeightRatio({hours:segmentHours,startDate:lokaleIso(stuk.van),endDate:lokaleIso(stuk.tot)}),6) : planningBarPixelHeight(heeftSubs ? OUDER_H : BALK_H, planningBarHeightRatio({hours:regel.hours,startDate:lokaleIso(stuk.van),endDate:lokaleIso(stuk.tot)}),6)
+                          const dailyHours = segmentHours / Math.max(1,werkdagenIn(lokaleIso(stuk.van),lokaleIso(stuk.tot)))
                           // Tijdens het slepen schuift de balk alvast mee,
                           // zodat je ziet waar je 'm neerlegt.
                           const bezig = sleep?.rijKey === regel.key ? sleep : null
@@ -692,7 +701,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           if(previewStart > previewEnd){if(bezig?.soort==='start')previewStart=previewEnd;else previewEnd=previewStart}
                           const preview = rangeToPx(cols,previewStart,previewEnd) ?? vak
                           const left = preview.left
-                          const width = preview.width
+                          const width = Math.max(1,preview.width - (segment ? 2 : 0))
                           const workdays = werkdagenIn(lokaleIso(previewStart),lokaleIso(previewEnd))
                           const datum = (d: Date) => d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
                           const subs = `${regel.subAantal} subitem${regel.subAantal === 1 ? '' : 's'}`
@@ -700,7 +709,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                             ? ` · ${subs} · ${regel.isOuder ? 'stappen inklappen' : 'stappen uitklappen'}`
                             : sleepbaar ? ' · sleep om te verzetten' : ''
                           return (
-                            <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(heeftSubs)klapOmgekeerd(regel.itemId);else onOpenItem(regel.itemId,regel.subitemId)}}}
+                            <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}${segment ? " — " + segment.name : ""}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(heeftSubs)klapOmgekeerd(regel.itemId);else onOpenItem(regel.itemId,regel.subitemId)}}}
                               onPointerDown={e => sleepbaar && startSleep(e, regel, regel.periode, 'heel')}
                               // Projecten klappen open; losse stappen openen hun details.
                               onClick={() => {
@@ -708,20 +717,20 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                                 if (heeftSubs) klapOmgekeerd(regel.itemId)
                                 else onOpenItem(regel.itemId, regel.subitemId)
                               }}
-                              title={`${regel.naam} · ${hoursLabel} werk · ${workdays} werkdagen looptijd · gemiddeld ${dailyHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur per werkdag · ${datum(stuk.van)} – ${datum(stuk.tot)}${waiting ? ' · Wachten' : ''}${staart}`}
+                              title={`${regel.naam}${segment ? " — " + segment.name : ""} · ${segment ? segmentLabel : hoursLabel} werk · ${workdays} werkdagen looptijd · gemiddeld ${dailyHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur per werkdag · ${datum(stuk.van)} – ${datum(stuk.tot)}${waiting ? ' · Wachten' : ''}${staart}`}
                               style={{ position: 'absolute', left, width,
-                                top: (hoog - Math.max(26,hoogte)) / 2, height: Math.max(26,hoogte), borderRadius: regel.isOuder ? 3 : 5,
+                                top: segment && laneEnds.length > 1 ? 6 + (segmentLanes.get(segment.id) ?? 0) * 36 + (32 - Math.max(26,hoogte))/2 : (hoog - Math.max(26,hoogte)) / 2, height: Math.max(26,hoogte), borderRadius: regel.isOuder ? 3 : 5,
                                 cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
                                 background: 'transparent',
                                 opacity: regel.isDone ? 0.5 : 1,
                                 boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
                                 color: heeftSubs && !waiting && hoogte >= 20 ? 'var(--bg-card)' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 6px',
                                 // Geen overflow:hidden meer: dat maakt van de
                                 // balk een eigen scroll-container en dan werkt
                                 // de meescrollende naam hieronder niet.
                                 whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
-                              <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(26,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? 'repeating-linear-gradient(135deg, var(--bg-hover), var(--bg-hover) 4px, var(--border) 4px, var(--border) 6px)' : heeftSubs ? 'var(--text-primary)' : `color-mix(in srgb, ${groep.color || color} 35%, var(--bg-card))`,border:regel.hours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
+                              <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(26,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? 'repeating-linear-gradient(135deg, var(--bg-hover), var(--bg-hover) 4px, var(--border) 4px, var(--border) 6px)' : heeftSubs ? 'var(--text-primary)' : `color-mix(in srgb, ${groep.color || color} 35%, var(--bg-card))`,border:segmentHours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
                               {bezig && <span role="status" style={{position:'absolute',bottom:'calc(100% + 5px)',left:0,padding:'4px 7px',background:'var(--text-primary)',color:'var(--bg-card)',borderRadius:5,fontSize:11,zIndex:5,pointerEvents:'none'}}>{datum(previewStart)} – {datum(previewEnd)}</span>}
                               {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
@@ -736,7 +745,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                               <span style={{ position: 'sticky', left: NAAM_W + 8,
                                 maxWidth: Math.max(0, width - 12),
                                 overflow: 'hidden', textOverflow: 'ellipsis', zIndex:1, background:hoogte < 20 ? 'var(--bg-card)' : undefined,borderRadius:3,padding:'0 3px' }}>
-                                {width > 42 ? hoursLabel : ''}
+                                {width > 42 ? barLabel : ''}
                               </span>
                               {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'eind') }}
