@@ -716,16 +716,17 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           const workdays = werkdagenIn(lokaleIso(previewStart),lokaleIso(previewEnd))
                           const datum = (d: Date) => d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
                           const subs = `${regel.subAantal} subitem${regel.subAantal === 1 ? '' : 's'}`
-                          const staart = heeftSubs
+                          const staart = segment ? ' · open subitem' : heeftSubs
                             ? ` · ${subs} · ${regel.isOuder ? 'stappen inklappen' : 'stappen uitklappen'}`
                             : sleepbaar ? ' · sleep om te verzetten' : ''
                           return (
-                            <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}${segment ? " — " + segment.name : ""}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(heeftSubs)klapOmgekeerd(regel.itemId);else onOpenItem(regel.itemId,regel.subitemId)}}}
+                            <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}${segment ? " — " + segment.name : ""}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(segment)onOpenItem(regel.itemId,segment.id);else if(heeftSubs)klapOmgekeerd(regel.itemId);else onOpenItem(regel.itemId,regel.subitemId)}}}
                               onPointerDown={e => sleepbaar && startSleep(e, regel, regel.periode, 'heel')}
-                              // Projecten klappen open; losse stappen openen hun details.
+                              // Segmenten openen hun subitem; de projectnaam klapt de stappen uit.
                               onClick={() => {
                                 if (sleep || netGesleept.current) return
-                                if (heeftSubs) klapOmgekeerd(regel.itemId)
+                                if (segment) onOpenItem(regel.itemId, segment.id)
+                                else if (heeftSubs) klapOmgekeerd(regel.itemId)
                                 else onOpenItem(regel.itemId, regel.subitemId)
                               }}
                               title={`${regel.naam}${segment ? " — " + segment.name : ""} · ${barStatus || 'Geen status'} · ${segment ? segmentLabel : hoursLabel} werk · ${workdays} werkdagen looptijd · gemiddeld ${dailyHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur per werkdag · ${datum(stuk.van)} – ${datum(stuk.tot)}${waiting ? ' · Wachten' : ''}${staart}`}
