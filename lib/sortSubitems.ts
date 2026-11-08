@@ -1,6 +1,6 @@
 import type { SubItem } from './boards'
 export type AgendaSort = {key:string;dir:'asc'|'desc'} | null
-export function sortSubitems(items: SubItem[], sort: AgendaSort, ownerName: (id: string) => string) {
+export function sortSubitems<T extends SubItem>(items: T[], sort: AgendaSort, ownerName: (id: string) => string) {
   if (!sort) return items
   const statuses=['','Working on...','Done','Stuck','Not started','Doorlopend']
   const value=(item:SubItem):string|number|null=>{

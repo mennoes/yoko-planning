@@ -10,21 +10,24 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { BoardGroup, BoardItem, SubItem } from '@/lib/boards'
 import {
-  buildCols, getMonthGroupsFromCols, rangeToPx, dateToPx, pxNaarDagen, lokaleIso,
-  ZOOM_COL_W, type ZoomLevel,
+  getWeekCols, getDayCols, getMonthCols, getMonthGroupsFromCols, rangeToPx, dateToPx, pxNaarDagen, lokaleIso,
+  type ZoomLevel,
 } from '@/lib/timelineCols'
+import { sortSubitems, type AgendaSort } from '@/lib/sortSubitems'
+import { useTeam } from './TeamContext'
 import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
+import { werkdagenIn } from '@/lib/sjabloonPlan'
 import { itemDatums } from '@/lib/itemDatums'
 
-const NAAM_W = 270
-const RIJ_H  = 32
-const OUDER_RIJ_H = 24
-const BALK_H = 18
+const NAAM_W = 290
+const RIJ_H  = 44
+const OUDER_RIJ_H = 52
+const BALK_H = 26
 /** Een ouder met subitems is een samenvatting, geen werk op zich. Zijn
  *  balk is daarom een dun grijs streepje boven de subitems: je ziet de
  *  omspanning, maar je blik gaat naar de regels eronder. */
-const OUDER_H = 5
+const OUDER_H = 32
 /** Tot hoever je terug kunt scrollen voordat we stoppen met bijladen. */
 const MAX_EXTRA_TERUG = 730
 
@@ -95,6 +98,7 @@ export type TijdlijnRegel = {
    *  gewerkt op de dagen van de subitems. */
   segmenten?: { van: Date; tot: Date }[]
   isDone: boolean
+  deadline?: string | null
 }
 
 /**
@@ -102,23 +106,23 @@ export type TijdlijnRegel = {
  *
  * Een item met subitems staat standaard ingeklapt: één gewone balk in de
  * groepskleur, met een bolletje dat zegt hoeveel er onder zit. Klap je 'm
- * uit, dan krijgt elk subitem een eigen regel en zakt de ouder terug tot
- * een dun grijs streepje erboven — daar zit het werk immers niet in.
+ * uit, dan krijgt elk subitem een eigen regel onder de projectsamenvatting.
  */
 export function bouwRegels(
   metDatum: { item: BoardItem; periode: { van: Date; tot: Date } }[],
-  opties: { toonAfgerond: boolean; rasterStart: Date; uitgeklapt?: Set<string> },
+  opties: { toonAfgerond: boolean; rasterStart: Date; uitgeklapt?: Set<string>; sortBy?: AgendaSort; ownerName?: (id:string)=>string },
 ): TijdlijnRegel[] {
   const regels: TijdlijnRegel[] = []
   for (const { item, periode } of metDatum) {
-    const subs = (item.subitems ?? [])
+    const subOrder = opties.sortBy === undefined ? item.subitems ?? [] : sortSubitems(item.subitems ?? [], opties.sortBy, opties.ownerName ?? (id => id))
+    const subs = subOrder
       .filter(sub => opties.toonAfgerond || sub.status !== 'Done')
       .map(sub => ({ sub, periode: subPeriode(sub) }))
       .filter((e): e is { sub: SubItem; periode: { van: Date; tot: Date } } => e.periode !== null)
       // Een subitem dat helemaal vóór het raster ligt heeft geen balk en
       // dus geen regel — zelfde regel als voor items.
       .filter(e => e.periode.tot >= opties.rasterStart)
-      .sort((a, b) => a.periode.van.getTime() - b.periode.van.getTime())
+      .sort((a, b) => opties.sortBy === undefined ? a.periode.van.getTime() - b.periode.van.getTime() : 0)
     const open = subs.length > 0 && (opties.uitgeklapt?.has(item.id) ?? false)
     // Heeft het item geen eigen periode, dan is zijn balk geleend van de
     // subitems. Die tekenen we dan ook als losse stukjes in plaats van
@@ -126,7 +130,7 @@ export function bouwRegels(
     const geleend = subs.length > 0 && !item.startDate && !item.endDate
     regels.push({
       key: item.id, itemId: item.id, naam: item.name || '(naamloos)',
-      ownerIds: item.ownerIds ?? [], periode,
+      ownerIds: item.ownerIds ?? [], periode, deadline: item.deadline,
       isOuder: open, subAantal: subs.length, isDone: item.status === 'Done',
       ...(!open && geleend ? { segmenten: subs.map(e => e.periode) } : {}),
     })
@@ -135,15 +139,16 @@ export function bouwRegels(
       regels.push({
         key: `${item.id}:${sub.id}`, itemId: item.id, subitemId: sub.id,
         naam: sub.name || '(naamloos)', ownerIds: sub.ownerIds ?? [], periode: subTijd,
-        isOuder: false, subAantal: 0, isDone: sub.status === 'Done',
+        isOuder: false, subAantal: 0, isDone: sub.status === 'Done', deadline: sub.deadline,
       })
     }
   }
   return regels
 }
 
-export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }: {
+export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, sortBy }: {
   groups: BoardGroup[]
+  sortBy?: AgendaSort
   color: string
   /** Klikken op een balk opent de item-popup, desnoods op een subitem. */
   onOpenItem: (itemId: string, subitemId?: string) => void
@@ -151,6 +156,8 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
    *  is de tijdlijn een slechtere versie van de planning. */
   onMoveItem: (itemId: string, startDate: string, endDate: string, subitemId?: string) => void
 }) {
+  const { members } = useTeam()
+  const ownerName = (id:string) => members.find(m => m.id===id)?.name ?? id
   // Wat er nú gesleept wordt, zodat de balk meteen meebeweegt in plaats
   // van pas te springen als je loslaat. De sleutel is de rij, niet het
   // item: een ouder en zijn subitems staan allemaal op dezelfde item-id.
@@ -186,7 +193,21 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   const [toonAfgerond, setToonAfgerond] = useState(false)
   const [toonEerder, setToonEerder] = useState(false)
 
-  const colW = ZOOM_COL_W[zoom]
+  const [viewportWidth, setViewportWidth] = useState(1100)
+  const [extraVooruit, setExtraVooruit] = useState(0)
+  const [toonMomenten, setToonMomenten] = useState(true)
+  const dragCleanup = useRef<(() => void) | null>(null)
+  useEffect(() => () => dragCleanup.current?.(), [])
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => setViewportWidth(el.clientWidth))
+    observer.observe(el)
+    setViewportWidth(el.clientWidth)
+    return () => observer.disconnect()
+  }, [])
+  const colW = Math.max(zoom === 'dag' ? 54 : 110, (viewportWidth - NAAM_W) / (zoom === 'week' ? 4 : zoom === 'maand' ? 6 : 6))
+
 
   // Afgerond werk hoort hier standaard niet thuis: de tijdlijn gaat over
   // wat loopt en wat eraan komt. Je kunt het erbij zetten, en we laten
@@ -229,8 +250,10 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
     const start = zoom === 'maand'
       ? new Date(vensterStart.getFullYear(), vensterStart.getMonth(), 1)
       : new Date(getWeekStart(vensterStart))
-    return buildCols(zoom, start, colW)
-  }, [zoom, colW, vensterStart])
+    if (zoom === 'maand') return getMonthCols(start, 48 + Math.ceil(extraTerug / 28) + extraVooruit, colW)
+    if (zoom === 'dag') return getDayCols(start, 56 + extraTerug + extraVooruit, colW)
+    return getWeekCols(start, 104 + Math.ceil(extraTerug / 7) + extraVooruit, colW)
+  }, [zoom, colW, vensterStart, extraTerug, extraVooruit])
 
   /** Ligt dit werk helemaal vóór het raster? Dan heeft een rij geen balk en
    *  dus geen betekenis. */
@@ -244,12 +267,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
     items.filter(valtEerder).map(item => ({ groep, item })))
 
   const regelsVan = (metDatum: { item: BoardItem; periode: { van: Date; tot: Date } }[]) =>
-    bouwRegels(metDatum, { toonAfgerond, rasterStart: cols[0]?.rangeStart ?? vensterStart, uitgeklapt })
-
-  const dagenTussen = (van: Date, tot: Date) => {
-    const dag = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
-    return Math.max(1, dag(tot) - dag(van) + 1)
-  }
+    bouwRegels(metDatum, { toonAfgerond, rasterStart: cols[0]?.rangeStart ?? vensterStart, uitgeklapt, sortBy, ownerName })
 
   /** Begin een sleepactie op een balk. 'heel' schuift de hele periode op,
    *  'start' en 'eind' verzetten één kant. We rekenen pixels pas bij het
@@ -263,17 +281,21 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
     if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
+    dragCleanup.current?.()
     const startX = event.clientX
+    const startScroll = scrollRef.current?.scrollLeft ?? 0
+    const origin = dateToPx(cols, periode.van) ?? 0
     let dagen = 0
 
     const beweeg = (move: PointerEvent) => {
-      dagen = pxNaarDagen(cols, 0, move.clientX - startX)
+      dagen = pxNaarDagen(cols, origin, origin + move.clientX - startX + (scrollRef.current?.scrollLeft ?? 0) - startScroll)
       setSleep({ rijKey: rij.key, soort, dagen })
     }
     const los = () => {
       window.removeEventListener('pointermove', beweeg)
       window.removeEventListener('pointerup', los)
-      window.removeEventListener('pointercancel', los)
+      window.removeEventListener('pointercancel', cancel)
+      dragCleanup.current = null
       setSleep(null)
       if (dagen === 0) return
       netGesleept.current = true
@@ -286,9 +308,17 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
       if (soort === 'eind')  { tot = schuif(tot, dagen); if (tot < van) tot = van }
       onMoveItem(rij.itemId, lokaleIso(van), lokaleIso(tot), rij.subitemId)
     }
+    const cancel = () => {
+      window.removeEventListener('pointermove', beweeg)
+      window.removeEventListener('pointerup', los)
+      window.removeEventListener('pointercancel', cancel)
+      dragCleanup.current = null
+      setSleep(null)
+    }
+    dragCleanup.current = cancel
     window.addEventListener('pointermove', beweeg)
     window.addEventListener('pointerup', los)
-    window.addEventListener('pointercancel', los)
+    window.addEventListener('pointercancel', cancel)
   }
 
   const totaleBreedte = cols.reduce((som, col) => som + col.widthPx, 0)
@@ -300,17 +330,17 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   function naarVandaag() {
     const el = scrollRef.current
     if (!el || vandaagPx === null) return
-    el.scrollTo({ left: Math.max(0, vandaagPx - el.clientWidth * 0.25), behavior: 'smooth' })
+    el.scrollTo({ left: Math.max(0, vandaagPx - (el.clientWidth - NAAM_W) * 0.12), behavior: 'smooth' })
   }
 
   // Open op vandaag in plaats van op maanden geschiedenis.
-  useEffect(() => { naarVandaagGescrold.current = false }, [zoom, toonAfgerond])
+  useEffect(() => { naarVandaagGescrold.current = false }, [zoom, toonAfgerond, colW])
   useEffect(() => {
     if (naarVandaagGescrold.current || !scrollRef.current) return
     const index = cols.findIndex(col => col.isCurrent)
     if (index < 0) return
     const x = cols.slice(0, index).reduce((som, col) => som + col.widthPx, 0)
-    scrollRef.current.scrollLeft = Math.max(0, x - 120)
+    scrollRef.current.scrollLeft = Math.max(0, x)
     naarVandaagGescrold.current = true
   }, [cols])
 
@@ -341,7 +371,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
   return (
     <div data-board-timeline
       style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-card)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border-light)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderBottom: '1px solid var(--border-light)' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           Zoom
         </span>
@@ -350,7 +380,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
             style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', cursor: 'pointer',
               background: zoom === niveau ? 'var(--control-active)' : 'var(--bg-card)',
               color: 'var(--text-primary)', fontSize: 12, fontWeight: zoom === niveau ? 700 : 500 }}>
-            {niveau === 'dag' ? 'Dag' : niveau === 'week' ? 'Week' : 'Maand'}
+            {niveau === 'dag' ? 'Dagen' : niveau === 'week' ? '4 weken' : '6 maanden'}
           </button>
         ))}
         <button onClick={naarVandaag} title="Spring naar vandaag"
@@ -359,11 +389,18 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
             fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em' }}>
           VANDAAG
         </button>
+        <button aria-label="Vorige periode" onClick={() => scrollRef.current?.scrollBy({left: -(viewportWidth - NAAM_W), behavior: 'smooth'})} style={{border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',padding:'4px 10px',cursor:'pointer'}}>←</button>
+        <button aria-label="Volgende periode" onClick={() => scrollRef.current?.scrollBy({left: viewportWidth - NAAM_W, behavior: 'smooth'})} style={{border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',padding:'4px 10px',cursor:'pointer'}}>→</button>
+        <button onClick={() => setUitgeklapt(current => current.size ? new Set() : new Set(groups.flatMap(g => g.items.filter(i => i.subitems?.length).map(i => i.id))))}
+          style={{border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',padding:'4px 10px',cursor:'pointer',fontSize:12}}>
+          {uitgeklapt.size ? 'Stappen inklappen' : 'Stappen uitklappen'}
+        </button>
+        <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12,color:'var(--text-secondary)'}}><input type="checkbox" checked={toonMomenten} onChange={e=>setToonMomenten(e.target.checked)}/>Klantmomenten</label>
         {groups.length > 1 && (
           // Duidelijk los van de zoomknoppen: met 6px ernaast las het als
           // één rij knoppen en wist je niet meer waar Zoom ophield.
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-            marginLeft: 22, paddingLeft: 22, borderLeft: '1px solid var(--border)' }}>
+            marginLeft: 0, paddingLeft: 10, borderLeft: '1px solid var(--border)' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Groepen
             </span>
@@ -403,13 +440,17 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
         )}
       </div>
 
-      <div ref={scrollRef}
+      <div style={{display:'flex',gap:16,padding:'6px 12px',fontSize:11,color:'var(--text-muted)',borderBottom:'1px solid var(--border-light)'}}>
+        <span>◆ Naar de klant</span><span>┆ Deadline</span><span style={{marginLeft:'auto'}}>Scroll door de tijd · sleep een balk om te plannen</span>
+      </div>
+      <div ref={scrollRef} role="region" aria-label="Tijdlijn, horizontaal en verticaal scrollbaar" tabIndex={0}
         onScroll={e => {
           // Naar links blijven scrollen laadt eerdere weken bij, in plaats
           // van tegen een harde rand te lopen. We houden de kijkpositie
           // gelijk door net zoveel terug te scrollen als er kolommen bij
           // komen; anders springt het beeld.
           const el = e.currentTarget
+          if (el.scrollWidth - el.clientWidth - el.scrollLeft < 120 && extraVooruit < 104) setExtraVooruit(n => n + 12)
           if (el.scrollLeft > 40 || ladenBezig.current) return
           // Niet eindeloos doorladen: twee jaar historie is ruim, en zonder
           // deze grens blijft hij bijladen zolang je aan de linkerrand staat.
@@ -420,7 +461,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
           herstelRef.current = { scrollLeft: el.scrollLeft, eersteKolom: cols[0]?.key ?? '' }
           setExtraTerug(vorige => Math.min(MAX_EXTRA_TERUG, vorige + 56))
         }}
-        style={{ overflowX: 'auto', overflowY: 'visible' }}>
+        style={{ overflow: 'auto', maxHeight: '68vh', minHeight: 240, overscrollBehaviorX: 'contain', scrollbarGutter: 'stable', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ minWidth: NAAM_W + totaleBreedte, position: 'relative' }}>
           {/* Vandaag-streep over het hele raster. Ligt onder de vastgeplakte
               naamkolom (die heeft een hogere z-index), zodat hij daar niet
@@ -430,6 +471,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
               left: NAAM_W + vandaagPx, width: 0, borderLeft: '2px solid var(--yellow)',
               zIndex: 1, pointerEvents: 'none' }} />
           )}
+          <div style={{position:"sticky",top:0,zIndex:4,background:"var(--bg-card)"}}>
           {/* Maandkoppen */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border-light)' }}>
             <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3, background: 'var(--bg-card)' }} />
@@ -446,25 +488,27 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
             <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 3, background: 'var(--bg-card)',
               padding: '6px 12px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',
               textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-              Item
+              Project / stap
             </div>
             {cols.map(col => (
               <div key={col.key} data-kolomkop style={{ width: col.widthPx, flexShrink: 0, padding: '4px 6px',
                 borderLeft: '1px solid var(--border-light)',
                 background: col.isCurrent ? 'var(--accent-light)' : col.isPast ? 'var(--overlay-faint)' : 'transparent' }}>
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)' }}>{col.label1}</div>
-                <div style={{ fontSize: 9.5, color: 'var(--text-muted)' }}>{col.label2}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{col.label2}</div>
               </div>
             ))}
           </div>
 
+          </div>
           {relevant.map(({ groep, items }) => {
-            const metDatum = items
+            const orderedItems = sortSubitems(items, sortBy ?? null, ownerName)
+            const metDatum = orderedItems
               .map(item => ({ item, periode: itemPeriode(item) }))
               .filter((entry): entry is { item: BoardItem; periode: { van: Date; tot: Date } } => entry.periode !== null)
               // Geen rij zonder balk: dat is wat de lijst onleesbaar maakte.
               .filter(entry => !valtEerder(entry.item))
-              .sort((a, b) => a.periode.van.getTime() - b.periode.van.getTime())
+              .sort((a, b) => sortBy === undefined ? a.periode.van.getTime() - b.periode.van.getTime() : 0)
             if (metDatum.length === 0) return null
             return (
               <div key={groep.id}>
@@ -487,21 +531,18 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                 </div>
                 {regelsVan(metDatum).map(regel => {
                   const balk = rangeToPx(cols, regel.periode.van, regel.periode.tot)
-                  const hoog = regel.isOuder ? OUDER_RIJ_H : RIJ_H
-                  const hoogte = regel.isOuder ? OUDER_H : BALK_H
-                  // Een item met subitems laat zich niet verslepen: zijn
-                  // datums zijn de optelsom van de subitems, dus schuiven
-                  // zou meteen weer worden overschreven. Klap 'm uit en
-                  // versleep het subitem dat je bedoelt.
+                  const hoog = regel.subAantal > 0 ? OUDER_RIJ_H : RIJ_H
+                  const hoogte = regel.subAantal > 0 ? OUDER_H : regel.subitemId ? 22 : BALK_H
+                  // Een project verschuift samen met zijn stappen; deadlines blijven vast.
                   const heeftSubs = regel.subAantal > 0
-                  const sleepbaar = !heeftSubs && !regel.isDone
+                  const sleepbaar = !regel.isDone
                   const aan = hoverItem === regel.key
                   return (
                     <div key={regel.key}
                       onMouseEnter={() => setHoverItem(regel.key)}
                       onMouseLeave={() => setHoverItem(current => current === regel.key ? null : current)}
                       style={{ display: 'flex', minHeight: hoog,
-                        borderBottom: regel.isOuder ? 'none' : '1px solid var(--border-light)',
+                        borderBottom: '1px solid var(--border-light)',
                         background: aan ? 'var(--bg-hover)' : 'transparent' }}>
                       <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
                         background: aan ? 'var(--bg-hover)' : 'var(--bg-card)',
@@ -529,31 +570,22 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
                             minWidth: 0, flex: 1, opacity: regel.isDone ? 0.55 : 1,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            fontSize: regel.isOuder ? 11 : 12.5,
-                            fontWeight: regel.isOuder ? 700 : 500,
+                            fontSize: 12.5,
+                            fontWeight: heeftSubs ? 700 : 500,
                             letterSpacing: regel.isOuder ? '0.03em' : undefined,
-                            color: regel.isOuder ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                            color: 'var(--text-primary)' }}>
                           {regel.naam}
+                          {!regel.subitemId && <span style={{display:'block',fontSize:10.5,fontWeight:400,color:'var(--text-muted)',marginTop:2}}>
+                            {heeftSubs ? regel.subAantal + ' stappen · ' : ''}{regel.deadline ? 'Deadline ' + new Date(regel.deadline+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : regel.periode.van.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+' – '+regel.periode.tot.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}
+                          </span>}
                         </button>
-                        {/* Het aantal subitems hoort naast de naam, niet op
-                            de balk: bij een klus van een half jaar staat
-                            het eind van die balk buiten beeld en zie je het
-                            bolletje nooit. De naamkolom blijft wel staan. */}
-                        {heeftSubs && (
-                          <span aria-hidden title={`${regel.subAantal} subitem${regel.subAantal === 1 ? '' : 's'}`}
-                            style={{ flexShrink: 0, minWidth: 15, height: 15, borderRadius: 999, padding: '0 4px',
-                              background: 'var(--overlay-medium)', color: 'var(--text-secondary)',
-                              fontSize: 9.5, fontWeight: 800, lineHeight: '15px', textAlign: 'center' }}>
-                            {regel.subAantal}
-                          </span>
-                        )}
                         {/* Eigenaren rechts van de titel: zo staan ze bij
                             elkaar in één kolom en loopt de naam niet in
                             een wisselend aantal avatars vast. */}
                         <span style={{ display: 'inline-flex', flexShrink: 0 }}>
                           {regel.ownerIds.filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
                             <span key={id} style={{ marginLeft: i === 0 ? 0 : -7, display: 'inline-flex' }}>
-                              <UserAvatar memberId={id} size={regel.isOuder ? 17 : 21} />
+                              <UserAvatar memberId={id} size={24} />
                             </span>
                           ))}
                         </span>
@@ -566,52 +598,64 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                             background: col.isCurrent ? 'var(--accent-light)' : col.isPast ? 'var(--overlay-faint)' : 'transparent',
                             pointerEvents: 'none' }} />
                         ))}
+                        {toonMomenten && regel.deadline && (() => {
+                          const deadlineDate = new Date(regel.deadline+'T12:00:00')
+                          const x = dateToPx(cols,deadlineDate)
+                          if (x === null) return null
+                          return <button aria-label={`${regel.subitemId ? 'Naar klant' : 'Deadline'} ${regel.naam}: ${deadlineDate.toLocaleDateString('nl-NL')}`}
+                            onClick={()=>onOpenItem(regel.itemId,regel.subitemId)}
+                            title={`${regel.subitemId ? 'Naar klant' : 'Deadline'} · ${deadlineDate.toLocaleDateString('nl-NL')}`}
+                            style={{position:'absolute',left:x-9,top:0,height:hoog,width:18,padding:0,border:0,background:'transparent',color:'var(--yellow)',zIndex:2,cursor:'pointer'}}>
+                            {regel.subitemId ? <span style={{position:'absolute',top:3,left:2,fontSize:16}}>◆</span> : <span style={{position:'absolute',left:9,top:0,bottom:0,borderLeft:'1px dashed var(--yellow)'}}/>}
+                          </button>
+                        })()}
                         {/* Losse stukjes als de periode geleend is van de
                             subitems, anders één balk. Eén doorlopende balk
                             van oktober tot maart beweert dat er een half
                             jaar aan gewerkt wordt, terwijl het om drie
                             losse dagen gaat. */}
-                        {(regel.segmenten ?? (balk ? [regel.periode] : [])).map((stuk, stukIdx) => {
-                          const vak = regel.segmenten ? rangeToPx(cols, stuk.van, stuk.tot) : balk
+                        {(balk ? [regel.periode] : []).map((stuk, stukIdx) => {
+                          const vak = balk
                           if (!vak) return null
                           // Tijdens het slepen schuift de balk alvast mee,
                           // zodat je ziet waar je 'm neerlegt.
                           const bezig = sleep?.rijKey === regel.key ? sleep : null
-                          const dagBreedte = vak.width / Math.max(1, dagenTussen(stuk.van, stuk.tot))
-                          const verschuif = bezig ? bezig.dagen * dagBreedte : 0
-                          const left  = vak.left + (bezig?.soort === 'eind' ? 0 : verschuif)
-                          const width = Math.max(6, vak.width + (bezig?.soort === 'heel' ? 0 : bezig?.soort === 'start' ? -verschuif : verschuif))
+                          const schuifDatum = (d: Date, n: number) => { const next = new Date(d); next.setDate(next.getDate()+n); return next }
+                          let previewStart = bezig && bezig.soort !== 'eind' ? schuifDatum(stuk.van, bezig.dagen) : stuk.van
+                          let previewEnd = bezig && bezig.soort !== 'start' ? schuifDatum(stuk.tot, bezig.dagen) : stuk.tot
+                          if(previewStart > previewEnd){if(bezig?.soort==='start')previewStart=previewEnd;else previewEnd=previewStart}
+                          const preview = rangeToPx(cols,previewStart,previewEnd) ?? vak
+                          const left = preview.left
+                          const width = preview.width
+                          const workdays = werkdagenIn(lokaleIso(previewStart),lokaleIso(previewEnd))
                           const datum = (d: Date) => d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
                           const subs = `${regel.subAantal} subitem${regel.subAantal === 1 ? '' : 's'}`
                           const staart = heeftSubs
-                            ? ` · ${subs} · klik om ${regel.isOuder ? 'in' : 'uit'} te klappen`
+                            ? ` · ${subs} · open project`
                             : sleepbaar ? ' · sleep om te verzetten' : ''
                           return (
-                            <div key={stukIdx}
+                            <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpenItem(regel.itemId,regel.subitemId)}}}
                               onPointerDown={e => sleepbaar && startSleep(e, regel, regel.periode, 'heel')}
-                              // Een balk met subitems klapt open in plaats van
-                              // de popup te openen: dat is waar je op dat
-                              // moment naar op zoek bent. De naam ernaast
-                              // opent nog steeds het item zelf.
+                              // Balk en naam openen hetzelfde detailpaneel; het pijltje klapt stappen uit.
                               onClick={() => {
                                 if (sleep || netGesleept.current) return
-                                if (heeftSubs) klapOmgekeerd(regel.itemId)
-                                else onOpenItem(regel.itemId, regel.subitemId)
+                                onOpenItem(regel.itemId, regel.subitemId)
                               }}
                               title={`${regel.naam} · ${datum(stuk.van)} – ${datum(stuk.tot)}${staart}`}
                               style={{ position: 'absolute', left, width,
                                 top: (hoog - hoogte) / 2, height: hoogte, borderRadius: regel.isOuder ? 3 : 5,
                                 cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
-                                background: regel.isOuder ? 'var(--text-muted)' : (groep.color || color),
-                                opacity: regel.isOuder ? 0.32 : regel.isDone ? 0.4 : bezig ? 1 : 0.9,
+                                background: heeftSubs ? 'var(--text-primary)' : `color-mix(in srgb, ${groep.color || color} ${regel.subitemId ? 26 : 38}%, var(--bg-card))`,
+                                opacity: regel.isDone ? 0.5 : 1,
                                 boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
-                                color: '#fff', fontSize: 10.5, fontWeight: 700,
-                                display: 'flex', alignItems: 'center', padding: '0 6px',
+                                color: heeftSubs ? 'var(--bg-card)' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px',
                                 // Geen overflow:hidden meer: dat maakt van de
                                 // balk een eigen scroll-container en dan werkt
                                 // de meescrollende naam hieronder niet.
                                 whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
-                              {sleepbaar && (
+                              {bezig && <span role="status" style={{position:'absolute',bottom:'calc(100% + 5px)',left:0,padding:'4px 7px',background:'var(--text-primary)',color:'var(--bg-card)',borderRadius:5,fontSize:11,zIndex:5,pointerEvents:'none'}}>{datum(previewStart)} – {datum(previewEnd)}</span>}
+                              {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
                                   title="Sleep om de startdatum te verzetten"
                                   style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />
@@ -624,9 +668,9 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem }:
                               <span style={{ position: 'sticky', left: NAAM_W + 8,
                                 maxWidth: Math.max(0, width - 12),
                                 overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {!regel.isOuder && !regel.segmenten && width > 54 ? regel.naam : ''}
+                                {width > 42 ? (workdays > 0 ? `${workdays} ${workdays === 1 ? 'dag' : 'dagen'}` : 'Weekend') : ''}
                               </span>
-                              {sleepbaar && (
+                              {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'eind') }}
                                   title="Sleep om de einddatum te verzetten"
                                   style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 7, cursor: 'ew-resize' }} />

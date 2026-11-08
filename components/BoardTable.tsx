@@ -57,6 +57,7 @@ import { startTouchItemDrag } from '@/lib/touchItemDrag'
 import { visibleRecurringSubitems } from '@/lib/recurringMeetingWindow'
 import { mergeDetailPatch } from '@/lib/boardItemPatch'
 import { sortSubitems, type AgendaSort } from '@/lib/sortSubitems'
+import { moveTimelineItem } from '@/lib/moveTimelineItem'
 import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
 
@@ -5751,6 +5752,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           worden. */}
       {weergave === 'tijdlijn' && (
         <BoardTimeline
+          sortBy={sortBy}
           groups={filteredGroups}
           color={color}
           onOpenItem={(itemId, subitemId) => {
@@ -5771,16 +5773,14 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             const sub = subitemId ? (item.subitems ?? []).find(s => s.id === subitemId) : undefined
             if (subitemId && !sub) return
             const doel = sub ?? item
-            const oudStart = doel.startDate ?? '—'
+            const oudStart = (sub ? sub.startDate : itemDatums(item).startDate) ?? '—'
             const oudEind  = doel.endDate ?? '—'
             if (oudStart === startDate && oudEind === endDate) return
             onChange(groups.map(groep => ({
               ...groep,
               items: groep.items.map(i => {
                 if (i.id !== itemId) return i
-                if (!sub) return { ...i, startDate, endDate }
-                return { ...i, subitems: (i.subitems ?? []).map(s =>
-                  s.id === subitemId ? { ...s, startDate, endDate } : s) }
+                return moveTimelineItem(i, startDate, endDate, subitemId)
               }),
             })))
             void logItemActivity(itemId, 'wijzigde de timeline',
