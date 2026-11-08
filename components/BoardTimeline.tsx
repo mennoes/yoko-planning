@@ -178,6 +178,12 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
     return volgende
   })
   // Welke groepen je uit beeld hebt gehaald. Leeg = alles zichtbaar.
+  const [ingeklapteGroepen, setIngeklapteGroepen] = useState<Set<string>>(new Set())
+  const toggleGroep = (id: string) => setIngeklapteGroepen(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
   const [verborgenGroepen, setVerborgenGroepen] = useState<Set<string>>(new Set())
   // Hoeveel extra historie er is bijgeladen door naar links te scrollen.
   const [extraTerug, setExtraTerug] = useState(0)
@@ -408,19 +414,11 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
 
   return (
     <div data-board-timeline
-      style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-card)' }}>
+      style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-card)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderBottom: '1px solid var(--border-light)' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Zoom
-        </span>
-        {(['dag', 'week', 'maand'] as const).map(niveau => (
-          <button key={niveau} onClick={() => setZoom(niveau)} aria-pressed={zoom === niveau}
-            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', cursor: 'pointer',
-              background: zoom === niveau ? 'var(--control-active)' : 'var(--bg-card)',
-              color: 'var(--text-primary)', fontSize: 12, fontWeight: zoom === niveau ? 700 : 500 }}>
-            {niveau === 'dag' ? 'Dagen' : niveau === 'week' ? '4 weken' : '6 maanden'}
-          </button>
-        ))}
+        <select aria-label="Tijdlijnperiode" value={zoom} onChange={e => setZoom(e.target.value as ZoomLevel)} style={{padding:'5px 9px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',fontSize:12}}>
+          <option value="dag">Dagen</option><option value="week">4 weken</option><option value="maand">6 maanden</option>
+        </select>
         <button onClick={naarVandaag} title="Spring naar vandaag"
           style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
             background: 'var(--yellow)', color: '#1a1a1a', marginLeft: 4,
@@ -429,6 +427,9 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
         </button>
         <button aria-label="Vorige periode" onClick={() => scrollRef.current?.scrollBy({left: -(viewportWidth - NAAM_W), behavior: 'smooth'})} style={{border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',padding:'4px 10px',cursor:'pointer'}}>←</button>
         <button aria-label="Volgende periode" onClick={() => scrollRef.current?.scrollBy({left: viewportWidth - NAAM_W, behavior: 'smooth'})} style={{border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',padding:'4px 10px',cursor:'pointer'}}>→</button>
+        <details style={{marginLeft:'auto',position:'relative'}} onKeyDown={e => { if(e.key === 'Escape') e.currentTarget.open = false }}>
+          <summary style={{cursor:'pointer',listStyle:'none',padding:'5px 10px',fontSize:12,color:'var(--text-primary)',border:'1px solid var(--border)',borderRadius:6}}>Weergave ⌄</summary>
+          <div style={{position:'absolute',right:0,top:'calc(100% + 8px)',width:260,zIndex:20,display:'flex',flexDirection:'column',alignItems:'stretch',gap:12,padding:14,border:'1px solid var(--border)',borderRadius:10,background:'var(--bg-card)',boxShadow:'0 8px 24px #0003'}}>
         <button onClick={() => setUitgeklapt(current => current.size ? new Set() : new Set(groups.flatMap(g => g.items.filter(i => i.subitems?.length).map(i => i.id))))}
           style={{border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',padding:'4px 10px',cursor:'pointer',fontSize:12}}>
           {uitgeklapt.size ? 'Stappen inklappen' : 'Stappen uitklappen'}
@@ -438,7 +439,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
           // Duidelijk los van de zoomknoppen: met 6px ernaast las het als
           // één rij knoppen en wist je niet meer waar Zoom ophield.
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-            marginLeft: 0, paddingLeft: 10, borderLeft: '1px solid var(--border)' }}>
+            marginLeft: 0, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Groepen
             </span>
@@ -476,11 +477,11 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
             {toonAfgerond ? '✓ ' : ''}Afgerond ({afgerondAantal})
           </button>
         )}
+          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Veeg of sleep de achtergrond om te scrollen.</div>
+          </div>
+        </details>
       </div>
 
-      <div style={{display:'flex',gap:16,padding:'6px 12px',fontSize:11,color:'var(--text-muted)',borderBottom:'1px solid var(--border-light)'}}>
-        <span>◆ Naar de klant</span><span>⚑ Deadline</span><span style={{marginLeft:'auto'}}>Veeg of sleep de achtergrond · sleep een balk om te plannen</span>
-      </div>
       <div ref={scrollRef} role="region" aria-label="Tijdlijn, horizontaal en verticaal scrollbaar" tabIndex={0}
         onPointerDown={startPan}
         onScroll={e => {
@@ -555,20 +556,20 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                     dikkere scheiding erboven en wat lucht. Eerder was het
                     verschil tussen een groepskop en een itemrij een iets
                     ander grijs — dan zie je de indeling niet. */}
-                <div style={{ display: 'flex', background: 'var(--overlay-faint)',
+                <div role="button" tabIndex={0} aria-expanded={!ingeklapteGroepen.has(groep.id)} aria-label={`Groep ${groep.name}`} onClick={() => toggleGroep(groep.id)} onKeyDown={e => {if(e.key === 'Enter' || e.key === ' '){e.preventDefault();toggleGroep(groep.id)}}} style={{ display: 'flex', cursor:'pointer', background: 'var(--overlay-faint)',
                   borderTop: '2px solid var(--border-strong)', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
                     background: 'var(--overlay-faint)', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8,
                     borderLeft: `4px solid ${groep.color || color}`, boxSizing: 'border-box' }}>
                     <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{groep.name}</span>
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ingeklapteGroepen.has(groep.id) ? '▸' : '▾'} {groep.name}</span>
                     <span style={{ fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>
                       {metDatum.length}{urenVanGroep(metDatum.map(e => e.item))}
                     </span>
                   </div>
                   <div style={{ width: totaleBreedte, flexShrink: 0 }} />
                 </div>
-                {regelsVan(metDatum).map(regel => {
+                {!ingeklapteGroepen.has(groep.id) && regelsVan(metDatum).map(regel => {
                   const balk = rangeToPx(cols, regel.periode.van, regel.periode.tot)
                   const hoog = regel.subAantal > 0 ? OUDER_RIJ_H : RIJ_H
                   const hoogte = regel.subAantal > 0 ? OUDER_H : regel.subitemId ? 22 : BALK_H
