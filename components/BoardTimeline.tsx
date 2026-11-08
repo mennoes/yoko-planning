@@ -189,6 +189,44 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
   const [zoom, setZoom] = useState<ZoomLevel>('week')
   const scrollRef = useRef<HTMLDivElement>(null)
   const naarVandaagGescrold = useRef(false)
+  const [isPanning, setIsPanning] = useState(false)
+  const panCleanup = useRef<(() => void) | null>(null)
+  useEffect(() => () => panCleanup.current?.(), [])
+
+  // Native two-finger scrolling stays untouched. Drag empty grid space to
+  // browse, while bars and controls keep their own interactions.
+  function startPan(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || event.pointerType !== 'mouse') return
+    if ((event.target as HTMLElement).closest('button, [role="button"], input, select, textarea, a, [draggable="true"]')) return
+    const el = event.currentTarget
+    const bounds = el.getBoundingClientRect()
+    if (event.clientX >= bounds.left + el.clientWidth || event.clientY >= bounds.top + el.clientHeight) return
+    event.preventDefault()
+    panCleanup.current?.()
+    let lastX = event.clientX
+    const pointerId = event.pointerId
+    setIsPanning(true)
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return
+      // Incremental deltas also work when earlier weeks are prepended.
+      el.scrollLeft += lastX - e.clientX
+      lastX = e.clientX
+    }
+    const stop = () => { cleanup(); setIsPanning(false) }
+    const end = (e: PointerEvent) => { if (e.pointerId === pointerId) stop() }
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      window.removeEventListener('blur', stop)
+      panCleanup.current = null
+    }
+    panCleanup.current = cleanup
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    window.addEventListener('blur', stop)
+  }
 
   const [toonAfgerond, setToonAfgerond] = useState(false)
   const [toonEerder, setToonEerder] = useState(false)
@@ -441,9 +479,10 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
       </div>
 
       <div style={{display:'flex',gap:16,padding:'6px 12px',fontSize:11,color:'var(--text-muted)',borderBottom:'1px solid var(--border-light)'}}>
-        <span>◆ Naar de klant</span><span>┆ Deadline</span><span style={{marginLeft:'auto'}}>Scroll door de tijd · sleep een balk om te plannen</span>
+        <span>◆ Naar de klant</span><span>┆ Deadline</span><span style={{marginLeft:'auto'}}>Veeg of sleep de achtergrond · sleep een balk om te plannen</span>
       </div>
       <div ref={scrollRef} role="region" aria-label="Tijdlijn, horizontaal en verticaal scrollbaar" tabIndex={0}
+        onPointerDown={startPan}
         onScroll={e => {
           // Naar links blijven scrollen laadt eerdere weken bij, in plaats
           // van tegen een harde rand te lopen. We houden de kijkpositie
@@ -461,7 +500,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
           herstelRef.current = { scrollLeft: el.scrollLeft, eersteKolom: cols[0]?.key ?? '' }
           setExtraTerug(vorige => Math.min(MAX_EXTRA_TERUG, vorige + 56))
         }}
-        style={{ overflow: 'auto', maxHeight: '68vh', minHeight: 240, overscrollBehaviorX: 'contain', scrollbarGutter: 'stable', WebkitOverflowScrolling: 'touch' }}>
+        style={{ cursor: isPanning ? 'grabbing' : 'grab', userSelect: isPanning ? 'none' : 'auto', overflow: 'auto', maxHeight: '68vh', minHeight: 240, overscrollBehaviorX: 'contain', scrollbarGutter: 'stable', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ minWidth: NAAM_W + totaleBreedte, position: 'relative' }}>
           {/* Vandaag-streep over het hele raster. Ligt onder de vastgeplakte
               naamkolom (die heeft een hogere z-index), zodat hij daar niet
