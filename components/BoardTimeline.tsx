@@ -32,13 +32,13 @@ function timelineStatusColor(status: string): string {
 }
 
 const NAAM_W = 290
-const RIJ_H  = 44
-const OUDER_RIJ_H = 52
-const BALK_H = 26
+const RIJ_H  = 30
+const OUDER_RIJ_H = 36
+const BALK_H = 20
 /** Een ouder met subitems is een samenvatting, geen werk op zich. Zijn
  *  balk is daarom een dun grijs streepje boven de subitems: je ziet de
  *  omspanning, maar je blik gaat naar de regels eronder. */
-const OUDER_H = 32
+const OUDER_H = 22
 /** Tot hoever je terug kunt scrollen voordat we stoppen met bijladen. */
 const MAX_EXTRA_TERUG = 730
 
@@ -255,6 +255,9 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
   const [toonAfgerond, setToonAfgerond] = useState(false)
   const [toonEerder, setToonEerder] = useState(false)
 
+  const [scrollX, setScrollX] = useState<number | null>(null)
+  const [zoomScale, setZoomScale] = useState(1)
+  const zoomAnchor = useRef<{ center: number; oldWidth: number } | null>(null)
   const [viewportWidth, setViewportWidth] = useState(1100)
   const [extraVooruit, setExtraVooruit] = useState(0)
   const [toonMomenten, setToonMomenten] = useState(true)
@@ -268,8 +271,31 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
     setViewportWidth(el.clientWidth)
     return () => observer.disconnect()
   }, [])
-  const colW = Math.max(zoom === 'dag' ? 54 : 110, (viewportWidth - NAAM_W) / (zoom === 'week' ? 4 : zoom === 'maand' ? 6 : 6))
-
+  const baseColW = Math.max(zoom === 'dag' ? 54 : 110, (viewportWidth - NAAM_W) / (zoom === 'week' ? 4 : zoom === 'maand' ? 6 : 6))
+  const colW = baseColW * zoomScale
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]') || document.querySelector('[role="dialog"]')) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (!['+','=','-','_'].includes(e.key)) return
+      e.preventDefault()
+      const el = scrollRef.current
+      if (!el) return
+      zoomAnchor.current = {center:el.scrollLeft + (el.clientWidth - NAAM_W)/2,oldWidth:colW}
+      setZoomScale(value => Math.max(.25,Math.min(4,Math.round((value + (e.key === '+' || e.key === '=' ? .1 : -.1))*100)/100)))
+    }
+    window.addEventListener('keydown',onKey)
+    return () => window.removeEventListener('keydown',onKey)
+  },[colW])
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el || !zoomAnchor.current) return
+    const anchor = zoomAnchor.current
+    el.scrollLeft = Math.max(0,anchor.center * colW / anchor.oldWidth - (el.clientWidth - NAAM_W)/2)
+    zoomAnchor.current = null
+    setScrollX(el.scrollLeft)
+  },[colW])
 
   // Afgerond werk hoort hier standaard niet thuis: de tijdlijn gaat over
   // wat loopt en wat eraan komt. Je kunt het erbij zetten, en we laten
@@ -316,6 +342,15 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
     if (zoom === 'dag') return getDayCols(start, 56 + extraTerug + extraVooruit, colW)
     return getWeekCols(start, 104 + Math.ceil(extraTerug / 7) + extraVooruit, colW)
   }, [zoom, colW, vensterStart, extraTerug, extraVooruit])
+
+  const isVisiblePeriod = (period: {van:Date;tot:Date}) => {
+    if (scrollX === null) return true
+    const pixels = rangeToPx(cols,period.van,period.tot)
+    return !!pixels && pixels.left + pixels.width > scrollX && pixels.left < scrollX + viewportWidth - NAAM_W
+  }
+  const itemVisible = (item: BoardItem, period: {van:Date;tot:Date}) => item.subitems?.length
+    ? item.subitems.some(sub => {const p = subPeriode(sub); return p && isVisiblePeriod(p)})
+    : isVisiblePeriod(period)
 
   /** Ligt dit werk helemaal vóór het raster? Dan heeft een rij geen balk en
    *  dus geen betekenis. */
@@ -396,13 +431,14 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
   }
 
   // Open op vandaag in plaats van op maanden geschiedenis.
-  useEffect(() => { naarVandaagGescrold.current = false }, [zoom, toonAfgerond, colW])
+  useEffect(() => { naarVandaagGescrold.current = false }, [zoom, toonAfgerond, baseColW])
   useEffect(() => {
     if (naarVandaagGescrold.current || !scrollRef.current) return
     const index = cols.findIndex(col => col.isCurrent)
     if (index < 0) return
     const x = cols.slice(0, index).reduce((som, col) => som + col.widthPx, 0)
     scrollRef.current.scrollLeft = Math.max(0, x)
+    setScrollX(scrollRef.current.scrollLeft)
     naarVandaagGescrold.current = true
   }, [cols])
 
@@ -434,8 +470,8 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
     <div data-board-timeline
       style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-card)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px', borderBottom: '1px solid var(--border-light)' }}>
-        <select aria-label="Tijdlijnperiode" value={zoom} onChange={e => setZoom(e.target.value as ZoomLevel)} style={{padding:'5px 9px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',fontSize:12}}>
-          <option value="dag">Dagen</option><option value="week">4 weken</option><option value="maand">6 maanden</option>
+        <select aria-label="Tijdlijnperiode" value={zoom} onChange={e => {setZoomScale(1);setZoom(e.target.value as ZoomLevel)}} style={{padding:'5px 9px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg-card)',color:'var(--text-primary)',fontSize:12}}>
+          <option value="dag">Dagen</option><option value="week">Weken</option><option value="maand">Maanden</option>
         </select>
         <button onClick={naarVandaag} title="Spring naar vandaag"
           style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
@@ -495,7 +531,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
             {toonAfgerond ? '✓ ' : ''}Afgerond ({afgerondAantal})
           </button>
         )}
-          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Breedte = looptijd · hoogte = uren per werkdag<br/>Gestreept = wachtstatus · ? = nog niet geschat<br/>Veeg of sleep de achtergrond om te scrollen.</div>
+          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Breedte = looptijd · hoogte = uren per werkdag<br/>Gestreept = wachtstatus · ? = nog niet geschat<br/>Veeg of sleep de achtergrond om te scrollen.<br/>+ / −: in- en uitzoomen</div>
           </div>
         </details>
       </div>
@@ -508,6 +544,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
           // gelijk door net zoveel terug te scrollen als er kolommen bij
           // komen; anders springt het beeld.
           const el = e.currentTarget
+          setScrollX(el.scrollLeft)
           if (el.scrollWidth - el.clientWidth - el.scrollLeft < 120 && extraVooruit < 104) setExtraVooruit(n => n + 12)
           if (el.scrollLeft > 40 || ladenBezig.current) return
           // Niet eindeloos doorladen: twee jaar historie is ruim, en zonder
@@ -565,7 +602,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
               .map(item => ({ item, periode: itemPeriode(item) }))
               .filter((entry): entry is { item: BoardItem; periode: { van: Date; tot: Date } } => entry.periode !== null)
               // Geen rij zonder balk: dat is wat de lijst onleesbaar maakte.
-              .filter(entry => !valtEerder(entry.item))
+              .filter(entry => !valtEerder(entry.item) && (sleep || itemVisible(entry.item,entry.periode)))
               .sort((a, b) => sortBy === undefined ? a.periode.van.getTime() - b.periode.van.getTime() : 0)
             if (metDatum.length === 0) return null
             return (
@@ -577,7 +614,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                 <div role="button" tabIndex={0} aria-expanded={!ingeklapteGroepen.has(groep.id)} aria-label={`Groep ${groep.name}`} onClick={() => toggleGroep(groep.id)} onKeyDown={e => {if(e.key === 'Enter' || e.key === ' '){e.preventDefault();toggleGroep(groep.id)}}} style={{ display: 'flex', cursor:'pointer', background: 'var(--overlay-faint)',
                   borderTop: '2px solid var(--border-strong)', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ width: NAAM_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2,
-                    background: 'var(--overlay-faint)', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8,
+                    background: 'var(--overlay-faint)', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8,
                     borderLeft: `4px solid ${groep.color || color}`, boxSizing: 'border-box' }}>
                     <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ingeklapteGroepen.has(groep.id) ? '▸' : '▾'} {groep.name}</span>
@@ -587,17 +624,17 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                   </div>
                   <div style={{ width: totaleBreedte, flexShrink: 0 }} />
                 </div>
-                {!ingeklapteGroepen.has(groep.id) && regelsVan(metDatum).map(regel => {
+                {!ingeklapteGroepen.has(groep.id) && regelsVan(metDatum).filter(regel => !regel.subitemId || sleep || isVisiblePeriod(regel.periode)).map(regel => {
                   const balk = rangeToPx(cols, regel.periode.van, regel.periode.tot)
                   const laneEnds: number[] = []
                   const segmentLanes = new Map<string,number>()
-                  for (const segment of [...(regel.segmenten ?? [])].sort((a,b) => a.van.getTime()-b.van.getTime())) {
+                  for (const segment of [...(regel.segmenten ?? [])].filter(isVisiblePeriod).sort((a,b) => a.van.getTime()-b.van.getTime())) {
                     let lane = laneEnds.findIndex(end => end < segment.van.getTime())
                     if (lane < 0) lane = laneEnds.length
                     laneEnds[lane] = segment.tot.getTime()
                     segmentLanes.set(segment.id,lane)
                   }
-                  const hoog = Math.max(regel.subAantal > 0 ? OUDER_RIJ_H : RIJ_H, laneEnds.length * 36 + 12)
+                  const hoog = Math.max(regel.subAantal > 0 ? OUDER_RIJ_H : RIJ_H, laneEnds.length * 24 + 6)
                   const hoursLabel = regel.hours > 0 ? `${regel.hours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur${regel.missingEstimates ? ' + ?' : ''}` : 'Nog niet geschat'
                   const waiting = isWaitingStatus(regel.status)
                   const alerts = [
@@ -645,7 +682,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
                             minWidth: 0, flex: 1, opacity: regel.isDone ? 0.55 : 1,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            fontSize: 12.5,
+                            fontSize: 11.5,
                             fontWeight: heeftSubs ? 700 : 500,
                             letterSpacing: regel.isOuder ? '0.03em' : undefined,
                             color: 'var(--text-primary)' }}>
@@ -662,7 +699,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                         <span style={{ display: 'inline-flex', flexShrink: 0 }}>
                           {regel.ownerIds.filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
                             <span key={id} style={{ marginLeft: i === 0 ? 0 : -7, display: 'inline-flex' }}>
-                              <UserAvatar memberId={id} size={24} />
+                              <UserAvatar memberId={id} size={20} />
                             </span>
                           ))}
                         </span>
@@ -732,18 +769,18 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                               }}
                               title={`${regel.naam}${segment ? " — " + segment.name : ""} · ${barStatus || 'Geen status'} · ${segment ? segmentLabel : hoursLabel} werk · ${workdays} werkdagen looptijd · gemiddeld ${dailyHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur per werkdag · ${datum(stuk.van)} – ${datum(stuk.tot)}${waiting ? ' · Wachten' : ''}${staart}`}
                               style={{ position: 'absolute', left, width,
-                                top: segment && laneEnds.length > 1 ? 6 + (segmentLanes.get(segment.id) ?? 0) * 36 + (32 - Math.max(26,hoogte))/2 : (hoog - Math.max(26,hoogte)) / 2, height: Math.max(26,hoogte), borderRadius: regel.isOuder ? 3 : 5,
+                                top: segment && laneEnds.length > 1 ? 3 + (segmentLanes.get(segment.id) ?? 0) * 24 + (22 - Math.max(18,hoogte))/2 : (hoog - Math.max(18,hoogte)) / 2, height: Math.max(18,hoogte), borderRadius: regel.isOuder ? 3 : 5,
                                 cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
                                 background: 'transparent',
                                 opacity: regel.isDone ? 0.5 : 1,
                                 boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
-                                color: hoogte >= 20 ? '#171717' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
+                                color: hoogte >= 16 ? '#171717' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
                                 display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 6px',
                                 // Geen overflow:hidden meer: dat maakt van de
                                 // balk een eigen scroll-container en dan werkt
                                 // de meescrollende naam hieronder niet.
                                 whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
-                              <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(26,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? `repeating-linear-gradient(135deg, ${barColor}, ${barColor} 4px, var(--bg-card) 4px, var(--bg-card) 6px)` : barColor,border:segmentHours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
+                              <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(18,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? `repeating-linear-gradient(135deg, ${barColor}, ${barColor} 4px, var(--bg-card) 4px, var(--bg-card) 6px)` : barColor,border:segmentHours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
                               {bezig && <span role="status" style={{position:'absolute',bottom:'calc(100% + 5px)',left:0,padding:'4px 7px',background:'var(--text-primary)',color:'var(--bg-card)',borderRadius:5,fontSize:11,zIndex:5,pointerEvents:'none'}}>{datum(previewStart)} – {datum(previewEnd)}</span>}
                               {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
@@ -757,7 +794,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                                   baan zonder te weten waarvan. */}
                               <span style={{ position: 'sticky', left: NAAM_W + 8,
                                 maxWidth: Math.max(0, width - 12),
-                                overflow: 'hidden', textOverflow: 'ellipsis', zIndex:1, background:hoogte < 20 ? 'var(--bg-card)' : undefined,borderRadius:3,padding:'0 3px' }}>
+                                overflow: 'hidden', textOverflow: 'ellipsis', zIndex:1, background:hoogte < 16 ? 'var(--bg-card)' : undefined,borderRadius:3,padding:'0 3px' }}>
                                 {width > 42 ? barLabel : ''}
                               </span>
                               {sleepbaar && !heeftSubs && (
