@@ -479,7 +479,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
       </div>
 
       <div style={{display:'flex',gap:16,padding:'6px 12px',fontSize:11,color:'var(--text-muted)',borderBottom:'1px solid var(--border-light)'}}>
-        <span>◆ Naar de klant</span><span>┆ Deadline</span><span style={{marginLeft:'auto'}}>Veeg of sleep de achtergrond · sleep een balk om te plannen</span>
+        <span>◆ Naar de klant</span><span>⚑ Deadline</span><span style={{marginLeft:'auto'}}>Veeg of sleep de achtergrond · sleep een balk om te plannen</span>
       </div>
       <div ref={scrollRef} role="region" aria-label="Tijdlijn, horizontaal en verticaal scrollbaar" tabIndex={0}
         onPointerDown={startPan}
@@ -604,8 +604,9 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                             {regel.isOuder ? '▼' : '▶'}
                           </button>
                         )}
-                        <button onClick={() => onOpenItem(regel.itemId, regel.subitemId)}
-                          title={`${regel.naam} — open`}
+                        <button onClick={() => heeftSubs ? klapOmgekeerd(regel.itemId) : onOpenItem(regel.itemId, regel.subitemId)}
+                          aria-expanded={heeftSubs ? regel.isOuder : undefined}
+                          title={`${regel.naam} — ${heeftSubs ? (regel.isOuder ? 'stappen inklappen' : 'stappen uitklappen') : 'open'}`}
                           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
                             minWidth: 0, flex: 1, opacity: regel.isDone ? 0.55 : 1,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -621,6 +622,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                         {/* Eigenaren rechts van de titel: zo staan ze bij
                             elkaar in één kolom en loopt de naam niet in
                             een wisselend aantal avatars vast. */}
+                        {heeftSubs && <button onClick={() => onOpenItem(regel.itemId)} aria-label={`Details van ${regel.naam}`} title="Projectdetails openen" style={{border:0,background:'transparent',color:'var(--text-muted)',cursor:'pointer',padding:'3px 5px',fontSize:14}}>↗</button>}
                         <span style={{ display: 'inline-flex', flexShrink: 0 }}>
                           {regel.ownerIds.filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
                             <span key={id} style={{ marginLeft: i === 0 ? 0 : -7, display: 'inline-flex' }}>
@@ -643,9 +645,9 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           if (x === null) return null
                           return <button aria-label={`${regel.subitemId ? 'Naar klant' : 'Deadline'} ${regel.naam}: ${deadlineDate.toLocaleDateString('nl-NL')}`}
                             onClick={()=>onOpenItem(regel.itemId,regel.subitemId)}
-                            title={`${regel.subitemId ? 'Naar klant' : 'Deadline'} · ${deadlineDate.toLocaleDateString('nl-NL')}`}
+                            title={`${regel.subitemId ? 'Naar klant' : 'Deadline'} · ${deadlineDate.toLocaleDateString('nl-NL')} · klik voor details`}
                             style={{position:'absolute',left:x-9,top:0,height:hoog,width:18,padding:0,border:0,background:'transparent',color:'var(--yellow)',zIndex:2,cursor:'pointer'}}>
-                            {regel.subitemId ? <span style={{position:'absolute',top:3,left:2,fontSize:16}}>◆</span> : <span style={{position:'absolute',left:9,top:0,bottom:0,borderLeft:'1px dashed var(--yellow)'}}/>}
+                            {regel.subitemId ? <span style={{position:'absolute',top:3,left:2,fontSize:16}}>◆</span> : <><span aria-hidden style={{position:'absolute',left:8,top:6,bottom:0,borderLeft:'2px dashed var(--yellow)'}}/><span aria-hidden style={{position:'absolute',left:8,top:2,width:10,height:7,background:'var(--yellow)',clipPath:'polygon(0 0,100% 0,75% 50%,100% 100%,0 100%)'}}/></>}
                           </button>
                         })()}
                         {/* Losse stukjes als de periode geleend is van de
@@ -670,15 +672,16 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           const datum = (d: Date) => d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
                           const subs = `${regel.subAantal} subitem${regel.subAantal === 1 ? '' : 's'}`
                           const staart = heeftSubs
-                            ? ` · ${subs} · open project`
+                            ? ` · ${subs} · ${regel.isOuder ? 'stappen inklappen' : 'stappen uitklappen'}`
                             : sleepbaar ? ' · sleep om te verzetten' : ''
                           return (
-                            <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpenItem(regel.itemId,regel.subitemId)}}}
+                            <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(heeftSubs)klapOmgekeerd(regel.itemId);else onOpenItem(regel.itemId,regel.subitemId)}}}
                               onPointerDown={e => sleepbaar && startSleep(e, regel, regel.periode, 'heel')}
-                              // Balk en naam openen hetzelfde detailpaneel; het pijltje klapt stappen uit.
+                              // Projecten klappen open; losse stappen openen hun details.
                               onClick={() => {
                                 if (sleep || netGesleept.current) return
-                                onOpenItem(regel.itemId, regel.subitemId)
+                                if (heeftSubs) klapOmgekeerd(regel.itemId)
+                                else onOpenItem(regel.itemId, regel.subitemId)
                               }}
                               title={`${regel.naam} · ${datum(stuk.van)} – ${datum(stuk.tot)}${staart}`}
                               style={{ position: 'absolute', left, width,
