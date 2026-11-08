@@ -22,6 +22,15 @@ import { planningBarHeightRatio, planningBarPixelHeight } from '@/lib/planningBa
 import { timelineEffort, isWaitingStatus, nextClientMoment } from '@/lib/timelineEffort'
 import { itemDatums } from '@/lib/itemDatums'
 
+// Same palette as the status pickers in Planning and the agenda.
+function timelineStatusColor(status: string): string {
+  if (status === 'Done') return '#00c875'
+  if (/^working on/i.test(status)) return '#ff7b24'
+  if (status === 'Stuck') return '#e2445c'
+  if (status === 'Doorlopend') return '#579bfc'
+  return '#808080'
+}
+
 const NAAM_W = 290
 const RIJ_H  = 44
 const OUDER_RIJ_H = 52
@@ -122,14 +131,14 @@ export function bouwRegels(
   const regels: TijdlijnRegel[] = []
   for (const { item, periode } of metDatum) {
     const subOrder = opties.sortBy === undefined ? item.subitems ?? [] : sortSubitems(item.subitems ?? [], opties.sortBy, opties.ownerName ?? (id => id))
-    const subs = subOrder
-      .filter(sub => opties.toonAfgerond || sub.status !== 'Done')
+    const allDatedSubs = subOrder
       .map(sub => ({ sub, periode: subPeriode(sub) }))
       .filter((e): e is { sub: SubItem; periode: { van: Date; tot: Date } } => e.periode !== null)
       // Een subitem dat helemaal vóór het raster ligt heeft geen balk en
       // dus geen regel — zelfde regel als voor items.
       .filter(e => e.periode.tot >= opties.rasterStart)
       .sort((a, b) => opties.sortBy === undefined ? a.periode.van.getTime() - b.periode.van.getTime() : 0)
+    const subs = allDatedSubs.filter(({sub}) => opties.toonAfgerond || sub.status !== 'Done')
     const open = subs.length > 0 && (opties.uitgeklapt?.has(item.id) ?? false)
     const effort = timelineEffort(item)
     const moment = nextClientMoment(item.subitems, lokaleIso(new Date()))
@@ -139,7 +148,7 @@ export function bouwRegels(
       key: item.id, itemId: item.id, naam: item.name || '(naamloos)',
       ownerIds: item.ownerIds ?? [], periode, deadline: item.deadline,
       isOuder: open, subAantal: subs.length, isDone: item.status === 'Done',
-      ...(item.subitems?.length ? { segmenten: subs.map(({sub,periode}) => ({...periode,id:sub.id,name:sub.name,hours:Math.max(0,Number(sub.estHours)||0),status:sub.status})) } : {}),
+      ...(item.subitems?.length ? { segmenten: allDatedSubs.map(({sub,periode}) => ({...periode,id:sub.id,name:sub.name,hours:Math.max(0,Number(sub.estHours)||0),status:sub.status})) } : {}),
     })
     if (!open) continue
     for (const { sub, periode: subTijd } of subs) {
@@ -597,7 +606,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                     regel.deadline && lokaleIso(regel.periode.tot) > regel.deadline ? 'Gepland na deadline' : '',
                     regel.projectDeadline && lokaleIso(regel.periode.tot) > regel.projectDeadline ? 'Stap eindigt na projectdeadline' : '',
                   ].filter(Boolean)
-                  const statusColor = regel.status === 'Done' ? '#16a36a' : regel.status === 'Stuck' ? '#df4664' : waiting ? '#a08bbd' : /^working on/i.test(regel.status) ? '#ed8a32' : 'var(--text-muted)' 
+                  const statusColor = timelineStatusColor(regel.status)
                   // Een project verschuift samen met zijn stappen; deadlines blijven vast.
                   const heeftSubs = regel.subAantal > 0
                   const sleepbaar = !regel.isDone
@@ -689,7 +698,9 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           const segmentHours = segment ? segment.hours : regel.hours
                           const segmentLabel = segmentHours > 0 ? `${segmentHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur` : 'Nog niet geschat'
                           const barLabel = segment ? `${segment.name} · ${segmentLabel}` : hoursLabel
-                          const waiting = isWaitingStatus(segment?.status ?? regel.status)
+                          const barStatus = segment?.status ?? regel.status
+                          const barColor = timelineStatusColor(barStatus)
+                          const waiting = isWaitingStatus(barStatus)
                           const hoogte = segment ? planningBarPixelHeight(OUDER_H, planningBarHeightRatio({hours:segmentHours,startDate:lokaleIso(stuk.van),endDate:lokaleIso(stuk.tot)}),6) : planningBarPixelHeight(heeftSubs ? OUDER_H : BALK_H, planningBarHeightRatio({hours:regel.hours,startDate:lokaleIso(stuk.van),endDate:lokaleIso(stuk.tot)}),6)
                           const dailyHours = segmentHours / Math.max(1,werkdagenIn(lokaleIso(stuk.van),lokaleIso(stuk.tot)))
                           // Tijdens het slepen schuift de balk alvast mee,
@@ -717,20 +728,20 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                                 if (heeftSubs) klapOmgekeerd(regel.itemId)
                                 else onOpenItem(regel.itemId, regel.subitemId)
                               }}
-                              title={`${regel.naam}${segment ? " — " + segment.name : ""} · ${segment ? segmentLabel : hoursLabel} werk · ${workdays} werkdagen looptijd · gemiddeld ${dailyHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur per werkdag · ${datum(stuk.van)} – ${datum(stuk.tot)}${waiting ? ' · Wachten' : ''}${staart}`}
+                              title={`${regel.naam}${segment ? " — " + segment.name : ""} · ${barStatus || 'Geen status'} · ${segment ? segmentLabel : hoursLabel} werk · ${workdays} werkdagen looptijd · gemiddeld ${dailyHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur per werkdag · ${datum(stuk.van)} – ${datum(stuk.tot)}${waiting ? ' · Wachten' : ''}${staart}`}
                               style={{ position: 'absolute', left, width,
                                 top: segment && laneEnds.length > 1 ? 6 + (segmentLanes.get(segment.id) ?? 0) * 36 + (32 - Math.max(26,hoogte))/2 : (hoog - Math.max(26,hoogte)) / 2, height: Math.max(26,hoogte), borderRadius: regel.isOuder ? 3 : 5,
                                 cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
                                 background: 'transparent',
                                 opacity: regel.isDone ? 0.5 : 1,
                                 boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
-                                color: heeftSubs && !waiting && hoogte >= 20 ? 'var(--bg-card)' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
+                                color: hoogte >= 20 ? '#171717' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
                                 display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '0 6px',
                                 // Geen overflow:hidden meer: dat maakt van de
                                 // balk een eigen scroll-container en dan werkt
                                 // de meescrollende naam hieronder niet.
                                 whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
-                              <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(26,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? 'repeating-linear-gradient(135deg, var(--bg-hover), var(--bg-hover) 4px, var(--border) 4px, var(--border) 6px)' : heeftSubs ? 'var(--text-primary)' : `color-mix(in srgb, ${groep.color || color} 35%, var(--bg-card))`,border:segmentHours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
+                              <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(26,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? `repeating-linear-gradient(135deg, ${barColor}, ${barColor} 4px, var(--bg-card) 4px, var(--bg-card) 6px)` : barColor,border:segmentHours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
                               {bezig && <span role="status" style={{position:'absolute',bottom:'calc(100% + 5px)',left:0,padding:'4px 7px',background:'var(--text-primary)',color:'var(--bg-card)',borderRadius:5,fontSize:11,zIndex:5,pointerEvents:'none'}}>{datum(previewStart)} – {datum(previewEnd)}</span>}
                               {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
