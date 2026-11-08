@@ -705,7 +705,8 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           const dailyHours = segmentHours / Math.max(1,werkdagenIn(lokaleIso(stuk.van),lokaleIso(stuk.tot)))
                           // Tijdens het slepen schuift de balk alvast mee,
                           // zodat je ziet waar je 'm neerlegt.
-                          const bezig = sleep?.rijKey === regel.key ? sleep : null
+                          const dragRow = segment ? { key: `${regel.itemId}:${segment.id}`, itemId: regel.itemId, subitemId: segment.id } : regel
+                          const bezig = sleep?.rijKey === dragRow.key ? sleep : null
                           const schuifDatum = (d: Date, n: number) => { const next = new Date(d); next.setDate(next.getDate()+n); return next }
                           let previewStart = bezig && bezig.soort !== 'eind' ? schuifDatum(stuk.van, bezig.dagen) : stuk.van
                           let previewEnd = bezig && bezig.soort !== 'start' ? schuifDatum(stuk.tot, bezig.dagen) : stuk.tot
@@ -721,7 +722,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                             : sleepbaar ? ' · sleep om te verzetten' : ''
                           return (
                             <div key={stukIdx} role="button" tabIndex={0} aria-label={`${regel.naam}${segment ? " — " + segment.name : ""}, ${datum(previewStart)} tot ${datum(previewEnd)}`} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(segment)onOpenItem(regel.itemId,segment.id);else if(heeftSubs)klapOmgekeerd(regel.itemId);else onOpenItem(regel.itemId,regel.subitemId)}}}
-                              onPointerDown={e => sleepbaar && startSleep(e, regel, regel.periode, 'heel')}
+                              onPointerDown={e => sleepbaar && startSleep(e, dragRow, stuk, 'heel')}
                               // Segmenten openen hun subitem; de projectnaam klapt de stappen uit.
                               onClick={() => {
                                 if (sleep || netGesleept.current) return
