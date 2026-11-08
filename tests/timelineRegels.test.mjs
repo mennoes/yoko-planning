@@ -26,7 +26,7 @@ function laad(file, mocks = {}) {
   return exports
 }
 
-const tl = laad('../components/BoardTimeline.tsx')
+const tl = laad('../components/BoardTimeline.tsx', { '@/lib/timelineEffort': laad('../lib/timelineEffort.ts') })
 
 const RASTER = new Date('2026-01-01T00:00:00')
 const sub = (id, naam, van, tot, extra = {}) => ({

@@ -18,6 +18,8 @@ import { useTeam } from './TeamContext'
 import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
 import { werkdagenIn } from '@/lib/sjabloonPlan'
+import { planningBarHeightRatio, planningBarPixelHeight } from '@/lib/planningBarHeight'
+import { timelineEffort, isWaitingStatus, nextClientMoment } from '@/lib/timelineEffort'
 import { itemDatums } from '@/lib/itemDatums'
 
 const NAAM_W = 290
@@ -33,7 +35,7 @@ const MAX_EXTRA_TERUG = 730
 
 /** '· 120u' achter een groepskop. */
 function urenVanGroep(items: BoardItem[]): string {
-  const totaal = items.reduce((som, item) => som + (Number(item.estHours) || 0), 0)
+  const totaal = items.reduce((som, item) => som + timelineEffort(item).hours, 0)
   const afgerond = Math.round(totaal * 10) / 10
   return afgerond > 0 ? ` · ${afgerond}u` : ''
 }
@@ -99,6 +101,11 @@ export type TijdlijnRegel = {
   segmenten?: { van: Date; tot: Date }[]
   isDone: boolean
   deadline?: string | null
+  hours: number
+  missingEstimates: number
+  status: string
+  projectDeadline?: string | null
+  nextMoment?: { name: string; deadline: string }
 }
 
 /**
@@ -128,7 +135,11 @@ export function bouwRegels(
     // subitems. Die tekenen we dan ook als losse stukjes in plaats van
     // als één lange balk van de eerste tot de laatste dag.
     const geleend = subs.length > 0 && !item.startDate && !item.endDate
+    const effort = timelineEffort(item)
+    const moment = nextClientMoment(item.subitems, lokaleIso(new Date()))
     regels.push({
+      hours: effort.hours, missingEstimates: effort.missing, status: item.status,
+      nextMoment: moment?.deadline ? { name: moment.name, deadline: moment.deadline } : undefined,
       key: item.id, itemId: item.id, naam: item.name || '(naamloos)',
       ownerIds: item.ownerIds ?? [], periode, deadline: item.deadline,
       isOuder: open, subAantal: subs.length, isDone: item.status === 'Done',
@@ -137,6 +148,8 @@ export function bouwRegels(
     if (!open) continue
     for (const { sub, periode: subTijd } of subs) {
       regels.push({
+        hours: Math.max(0, Number(sub.estHours) || 0), missingEstimates: Number(sub.estHours) > 0 ? 0 : 1,
+        status: sub.status, projectDeadline: item.deadline,
         key: `${item.id}:${sub.id}`, itemId: item.id, subitemId: sub.id,
         naam: sub.name || '(naamloos)', ownerIds: sub.ownerIds ?? [], periode: subTijd,
         isOuder: false, subAantal: 0, isDone: sub.status === 'Done', deadline: sub.deadline,
@@ -477,7 +490,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
             {toonAfgerond ? '✓ ' : ''}Afgerond ({afgerondAantal})
           </button>
         )}
-          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Veeg of sleep de achtergrond om te scrollen.</div>
+          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Breedte = looptijd · hoogte = uren per werkdag<br/>Gestreept = wachtstatus · ? = nog niet geschat<br/>Veeg of sleep de achtergrond om te scrollen.</div>
           </div>
         </details>
       </div>
@@ -572,7 +585,17 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                 {!ingeklapteGroepen.has(groep.id) && regelsVan(metDatum).map(regel => {
                   const balk = rangeToPx(cols, regel.periode.van, regel.periode.tot)
                   const hoog = regel.subAantal > 0 ? OUDER_RIJ_H : RIJ_H
-                  const hoogte = regel.subAantal > 0 ? OUDER_H : regel.subitemId ? 22 : BALK_H
+                  const dailyHours = regel.hours / Math.max(1, werkdagenIn(lokaleIso(regel.periode.van), lokaleIso(regel.periode.tot)))
+                  const hoogte = planningBarPixelHeight(regel.subAantal > 0 ? OUDER_H : BALK_H, planningBarHeightRatio({hours:regel.hours,startDate:lokaleIso(regel.periode.van),endDate:lokaleIso(regel.periode.tot)}), 6)
+                  const hoursLabel = regel.hours > 0 ? `${regel.hours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur${regel.missingEstimates ? ' + ?' : ''}` : 'Nog niet geschat'
+                  const waiting = isWaitingStatus(regel.status)
+                  const alerts = [
+                    regel.missingEstimates ? `${regel.missingEstimates} ontbrekende urenschatting${regel.missingEstimates > 1 ? 'en' : ''}` : '',
+                    !regel.ownerIds.some(id => id && id !== 'unassigned') ? 'Geen owner' : '',
+                    regel.deadline && lokaleIso(regel.periode.tot) > regel.deadline ? 'Gepland na deadline' : '',
+                    regel.projectDeadline && lokaleIso(regel.periode.tot) > regel.projectDeadline ? 'Stap eindigt na projectdeadline' : '',
+                  ].filter(Boolean)
+                  const statusColor = regel.status === 'Done' ? '#16a36a' : regel.status === 'Stuck' ? '#df4664' : waiting ? '#a08bbd' : /^working on/i.test(regel.status) ? '#ed8a32' : 'var(--text-muted)' 
                   // Een project verschuift samen met zijn stappen; deadlines blijven vast.
                   const heeftSubs = regel.subAantal > 0
                   const sleepbaar = !regel.isDone
@@ -607,7 +630,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                         )}
                         <button onClick={() => heeftSubs ? klapOmgekeerd(regel.itemId) : onOpenItem(regel.itemId, regel.subitemId)}
                           aria-expanded={heeftSubs ? regel.isOuder : undefined}
-                          title={`${regel.naam} — ${heeftSubs ? (regel.isOuder ? 'stappen inklappen' : 'stappen uitklappen') : 'open'}`}
+                          title={`${regel.naam} — ${heeftSubs ? (regel.isOuder ? 'stappen inklappen' : 'stappen uitklappen') : 'open'}${regel.nextMoment ? ' · Volgend klantmoment: ' + regel.nextMoment.name + ' op ' + regel.nextMoment.deadline : ''}`}
                           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
                             minWidth: 0, flex: 1, opacity: regel.isDone ? 0.55 : 1,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -615,14 +638,15 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                             fontWeight: heeftSubs ? 700 : 500,
                             letterSpacing: regel.isOuder ? '0.03em' : undefined,
                             color: 'var(--text-primary)' }}>
-                          {regel.naam}
+                          <span title={regel.status || 'Geen status'} style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:statusColor,marginRight:6,verticalAlign:'middle'}} />{regel.naam}
                           {!regel.subitemId && <span style={{display:'block',fontSize:10.5,fontWeight:400,color:'var(--text-muted)',marginTop:2}}>
-                            {heeftSubs ? regel.subAantal + ' stappen · ' : ''}{regel.deadline ? 'Deadline ' + new Date(regel.deadline+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : regel.periode.van.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+' – '+regel.periode.tot.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})}
+                            {heeftSubs ? regel.subAantal + ' stappen · ' : ''}{hoursLabel}{regel.nextMoment ? ' · Naar klant: ' + regel.nextMoment.name + ' ' + new Date(regel.nextMoment.deadline+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : regel.deadline ? ' · Deadline ' + new Date(regel.deadline+'T00:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : ''}
                           </span>}
                         </button>
                         {/* Eigenaren rechts van de titel: zo staan ze bij
                             elkaar in één kolom en loopt de naam niet in
                             een wisselend aantal avatars vast. */}
+                        {alerts.length > 0 && !regel.isDone && <button title={alerts.join(' · ')} aria-label={`${regel.naam}: ${alerts.join(' · ')}`} onClick={() => onOpenItem(regel.itemId,regel.subitemId)} style={{border:0,background:'none',color:'var(--text-muted)',cursor:'pointer',padding:2}}>⚠</button>}
                         {heeftSubs && <button onClick={() => onOpenItem(regel.itemId)} aria-label={`Details van ${regel.naam}`} title="Projectdetails openen" style={{border:0,background:'transparent',color:'var(--text-muted)',cursor:'pointer',padding:'3px 5px',fontSize:14}}>↗</button>}
                         <span style={{ display: 'inline-flex', flexShrink: 0 }}>
                           {regel.ownerIds.filter(id => id && id !== 'unassigned').slice(0, 3).map((id, i) => (
@@ -646,7 +670,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           if (x === null) return null
                           return <button aria-label={`${regel.subitemId ? 'Naar klant' : 'Deadline'} ${regel.naam}: ${deadlineDate.toLocaleDateString('nl-NL')}`}
                             onClick={()=>onOpenItem(regel.itemId,regel.subitemId)}
-                            title={`${regel.subitemId ? 'Naar klant' : 'Deadline'} · ${deadlineDate.toLocaleDateString('nl-NL')} · klik voor details`}
+                            title={`${regel.subitemId ? `Naar klant: ${regel.naam}` : 'Deadline'} · ${deadlineDate.toLocaleDateString('nl-NL')} · klik voor details`}
                             style={{position:'absolute',left:x-9,top:0,height:hoog,width:18,padding:0,border:0,background:'transparent',color:'var(--yellow)',zIndex:2,cursor:'pointer'}}>
                             {regel.subitemId ? <span style={{position:'absolute',top:3,left:2,fontSize:16}}>◆</span> : <><span aria-hidden style={{position:'absolute',left:8,top:6,bottom:0,borderLeft:'2px dashed var(--yellow)'}}/><span aria-hidden style={{position:'absolute',left:8,top:2,width:10,height:7,background:'var(--yellow)',clipPath:'polygon(0 0,100% 0,75% 50%,100% 100%,0 100%)'}}/></>}
                           </button>
@@ -684,19 +708,20 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                                 if (heeftSubs) klapOmgekeerd(regel.itemId)
                                 else onOpenItem(regel.itemId, regel.subitemId)
                               }}
-                              title={`${regel.naam} · ${datum(stuk.van)} – ${datum(stuk.tot)}${staart}`}
+                              title={`${regel.naam} · ${hoursLabel} werk · ${workdays} werkdagen looptijd · gemiddeld ${dailyHours.toLocaleString('nl-NL',{maximumFractionDigits:1})} uur per werkdag · ${datum(stuk.van)} – ${datum(stuk.tot)}${waiting ? ' · Wachten' : ''}${staart}`}
                               style={{ position: 'absolute', left, width,
-                                top: (hoog - hoogte) / 2, height: hoogte, borderRadius: regel.isOuder ? 3 : 5,
+                                top: (hoog - Math.max(26,hoogte)) / 2, height: Math.max(26,hoogte), borderRadius: regel.isOuder ? 3 : 5,
                                 cursor: sleepbaar ? (bezig ? 'grabbing' : 'grab') : 'pointer',
-                                background: heeftSubs ? 'var(--text-primary)' : `color-mix(in srgb, ${groep.color || color} ${regel.subitemId ? 26 : 38}%, var(--bg-card))`,
+                                background: 'transparent',
                                 opacity: regel.isDone ? 0.5 : 1,
                                 boxShadow: bezig ? '0 2px 10px rgba(0,0,0,0.35)' : undefined,
-                                color: heeftSubs ? 'var(--bg-card)' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
+                                color: heeftSubs && !waiting && hoogte >= 20 ? 'var(--bg-card)' : 'var(--text-primary)', fontSize: 11.5, fontWeight: 700,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px',
                                 // Geen overflow:hidden meer: dat maakt van de
                                 // balk een eigen scroll-container en dan werkt
                                 // de meescrollende naam hieronder niet.
                                 whiteSpace: 'nowrap', userSelect: 'none', touchAction: 'none' }}>
+                              <span aria-hidden style={{position:'absolute',left:0,right:0,top:(Math.max(26,hoogte)-hoogte)/2,height:hoogte,borderRadius:4,pointerEvents:'none',background:waiting ? 'repeating-linear-gradient(135deg, var(--bg-hover), var(--bg-hover) 4px, var(--border) 4px, var(--border) 6px)' : heeftSubs ? 'var(--text-primary)' : `color-mix(in srgb, ${groep.color || color} 35%, var(--bg-card))`,border:regel.hours ? undefined : '1px dashed var(--text-muted)',opacity:waiting ? .6 : 1}} />
                               {bezig && <span role="status" style={{position:'absolute',bottom:'calc(100% + 5px)',left:0,padding:'4px 7px',background:'var(--text-primary)',color:'var(--bg-card)',borderRadius:5,fontSize:11,zIndex:5,pointerEvents:'none'}}>{datum(previewStart)} – {datum(previewEnd)}</span>}
                               {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'start') }}
@@ -710,8 +735,8 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                                   baan zonder te weten waarvan. */}
                               <span style={{ position: 'sticky', left: NAAM_W + 8,
                                 maxWidth: Math.max(0, width - 12),
-                                overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {width > 42 ? (workdays > 0 ? `${workdays} ${workdays === 1 ? 'dag' : 'dagen'}` : 'Weekend') : ''}
+                                overflow: 'hidden', textOverflow: 'ellipsis', zIndex:1, background:hoogte < 20 ? 'var(--bg-card)' : undefined,borderRadius:3,padding:'0 3px' }}>
+                                {width > 42 ? hoursLabel : ''}
                               </span>
                               {sleepbaar && !heeftSubs && (
                                 <span onPointerDown={e => { e.stopPropagation(); startSleep(e, regel, regel.periode, 'eind') }}
