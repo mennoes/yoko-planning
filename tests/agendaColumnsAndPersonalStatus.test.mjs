@@ -61,10 +61,11 @@ test('agenda headers support direct column reordering with a visible drop positi
   assert.match(board, /Sleep \$\{col\.label\} om de kolom te verplaatsen/)
   assert.match(board, /pressedColumnKey === col\.key/)
   assert.match(board, /onMouseDown=\{\(\) => \{ if \(!isMobile\) setPressedColumnKey\(col\.key\) \}\}/)
-  // De grip blijft in de DOM terwijl de muis wordt ingedrukt. De eerdere
-  // conditionele mount annuleerde in sommige browsers de native dragstart.
-  assert.match(board, /\{!isMobile && <span aria-hidden/)
-  assert.doesNotMatch(board, /\{!isMobile && pressedColumnKey === col\.key && <span/)
+  // Alleen de lege ruimte naast de naam is sleepbaar. De naam zelf is een
+  // aparte knop om te hernoemen, zodat een klik nooit per ongeluk sleept.
+  assert.match(board, /data-testid=\{`kolom-sleephandvat-\$\{col\.key\}`\}/)
+  assert.match(board, /aria-label=\{`Kolom \$\{col\.label\} hernoemen`\}/)
+  assert.match(board, /onClick=\{\(\) => startColumnRename\(col\)\}/)
 })
 
 test('personal completion client only persists personal status', () => {

@@ -7,10 +7,13 @@ const start = source.indexOf('function BoardGroupSection')
 const end = source.indexOf('// ─── BoardTable', start)
 const groupSection = source.slice(start, end > start ? end : undefined)
 
-test('agenda columns can be dragged directly and reveal their grip on press', () => {
+test('agenda columns drag from the space beside the editable name', () => {
   assert.match(groupSection, /draggable=\{!isMobile\}/)
   assert.match(groupSection, /onMoveColumn\(sourceKey, col\.key, side\)/)
-  assert.match(groupSection, /pressedColumnKey === col\.key \? 1 : 0/)
+  assert.match(groupSection, /data-testid=\{`kolom-sleephandvat-\$\{col\.key\}`\}/)
+  assert.match(groupSection, /opacity: pressedColumnKey === col\.key \? 1 : 0/)
+  assert.match(groupSection, /function finishColumnRename\(column: ColumnDef, save: boolean\)/)
+  assert.match(groupSection, /setBoardColumns\(boardId, allColumns\.map/)
 })
 
 test('agenda group no longer offers select-all controls', () => {
