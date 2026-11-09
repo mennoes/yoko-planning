@@ -1420,9 +1420,20 @@ export async function moveItemToBoard(
         color: targetBoard === 'omdenken' ? '#c73561' : '#9aadbd',
         columns: defaultColumnsForNewBoard(),
       }
-      const targetPosition = Math.max(0, getBoardIds().indexOf(targetBoard))
-      if (!await upsertBoard(targetConfig, targetPosition)) {
-        return { ok: false, message: 'De doel-agenda kon niet gedeeld worden. Het item blijft in de oorspronkelijke agenda.' }
+      // Een bestaande doelagenda hoeft niet bij iedere item-move opnieuw
+      // ge-upsert te worden. Dat herschreef onnodig alle metadata en maakte
+      // een gewone drag afhankelijk van schrijfrechten op `boards`, terwijl
+      // de daadwerkelijke move alleen `board_groups` en `board_items` raakt.
+      // Controleer dus eerst of de rij er al is; alleen een écht lokaal,
+      // nog niet gedeeld bord moet hier worden aangemaakt.
+      const { data: remoteTarget, error: targetReadError } = await supabase.from('boards')
+        .select('id').eq('id', targetBoard).maybeSingle()
+      if (targetReadError) throw targetReadError
+      if (!remoteTarget) {
+        const targetPosition = Math.max(0, getBoardIds().indexOf(targetBoard))
+        if (!await upsertBoard(targetConfig, targetPosition)) {
+          return { ok: false, message: 'De doelagenda bestaat nog niet online. Probeer opnieuw of vernieuw de pagina.' }
+        }
       }
       const targetGroup = updatedTarget.find(group => group.id === targetGroupId) ?? updatedTarget[0]
       const targetGroupPosition = Math.max(0, updatedTarget.findIndex(group => group.id === targetGroup.id))

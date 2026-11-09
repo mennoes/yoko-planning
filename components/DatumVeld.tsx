@@ -8,7 +8,7 @@
 // met dd-mm-jjjj, en de kalender van de browser nog als knopje ernaast
 // voor wie liever prikt dan typt.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { naarIso, naarNl } from '@/lib/datumInvoer'
 import { IconAgenda } from './Icon'
 
@@ -28,7 +28,6 @@ export function DatumVeld({
 }) {
   const [concept, setConcept] = useState(() => naarNl(value))
   const [bezig, setBezig] = useState(false)
-  const kalender = useRef<HTMLInputElement>(null)
 
   // Van buitenaf gewijzigd (undo, een sync, een andere cel) — maar niet
   // terwijl iemand zit te typen, want dan tik je tegen jezelf in.
@@ -64,30 +63,25 @@ export function DatumVeld({
         }}
         style={{ minWidth: 0, ...style }} />
       {!disabled && (
-        <>
-          <button type="button" tabIndex={-1}
-            aria-label="Kies een datum" title="Kalender openen"
-            onClick={() => {
-              const el = kalender.current
-              if (!el) return
-              // showPicker is wat je wil; waar die er niet is doet een
-              // klik op het veld hetzelfde.
-              if (typeof el.showPicker === 'function') el.showPicker()
-              else el.click()
-            }}
-            style={{ border: 0, background: 'none', cursor: 'pointer', padding: '0 3px',
-              color: 'var(--text-muted)', lineHeight: 0, flexShrink: 0,
-              display: 'inline-flex', alignItems: 'center' }}>
-            {/* Een echt icoon uit de set, geen emoji: die rendert per
-                besturingssysteem anders en valt uit de toon. */}
-            <IconAgenda size={14} />
-          </button>
-          {/* Alleen voor de kalender zelf; de waarde lees je links af. */}
-          <input ref={kalender} type="date" tabIndex={-1} aria-hidden min={min}
-            value={value ?? ''}
+        <span title="Kalender openen" style={{
+          position: 'relative', width: 26, minWidth: 26, height: 28,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--text-muted)', lineHeight: 0, flexShrink: 0,
+        }}>
+          {/* De date-input ligt echt over het icoon. De oude input was 0×0
+              pixels en had pointer-events:none; showPicker() werd daardoor
+              in Chrome geregeld geweigerd. Een directe gebruikersklik op
+              een invoer met echte afmetingen opent de kalender betrouwbaar. */}
+          <IconAgenda size={14} />
+          <input type="date" min={min} value={value ?? ''}
+            data-testid="datum-kalender"
+            aria-label={ariaLabel ? `${ariaLabel} kiezen` : 'Kies een datum'}
             onChange={event => onChange(event.target.value || null)}
-            style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
-        </>
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              opacity: 0, cursor: 'pointer', border: 0, padding: 0,
+            }} />
+        </span>
       )}
     </span>
   )
