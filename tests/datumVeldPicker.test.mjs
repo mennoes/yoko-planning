@@ -4,13 +4,19 @@ import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../components/DatumVeld.tsx', import.meta.url), 'utf8')
 
-test('de kalender krijgt een echt klikbaar vlak in plaats van een verborgen 0x0-input', () => {
+const calendar = readFileSync(new URL('../components/SingleDateCalendar.tsx', import.meta.url), 'utf8')
+
+test('het kalendericoon opent de eigen maandkalender zonder de agendacel te sluiten', () => {
   assert.match(source, /data-testid="datum-kalender"/)
-  assert.match(source, /position: 'absolute', inset: 0, width: '100%', height: '100%'/)
-  assert.doesNotMatch(source, /\.showPicker\(/)
-  assert.doesNotMatch(source, /pointerEvents:\s*'none'/)
+  assert.match(source, /onMouseDown=\{event => event\.preventDefault\(\)\}/)
+  assert.match(source, /<SingleDateCalendar anchor=\{kalenderKnop\}/)
+  assert.doesNotMatch(source, /<input type="date"/)
 })
 
-test('de kalenderkeuze blijft gekoppeld aan dezelfde ISO-datumcallback', () => {
-  assert.match(source, /onChange=\{event => onChange\(event\.target\.value \|\| null\)\}/)
+test('de kalender toont een maandraster en geeft de gekozen ISO-datum terug', () => {
+  assert.match(calendar, /role="dialog" aria-label="Datum kiezen"/)
+  assert.match(calendar, /gridTemplateColumns: '30px repeat\(7, 1fr\)'/)
+  assert.match(calendar, /onChange\(date\)/)
+  assert.match(calendar, />Vandaag<\/button>/)
+  assert.match(calendar, />Wissen<\/button>/)
 })

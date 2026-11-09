@@ -2,15 +2,14 @@
 
 // Een datumveld dat altijd met de dag begint.
 //
-// <input type="date"> laat die volgorde niet kiezen: de browser gebruikt
-// zijn eigen taalinstelling en niet lang="nl", dus in een Engelse Chrome
-// staat er 11/04/2026 waar 4 november bedoeld is. Daarom een tekstveld
-// met dd-mm-jjjj, en de kalender van de browser nog als knopje ernaast
-// voor wie liever prikt dan typt.
+// Het tekstveld gebruikt altijd dd-mm-jjjj. Het kalendericoon opent onze
+// eigen maandkalender, zodat de werking en vorm niet afhangen van de taal
+// of datumkiezer van de browser.
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { naarIso, naarNl } from '@/lib/datumInvoer'
 import { IconAgenda } from './Icon'
+import SingleDateCalendar from './SingleDateCalendar'
 
 export function DatumVeld({
   value, onChange, disabled, style, ariaLabel, title, autoFocus, onBlur, min,
@@ -28,6 +27,9 @@ export function DatumVeld({
 }) {
   const [concept, setConcept] = useState(() => naarNl(value))
   const [bezig, setBezig] = useState(false)
+  const [kalenderOpen, setKalenderOpen] = useState(false)
+  const kalenderKnop = useRef<HTMLButtonElement>(null)
+  const sluitKalender = useCallback(() => setKalenderOpen(false), [])
 
   // Van buitenaf gewijzigd (undo, een sync, een andere cel) — maar niet
   // terwijl iemand zit te typen, want dan tik je tegen jezelf in.
@@ -63,25 +65,30 @@ export function DatumVeld({
         }}
         style={{ minWidth: 0, ...style }} />
       {!disabled && (
-        <span title="Kalender openen" style={{
-          position: 'relative', width: 26, minWidth: 26, height: 28,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-muted)', lineHeight: 0, flexShrink: 0,
-        }}>
-          {/* De date-input ligt echt over het icoon. De oude input was 0×0
-              pixels en had pointer-events:none; showPicker() werd daardoor
-              in Chrome geregeld geweigerd. Een directe gebruikersklik op
-              een invoer met echte afmetingen opent de kalender betrouwbaar. */}
-          <IconAgenda size={14} />
-          <input type="date" min={min} value={value ?? ''}
-            data-testid="datum-kalender"
+        <>
+          <button ref={kalenderKnop} type="button" data-testid="datum-kalender"
             aria-label={ariaLabel ? `${ariaLabel} kiezen` : 'Kies een datum'}
-            onChange={event => onChange(event.target.value || null)}
+            aria-haspopup="dialog" aria-expanded={kalenderOpen} title="Kalender openen"
+            // Voorkom dat EditableCell zijn onBlur afvuurt en de editor
+            // verwijdert voordat de kalender kan openen.
+            onMouseDown={event => event.preventDefault()}
+            onClick={() => setKalenderOpen(open => !open)}
             style={{
-              position: 'absolute', inset: 0, width: '100%', height: '100%',
-              opacity: 0, cursor: 'pointer', border: 0, padding: 0,
-            }} />
-        </span>
+              width: 26, minWidth: 26, height: 28, padding: 0, border: 0,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: kalenderOpen ? 'var(--bg-hover)' : 'transparent', borderRadius: 5,
+              color: kalenderOpen ? 'var(--text-primary)' : 'var(--text-muted)',
+              lineHeight: 0, flexShrink: 0, cursor: 'pointer',
+            }}>
+          <IconAgenda size={14} />
+          </button>
+          {kalenderOpen && <SingleDateCalendar anchor={kalenderKnop} value={value ?? null} min={min}
+            onClose={sluitKalender}
+            onChange={date => {
+              setConcept(naarNl(date))
+              onChange(date)
+            }} />}
+        </>
       )}
     </span>
   )
