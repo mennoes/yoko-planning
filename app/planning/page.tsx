@@ -2109,6 +2109,9 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   const totalWidth  = cols.reduce((s, c) => s + c.widthPx, 0)
   const msPerPx     = (gridEndMs - gridStartMs) / totalWidth
   const isWeek      = zoom === 'week'
+  const todayPx = (Date.now() - gridStartMs) / msPerPx
+  const viewportStart = visibleStartPx ?? todayPx
+  const viewportEnd = visibleEndPx ?? todayPx
 
   // Each occurrence renders as its own bar — recurring meetings stay as
   // small individual dots/bars rather than one stretched merge.
@@ -2133,7 +2136,16 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
       meetingsByDay.set(day, list)
     }
   }
-  const meetingSummaryHeight = meetingsByDay.size > 0 ? 22 : 0
+  // Alleen meetings die daadwerkelijk in het horizontale venster staan
+  // reserveren de compacte meeting-regel. Een afspraak weken buiten beeld
+  // mag de huidige persoonsrij niet hoger maken; bij horizontaal scrollen
+  // wordt het venster bijgewerkt en verschijnt de regel vanzelf.
+  const hasVisibleMeetingSummary = zoom === 'week' && [...meetingsByDay.keys()].some(day => {
+    const left = dateToWeekPx(new Date(`${day}T00:00:00`), gridStart, colW)
+    const width = colW / 5
+    return left < viewportEnd && left + width > viewportStart
+  })
+  const meetingSummaryHeight = hasVisibleMeetingSummary ? 22 : 0
 
   const rawBars = owned.map(p => {
       // Orphan-date bars (alleen startDate óf alleen endDate) vroeger:
@@ -2514,34 +2526,22 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
       top, bottom: top + h,
     })
   }
-  // Container-hoogte NIET baseren op de volledige ~2-jaar zichtbare
-  // periode — een drukke dag ver weg (andere maand/kwartaal, bv. 4
-  // dingen die dezelfde dag overlappen en dus 4 lanes nodig hebben)
-  // blies anders de rij-hoogte op voor ÉLKE week, óók rustige weken die
-  // daar niets mee te maken hebben — precies de 'grote lege ruimte
-  // onder een enkel 8u-item' die gerapporteerd werd. Venster van ±90
-  // drie weken rond het zichtbare deel: alleen balken die (mede) in dat venster vallen
-  // tellen mee voor de container-hoogte. Balken ver buiten het venster
-  // houden hun eigen correcte top/hoogte (skyline hierboven raakt daar
-  // niet aan), maar mogen de referentie voor de rest van de tijdlijn
-  // niet meer opblazen.
-  const WINDOW_DAYS = 21
-  const windowPx = (WINDOW_DAYS * 86400000) / msPerPx
-  const todayPx = (Date.now() - gridStartMs) / msPerPx
-  const viewportStart = visibleStartPx ?? todayPx
-  const viewportEnd = visibleEndPx ?? todayPx
-  const windowed = placed.filter(r => r.start < viewportEnd + windowPx && r.end > viewportStart - windowPx)
+  // De rijhoogte volgt uitsluitend de balken die nu in beeld staan.
+  // Eerder telde hier aan beide kanten nog drie weken buffer mee; daardoor
+  // kon een drukke dag buiten beeld honderden pixels lege rijhoogte geven.
+  // Bij horizontaal scrollen verandert viewportStart/End en groeit of krimpt
+  // de rij precies wanneer de betreffende balk zichtbaar wordt.
+  const windowed = placed.filter(r => r.start < viewportEnd && r.end > viewportStart)
+  const emptyViewportHeight = Math.max(8, Math.round(10 * RS))
   const baseHeight = windowed.length > 0
     ? Math.max(...windowed.map(r => r.bottom)) + BAR_GAP_S + meetingSummaryHeight
-    : BASELINE_AVAIL_H + BAR_GAP_S * 2
-  const height = bars.length === 0
-    ? Math.max(Math.round(36 * RS), baseHeight + meetingSummaryHeight)
-    : baseHeight
+    : Math.max(emptyViewportHeight, meetingSummaryHeight + BAR_GAP_S * 2)
+  const height = baseHeight
 
   return (
     <div>
     <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}/>
-    <div style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
+    <div data-testid={`planning-timeline-${memberId}`} style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
@@ -5369,10 +5369,11 @@ export default function PlanningPage() {
         const cur = grid.scrollLeft
         setVisibleGridRange(prev => {
           const next = { start: cur, end: cur + grid.clientWidth }
-          // Row-height/packing heeft al een buffer van drie weken. Een
-          // update per kwart viewport is ruim voldoende en voorkomt een
-          // volledige planner-render op iedere pixel scroll.
-          const step = Math.max(80, grid.clientWidth * 0.25)
+          // De rijhoogte volgt alleen wat zichtbaar is. Update daarom in
+          // kleine stappen tijdens horizontaal scrollen: snel genoeg om
+          // een binnenkomende balk direct ruimte te geven, zonder bij elke
+          // losse pixel de volledige planner opnieuw te renderen.
+          const step = Math.max(24, Math.min(56, grid.clientWidth * 0.04))
           const widthChanged = Math.abs((prev.end - prev.start) - grid.clientWidth) > 1
           return prev.end === 0 || widthChanged || Math.abs(prev.start - cur) >= step ? next : prev
         })
@@ -6617,7 +6618,7 @@ export default function PlanningPage() {
       {/* ── Grid — only this scrolls (both axes) ── */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       <TodayMarker gridRef={gridRef} nowOffset={nowOffset} nameW={nameW} namePad={namePad} zoom={zoom} cols={cols} goToday={goToday} />
-      <div ref={gridRef} onMouseDown={onGridMouseDown}
+      <div ref={gridRef} data-testid="planning-grid-scroll" onMouseDown={onGridMouseDown}
         onWheel={(ev) => {
           // Cmd/Ctrl + wheel → verticale zoom (bar-hoogte). Trackpad-pinch
           // op macOS stuurt 'n wheel-event met ctrlKey=true, dus pinch
