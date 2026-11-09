@@ -10,7 +10,7 @@ export default function PlanningDeadlines({projects,cols,zoom,onOpen}:{projects:
   const flags:{key:string;x:number;date:string;project:Project;sub:boolean;lane:number}[]=[]
   for(const p of projects){
     const candidates=[{date:p.deadline,project:p,sub:!!p.parentProjectId}]
-    if(p.parentDeadline && p.parentProjectId) candidates.push({date:p.parentDeadline,sub:false,project:{...p,id:p.parentProjectId,name:p.parentName??p.name,deadline:p.parentDeadline,parentName:undefined,parentProjectId:undefined,completionSubitemId:undefined}})
+    if(p.parentDeadline && p.parentProjectId) candidates.push({date:p.parentDeadline,sub:false,project:p.parentProject ?? {...p,id:p.parentProjectId,name:p.parentName??p.name,deadline:p.parentDeadline,parentName:undefined,parentProjectId:undefined,completionSubitemId:undefined}})
     for(const entry of candidates){
       if(!entry.date)continue
       const time=new Date(entry.date+'T00:00:00').getTime()

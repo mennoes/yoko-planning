@@ -16,6 +16,7 @@ export type Project = {
   deadline?: string | null
   parentDeadline?: string | null
   parentProjectId?: string
+  parentProject?: Project
   // HH:MM strings (24-uurs) wanneer er een specifieke tijd bekend is —
   // Google-events met dateTime krijgen hem mee, all-day blijft null. De
   // Week-zoom in Planning gebruikt 'm voor uur-positionering.
@@ -171,6 +172,17 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               deadline: si.deadline ?? null,
               parentDeadline: i.deadline as string | null,
               parentProjectId: `${boardName}__${i.id}`,
+              parentProject: {
+                id: `${boardName}__${i.id}`, completionParentItemId: i.id as string,
+                name: i.name as string, board: boardName, group:g.name,
+                ownerIds: (i.ownerIds as string[]) ?? [],
+                startDate: (i.startDate as string | null) ?? null,
+                endDate: (i.endDate as string | null) ?? null,
+                deadline: (i.deadline as string | null) ?? null,
+                estHours: Number(i.estHours) || 0,
+                status: i.status === 'Done' ? 'done' : 'active',
+                source: i.source as 'manual' | 'google' | undefined,
+              },
               parentName: i.name as string,
             }
           })
