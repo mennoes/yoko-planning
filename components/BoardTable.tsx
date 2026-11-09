@@ -3080,7 +3080,8 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
   const [dropHover, setDropHover] = useState(false)
   const [columnDrop, setColumnDrop] = useState<{ key: string; side: 'before' | 'after' } | null>(null)
   const [pressedColumnKey, setPressedColumnKey] = useState<string | null>(null)
-  const suppressColumnSort = useRef(false)
+  const [editingColumnKey, setEditingColumnKey] = useState<string | null>(null)
+  const [columnLabelDraft, setColumnLabelDraft] = useState('')
   useEffect(() => {
     const releaseColumn = () => setPressedColumnKey(null)
     window.addEventListener('mouseup', releaseColumn)
@@ -3123,6 +3124,22 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
   function saveName() {
     onUpdateGroup({ ...group, name: nameDraft })
     setEditName(false)
+  }
+
+  function startColumnRename(column: ColumnDef) {
+    setEditingColumnKey(column.key)
+    setColumnLabelDraft(column.label)
+  }
+
+  function finishColumnRename(column: ColumnDef, save: boolean) {
+    const nextLabel = columnLabelDraft.trim()
+    if (save && nextLabel && nextLabel !== column.label) {
+      setBoardColumns(boardId, allColumns.map(current =>
+        current.key === column.key ? { ...current, label: nextLabel } : current,
+      ))
+    }
+    setEditingColumnKey(null)
+    setColumnLabelDraft('')
   }
 
   function updateItem(itemId: string, updates: Partial<BoardItem>) {
@@ -3672,16 +3689,7 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                   }} />
               </div>
               {cols.map(col => (
-                <div key={col.key} draggable={!isMobile}
-                  title={isMobile ? col.label : `Sleep ${col.label} om de kolom te verplaatsen`}
-                  onMouseDown={() => { if (!isMobile) setPressedColumnKey(col.key) }}
-                  onDragStart={event => {
-                    if (isMobile) { event.preventDefault(); return }
-                    setPressedColumnKey(col.key)
-                    suppressColumnSort.current = true
-                    event.dataTransfer.effectAllowed = 'move'
-                    event.dataTransfer.setData('application/x-yoko-column', col.key)
-                  }}
+                <div key={col.key}
                   onDragOver={event => {
                     if (!event.dataTransfer.types.includes('application/x-yoko-column')) return
                     event.preventDefault()
@@ -3701,24 +3709,52 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
                     setColumnDrop(null)
                     if (sourceKey && sourceKey !== col.key) onMoveColumn(sourceKey, col.key, side)
                   }}
-                  onDragEnd={() => {
-                    setColumnDrop(null)
-                    setPressedColumnKey(null)
-                    window.setTimeout(() => { suppressColumnSort.current = false }, 0)
-                  }}
-                  style={{ position: 'relative', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: isMobile ? (isPersonalColumn(col.key) ? 'default' : 'pointer') : 'grab', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', backgroundColor: columnDrop?.key === col.key ? 'var(--accent-light)' : undefined, backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined, boxShadow: columnDrop?.key === col.key ? `inset ${columnDrop.side === 'before' ? '4px' : '-4px'} 0 0 var(--accent)` : undefined, transition: 'background-color 0.12s, box-shadow 0.12s' }}
-                  onClick={() => { if (!suppressColumnSort.current && !isPersonalColumn(col.key)) onToggleSort(col.key) }}>
-                  {!isMobile && <span aria-hidden style={{
-                    color: 'var(--text-muted)', fontSize: 11, letterSpacing: -2,
-                    marginRight: pressedColumnKey === col.key ? 2 : 0,
-                    width: pressedColumnKey === col.key ? 12 : 0,
-                    opacity: pressedColumnKey === col.key ? 1 : 0,
-                    overflow: 'hidden', transition: 'opacity 0.1s, width 0.1s, margin 0.1s',
-                  }}>⠿</span>}
-                  {col.label}
-                  {sortBy?.key === col.key && (
-                    <span style={{ fontSize: 11, color: 'var(--accent)' }}>{sortBy.dir === 'asc' ? '▲' : '▼'}</span>
+                  style={{ position: 'relative', padding: '0 8px', fontSize: 12, fontWeight: 600, color: sortBy?.key === col.key ? 'var(--text-primary)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderLeft: isPersonalColumn(col.key) ? '3px double var(--border-strong)' : '1px solid var(--border-strong)', userSelect: 'none', cursor: 'default', display: 'flex', alignItems: 'stretch', gap: 4, whiteSpace: 'nowrap', backgroundColor: columnDrop?.key === col.key ? 'var(--accent-light)' : undefined, backgroundImage: isPersonalColumn(col.key) ? 'repeating-linear-gradient(135deg, transparent 0 8px, var(--overlay-faint) 8px 10px)' : undefined, boxShadow: columnDrop?.key === col.key ? `inset ${columnDrop.side === 'before' ? '4px' : '-4px'} 0 0 var(--accent)` : undefined, transition: 'background-color 0.12s, box-shadow 0.12s' }}>
+                  {editingColumnKey === col.key ? (
+                    <input autoFocus value={columnLabelDraft}
+                      aria-label={`Nieuwe naam voor kolom ${col.label}`}
+                      onChange={event => setColumnLabelDraft(event.target.value)}
+                      onBlur={() => finishColumnRename(col, true)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') event.currentTarget.blur()
+                        if (event.key === 'Escape') finishColumnRename(col, false)
+                      }}
+                      onMouseDown={event => event.stopPropagation()}
+                      style={{ minWidth: 0, width: `${Math.max(7, columnLabelDraft.length + 1)}ch`, margin: '3px 0', padding: '2px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--bg-base)', color: 'var(--text-primary)', font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit', outline: 'none' }} />
+                  ) : (
+                    <button type="button" draggable={false}
+                      title={`${col.label} hernoemen`}
+                      aria-label={`Kolom ${col.label} hernoemen`}
+                      onClick={() => startColumnRename(col)}
+                      onMouseDown={event => event.stopPropagation()}
+                      style={{ alignSelf: 'center', minWidth: 0, padding: '3px 0', border: 0, background: 'transparent', color: 'inherit', cursor: 'text', font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {col.label}
+                    </button>
                   )}
+                  {!isPersonalColumn(col.key) && (
+                    <button type="button" onClick={() => onToggleSort(col.key)}
+                      title={sortBy?.key === col.key ? `Sorteervolgorde van ${col.label} omdraaien` : `Sorteren op ${col.label}`}
+                      aria-label={sortBy?.key === col.key ? `Sorteer ${col.label} ${sortBy.dir === 'asc' ? 'aflopend' : 'oplopend'}` : `Sorteer op ${col.label}`}
+                      style={{ alignSelf: 'center', padding: '3px 2px', border: 0, background: 'transparent', color: sortBy?.key === col.key ? 'var(--accent)' : 'var(--text-muted)', opacity: sortBy?.key === col.key ? 1 : .45, cursor: 'pointer', fontSize: 11 }}>
+                      {sortBy?.key === col.key ? (sortBy.dir === 'asc' ? '▲' : '▼') : '↕'}
+                    </button>
+                  )}
+                  {!isMobile && <span aria-hidden draggable={!isMobile}
+                    title={`Sleep ${col.label} om de kolom te verplaatsen`}
+                    data-testid={`kolom-sleephandvat-${col.key}`}
+                    onMouseDown={() => { if (!isMobile) setPressedColumnKey(col.key) }}
+                    onDragStart={event => {
+                      setPressedColumnKey(col.key)
+                      event.dataTransfer.effectAllowed = 'move'
+                      event.dataTransfer.setData('application/x-yoko-column', col.key)
+                    }}
+                    onDragEnd={() => {
+                      setColumnDrop(null)
+                      setPressedColumnKey(null)
+                    }}
+                    style={{ flex: 1, minWidth: 12, cursor: 'grab', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: 'var(--text-muted)', fontSize: 11, letterSpacing: -2, paddingRight: 3 }}>
+                    <span style={{ opacity: pressedColumnKey === col.key ? 1 : 0, transition: 'opacity 0.1s' }}>⠿</span>
+                  </span>}
                   <div
                     title="Kolom breder/smaller slepen"
                     style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }}
