@@ -26,6 +26,7 @@ import { IconComment, IconSearch, IconActivity, IconHistory, IconSpark } from '.
 import { BoardTrashDrawer } from './BoardTrashDrawer'
 import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity, logItemCreated } from '@/lib/itemActivity'
+import { changeDeadline } from '@/lib/changeDeadline'
 import BoardTimeline from './BoardTimeline'
 import {
   loadCommentsFor, saveComment, newCommentId, onCommentsUpdate,
@@ -5762,6 +5763,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
             // popup openen. De popup hangt aan een portal, dus hij werkt
             // ook terwijl de lijst eronder verborgen is.
             setOpenRequest(subitemId ? { id: itemId, subitemId } : { id: itemId })
+          }}
+          onChangeDeadline={(itemId,date,subitemId)=>{
+            const snapshot=groups
+            onChange(changeDeadline(groups,itemId,subitemId,date))
+            void logItemActivity(itemId,'wijzigde de deadline',date,{field:'deadline',boardId,after:date})
+            pushUndo(()=>onChange(snapshot),'Deadline gewijzigd')
           }}
           onMoveItem={(itemId, startDate, endDate, subitemId) => {
             // Datums verzetten vanuit de tijdlijn. Alleen start/eind — geen

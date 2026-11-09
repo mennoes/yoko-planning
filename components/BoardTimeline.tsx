@@ -15,7 +15,7 @@ import {
 } from '@/lib/timelineCols'
 import { sortSubitems, type AgendaSort } from '@/lib/sortSubitems'
 import { useTeam } from './TeamContext'
-import DeadlineFlag from './DeadlineFlag'
+import DraggableDeadline from './DraggableDeadline'
 import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
 import { werkdagenIn } from '@/lib/sjabloonPlan'
@@ -165,9 +165,10 @@ export function bouwRegels(
   return regels
 }
 
-export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, sortBy }: {
+export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, onChangeDeadline, sortBy }: {
   groups: BoardGroup[]
   sortBy?: AgendaSort
+  onChangeDeadline?: (itemId:string,date:string,subitemId?:string)=>void
   color: string
   /** Klikken op een balk opent de item-popup, desnoods op een subitem. */
   onOpenItem: (itemId: string, subitemId?: string) => void
@@ -749,12 +750,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           const deadlineDate = new Date(regel.deadline+'T12:00:00')
                           const x = dateToPx(cols,deadlineDate)
                           if (x === null) return null
-                          return <button aria-label={`${regel.subitemId ? 'Subitemdeadline' : 'Projectdeadline'} ${regel.naam}: ${deadlineDate.toLocaleDateString('nl-NL')}`}
-                            onClick={()=>onOpenItem(regel.itemId,regel.subitemId)}
-                            title={`${regel.subitemId ? `Naar klant: ${regel.naam}` : 'Deadline'} · ${deadlineDate.toLocaleDateString('nl-NL')} · klik voor details`}
-                            style={{position:'absolute',left:x-9,top:0,height:hoog,width:18,padding:0,border:0,background:'transparent',color:'var(--yellow)',zIndex:2,cursor:'pointer'}}>
-                            <span style={{position:'absolute',left:6,top:0}}><DeadlineFlag subitem={!!regel.subitemId}/></span><span aria-hidden style={{position:'absolute',left:9,top:18,bottom:0,borderLeft:`${regel.subitemId ? 1 : 2}px dashed var(--yellow)`}}/>
-                          </button>
+                          return <DraggableDeadline date={regel.deadline!} subitem={!!regel.subitemId} label={`${regel.subitemId?'Subitemdeadline':'Projectdeadline'} ${regel.naam}`} xForDate={date=>{const px=dateToPx(cols,new Date(date+'T12:00:00'));return px===null?null:px-3}} onChange={onChangeDeadline ? date=>onChangeDeadline(regel.itemId,date,regel.subitemId) : undefined} onOpen={()=>onOpenItem(regel.itemId,regel.subitemId)} style={{position:'absolute',left:x-3,top:0,height:18,width:18,padding:0,border:0,background:'transparent',color:'var(--yellow)',zIndex:2}}/>
                         })()}
                         {/* Losse stukjes als de periode geleend is van de
                             subitems, anders één balk. Eén doorlopende balk

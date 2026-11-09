@@ -1,5 +1,6 @@
 'use client'
 
+import { changeDeadline } from '@/lib/changeDeadline'
 import PlanningDeadlines from '@/components/PlanningDeadlines'
 import { memo, useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -1101,7 +1102,8 @@ function localIso(d: Date): string {
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
 }
 
-function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, rowScale, onSelect, onTimedDrag, onDateDragEnd, onReassign, onCreateAt }: {
+function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, memberId, team, nameW, stickyBg, leftHeader, expanded, rowScale, onSelect, onTimedDrag, onDateDragEnd, onReassign, onCreateAt }: {
+  onDeadlineChange: (p:Project,date:string)=>void
   cols: Col[]
   projects: Project[]
   // Wanneer memberId niet gezet is, gebruiken we deze predicate om te
@@ -1554,7 +1556,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
 
   return (
     <div>
-      <div style={{display:'flex'}}><div style={{width:nameW,flexShrink:0,position:'sticky',left:0,zIndex:20,background:stickyBg}}/><PlanningDeadlines projects={visible} cols={cols} zoom="dag" onOpen={onSelect}/></div>
+      <div style={{display:'flex'}}><div style={{width:nameW,flexShrink:0,position:'sticky',left:0,zIndex:20,background:stickyBg}}/><PlanningDeadlines projects={visible} cols={cols} zoom="dag" onOpen={onSelect} onChange={onDeadlineChange}/></div>
       {/* All-day banner — sticky-left cel toont 'De hele dag' OR de avatar
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
@@ -2072,7 +2074,8 @@ function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: 
   )
 }
 
-function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onMarkDone, onReassign }: {
+function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onMarkDone, onReassign }: {
+  onDeadlineChange: (p:Project,date:string)=>void
   memberId: string; projects: Project[]; cols: Col[]; colW: number
   team?: TeamMember[]
   zoom: ZoomLevel
@@ -2537,7 +2540,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
 
   return (
     <div>
-      <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick}/>
+      <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}/>
     <div style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
@@ -5716,6 +5719,23 @@ export default function PlanningPage() {
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
     }, `'${project.name}': ${fromName} → ${toName}`)
   }
+  function handleDeadlineChange(project:Project,date:string) {
+    const board=project.board
+    const before=loadGroups(board,allGroups[board]??[])
+    const raw=project.id.slice(board.length+2)
+    const match=raw.match(/^(.+)__si(\d+)$/)
+    const itemId=project.completionParentItemId ?? (match?match[1]:raw)
+    const item=before.flatMap(g=>g.items).find(i=>i.id===itemId)
+    if(!item)return
+    const subId=project.completionSubitemId ?? (match?item.subitems?.[Number(match[2])]?.id:undefined)
+    if(match&&!subId)return
+    const next=changeDeadline(before,itemId,subId,date)
+    saveGroups(board,next)
+    setAllGroups(prev=>({...prev,[board]:next}))
+    void logItemActivity(itemId,'wijzigde de deadline',date,{field:'deadline',boardId:board,after:date})
+    pushUndo(()=>{saveGroups(board,before);setAllGroups(prev=>({...prev,[board]:before}))},'Deadline gewijzigd')
+  }
+
   function handleDetailUpdate(project: Project, newStart: string | null, newEnd: string | null, extra?: Partial<{ estHours: number; notes: string; contactpersoon: string; journal: import("@/lib/boards").JournalEntry[]; ownerHours: Record<string, number>; ownerIds: string[]; links: import("@/lib/boards").ItemLink[]; startTime: string | null; endTime: string | null; status: string; hiddenFromPlanning: boolean }> & Record<string, unknown>) {
     const boardName  = project.board
     let rawIdPart    = project.id.slice(boardName.length + 2)
@@ -6924,7 +6944,7 @@ export default function PlanningPage() {
                       )
                     })}
                   </div>
-                  <WeekTimeGrid
+                  <WeekTimeGrid onDeadlineChange={handleDeadlineChange}
                     cols={cols}
                     projects={effectiveProjects}
                     memberId={m.id}
@@ -7236,7 +7256,7 @@ export default function PlanningPage() {
                   <div style={{ display: 'flex' }}>
                     <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
-                      <TimelineBars memberId={member.id} projects={memberProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
+                      <TimelineBars onDeadlineChange={handleDeadlineChange} memberId={member.id} projects={memberProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         rowScale={rowScale}
                         visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
                         visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
