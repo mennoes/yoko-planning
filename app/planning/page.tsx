@@ -1,5 +1,6 @@
 'use client'
 
+import PlanningDeadlines from '@/components/PlanningDeadlines'
 import { memo, useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
@@ -1553,6 +1554,7 @@ function WeekTimeGrid({ cols, projects, isMemberVisible, memberId, team, nameW, 
 
   return (
     <div>
+      <div style={{display:'flex'}}><div style={{width:nameW,flexShrink:0,position:'sticky',left:0,zIndex:20,background:stickyBg}}/><PlanningDeadlines projects={visible} cols={cols} zoom="dag" onOpen={onSelect}/></div>
       {/* All-day banner — sticky-left cel toont 'De hele dag' OR de avatar
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
@@ -2534,6 +2536,8 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
     : baseHeight
 
   return (
+    <div>
+      <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick}/>
     <div style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
@@ -2704,6 +2708,7 @@ function TimelineBars({ memberId, projects, team, cols, colW, zoom, hideMeetings
           </div>
         )
       })}
+    </div>
     </div>
   )
 }
