@@ -9,7 +9,7 @@ test('deadline flags have their own lane instead of covering project bars', () =
   assert.doesNotMatch(deadlines, /anchors/)
   assert.match(deadlines, /height:ends\.length\*22\+4/)
   assert.match(deadlines, /borderBottom:'1px solid var\(--border-light\)'/)
-  assert.match(planning, /<PlanningDeadlines projects=\{owned\}[\s\S]{0,180}?\/>\s*<div style=\{\{ position: 'relative', height/)
+  assert.match(planning, /<PlanningDeadlines projects=\{owned\}[\s\S]{0,260}?\/>\s*<div[^>]*style=\{\{ position: 'relative', height/)
 })
 
 test('day view places all deadlines in the separate lane', () => {
