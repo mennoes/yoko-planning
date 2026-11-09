@@ -1556,7 +1556,7 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
 
   return (
     <div>
-      <div style={{display:'flex'}}><div style={{width:nameW,flexShrink:0,position:'sticky',left:0,zIndex:20,background:stickyBg}}/><PlanningDeadlines projects={visible.filter(p=>!allDayBars.some(b=>b.p.id===p.id))} cols={cols} zoom="dag" onOpen={onSelect} onChange={onDeadlineChange}/></div>
+      <div style={{display:'flex'}}><div style={{width:nameW,flexShrink:0,position:'sticky',left:0,zIndex:20,background:stickyBg}}/><PlanningDeadlines projects={visible} cols={cols} zoom="dag" onOpen={onSelect} onChange={onDeadlineChange}/></div>
       {/* All-day banner — sticky-left cel toont 'De hele dag' OR de avatar
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
@@ -1567,7 +1567,6 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
           fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>{leftHeader ?? 'De hele dag'}</div>
         <div style={{ position: 'relative', width: totalWidth, minHeight: allDayH, background: stickyBg, overflowX: 'clip', overflowY: 'visible' }}>
-          <PlanningDeadlines projects={allDayBars.map(b=>b.p)} cols={cols} zoom="dag" onOpen={onSelect} onChange={onDeadlineChange} anchors={allDayBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:6+b.lane*(allDayLaneH+4),left:b.left,right:b.left+b.width}))}/>
           {cols.map((col, idx) => {
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
@@ -2541,8 +2540,8 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
 
   return (
     <div>
+    <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}/>
     <div style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
-      <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange} anchors={bars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:(barTops.get(b.p.id)??0)+meetingSummaryHeight,left:b.left,right:b.left+b.width}))}/>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
