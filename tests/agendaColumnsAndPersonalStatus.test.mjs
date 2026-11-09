@@ -46,7 +46,7 @@ test('agenda column manager persists order and visibility for regular columns', 
   assert.match(board, /hidden: !c\.hidden/)
   assert.match(board, /draggable/)
   assert.match(board, /function moveTo\(from: number, to: number\)/)
-  assert.match(board, /Houd een rij vast en sleep hem naar de gewenste plek/)
+  assert.match(board, /Pas een naam aan of sleep een rij naar de gewenste plek/)
   assert.match(board, /\+ Kolom toevoegen/)
   assert.match(board, /removeCustom\(c\.key, c\.label\)/)
   assert.match(board, /const tableColumns = completeColumns\.filter\(column => !column\.hidden\)/)

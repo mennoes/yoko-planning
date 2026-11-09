@@ -4160,11 +4160,6 @@ function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
   return columns
     .filter(column => column.key !== '__personalTimeline' && column.key !== PERSONAL_STATUS_KEY)
     .filter(column => !RETIRED_COLUMN_KEYS.has(column.key))
-    .map(column => column.key === 'status'
-      ? { ...column, label: 'Status' }
-      : column.key === 'timeline'
-        ? { ...column, label: 'Timeline' }
-        : column)
 }
 
 function ColumnManagerButton({ boardId, columns, color, menu = false, plus = false }: {
@@ -4195,6 +4190,12 @@ function ColumnManagerButton({ boardId, columns, color, menu = false, plus = fal
     setBoardColumns(boardId, next)
   }
   function toggleVisible(key: string) { commit(list.map(c => c.key === key ? { ...c, hidden: !c.hidden } : c)) }
+  function renameColumn(key: string, label: string) {
+    const nextLabel = label.trim()
+    const current = list.find(column => column.key === key)
+    if (!current || !nextLabel || nextLabel === current.label) return
+    commit(list.map(column => column.key === key ? { ...column, label: nextLabel } : column))
+  }
   function moveTo(from: number, to: number) {
     if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return
     const next = [...list]
@@ -4258,7 +4259,7 @@ function ColumnManagerButton({ boardId, columns, color, menu = false, plus = fal
           <rect x="9.5" y="4" width="5" height="16" rx="1" />
           <rect x="16" y="4" width="5" height="16" rx="1" />
         </svg>
-        Kolomvolgorde
+        Kolommen
       </button>
       )}
       {open && (
@@ -4269,11 +4270,11 @@ function ColumnManagerButton({ boardId, columns, color, menu = false, plus = fal
             boxShadow: '0 10px 36px rgba(0,0,0,0.4)',
           }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>Kolommen en volgorde</strong>
+              <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>Kolommen</strong>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{list.filter(column => !column.hidden).length} zichtbaar</span>
             </div>
             <p style={{ margin: '4px 0 11px', fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-muted)' }}>
-              Houd een rij vast en sleep hem naar de gewenste plek. De volgorde verandert direct in de Agenda.
+              Pas een naam aan of sleep een rij naar de gewenste plek. Wijzigingen verschijnen direct in de Agenda.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {list.map((c, idx) => (
@@ -4292,7 +4293,23 @@ function ColumnManagerButton({ boardId, columns, color, menu = false, plus = fal
                   onDragEnd={() => { dragIndex.current = null; setDraggingIndex(null); setDropIndex(null) }}
                   style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '5px 7px', borderRadius: 8, background: dropIndex === idx ? 'var(--accent-light)' : 'var(--overlay-faint)', opacity: draggingIndex === idx ? 0.42 : c.hidden ? 0.62 : 1, cursor: 'grab', boxShadow: dropIndex === idx ? 'inset 0 3px 0 var(--accent)' : 'none', transition: 'background 0.12s, opacity 0.12s, box-shadow 0.12s' }}>
                   <span aria-hidden title="Sleep om te verplaatsen" style={{ color: 'var(--text-muted)', fontSize: 16, letterSpacing: -2, padding: '2px 4px 2px 1px' }}>⠿</span>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 650, color: c.hidden ? 'var(--text-muted)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+                  <input key={`${c.key}:${c.label}`} defaultValue={c.label}
+                    aria-label={`Naam van kolom ${c.label}`} title="Klik om de kolomnaam aan te passen"
+                    draggable={false}
+                    onPointerDown={event => event.stopPropagation()}
+                    onDragStart={event => event.preventDefault()}
+                    onBlur={event => {
+                      const nextLabel = event.currentTarget.value.trim()
+                      if (!nextLabel) { event.currentTarget.value = c.label; return }
+                      renameColumn(c.key, nextLabel)
+                    }}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') event.currentTarget.blur()
+                      if (event.key === 'Escape') { event.currentTarget.value = c.label; event.currentTarget.blur() }
+                    }}
+                    style={{ flex: 1, minWidth: 0, padding: '5px 7px', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: c.hidden ? 'var(--text-muted)' : 'var(--text-secondary)', fontSize: 12.5, fontWeight: 650, outline: 'none', cursor: 'text' }}
+                    onFocus={event => { event.currentTarget.style.borderColor = 'var(--border-light)'; event.currentTarget.style.background = 'var(--bg-base)' }}
+                    onBlurCapture={event => { event.currentTarget.style.borderColor = 'transparent'; event.currentTarget.style.background = 'transparent' }} />
                   <button onClick={() => toggleVisible(c.key)}
                     title={c.hidden ? 'Kolom tonen' : 'Kolom verbergen'} aria-label={c.hidden ? `${c.label} tonen` : `${c.label} verbergen`}
                     style={{ background: c.hidden ? 'var(--bg-hover)' : color, border: 'none', cursor: 'pointer', color: c.hidden ? 'var(--text-muted)' : '#fff', padding: '5px 9px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, minWidth: 70 }}>
