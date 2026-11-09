@@ -137,3 +137,12 @@ test('winter time does not inflate hours across adjacent weeks', () => {
   // presentatieronding. De oude 24-uursloop kwam hier foutief op 61,6 uit.
   assert.equal(total, 56.1)
 })
+
+test('planning carries separate child and parent deadlines without changing effort', () => {
+ const projects=exports.groupsToProjects('yoko',[{id:'g',name:'Werk',items:[{id:'p',name:'Project',ownerIds:['menno'],status:'',estHours:8,deadline:'2026-11-30',subitems:[{id:'s',name:'Script',ownerIds:['menno'],status:'',estHours:8,startDate:'2026-11-10',endDate:'2026-11-12',deadline:'2026-11-13'}]}]}])
+ assert.equal(projects.length,1)
+ assert.equal(projects[0].deadline,'2026-11-13')
+ assert.equal(projects[0].parentDeadline,'2026-11-30')
+ assert.equal(projects[0].parentProjectId,'yoko__p')
+ assert.equal(projects[0].estHours,8)
+})

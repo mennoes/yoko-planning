@@ -15,6 +15,7 @@ import {
 } from '@/lib/timelineCols'
 import { sortSubitems, type AgendaSort } from '@/lib/sortSubitems'
 import { useTeam } from './TeamContext'
+import DeadlineFlag from './DeadlineFlag'
 import { UserAvatar } from './UserAvatar'
 import { getWeekStart } from '@/lib/workload'
 import { werkdagenIn } from '@/lib/sjabloonPlan'
@@ -562,7 +563,7 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
             {toonAfgerond ? '✓ ' : ''}Afgerond ({afgerondAantal})
           </button>
         )}
-          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>◆ Naar de klant · ⚑ Deadline<br/>Breedte = looptijd · hoogte = uren per werkdag<br/>Gestreept = wachtstatus · ? = nog niet geschat<br/>Veeg of sleep de achtergrond om te scrollen.<br/>+ / −: in- en uitzoomen<br/>Sleep de randen voor start/einde · Escape annuleert</div>
+          <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.6}}>Volle vlag: project · open vlag: subitem<br/>Breedte = looptijd · hoogte = uren per werkdag<br/>Gestreept = wachtstatus · ? = nog niet geschat<br/>Veeg of sleep de achtergrond om te scrollen.<br/>+ / −: in- en uitzoomen<br/>Sleep de randen voor start/einde · Escape annuleert</div>
           </div>
         </details>
       </div>
@@ -748,11 +749,11 @@ export default function BoardTimeline({ groups, color, onOpenItem, onMoveItem, s
                           const deadlineDate = new Date(regel.deadline+'T12:00:00')
                           const x = dateToPx(cols,deadlineDate)
                           if (x === null) return null
-                          return <button aria-label={`${regel.subitemId ? 'Naar klant' : 'Deadline'} ${regel.naam}: ${deadlineDate.toLocaleDateString('nl-NL')}`}
+                          return <button aria-label={`${regel.subitemId ? 'Subitemdeadline' : 'Projectdeadline'} ${regel.naam}: ${deadlineDate.toLocaleDateString('nl-NL')}`}
                             onClick={()=>onOpenItem(regel.itemId,regel.subitemId)}
                             title={`${regel.subitemId ? `Naar klant: ${regel.naam}` : 'Deadline'} · ${deadlineDate.toLocaleDateString('nl-NL')} · klik voor details`}
                             style={{position:'absolute',left:x-9,top:0,height:hoog,width:18,padding:0,border:0,background:'transparent',color:'var(--yellow)',zIndex:2,cursor:'pointer'}}>
-                            {regel.subitemId ? <span style={{position:'absolute',top:3,left:2,fontSize:16}}>◆</span> : <><span aria-hidden style={{position:'absolute',left:8,top:6,bottom:0,borderLeft:'2px dashed var(--yellow)'}}/><span aria-hidden style={{position:'absolute',left:8,top:2,width:10,height:7,background:'var(--yellow)',clipPath:'polygon(0 0,100% 0,75% 50%,100% 100%,0 100%)'}}/></>}
+                            <span style={{position:'absolute',left:6,top:0}}><DeadlineFlag subitem={!!regel.subitemId}/></span><span aria-hidden style={{position:'absolute',left:9,top:18,bottom:0,borderLeft:`${regel.subitemId ? 1 : 2}px dashed var(--yellow)`}}/>
                           </button>
                         })()}
                         {/* Losse stukjes als de periode geleend is van de

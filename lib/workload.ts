@@ -13,6 +13,9 @@ export type Project = {
   ownerIds: string[]
   startDate: string | null
   endDate: string | null
+  deadline?: string | null
+  parentDeadline?: string | null
+  parentProjectId?: string
   // HH:MM strings (24-uurs) wanneer er een specifieke tijd bekend is —
   // Google-events met dateTime krijgen hem mee, all-day blijft null. De
   // Week-zoom in Planning gebruikt 'm voor uur-positionering.
@@ -94,7 +97,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
-        const allSubs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; startDate?: string | null; endDate?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
+        const allSubs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; startDate?: string | null; endDate?: string | null; deadline?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
         const subs = visibleRecurringSubitems(i.source as string | undefined, allSubs)
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
         // erbij maar krijgt status='done' zodat 'ie in de planning faded
@@ -165,6 +168,9 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               externalLink: si.externalLink ?? (i.externalLink as string | undefined),
               externalSyncedAt: si.externalSyncedAt ?? (i.externalSyncedAt as string | undefined),
               meetLink:  ((si as { meetLink?: string }).meetLink) ?? (i.meetLink as string | undefined),
+              deadline: si.deadline ?? null,
+              parentDeadline: i.deadline as string | null,
+              parentProjectId: `${boardName}__${i.id}`,
               parentName: i.name as string,
             }
           })
@@ -206,6 +212,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           return [{
             id: `${boardName}__${i.id}`,
             completionParentItemId: i.id as string,
+            deadline: i.deadline as string | null,
             name: i.name as string,
             board: boardName,
             group: g.name,
@@ -238,6 +245,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
         return [{
           id: `${boardName}__${i.id}`,
           completionParentItemId: i.id as string,
+          deadline: i.deadline as string | null,
           name: i.name as string,
           board: boardName,
           group: g.name,
