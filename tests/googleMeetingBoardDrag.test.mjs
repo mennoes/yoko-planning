@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 const table = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
 const sidebar = readFileSync(new URL('../components/Sidebar.tsx', import.meta.url), 'utf8')
 const store = readFileSync(new URL('../lib/boardStore.ts', import.meta.url), 'utf8')
+const moveStore = store.slice(store.indexOf('export async function moveItemToBoard'), store.indexOf('// ─── Patch one item'))
 
 test('Google meetings expose a clear cross-agenda drag affordance', () => {
   assert.match(table, /yoko-board-item-drag-start/)
@@ -37,6 +38,16 @@ test('manual Google moves are persisted as placement locks', () => {
   assert.match(store, /googlePlacementLocked: true/)
   assert.match(store, /movePatch\.extra = \{ \.\.\.extra, googlePlacementLocked: true \}/)
   assert.match(table, /rawItem\?\.source === 'google' \? \{ \.\.\.rawItem, googlePlacementLocked: true \}/)
+})
+
+test('moving to an existing agenda does not rewrite all board metadata', () => {
+  assert.match(moveStore, /\.from\('boards'\)[\s\S]{0,100}\.select\('id'\)\.eq\('id', targetBoard\)\.maybeSingle\(\)/)
+  assert.match(moveStore, /if \(!remoteTarget\) \{[\s\S]{0,220}?upsertBoard\(targetConfig, targetPosition\)/)
+})
+
+test('a failed move uses the sidebar toast instead of a blocking browser alert', () => {
+  assert.match(sidebar, /if \(!res\.ok\) showToast\(res\.message \?\? 'Verplaatsen mislukt'\)/)
+  assert.doesNotMatch(sidebar, /if \(!res\.ok\) alert\(/)
 })
 
 test('an item can be nested into a parent in another group', () => {

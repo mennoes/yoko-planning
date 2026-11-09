@@ -639,7 +639,7 @@ function SectionBlock({
                     const fallback: Record<string, BoardGroup[]> = {}
                     for (const b of BOARD_NAMES) fallback[b] = loadGroups(b, [])
                     const res = await moveItemToBoard(data.itemId, data.fromBoard, targetBoardId, fallback)
-                    if (!res.ok) alert(res.message ?? 'Verplaatsen mislukt')
+                    if (!res.ok) showToast(res.message ?? 'Verplaatsen mislukt')
                     else showToast(`Verplaatst naar ${item.label}`)
                   } catch {}
                   finally {
