@@ -61,6 +61,7 @@ import { sortSubitems, type AgendaSort } from '@/lib/sortSubitems'
 import { moveTimelineItem } from '@/lib/moveTimelineItem'
 import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
+import { prepareItemForGroupMove } from '@/lib/groupMove'
 
 import { OwnersCell, OwnerUsageCtx, MemberAvatar, ownerHoursDrafts } from './OwnersCell'
 const PERSONAL_STATUS_KEY = '__personalStatus'
@@ -5193,8 +5194,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     if (fromGroupId === toGroupId) return
     const fromGroup = groups.find(g => g.id === fromGroupId)
     const rawItem = fromGroup?.items.find(i => i.id === itemId)
-    const item = rawItem?.source === 'google' ? { ...rawItem, googlePlacementLocked: true } : rawItem
-    if (!item) return
+    const targetGroup = groups.find(g => g.id === toGroupId)
+    if (!rawItem || !targetGroup) return
+    const item = prepareItemForGroupMove(rawItem, targetGroup.name)
     onChange(groups.map(g => {
       if (g.id === fromGroupId) return { ...g, items: g.items.filter(i => i.id !== itemId) }
       if (g.id === toGroupId)   return { ...g, items: [...g.items, item] }
@@ -5207,11 +5209,13 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
   // onChange-pass) en plakken ze in de doel-groep in de oude volgorde.
   function moveItemsBetweenGroups(itemIds: string[], toGroupId: string) {
     if (itemIds.length === 0) return
+    const targetGroup = groups.find(g => g.id === toGroupId)
+    if (!targetGroup) return
     const idSet = new Set(itemIds)
     const collected: BoardItem[] = []
     for (const g of groups) {
       for (const it of g.items) {
-        if (idSet.has(it.id)) collected.push(it.source === 'google' ? { ...it, googlePlacementLocked: true } : it)
+        if (idSet.has(it.id)) collected.push(prepareItemForGroupMove(it, targetGroup.name))
       }
     }
     if (collected.length === 0) return
