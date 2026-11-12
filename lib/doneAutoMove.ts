@@ -1,9 +1,7 @@
-// Items blijven ALTIJD in hun eigen groep staan, ook wanneer de status naar
-// Done gaat — een aparte 'Done'-groep bracht afgeronde items op een plek
-// die niemand checkte, waardoor uren en meetings 'verdwenen' leken (zowel
-// bij handmatige status-wijzigingen als bij de server-side Google-sync,
-// zie lib/googleSync.ts). Deze functie verplaatst dus NOOIT meer iets NAAR
-// een Done-groep.
+// Alleen een statuswijziging naar Done verplaatst een item niet automatisch:
+// afgerond werk hoort standaard in zijn eigen groep te blijven. Een bewuste
+// drag naar een Done-groep is wél leidend en wordt voor Google-items gemarkeerd
+// met googlePlacementLocked, zodat sync en refresh die keuze respecteren.
 //
 // Wat 'ie wel nog doet: eenmalig herstel van items die door de OUDE
 // (verwijderde) auto-move-logica al in zo'n Done-groep terecht waren
@@ -17,10 +15,7 @@
 // Idempotent: een tweede pass op een al-herstelde staat verandert niks.
 
 import type { BoardGroup, BoardItem } from './boards'
-
-function isDoneGroupName(name: string): boolean {
-  return name.toLowerCase().trim().startsWith('done')
-}
+import { isDoneGroupName } from './groupMove'
 
 function isMeetingsGroupName(name: string): boolean {
   const n = name.toLowerCase().trim()
@@ -39,6 +34,13 @@ export function autoMoveDoneItems(next: BoardGroup[]): BoardGroup[] {
     if (!doneGroupIds.has(g.id)) return g
     const keep: BoardItem[] = []
     for (const i of g.items) {
+      // Een Google-meeting die de gebruiker bewust hierheen sleepte, hoort
+      // juist in Done te blijven. Alleen oude, onbedoelde plaatsingen zonder
+      // deze lock vallen nog onder de herstelcode hieronder.
+      if (i.source === 'google' && i.googlePlacementLocked) {
+        keep.push(i)
+        continue
+      }
       const originId = (i as { originGroupId?: string }).originGroupId
       const originAlive = originId && next.some(g2 => g2.id === originId && !doneGroupIds.has(g2.id))
       const target = originAlive
