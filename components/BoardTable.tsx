@@ -62,6 +62,7 @@ import { moveTimelineItem } from '@/lib/moveTimelineItem'
 import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
 import { prepareItemForGroupMove } from '@/lib/groupMove'
+import { suggestSubitemDateRanges, type SuggestedDateRange } from '@/lib/subitemDateSuggestions'
 
 import { OwnersCell, OwnerUsageCtx, MemberAvatar, ownerHoursDrafts } from './OwnersCell'
 const PERSONAL_STATUS_KEY = '__personalStatus'
@@ -146,6 +147,7 @@ const CelSchaalCtx = createContext(1)
 function DateRangeCell(props: {
   startDate: string | null; endDate: string | null
   onChange: (s: string | null, e: string | null) => void
+  suggestedRange?: SuggestedDateRange
 }) {
   const { color } = useContext(GroupCtx)
   const schaal = useContext(CelSchaalCtx)
@@ -1012,7 +1014,7 @@ function subitemAsItem(s: SubItem): BoardItem {
 }
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, suggestedRange, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -1031,6 +1033,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   onOpenDetail?: () => void
   // Net-aangemaakt subitem? Start dan meteen in edit-mode voor de naam.
   defaultEditName?: boolean
+  suggestedRange?: SuggestedDateRange
   // Column-resize: gebruiker kan vanuit subitem-rijen kolommen verbreden/
   // versmallen, niet alleen vanaf de sticky header bovenaan.
   colWidths?: Record<string, number>
@@ -1102,7 +1105,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           })} />
         </div>
       case 'timeline':
-        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} onChange={(s,e) => onUpdate({
+        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} suggestedRange={suggestedRange} onChange={(s,e) => onUpdate({
           startDate: s, endDate: e,
           ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')) ? { datesOverride: true } : {}),
         })} /></div>
@@ -1156,6 +1159,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   const stickyBg = isMobile ? 'var(--bg-card)' : rowBg
   return (
     <div
+      data-subitem-id={subitem.id}
       onDragOver={e => {
         if (!e.dataTransfer.types.includes('application/x-yoko-subitem')) return
         e.preventDefault()
@@ -1407,13 +1411,15 @@ function dismissTombstones(
   return [...new Set([...(existing ?? []), id, ...(subitem?.sourceItemId ? [subitem.sourceItemId] : [])])]
 }
 
-function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
+function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, parentStartDate, parentEndDate, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
   agendaSort?: AgendaSort
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
   parentItemId?: string
+  parentStartDate?: string | null
+  parentEndDate?: string | null
   fromGroupId?: string
   parentExternalLink?: string | null
   onOpenDetail?: (sub: SubItem) => void
@@ -1452,6 +1458,10 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
   const sortedSubitems = useMemo(() => sortSubitems(subitems, sortBy, id =>
     sortingMembers.find(member => member.id === id)?.name ?? teamData.members.find(member => member.id === id)?.name ?? id
   ), [subitems, sortBy, sortingMembers])
+  const suggestedRanges = useMemo(
+    () => suggestSubitemDateRanges(parentStartDate, parentEndDate, subitems),
+    [parentStartDate, parentEndDate, subitems],
+  )
   function updateOne(id: string, u: Partial<SubItem>) {
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
     // wijziging op alle geselecteerde subitems binnen dit item toe. Zo kun
@@ -1602,6 +1612,7 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
         </div>
         <SubitemRows subitems={sortedSubitems} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
+          suggestedRanges={suggestedRanges}
           selectedIds={selectedIds} onToggleSelect={onToggleSelect}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail}
@@ -1642,8 +1653,9 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedRanges, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
+  suggestedRanges?: Record<string, SuggestedDateRange>
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
   fromGroupId?: string
@@ -1676,6 +1688,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
       {active.map((sub, idx) => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
+          suggestedRange={suggestedRanges?.[sub.id]}
           selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
           onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
@@ -1731,6 +1744,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, selectedIds, onToggle
           {doneOpen && done.map((sub, idx) => (
             <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
               rail={rail}
+              suggestedRange={suggestedRanges?.[sub.id]}
               selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
               onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
               isLast={idx === lastDoneIdx}
@@ -2255,7 +2269,7 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
           accentColor={accentColor}
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
-          parentItemId={item.id} fromGroupId={groupId}
+          parentItemId={item.id} parentStartDate={item.startDate} parentEndDate={item.endDate} fromGroupId={groupId}
           parentExternalLink={item.externalLink ?? null}
           onOpenDetail={sub => setOpenSub(sub)}
           colWidths={subColWidths ?? colWidths} onResizeCol={onResizeSubCol ?? onResizeCol}
