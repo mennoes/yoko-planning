@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { accountCategory, DEFAULT_ACCOUNT_LAYOUT, moveAccount, readAccountLayout, type AccountLayout } from '@/lib/accountLayout'
 import type { Account } from '@/lib/accountsStore'
@@ -15,7 +15,7 @@ export function AccountGroups({ accounts, renderCard }: { accounts: Account[]; r
  const [folded,setFolded]=useState<string[]>([])
  const [drag,setDrag]=useState<{kind:'account'|'category';id:string}|null>(null)
  const [over,setOver]=useState<string|null>(null)
- useEffect(()=> { let alive=true; supabase?.auth.getUser().then(({data,error})=> { if(!alive)return; if(error){setError('Indeling kon niet worden geladen. Vernieuw de pagina.');return} setLayout(readAccountLayout(data.user?.user_metadata?.account_layout));setReady(true) });return()=>{alive=false} },[])
+ useEffect(()=> { let alive=true; supabase?.auth.getSession().then(({data,error})=> { if(!alive)return; if(error){setError('Indeling kon niet worden geladen. Vernieuw de pagina.');return} setLayout(readAccountLayout(data.session?.user?.user_metadata?.account_layout));setReady(true) });return()=>{alive=false} },[])
  async function save(next:AccountLayout) {
   if(busy || !ready || !supabase)return
   const previous=layout;setLayout(next);setBusy(true);setError('')
@@ -30,7 +30,25 @@ export function AccountGroups({ accounts, renderCard }: { accounts: Account[]; r
   else if(drag.id!==category){const categories=layout.categories.filter(c=>c.id!==drag.id);const source=layout.categories.find(c=>c.id===drag.id);if(source){categories.splice(categories.findIndex(c=>c.id===category),0,source);void save({...layout,categories})}}
   setDrag(null);setOver(null)
  }
- const ordered=[...accounts].sort((a,b)=>{const rank=(id:string)=>{const n=layout.order.indexOf(id);return n<0 ? layout.order.length+accounts.findIndex(a=>a.id===id):n};return rank(a.id)-rank(b.id)})
+ // De indeling hoeft alleen opnieuw berekend te worden wanneer de accounts
+ // of de opgeslagen volgorde veranderen. Voorheen deden iedere hover, drag
+ // en toetsaanslag meerdere indexOf/findIndex-rondes over de hele lijst.
+ const ordered=useMemo(()=>{
+  const storedRank=new Map(layout.order.map((id,index)=>[id,index]))
+  const fallbackRank=new Map(accounts.map((account,index)=>[account.id,index]))
+  const rank=(id:string)=>storedRank.get(id) ?? layout.order.length+(fallbackRank.get(id) ?? accounts.length)
+  return [...accounts].sort((a,b)=>rank(a.id)-rank(b.id))
+ },[accounts,layout.order])
+ const byCategory=useMemo(()=>{
+  const grouped=new Map<string,Account[]>()
+  for(const category of layout.categories)grouped.set(category.id,[])
+  for(const account of ordered){
+   const category=accountCategory(layout,account)
+   const bucket=grouped.get(category) ?? grouped.get('other')
+   bucket?.push(account)
+  }
+  return grouped
+ },[ordered,layout])
  return <div>
   <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
    <input aria-label="Zoek accounts" placeholder="Zoek een account…" value={query} onChange={e=>setQuery(e.target.value)} style={{...control,flex:'1 1 240px'}} />
@@ -42,7 +60,7 @@ export function AccountGroups({ accounts, renderCard }: { accounts: Account[]; r
   <div role="status" style={{fontSize:12,color:error?'var(--red)':'var(--text-muted)',marginBottom:10}}>{error || (busy?'Indeling opslaan…':!ready?'Indeling laden…':`${accounts.length} accounts · Jouw indeling`)}</div>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,300px),1fr))',gap:12,alignItems:'start'}}>
   {layout.categories.map(category=>{
-   const all=ordered.filter(a=>accountCategory(layout,a)===category.id)
+   const all=byCategory.get(category.id) ?? []
    const rows=all.filter(a=>[a.account,a.url,a.username,a.licensedBy].some(v=>v.toLowerCase().includes(query.toLowerCase())))
    if(query&&!rows.length)return null
    const collapsed=folded.includes(category.id)&&!query
