@@ -11,6 +11,11 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { DatumVeld } from './DatumVeld'
 import { isoWeekNumber } from '@/lib/weekPlanning'
+import {
+  readCopiedDateRange, writeCopiedDateRange,
+  type CopiedDateRange,
+} from '@/lib/dateRangeClipboard'
+import type { SuggestedDateRange } from '@/lib/subitemDateSuggestions'
 
 const NL_MON = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec']
 
@@ -370,7 +375,7 @@ export function RangeCalendar({
 }
 
 export function DateRangeCell({
-  startDate, endDate, onChange, color = '#579bfc', fontScale = 1,
+  startDate, endDate, onChange, color = '#579bfc', fontScale = 1, suggestedRange,
 }: {
   startDate: string | null; endDate: string | null
   onChange: (s: string | null, e: string | null) => void
@@ -378,9 +383,13 @@ export function DateRangeCell({
   color?: string
   /** 1 in een rij, ruimer in een venster. */
   fontScale?: number
+  /** Niet-opgeslagen voorstel voor een leeg subitem. */
+  suggestedRange?: SuggestedDateRange
 }) {
   const [open, setOpen]   = useState(false)
   const [hover, setHover] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [copiedRange, setCopiedRange] = useState<CopiedDateRange | null>(null)
   const celFont = (basis: number) => Math.round(basis * fontScale * 10) / 10
   const btnRef = useRef<HTMLButtonElement>(null)
 
@@ -420,9 +429,55 @@ export function DateRangeCell({
   const dur = durationLabel()
   const showDuration = hover && hasAny && !!dur
 
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('blur', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('blur', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [contextMenu])
+
+  function copyDates() {
+    const value = writeCopiedDateRange(startDate, endDate)
+    if (!value) return
+    setCopiedRange(value)
+    void navigator.clipboard?.writeText(`${value.startDate} → ${value.endDate}`).catch(() => {})
+    setContextMenu(null)
+  }
+
+  function pasteDates() {
+    const value = copiedRange ?? readCopiedDateRange()
+    if (!value) return
+    onChange(value.startDate, value.endDate)
+    setContextMenu(null)
+  }
+
   return (
     <div style={{ width: '100%' }}>
-      <button ref={btnRef} onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} data-date-range-cell
+        data-has-suggestion={!hasAny && !!suggestedRange ? 'true' : undefined}
+        onClick={() => {
+          if (!hasAny && suggestedRange) {
+            onChange(suggestedRange.startDate, suggestedRange.endDate)
+            return
+          }
+          setOpen(o => !o)
+        }}
+        onContextMenu={event => {
+          event.preventDefault()
+          event.stopPropagation()
+          setOpen(false)
+          setCopiedRange(readCopiedDateRange())
+          setContextMenu({ x: event.clientX, y: event.clientY })
+        }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
@@ -473,6 +528,14 @@ export function DateRangeCell({
               </button>
             )}
           </>
+        ) : suggestedRange ? (
+          <span title="Klik om deze datums te gebruiken" style={{
+            color: 'var(--text-muted)', fontSize: celFont(11.5), fontStyle: 'italic',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            width: '100%', textAlign: 'center',
+          }}>
+            Suggestie · {fmtRange(suggestedRange.startDate, suggestedRange.endDate)}
+          </span>
         ) : (
           <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>
         )}
@@ -486,7 +549,53 @@ export function DateRangeCell({
           />
         </PortalDropdown>
       )}
+      {contextMenu && typeof document !== 'undefined' && createPortal(
+        <div role="menu" aria-label="Datumacties"
+          onPointerDown={event => event.stopPropagation()}
+          style={{
+            position: 'fixed', left: Math.min(contextMenu.x, window.innerWidth - 240),
+            top: Math.min(contextMenu.y, window.innerHeight - 190), zIndex: 10020,
+            width: 230, padding: 6, borderRadius: 9,
+            border: '1px solid var(--border-strong)', background: 'var(--bg-card)',
+            boxShadow: '0 10px 35px rgba(0,0,0,0.22)',
+          }}>
+          <ContextAction disabled={!hasAny} onClick={copyDates}>Datums kopiëren</ContextAction>
+          <ContextAction disabled={!copiedRange} onClick={pasteDates}>
+            {copiedRange ? `Datums plakken · ${fmtRange(copiedRange.startDate, copiedRange.endDate)}` : 'Datums plakken'}
+          </ContextAction>
+          {!hasAny && suggestedRange && (
+            <ContextAction onClick={() => {
+              onChange(suggestedRange.startDate, suggestedRange.endDate)
+              setContextMenu(null)
+            }}>
+              Suggestie gebruiken · {fmtRange(suggestedRange.startDate, suggestedRange.endDate)}
+            </ContextAction>
+          )}
+          {!!hasAny && <ContextAction danger onClick={() => { onChange(null, null); setContextMenu(null) }}>Datums wissen</ContextAction>}
+        </div>, document.body,
+      )}
     </div>
+  )
+}
+
+function ContextAction({ children, disabled, danger, onClick }: {
+  children: React.ReactNode
+  disabled?: boolean
+  danger?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button type="button" role="menuitem" disabled={disabled} onClick={onClick}
+      style={{
+        display: 'block', width: '100%', border: 0, borderRadius: 6,
+        padding: '8px 10px', textAlign: 'left', cursor: disabled ? 'not-allowed' : 'pointer',
+        background: 'transparent', color: disabled ? 'var(--text-muted)' : danger ? 'var(--red)' : 'var(--text-primary)',
+        fontSize: 12.5, opacity: disabled ? 0.48 : 1,
+      }}
+      onMouseEnter={event => { if (!disabled) event.currentTarget.style.background = 'var(--overlay-hover)' }}
+      onMouseLeave={event => { event.currentTarget.style.background = 'transparent' }}>
+      {children}
+    </button>
   )
 }
 
