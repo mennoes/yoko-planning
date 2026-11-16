@@ -19,9 +19,12 @@ export function useAccountPermissions() {
  const refresh=useCallback(async()=>{
   try {
    if(!supabase)return
-   const {data,error}=await supabase.auth.getUser()
+   // De lokale sessie is voldoende om de beheerknop te tonen. De route
+   // valideert het token en de adminrol opnieuw op de server voordat een
+   // recht daadwerkelijk gelezen of gewijzigd wordt.
+   const {data,error}=await supabase.auth.getSession()
    if(error)throw new Error('Accountrechten konden niet worden geladen.')
-   const admin=accountAccessAdmin(data.user?.app_metadata)
+   const admin=accountAccessAdmin(data.session?.user?.app_metadata)
    setCanManage(admin)
    if(!admin){setUsers([]);return}
    const result=await request('GET');setUsers(result.users);setError('')

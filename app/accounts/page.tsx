@@ -47,11 +47,16 @@ export default function AccountsPage() {
       let sessEmail: string | null | undefined
       let sessHas = false
       if (supabase) {
-        const { data } = await supabase.auth.getUser()
+        // De sessie staat al lokaal in Supabase Auth. `getUser()` doet hier
+        // onnodig een netwerkverzoek en kon bij een trage auth-server de hele
+        // pagina eindeloos op "Laden…" laten staan. De API en RLS valideren
+        // rechten server-side; dit is alleen de client-side laadgate.
+        const { data } = await supabase.auth.getSession()
         if (cancelled) return
-        sessHas = !!data.user
-        sessEmail = data.user?.email
-        setManageAccess(accountAccessAdmin(data.user?.app_metadata))
+        const user = data.session?.user
+        sessHas = !!user
+        sessEmail = user?.email
+        setManageAccess(accountAccessAdmin(user?.app_metadata))
       }
       clearAuthCache()
       const result = await pullAccountsDetailed()
