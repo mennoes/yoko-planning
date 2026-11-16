@@ -60,14 +60,22 @@ export async function pullAccountsDetailed(): Promise<{
   forbidden?: boolean
 }> {
   if (!supabase) return { rows: null, error: { message: 'Supabase niet geconfigureerd' } }
-  if (!await getCurrentUserId()) return { rows: null, noAuth: true }
-  const access = await supabase.rpc('can_access_accounts')
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData.session?.user) return { rows: null, noAuth: true }
+
+  // Beide verzoeken zijn beveiligd door dezelfde ingelogde sessie en RLS.
+  // Ze hoeven niet op elkaar te wachten: voorheen kostte een page-load twee
+  // volledige database-rondreizen achter elkaar.
+  const [access, accountsResult] = await Promise.all([
+    supabase.rpc('can_access_accounts'),
+    supabase
+      .from('accounts')
+      .select('id, account, url, username, password, license_by, position')
+      .order('position', { ascending: true }),
+  ])
   if (access.error) return { rows: null, error: { message: 'Accounttoegang kon niet worden gecontroleerd.' } }
   if (access.data !== true) return { rows: null, forbidden: true }
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('id, account, url, username, password, license_by, position')
-    .order('position', { ascending: true })
+  const { data, error } = accountsResult
   if (error) return { rows: null, error: { message: error.message, code: error.code, hint: error.hint } }
   return { rows: (data as Row[] | null ?? []).map(rowToAccount) }
 }
