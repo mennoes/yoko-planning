@@ -16,6 +16,12 @@ test('kolommen die nooit gevuld werden zijn uit de agenda', () => {
   assert.doesNotMatch(registry, /key: 'nummers'/)
 })
 
+test('Nederland houdt Deadline als vaste kolom', () => {
+  assert.match(registry, /id: 'nederland'[\s\S]*?key: 'deadline'/)
+  assert.match(board, /boardId === 'nederland' && !columns\.some\(column => column\.key === 'deadline'\)/)
+  assert.match(board, /\{ key: 'deadline', label: 'Deadline', type: 'date', width: 105 \}/)
+})
+
 test('eigen kolommen blijven gewoon te maken', () => {
   assert.match(board, /\+ Kolom toevoegen/)
   assert.match(board, /let key = `custom_\$\{slug\}`/)

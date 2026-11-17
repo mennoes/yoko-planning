@@ -71,6 +71,7 @@ const FALLBACK: BoardConfig[] = [
     { key: 'status',         label: 'Status',         type: 'status',    width: 145 },
     { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
     { key: 'timeline',       label: 'Timeline',       type: 'daterange', width: 175 },
+    { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
     { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 175 },
     { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
     { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
