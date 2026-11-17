@@ -4630,11 +4630,23 @@ type BoardTableProps = {
 }
 
 export default function BoardTable({ boardId, title, emoji, color, columns, groups, onChange: rawOnChange, onRenameTitle }: BoardTableProps) {
-  const completeColumns = completeColumnLayout(columns)
+  // Deadline is essentieel voor Nederland: de masterplanning gebruikt dit
+  // veld voor de overdracht naar AD. Herstel hem ook in bestaande layouts
+  // waarin de kolom eerder per ongeluk is verdwenen.
+  const columnsWithRequiredDeadline = boardId === 'nederland' && !columns.some(column => column.key === 'deadline')
+    ? (() => {
+        const next = [...columns]
+        const timelineIndex = next.findIndex(column => column.key === 'timeline')
+        next.splice(timelineIndex >= 0 ? timelineIndex + 1 : next.length, 0,
+          { key: 'deadline', label: 'Deadline', type: 'date', width: 105 })
+        return next
+      })()
+    : columns
+  const completeColumns = completeColumnLayout(columnsWithRequiredDeadline)
   const dataColumns = completeColumns.filter(column => !isPersonalColumn(column.key) && !column.hidden)
   useEffect(() => {
-    if (columns.some(column => isPersonalColumn(column.key) || column.key === '__personalTimeline')) {
-      void setBoardColumns(boardId, completeColumnLayout(columns))
+    if (columnsWithRequiredDeadline !== columns || columns.some(column => isPersonalColumn(column.key) || column.key === '__personalTimeline')) {
+      void setBoardColumns(boardId, completeColumnLayout(columnsWithRequiredDeadline))
     }
   }, [boardId, columns])
   function moveColumn(sourceKey: string, targetKey: string, side: 'before' | 'after') {
