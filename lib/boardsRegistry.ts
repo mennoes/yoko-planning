@@ -23,7 +23,7 @@ const DEMO_FALLBACK: BoardConfig[] = [
     { key: 'deadline',  label: 'Deadline', type: 'date',      width: 105 },
     { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
     { key: 'dagen',     label: 'Dagen',    type: 'number',    width: 70  },
-    { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
+    { key: 'notes',     label: 'Beschrijving', type: 'text',  width: 160 },
   ] },
   { id: DEMO_BOARD_IDS[1], name: DEMO_BOARD_IDS[1], emoji: '🎨', color: '#D8935B', columns: [
     { key: 'ownerIds',       label: 'Owner',          type: 'owners',    width: 90  },
@@ -56,7 +56,7 @@ const FALLBACK: BoardConfig[] = [
     { key: 'deadline',  label: 'Deadline', type: 'date',      width: 105 },
     { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
     { key: 'dagen',     label: 'Dagen',    type: 'number',    width: 70  },
-    { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
+    { key: 'notes',     label: 'Beschrijving', type: 'text',  width: 160 },
   ] },
   { id: 'pnp', name: 'PnP', emoji: '📋', color: '#e2445c', columns: [
     { key: 'ownerIds',       label: 'Persoon',        type: 'owners',    width: 90  },
@@ -95,7 +95,7 @@ const FALLBACK: BoardConfig[] = [
     { key: 'deadline',  label: 'Deadline', type: 'date',      width: 105 },
     { key: 'estHours',  label: 'Est Time', type: 'number',    width: 85  },
     { key: 'dagen',     label: 'Dagen',    type: 'number',    width: 70  },
-    { key: 'notes',     label: 'Notes',    type: 'text',      width: 160 },
+    { key: 'notes',     label: 'Beschrijving', type: 'text',  width: 160 },
   ] },
   { id: 'dienjaar', name: 'Itorium', emoji: '📋', color: '#00c875', columns: [
     { key: 'ownerIds', label: 'Owner',    type: 'owners',    width: 90  },
@@ -391,6 +391,6 @@ export function defaultColumnsForNewBoard(): ColumnDef[] {
     { key: 'deadline', label: 'Deadline', type: 'date',      width: 105 },
     { key: 'estHours', label: 'Est Time', type: 'number',    width: 85  },
     { key: 'dagen',    label: 'Dagen',    type: 'number',    width: 70  },
-    { key: 'notes',    label: 'Notes',    type: 'text',      width: 160 },
+    { key: 'notes',    label: 'Beschrijving', type: 'text',  width: 160 },
   ]
 }

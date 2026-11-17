@@ -337,8 +337,8 @@ function MobileCreateItemSheet({ kind, groups, onClose, onCreate }: {
             <label style={labelStyle}>Deadline
               <DatumVeld value={deadline} ariaLabel="Deadline" onChange={v => setDeadline(v ?? '')} style={fieldStyle} />
             </label>
-            <label style={labelStyle}>Notities
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} placeholder="Extra context, afspraken of vervolgstappen…" style={{ ...fieldStyle, resize: 'vertical' }} />
+            <label style={labelStyle}>Beschrijving
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} placeholder="Korte briefing of omschrijving…" style={{ ...fieldStyle, resize: 'vertical' }} />
             </label>
           </>}
         </div>
@@ -2692,6 +2692,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
   const [mentionIds, setMentionIds] = useState<string[]>([])
   const [editName, setEditName] = useState(false)
   const [nameDraft, setNameDraft] = useState(item.name)
+  const [descriptionDraft, setDescriptionDraft] = useState(item.notes ?? '')
 
   useEffect(() => {
     const refresh = () => setThreads(loadCommentsFor('board-item:' + itemId))
@@ -2884,7 +2885,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
               één rij. Alle velden gebruiken één kolom; langere tekst
               blijft binnen het eigen vlak. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginBottom: 20 }}>
-            {cols.filter(col => !isPersonalColumn(col.key)).map(col => (
+            {cols.filter(col => !isPersonalColumn(col.key) && col.key !== 'notes').map(col => (
               // Elk veld in een eigen vlak: eerder liepen label en waarde
               // van de buurman in elkaar over en was het één grijze soep.
               <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6,
@@ -2940,15 +2941,38 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
             />
           })()}
 
-          {/* Notities-thread (voorheen "Opmerkingen") */}
+          <div style={{ marginBottom: 24 }}>
+            <label htmlFor={`item-description-${item.id}`} style={{ display: 'block', marginBottom: 8, fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              Beschrijving
+            </label>
+            <textarea
+              id={`item-description-${item.id}`}
+              value={descriptionDraft}
+              onChange={event => setDescriptionDraft(event.target.value)}
+              onBlur={() => {
+                if (descriptionDraft !== (item.notes ?? '')) onUpdate({ notes: descriptionDraft })
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation()
+                  event.currentTarget.blur()
+                }
+              }}
+              placeholder="Voeg een korte briefing of omschrijving toe…"
+              rows={5}
+              style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 112, padding: '11px 12px', borderRadius: 8, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: 15, lineHeight: 1.5, outline: 'none' }}
+            />
+          </div>
+
+          {/* Chronologische opmerkingen bij het item. */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                Notities
+                Opmerkingen
               </div>
               <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
               <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                {replies.length} {replies.length === 1 ? 'reactie' : 'reacties'}
+                {replies.length} {replies.length === 1 ? 'opmerking' : 'opmerkingen'}
               </span>
             </div>
 
@@ -2956,7 +2980,7 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
               <p style={{ fontSize: 14.5, color: 'var(--text-muted)', fontStyle: 'italic', margin: '10px 0 16px' }}>Nog geen opmerkingen. Wees de eerste!</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
-                {[...replies].reverse().map(r => {
+                {replies.map(r => {
                   const mine = !!profile?.memberId && r.authorId === profile.memberId
                   return (
                     <div key={r.id} style={{
@@ -4192,7 +4216,7 @@ const AVAILABLE_COLUMNS: ColumnDef[] = [
   { key: 'deadline',       label: 'Deadline',       type: 'date',      width: 105 },
   { key: 'estHours',       label: 'Est Time',       type: 'number',    width: 85  },
   { key: 'dagen',          label: 'Dagen',          type: 'number',    width: 70  },
-  { key: 'notes',          label: 'Notities',       type: 'text',      width: 160 },
+  { key: 'notes',          label: 'Beschrijving',   type: 'text',      width: 160 },
   { key: 'contactpersoon', label: 'Contactpersoon', type: 'text',      width: 160 },
   { key: 'framelink',      label: 'Frame link',     type: 'url',       width: 110 },
   { key: 'uitzenddag',     label: 'Uitzenddag',     type: 'date',      width: 105 },
@@ -4211,6 +4235,7 @@ function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
   return columns
     .filter(column => column.key !== '__personalTimeline' && column.key !== PERSONAL_STATUS_KEY)
     .filter(column => !RETIRED_COLUMN_KEYS.has(column.key))
+    .map(column => column.key === 'notes' ? { ...column, label: 'Beschrijving' } : column)
 }
 
 function ColumnManagerButton({ boardId, columns, color, menu = false, plus = false }: {
