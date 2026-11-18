@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo, createContext, useContext } from 'react'
+import { useState, useEffect, useRef, useMemo, createContext, useContext, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 // Note: bewust GEEN useSearchParams uit next/navigation — die zet de hele
 // pagina in CSR-bailout en breekt `next build` voor de dynamische
@@ -68,6 +68,7 @@ import { OwnersCell, OwnerUsageCtx, MemberAvatar, ownerHoursDrafts } from './Own
 const PERSONAL_STATUS_KEY = '__personalStatus'
 const isPersonalColumn = (key: string) => key === PERSONAL_STATUS_KEY
 const ITEM_EXPANSION_KEY_PREFIX = 'yoko-board-item-expanded-v1:'
+const NEDERLAND_MASTERPLANNING_URL = 'https://docs.google.com/spreadsheets/d/1GdOFB393stbzPbmeHGX1ufe0I8BeXrB42fdW_KOxJK0/edit'
 
 function loadRememberedItemExpansion(itemId: string): boolean {
   if (typeof window === 'undefined') return false
@@ -4238,11 +4239,12 @@ function completeColumnLayout(columns: ColumnDef[]): ColumnDef[] {
     .map(column => column.key === 'notes' ? { ...column, label: 'Beschrijving' } : column)
 }
 
-function ColumnManagerButton({ boardId, columns, color, menu = false, plus = false }: {
+function ColumnManagerButton({ boardId, columns, color, menu = false, plus = false, filterControl }: {
   boardId: string
   columns: ColumnDef[]
   color:   string
   menu?:   boolean
+  filterControl?: ReactNode
   /** Het plusje in de lege kolom rechts in de tabel: opent dezelfde
    *  kolommenlijst, maar meteen op 'toevoegen'. */
   plus?:   boolean
@@ -4345,6 +4347,10 @@ function ColumnManagerButton({ boardId, columns, color, menu = false, plus = fal
             borderRadius: 12, padding: 14, width: 360, maxWidth: 'calc(100vw - 24px)', maxHeight: 'min(680px, calc(100vh - 32px))', overflowY: 'auto',
             boxShadow: '0 10px 36px rgba(0,0,0,0.4)',
           }}>
+            {filterControl && <div style={{ margin: '-4px -4px 12px' }}>
+              {filterControl}
+              <div style={{ height: 1, background: 'var(--border-light)', margin: '7px 4px 0' }} />
+            </div>}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
               <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>Kolommen</strong>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{list.filter(column => !column.hidden).length} zichtbaar</span>
@@ -5625,6 +5631,16 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           {boardId && (
             <ShareButton boardId={boardId} groups={groups} />
           )}
+          {!isMobile && boardId === 'nederland' && (
+            <a href={NEDERLAND_MASTERPLANNING_URL} target="_blank" rel="noreferrer"
+              className="yoko-control-button"
+              title="Open de masterplanning van Onderzoekt en HeyU"
+              style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+                textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              Masterplanning <span aria-hidden>↗</span>
+            </a>
+          )}
           {!isMobile && (
             <button onClick={exportCSV} title="Exporteer als CSV" className="yoko-control-button"
               style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
@@ -5678,9 +5694,19 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                 <div style={{ height: 1, background: 'var(--border-light)', margin: '3px 6px' }} />
                 <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
                   onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} menu />
-                <AgendaFilterButton columns={dataColumns} owners={yokoOwners} filters={agendaFilters}
-                  onChange={setAgendaFilters} color={color} menu />
-                <ColumnManagerButton boardId={boardId} columns={columns} color={color} menu />
+                <ColumnManagerButton boardId={boardId} columns={columns} color={color} menu
+                  filterControl={<AgendaFilterButton columns={dataColumns} owners={yokoOwners} filters={agendaFilters}
+                    onChange={setAgendaFilters} color={color} menu />} />
+                {boardId === 'nederland' && (
+                  <a href={NEDERLAND_MASTERPLANNING_URL} target="_blank" rel="noreferrer"
+                    title="Open de masterplanning van Onderzoekt en HeyU"
+                    style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8, boxSizing: 'border-box',
+                      padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left',
+                      borderRadius: 6, textDecoration: 'none' }}>
+                    Masterplanning <span aria-hidden>↗</span>
+                  </a>
+                )}
                 <button onClick={() => { setTrashOpen(true); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
                     padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
@@ -5755,9 +5781,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           <>
             <PeriodFilterButton from={filterFrom} until={filterUntil} color={color}
               onChange={(f, u) => { setFilterFrom(f ?? ''); setFilterUntil(u ?? '') }} />
-            <AgendaFilterButton columns={dataColumns} owners={yokoOwners} filters={agendaFilters}
-              onChange={setAgendaFilters} color={color} />
-            <ColumnManagerButton boardId={boardId} columns={columns} color={color} />
+            <ColumnManagerButton boardId={boardId} columns={columns} color={color}
+              filterControl={<AgendaFilterButton columns={dataColumns} owners={yokoOwners} filters={agendaFilters}
+                onChange={setAgendaFilters} color={color} menu />} />
           </>
         )}
 

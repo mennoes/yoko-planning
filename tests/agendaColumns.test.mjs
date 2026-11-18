@@ -22,6 +22,11 @@ test('Nederland houdt Deadline als vaste kolom', () => {
   assert.match(board, /\{ key: 'deadline', label: 'Deadline', type: 'date', width: 105 \}/)
 })
 
+test('Nederland linkt subtiel naar de masterplanning', () => {
+  assert.match(board, /const NEDERLAND_MASTERPLANNING_URL = 'https:\/\/docs\.google\.com\/spreadsheets\/d\/1GdOFB393stbzPbmeHGX1ufe0I8BeXrB42fdW_KOxJK0\/edit'/)
+  assert.match(board, /boardId === 'nederland'[\s\S]{0,900}Masterplanning/)
+})
+
 test('eigen kolommen blijven gewoon te maken', () => {
   assert.match(board, /\+ Kolom toevoegen/)
   assert.match(board, /let key = `custom_\$\{slug\}`/)
