@@ -23,8 +23,10 @@ test('Nederland houdt Deadline als vaste kolom', () => {
 })
 
 test('Nederland linkt subtiel naar de masterplanning', () => {
-  assert.match(board, /const NEDERLAND_MASTERPLANNING_URL = 'https:\/\/docs\.google\.com\/spreadsheets\/d\/1GdOFB393stbzPbmeHGX1ufe0I8BeXrB42fdW_KOxJK0\/edit'/)
-  assert.match(board, /boardId === 'nederland'[\s\S]{0,900}Masterplanning/)
+  assert.match(board, /function MasterPlanningControls/)
+  assert.match(board, /Planning bijwerken/)
+  assert.match(board, /Open Sheet/)
+  assert.match(board, /boardId === 'nederland'[\s\S]{0,180}<MasterPlanningControls/)
 })
 
 test('eigen kolommen blijven gewoon te maken', () => {

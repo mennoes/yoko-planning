@@ -11,6 +11,7 @@ const guardedRoutes = [
   '../app/api/snapshots/merge-missing-subitems/route.ts',
   '../app/api/snapshots/restore-est/route.ts',
   '../app/api/snapshots/restore-item-est/route.ts',
+  '../app/api/maintenance/sync-masterplanning/route.ts',
 ]
 
 for (const path of guardedRoutes) {

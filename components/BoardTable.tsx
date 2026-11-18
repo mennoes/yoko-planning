@@ -63,12 +63,12 @@ import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
 import { prepareItemForGroupMove } from '@/lib/groupMove'
 import { suggestSubitemDateRanges, type SuggestedDateRange } from '@/lib/subitemDateSuggestions'
+import { MASTER_PLANNING_SHEET_URL } from '@/lib/masterPlanningSync'
 
 import { OwnersCell, OwnerUsageCtx, MemberAvatar, ownerHoursDrafts } from './OwnersCell'
 const PERSONAL_STATUS_KEY = '__personalStatus'
 const isPersonalColumn = (key: string) => key === PERSONAL_STATUS_KEY
 const ITEM_EXPANSION_KEY_PREFIX = 'yoko-board-item-expanded-v1:'
-const NEDERLAND_MASTERPLANNING_URL = 'https://docs.google.com/spreadsheets/d/1GdOFB393stbzPbmeHGX1ufe0I8BeXrB42fdW_KOxJK0/edit'
 
 function loadRememberedItemExpansion(itemId: string): boolean {
   if (typeof window === 'undefined') return false
@@ -89,6 +89,76 @@ function rememberItemExpansion(itemId: string, expanded: boolean): void {
     // localStorage kan geblokkeerd of vol zijn. De agenda blijft dan gewoon
     // werken; alleen de voorkeur kan niet tussen bezoeken worden onthouden.
   }
+}
+
+type MasterPlanningSyncResult = {
+  ok: boolean
+  added?: string[]
+  updated?: Array<{ name: string; fields: string[] }>
+  error?: string
+}
+
+function MasterPlanningControls({ menu = false }: { menu?: boolean }) {
+  const [state, setState] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle')
+  const [summary, setSummary] = useState('')
+
+  async function syncPlanning() {
+    if (state === 'syncing') return
+    setState('syncing')
+    setSummary('')
+    try {
+      if (!supabase) throw new Error('Yoko is niet met de database verbonden.')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Log opnieuw in om de planning bij te werken.')
+      const response = await fetch('/api/maintenance/sync-masterplanning', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const result = await response.json() as MasterPlanningSyncResult
+      if (!response.ok || !result.ok) {
+        if (response.status === 403) throw new Error('Alleen een teambeheerder kan de masterplanning synchroniseren.')
+        throw new Error(result.error || 'Synchroniseren is mislukt.')
+      }
+      await pullBoardFromRemote('nederland')
+      const added = result.added?.length ?? 0
+      const updated = result.updated?.length ?? 0
+      const message = added || updated ? `${added} toegevoegd · ${updated} bijgewerkt` : 'Alles is al actueel'
+      setSummary(message)
+      setState('success')
+      window.setTimeout(() => setState('idle'), 7000)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Synchroniseren is mislukt.'
+      setSummary(message)
+      setState('error')
+    }
+  }
+
+  const buttonLabel = state === 'syncing' ? 'Planning bijwerken…'
+    : state === 'success' ? `✓ ${summary}`
+    : state === 'error' ? 'Opnieuw proberen'
+    : 'Planning bijwerken'
+  const baseStyle: React.CSSProperties = menu
+    ? { display: 'flex', width: '100%', boxSizing: 'border-box', alignItems: 'center', gap: 7, padding: '9px 12px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left' }
+    : { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 10px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600 }
+
+  return (
+    <div aria-label="Masterplanning" style={{ position: 'relative', display: menu ? 'block' : 'inline-flex', alignItems: 'stretch', borderRadius: 6, overflow: 'hidden' }}>
+      <button type="button" onClick={syncPlanning} disabled={state === 'syncing'}
+        title={state === 'error' ? summary : 'Haal wijzigingen uit de masterplanning op en werk Producties bij'}
+        className="yoko-control-button"
+        style={{ ...baseStyle, cursor: state === 'syncing' ? 'wait' : 'pointer', borderRadius: menu ? 6 : '6px 0 0 6px', opacity: state === 'syncing' ? .65 : 1 }}>
+        <span aria-hidden>↻</span> {buttonLabel}
+      </button>
+      <a href={MASTER_PLANNING_SHEET_URL} target="_blank" rel="noreferrer"
+        title="Open de masterplanning in Google Sheets" aria-label="Open masterplanning in Google Sheets"
+        className="yoko-control-button"
+        style={{ ...baseStyle, width: menu ? '100%' : undefined, textDecoration: 'none', cursor: 'pointer',
+          borderRadius: menu ? 6 : '0 6px 6px 0', borderLeft: menu ? undefined : 0 }}>
+        <span aria-hidden>↗</span> {menu ? 'Open Sheet' : 'Sheet'}
+      </a>
+      {state === 'error' && <span role="status" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>{summary}</span>}
+    </div>
+  )
 }
 
 // Cache van het lopende profiel zodat helpers buiten een hook ook de
@@ -5631,16 +5701,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
           {boardId && (
             <ShareButton boardId={boardId} groups={groups} />
           )}
-          {!isMobile && boardId === 'nederland' && (
-            <a href={NEDERLAND_MASTERPLANNING_URL} target="_blank" rel="noreferrer"
-              className="yoko-control-button"
-              title="Open de masterplanning van Onderzoekt en HeyU"
-              style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
-                textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              Masterplanning <span aria-hidden>↗</span>
-            </a>
-          )}
+          {!isMobile && boardId === 'nederland' && <MasterPlanningControls />}
           {!isMobile && (
             <button onClick={exportCSV} title="Exporteer als CSV" className="yoko-control-button"
               style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
@@ -5698,14 +5759,7 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
                   filterControl={<AgendaFilterButton columns={dataColumns} owners={yokoOwners} filters={agendaFilters}
                     onChange={setAgendaFilters} color={color} menu />} />
                 {boardId === 'nederland' && (
-                  <a href={NEDERLAND_MASTERPLANNING_URL} target="_blank" rel="noreferrer"
-                    title="Open de masterplanning van Onderzoekt en HeyU"
-                    style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8, boxSizing: 'border-box',
-                      padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, textAlign: 'left',
-                      borderRadius: 6, textDecoration: 'none' }}>
-                    Masterplanning <span aria-hidden>↗</span>
-                  </a>
+                  <MasterPlanningControls menu />
                 )}
                 <button onClick={() => { setTrashOpen(true); setMoreOpen(false) }}
                   style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8,
