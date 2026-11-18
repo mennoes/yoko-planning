@@ -10,6 +10,12 @@ test('column order lives in the agenda toolbar instead of every group header', (
   assert.doesNotMatch(board, /onToggleReorder/)
 })
 
+test('filter is the first control inside the columns menu instead of a separate toolbar button', () => {
+  assert.match(board, /filterControl\?: ReactNode/)
+  assert.match(board, /filterControl=\{<AgendaFilterButton[\s\S]{0,220}menu \/>\}/)
+  assert.doesNotMatch(board, /<AgendaFilterButton columns=\{dataColumns\}[\s\S]{0,180}color=\{color\} \/>/)
+})
+
 test('existing column names can be edited without changing their data key', () => {
   assert.match(board, /function renameColumn\(key: string, label: string\)/)
   assert.match(board, /column\.key === key \? \{ \.\.\.column, label: nextLabel \} : column/)
