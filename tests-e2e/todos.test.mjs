@@ -85,6 +85,14 @@ test('alle personen zijn meteen zichtbaar, zonder iets open te klappen', { skip:
   assert.ok(zichtbaar >= 2, `de personen staan er meteen (${zichtbaar} gevonden)`)
 })
 
+test('de ingelogde persoon staat als eerste in het teamoverzicht', { skip: skip ?? false }, async () => {
+  const page = await todosPagina({ breedte: 1500 })
+  const firstMemberId = await page.locator('[data-personal-todo-column]').first().getAttribute('data-member-id')
+  await page.close()
+
+  assert.equal(firstMemberId, 'menno')
+})
+
 /** De namen van de groepchips, op volgorde. */
 const chipNamen = page => page.evaluate(() =>
   [...document.querySelectorAll('[data-todo-team-group-filter] button')]
