@@ -3268,6 +3268,36 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
         return mergeDetailPatch(i, updates)
       }),
     })
+    const affectedItems = group.items.filter(i => bulk ? selectedIds.has(i.id) : i.id === itemId)
+    if ('startDate' in updates || 'endDate' in updates) {
+      for (const before of affectedItems) {
+        const after = mergeDetailPatch(before, updates)
+        if (before.startDate === after.startDate && before.endDate === after.endDate) continue
+        void logItemActivity(before.id, 'wijzigde de timeline',
+          `${before.startDate ?? '—'} – ${before.endDate ?? '—'} → ${after.startDate ?? '—'} – ${after.endDate ?? '—'}`,
+          {
+            field: 'startDate', boardId, itemName: before.name,
+            before: { startDate: before.startDate, endDate: before.endDate },
+            after: { startDate: after.startDate, endDate: after.endDate },
+          })
+      }
+    }
+    if ('subitems' in updates && Array.isArray(updates.subitems)) {
+      for (const parent of affectedItems) {
+        const nextById = new Map(updates.subitems.map(sub => [sub.id, sub]))
+        for (const before of parent.subitems ?? []) {
+          const after = nextById.get(before.id)
+          if (!after || (before.startDate === after.startDate && before.endDate === after.endDate)) continue
+          void logItemActivity(parent.id, 'wijzigde de timeline',
+            `${before.name}: ${before.startDate ?? '—'} – ${before.endDate ?? '—'} → ${after.startDate ?? '—'} – ${after.endDate ?? '—'}`,
+            {
+              field: 'startDate', boardId, itemName: parent.name,
+              before: { startDate: before.startDate, endDate: before.endDate },
+              after: { startDate: after.startDate, endDate: after.endDate },
+            })
+        }
+      }
+    }
     // Toast + undo. Cell-handlers zelf zijn silent, dus we maken hier per
     // type een leesbare regel.
     const item = group.items.find(i => i.id === itemId)

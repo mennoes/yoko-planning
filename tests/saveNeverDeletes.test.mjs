@@ -46,7 +46,8 @@ test('opslaan verwijdert nooit items die niet in de lokale staat zitten', () => 
   // En de code moet 'm ook nakomen: geen enkele delete binnen de save-weg.
   const snapshotStart = store.indexOf('async function pushBoardSnapshot')
   assert.ok(snapshotStart > 0, 'pushBoardSnapshot bestaat nog')
-  const snapshot = store.slice(snapshotStart, store.indexOf('\n}\n', snapshotStart))
+  const snapshotEnd = store.slice(snapshotStart).search(/\r?\n}\r?\n/)
+  const snapshot = store.slice(snapshotStart, snapshotStart + snapshotEnd)
   assert.doesNotMatch(snapshot, /\.delete\(\)/, 'pushBoardSnapshot verwijdert niets')
 })
 

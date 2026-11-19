@@ -6,7 +6,8 @@ const store = readFileSync(new URL('../lib/boardStore.ts', import.meta.url), 'ut
 const history = readFileSync(new URL('../lib/googleMeetingHistory.ts', import.meta.url), 'utf8')
 
 test('every board upsert preserves stored historical occurrences', () => {
-  assert.match(store, /select\('id, board_id, subitems, extra'\)/)
+  assert.match(store, /const liveColumns = '[^']*subitems[^']*extra'/)
+  assert.match(store, /\.select\(liveColumns\)/)
   assert.match(store, /preserveStoredHistory/)
   assert.match(history, /export function preserveStoredHistory/)
 })

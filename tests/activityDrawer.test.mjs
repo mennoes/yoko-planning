@@ -40,7 +40,14 @@ test('van → naar blijft het hart van elke wijziging', () => {
 
 test('verhuizen tussen agendas wordt gelogd met van en naar', () => {
   assert.match(store, /logItemActivity\(itemId, 'verplaatste naar een andere agenda'/)
-  assert.match(store, /before: boardLabel\(sourceBoard\),\n\s+after: boardLabel\(targetBoard\),/)
+  assert.match(store, /before: boardLabel\(sourceBoard\),\r?\n\s+after: boardLabel\(targetBoard\),/)
+})
+
+test('timelinewijzigingen vanuit de agenda verschijnen in Activiteit', () => {
+  assert.match(board, /logItemActivity\(before\.id, 'wijzigde de timeline'/)
+  assert.match(board, /logItemActivity\(parent\.id, 'wijzigde de timeline'/)
+  assert.match(board, /before: \{ startDate: before\.startDate, endDate: before\.endDate \}/)
+  assert.match(board, /after: \{ startDate: after\.startDate, endDate: after\.endDate \}/)
 })
 
 test('de prullenbak levert de avatar van wie verwijderde', () => {
