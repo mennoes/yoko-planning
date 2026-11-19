@@ -6,6 +6,7 @@ import { normalizeTitle } from './subitemRules'
 import { preserveStoredHistory } from './googleMeetingHistory'
 import { emitBoardSaveStatus } from './boardSaveStatus'
 import { logItemActivity } from './itemActivity'
+import { mergeBoardRowAgainstRemote } from './boardRowMerge'
 
 // Filtert dubbele subitems eruit. Door historische sync-bugs én oude
 // migraties van Google-id-vormen (it_g_{ev.id} → it_g_{iCalUID}) konden
@@ -618,13 +619,13 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
 
   // Baseline: laatste-geziene remote state. Items die identiek zijn aan
   // de baseline overslaan we — er is niets om te pushen voor die item.
-  const baselineSerialized: Map<string, { groupId: string; idx: number; serialized: string }> = new Map()
+  const baselineSerialized: Map<string, { groupId: string; idx: number; serialized: string; item: BoardItem }> = new Map()
   try {
     const raw = localStorage.getItem(pulledKey(boardName))
     if (raw) {
       const base = JSON.parse(raw) as BoardGroup[]
       for (const g of base) g.items.forEach((it, idx) => {
-        baselineSerialized.set(it.id, { groupId: g.id, idx, serialized: JSON.stringify(it) })
+        baselineSerialized.set(it.id, { groupId: g.id, idx, serialized: JSON.stringify(it), item: it })
       })
     }
   } catch {}
@@ -681,16 +682,30 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
   if (itemRows.length > 0) {
     // A stale tab must not move a row back by saving its old board snapshot.
     // Cross-board changes belong exclusively to moveItemToBoard.
+    const liveColumns = 'id, board_id, group_id, position, name, owner_ids, status, start_date, end_date, deadline, est_hours, dagen, notes, contactpersoon, uitzenddag, framelink, nummers, subitems, journal, source, external_link, external_synced_at, extra'
     const { data: locations, error: locationError } = await supabase.from('board_items')
-      .select('id, board_id, subitems, extra').in('id', itemRows.map(row => String(row.id)))
+      .select(liveColumns).in('id', itemRows.map(row => String(row.id)))
     if (locationError) return fail(`Items controleren mislukt: ${locationError.message}`)
     const movedAway = new Set((locations ?? []).filter((row: { id: string; board_id: string }) => row.board_id !== boardName).map((row: { id: string }) => row.id))
     const safeRows = itemRows.filter(row => !movedAway.has(String(row.id)))
-    const storedById = new Map((locations ?? []).map(row => [String(row.id), row as {
+    const storedById = new Map((locations ?? []).map(row => [String(row.id), row as Record<string, unknown> & {
       id: string
       subitems?: SubItem[] | null
       extra?: Record<string, unknown> | null
     }]))
+
+    // Three-way merge: een lokale wijziging aan bijvoorbeeld notities of
+    // positie mag geen nieuwere remote timeline terugzetten. Vergelijk de
+    // lokale rij met de laatst opgehaalde baseline en neem voor ieder lokaal
+    // ongewijzigd veld de actuele databasewaarde over.
+    for (let index = 0; index < safeRows.length; index += 1) {
+      const row = safeRows[index]
+      const stored = storedById.get(String(row.id))
+      const base = baselineSerialized.get(String(row.id))
+      if (!stored || !base) continue
+      const baselineRow = itemToRow(boardName, base.groupId, base.idx, base.item)
+      safeRows[index] = mergeBoardRowAgainstRemote(row, baselineRow, stored)
+    }
 
     // SAFETY GUARD #2 — merge de live databasehistorie vlak vóór iedere
     // upsert terug. Hiermee kan een stale tab of sync-rebuild nooit oudere
