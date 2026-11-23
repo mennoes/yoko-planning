@@ -1233,7 +1233,10 @@ export default function HomePage() {
                        :              { bg: 'transparent', fg: 'var(--text-muted)' }
             const owners = (item.ownerIds ?? []).slice(0, 3)
             return (
-              <Link key={`${board}-${item.id}`} href={`/projects/${board}`} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
+              <Link key={`${board}-${item.id}`}
+                href={`/projects/${board}?focus=${encodeURIComponent(item.id)}&drawer=${encodeURIComponent(item.id)}`}
+                title={`Open '${item.name}' in de agenda`}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[board] ?? 'var(--accent)', flexShrink: 0 }} />
