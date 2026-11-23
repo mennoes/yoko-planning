@@ -3082,6 +3082,13 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     board: project.board,
     itemId: project.id.slice(project.board.length + 2),
   })
+  // Open vanuit Planning niet alleen het juiste bord, maar ook precies de
+  // juiste rij en het bijbehorende detailvenster. Voor subitems gebruiken
+  // we de stabiele parent/subitem-id's; `__siN` is alleen een afgeleide
+  // Planning-id en kan de agenda-drawer zelf niet openen.
+  const agendaItemId = personalCompletion?.parentItemId ?? rawParent?.id ?? rawProjectId
+  const agendaSubitemId = personalCompletion?.subitemId
+  const agendaItemHref = `/projects/${project.board}?focus=${encodeURIComponent(agendaItemId)}&drawer=${encodeURIComponent(agendaItemId)}${agendaSubitemId ? `&subitem=${encodeURIComponent(agendaSubitemId)}` : ''}`
 
   const [startDate, setStartDate] = useState(project.startDate ?? '')
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
@@ -3460,8 +3467,8 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
               in → <Link
-                href={`/projects/${project.board}?focus=${encodeURIComponent(project.id.slice(project.board.length + 2))}`}
-                title="Open op het bord"
+                href={agendaItemHref}
+                title="Open en licht dit item uit in de agenda"
                 style={{ color, fontWeight: 600, textDecoration: 'none' }}
                 onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
                 onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
