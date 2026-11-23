@@ -62,7 +62,7 @@ import { moveTimelineItem } from '@/lib/moveTimelineItem'
 import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
 import { prepareItemForGroupMove } from '@/lib/groupMove'
-import { suggestSubitemDateRanges, type SuggestedDateRange } from '@/lib/subitemDateSuggestions'
+import { suggestSubitemPlans, type SuggestedDateRange, type SuggestedSubitemPlan } from '@/lib/subitemDateSuggestions'
 import { MASTER_PLANNING_SHEET_URL } from '@/lib/masterPlanningSync'
 
 import { OwnersCell, OwnerUsageCtx, MemberAvatar, ownerHoursDrafts } from './OwnersCell'
@@ -526,11 +526,13 @@ function ProRatableNumberCell({ displayValue, editValue, isProrated, onChange }:
 }
 
 function EditableCell({
-  value, inputType, onChange,
+  value, inputType, onChange, suggestedValue, suggestionTitle,
 }: {
   value:     string | number | null | undefined
   inputType: 'text' | 'number' | 'date' | 'url'
   onChange:  (v: string | number | null) => void
+  suggestedValue?: string | null
+  suggestionTitle?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
@@ -568,6 +570,16 @@ function EditableCell({
       onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
       style={editInput}
     />
+  )
+
+  if (!display && inputType === 'date' && suggestedValue) return (
+    <button type="button" onClick={() => onChange(suggestedValue)}
+      title={suggestionTitle ?? 'Gebruik deze voorgestelde datum'}
+      style={{ width: '100%', minWidth: 0, border: 0, background: 'transparent', padding: '0 4px',
+        color: 'var(--accent)', cursor: 'pointer', fontSize: celFont(11.5), fontWeight: 650,
+        textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      Suggestie · {fmtDate(suggestedValue)}
+    </button>
   )
 
   return (
@@ -1085,7 +1097,7 @@ function subitemAsItem(s: SubItem): BoardItem {
 }
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, suggestedRange, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, suggestedPlan, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -1104,7 +1116,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   onOpenDetail?: () => void
   // Net-aangemaakt subitem? Start dan meteen in edit-mode voor de naam.
   defaultEditName?: boolean
-  suggestedRange?: SuggestedDateRange
+  suggestedPlan?: SuggestedSubitemPlan
   // Column-resize: gebruiker kan vanuit subitem-rijen kolommen verbreden/
   // versmallen, niet alleen vanaf de sticky header bovenaan.
   colWidths?: Record<string, number>
@@ -1176,7 +1188,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           })} />
         </div>
       case 'timeline':
-        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} suggestedRange={suggestedRange} onChange={(s,e) => onUpdate({
+        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} suggestedRange={suggestedPlan} onChange={(s,e) => onUpdate({
           startDate: s, endDate: e,
           ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')) ? { datesOverride: true } : {}),
         })} /></div>
@@ -1204,7 +1216,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       case 'echtGewerkt':
         return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
       case 'deadline':
-        return <div style={cellBorder}><EditableCell value={subitem.deadline ?? null} inputType="date" onChange={v => onUpdate({ deadline: (v as string) || null })} /></div>
+        return <div style={cellBorder}><EditableCell value={subitem.deadline ?? null} inputType="date"
+          suggestedValue={suggestedPlan?.deadline}
+          suggestionTitle={suggestedPlan
+            ? `${Math.round(suggestedPlan.effortDays * 10) / 10} werkdagen voor deze stap · ${suggestedPlan.availableDays} werkdagen beschikbaar${suggestedPlan.isTight ? ' · planning is krap' : ''}`
+            : undefined}
+          onChange={v => onUpdate({ deadline: (v as string) || null })} /></div>
       case 'dagen': {
         // Zelfde gedrag als bij top-level items: altijd afgeleid van
         // estHours ÷ 8, nooit los invulbaar. Zonder deze case viel 'dagen'
@@ -1482,7 +1499,7 @@ function dismissTombstones(
   return [...new Set([...(existing ?? []), id, ...(subitem?.sourceItemId ? [subitem.sourceItemId] : [])])]
 }
 
-function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, parentStartDate, parentEndDate, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
+function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, parentStartDate, parentEndDate, parentDeadline, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
   agendaSort?: AgendaSort
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
@@ -1491,6 +1508,7 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
   parentItemId?: string
   parentStartDate?: string | null
   parentEndDate?: string | null
+  parentDeadline?: string | null
   fromGroupId?: string
   parentExternalLink?: string | null
   onOpenDetail?: (sub: SubItem) => void
@@ -1529,9 +1547,9 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
   const sortedSubitems = useMemo(() => sortSubitems(subitems, sortBy, id =>
     sortingMembers.find(member => member.id === id)?.name ?? teamData.members.find(member => member.id === id)?.name ?? id
   ), [subitems, sortBy, sortingMembers])
-  const suggestedRanges = useMemo(
-    () => suggestSubitemDateRanges(parentStartDate, parentEndDate, subitems),
-    [parentStartDate, parentEndDate, subitems],
+  const suggestedPlans = useMemo(
+    () => suggestSubitemPlans(parentStartDate, parentEndDate, parentDeadline, subitems),
+    [parentStartDate, parentEndDate, parentDeadline, subitems],
   )
   function updateOne(id: string, u: Partial<SubItem>) {
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
@@ -1683,7 +1701,7 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
         </div>
         <SubitemRows subitems={sortedSubitems} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
-          suggestedRanges={suggestedRanges}
+          suggestedPlans={suggestedPlans}
           selectedIds={selectedIds} onToggleSelect={onToggleSelect}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail}
@@ -1724,9 +1742,9 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedRanges, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedPlans, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
-  suggestedRanges?: Record<string, SuggestedDateRange>
+  suggestedPlans?: Record<string, SuggestedSubitemPlan>
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
   fromGroupId?: string
@@ -1759,7 +1777,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedRanges, sele
       {active.map((sub, idx) => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
-          suggestedRange={suggestedRanges?.[sub.id]}
+          suggestedPlan={suggestedPlans?.[sub.id]}
           selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
           onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
@@ -1815,7 +1833,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedRanges, sele
           {doneOpen && done.map((sub, idx) => (
             <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
               rail={rail}
-              suggestedRange={suggestedRanges?.[sub.id]}
+              suggestedPlan={suggestedPlans?.[sub.id]}
               selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
               onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
               isLast={idx === lastDoneIdx}
@@ -2340,7 +2358,7 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
           accentColor={accentColor}
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
-          parentItemId={item.id} parentStartDate={item.startDate} parentEndDate={item.endDate} fromGroupId={groupId}
+          parentItemId={item.id} parentStartDate={item.startDate} parentEndDate={item.endDate} parentDeadline={item.deadline} fromGroupId={groupId}
           parentExternalLink={item.externalLink ?? null}
           onOpenDetail={sub => setOpenSub(sub)}
           colWidths={subColWidths ?? colWidths} onResizeCol={onResizeSubCol ?? onResizeCol}
