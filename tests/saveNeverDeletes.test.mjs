@@ -32,7 +32,7 @@ function deleteCalls() {
 // Functies die mogen verwijderen, met waarom.
 const TOEGESTAAN = {
   purgeNieuwItemPlaceholders: "ruimt alleen rijen op die letterlijk 'Nieuw item' heten",
-  pullBoardFromRemote:        "ruimt alleen lege 'Nieuw item'-placeholders op",
+  refreshBoard:               "ruimt alleen lege 'Nieuw item'-placeholders op",
   purgeTrashItem:             'papierbak legen — expliciete gebruikersactie',
   hardDeleteItems:            "batch hard-delete van lege 'Nieuw item'-rijen",
 }

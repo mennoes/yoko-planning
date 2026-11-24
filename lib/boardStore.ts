@@ -298,10 +298,28 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
   } as BoardItem
 }
 
+const boardReads = new Map<string, Promise<boolean>>()
+const signatures = new Map<string, string>()
+
 export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   if (!supabase) return false
   const userId = await getCurrentUserId()
   if (!userId) return false
+  const scope = JSON.stringify([userId, boardName])
+  const pending = boardReads.get(scope)
+  if (pending) return pending
+  const task = refreshBoard(boardName, userId, scope)
+  boardReads.set(scope, task)
+  try { return await task } finally { boardReads.delete(scope) }
+}
+
+async function refreshBoard(boardName: string, userId: string, scope: string): Promise<boolean> {
+  if (!supabase) return false
+  const { data: signature } = await supabase.rpc('planning_sync_signature', { board_name: boardName })
+  const cached = localStorage.getItem(key(boardName))
+  if (typeof signature === 'string' && signatures.get(scope) === signature &&
+      !localStorage.getItem(dirtyKey(boardName)) && cached !== null &&
+      cached === localStorage.getItem(pulledKey(boardName))) return true
   // Niet-bevestigde lokale wijzigingen mogen NOOIT worden overschreven door
   // een pull. Push 'em eerst omhoog; faalt dat, dan slaan we de pull over.
   // Unconfirmed edits never expire: retry them even after a long offline period.
@@ -425,6 +443,8 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   const serialized = JSON.stringify(groups)
   // Baseline altijd bijwerken — ook als de lokale staat identiek is —
   // zodat we weten dat we tot dit moment in sync zijn met remote.
+  if (typeof signature === 'string') signatures.set(scope, signature)
+  else signatures.delete(scope)
   localStorage.setItem(pulledKey(boardName), serialized)
   if (localStorage.getItem(key(boardName)) === serialized) return true  // no change
   localStorage.setItem(key(boardName), serialized)
