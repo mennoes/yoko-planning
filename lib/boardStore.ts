@@ -1,5 +1,6 @@
 import type { BoardGroup, BoardItem, SubItem } from './boards'
 import { supabase } from './supabase'
+import { readBoardItems } from './boardItemReads'
 import { getCurrentUserId } from './sync'
 import { getBoardIds, getBoardConfig, isCoreBoardId, upsertBoard, defaultColumnsForNewBoard } from './boardsRegistry'
 import { normalizeTitle } from './subitemRules'
@@ -299,7 +300,8 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
 
 export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   if (!supabase) return false
-  if (!await getCurrentUserId()) return false
+  const userId = await getCurrentUserId()
+  if (!userId) return false
   // Niet-bevestigde lokale wijzigingen mogen NOOIT worden overschreven door
   // een pull. Push 'em eerst omhoog; faalt dat, dan slaan we de pull over.
   // Unconfirmed edits never expire: retry them even after a long offline period.
@@ -327,9 +329,8 @@ export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
   const { data: groupRows, error: gErr } = await supabase
     .from('board_groups').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
   if (gErr || !groupRows) return false
-  const { data: itemRows, error: iErr } = await supabase
-    .from('board_items').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
-  if (iErr || !itemRows) return false
+  const itemRows = await readBoardItems(supabase, boardName, userId)
+  if (!itemRows) return false
 
   // Iedereen ziet dezelfde rijen — geen per-user filtering. Sync zorgt
   // dat er één row per Google-event bestaat (canonical via iCalUID),
