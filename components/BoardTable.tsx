@@ -40,7 +40,7 @@ import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
-import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours, commonOwnerIds } from '@/lib/ownerHours'
+import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours, commonOwnerIds, inheritParentOwners } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { itemDatums, subitemsGevenPeriode } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
@@ -1499,13 +1499,16 @@ function dismissTombstones(
   return [...new Set([...(existing ?? []), id, ...(subitem?.sourceItemId ? [subitem.sourceItemId] : [])])]
 }
 
-function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, parentStartDate, parentEndDate, parentDeadline, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
+function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, parentOwnerIds, emptyOwnerCount, onInheritParentOwners, parentStartDate, parentEndDate, parentDeadline, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
   agendaSort?: AgendaSort
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
   parentItemId?: string
+  parentOwnerIds?: string[]
+  emptyOwnerCount?: number
+  onInheritParentOwners?: () => void
   parentStartDate?: string | null
   parentEndDate?: string | null
   parentDeadline?: string | null
@@ -1602,7 +1605,8 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
       return
     }
     const id = Date.now().toString()
-    onUpdate([...subitems, { id, name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
+    const inheritedOwners = [...new Set((parentOwnerIds ?? []).filter(ownerId => ownerId && ownerId !== 'unassigned'))]
+    onUpdate([...subitems, { id, name: 'Nieuw subitem', ownerIds: inheritedOwners, status: '', startDate: null, endDate: null, estHours: 0 }])
     // Onthoud de net-aangemaakte id zodat de rij meteen in edit-mode
     // staat en de gebruiker direct kan typen i.p.v. de placeholder
     // 'Nieuw subitem' apart te moeten aanklikken.
@@ -1611,8 +1615,9 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
   }
   function createMobileSubitem(values: MobileCreateValues) {
     const id = Date.now().toString()
+    const inheritedOwners = [...new Set((parentOwnerIds ?? []).filter(ownerId => ownerId && ownerId !== 'unassigned'))]
     onUpdate([...subitems, {
-      id, name: values.name, ownerIds: values.ownerIds, status: values.status,
+      id, name: values.name, ownerIds: values.ownerIds.length > 0 ? values.ownerIds : inheritedOwners, status: values.status,
       startDate: values.startDate, endDate: values.endDate,
       deadline: values.deadline, estHours: values.estHours,
     }])
@@ -1675,6 +1680,16 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
                     triggerLabel={`Wijzig owners (${selectedSubs.length})`}
                     avatarSize={24} onChange={assignSelectedOwners} />
                 </div>
+              )}
+              {(c.key === 'owner' || c.key === 'ownerIds') && selectedSubs.length === 0 && (parentOwnerIds ?? []).some(ownerId => ownerId && ownerId !== 'unassigned') && (emptyOwnerCount ?? 0) > 0 && onInheritParentOwners && (
+                <button type="button" onClick={event => { event.stopPropagation(); onInheritParentOwners() }}
+                  aria-label={`Neem owners over voor ${emptyOwnerCount} lege subitems`}
+                  title={`Vul ${emptyOwnerCount} lege subitem${emptyOwnerCount === 1 ? '' : 's'} met de owners van het hoofditem`}
+                  style={{ display: 'block', marginTop: 5, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 5,
+                    background: 'var(--bg-hover)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 10.5,
+                    fontWeight: 700, lineHeight: 1.2, textTransform: 'none', letterSpacing: 0, whiteSpace: 'nowrap' }}>
+                  ↓ Neem over
+                </button>
               )}
               {onResizeCol && (
                 <div
@@ -2358,7 +2373,11 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
           accentColor={accentColor}
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
-          parentItemId={item.id} parentStartDate={item.startDate} parentEndDate={item.endDate} parentDeadline={item.deadline} fromGroupId={groupId}
+          parentItemId={item.id}
+          parentOwnerIds={item.ownerIds}
+          emptyOwnerCount={allSubitems.filter(subitem => !(subitem.ownerIds ?? []).some(ownerId => ownerId && ownerId !== 'unassigned')).length}
+          onInheritParentOwners={() => onUpdate({ subitems: inheritParentOwners(allSubitems, item.ownerIds) })}
+          parentStartDate={item.startDate} parentEndDate={item.endDate} parentDeadline={item.deadline} fromGroupId={groupId}
           parentExternalLink={item.externalLink ?? null}
           onOpenDetail={sub => setOpenSub(sub)}
           colWidths={subColWidths ?? colWidths} onResizeCol={onResizeSubCol ?? onResizeCol}
@@ -3275,6 +3294,13 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
     // wijziging op alle geselecteerde items binnen deze groep toe. Cross-
     // group bulk (zelden gebruikt) blijft per-groep.
     const bulk = selectedIds.size > 1 && selectedIds.has(itemId)
+    const updatesForItem = (current: BoardItem): Partial<BoardItem> => {
+      if (!('ownerIds' in updates) || !current.subitems?.length) return updates
+      const inherited = inheritParentOwners(current.subitems, updates.ownerIds ?? [])
+      return inherited.some((subitem, index) => subitem !== current.subitems![index])
+        ? { ...updates, subitems: inherited }
+        : updates
+    }
     // Snapshot voor undo — alleen bij geen-bulk en als er daadwerkelijk
     // iets verandert. Subitem-edits (onUpdate met subitems-array) doen we
     // ook mee, anders is een uren-correctie niet terug te draaien.
@@ -3283,13 +3309,13 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
       ...group,
       items: group.items.map(i => {
         if (!(bulk ? selectedIds.has(i.id) : i.id === itemId)) return i
-        return mergeDetailPatch(i, updates)
+        return mergeDetailPatch(i, updatesForItem(i))
       }),
     })
     const affectedItems = group.items.filter(i => bulk ? selectedIds.has(i.id) : i.id === itemId)
     if ('startDate' in updates || 'endDate' in updates) {
       for (const before of affectedItems) {
-        const after = mergeDetailPatch(before, updates)
+        const after = mergeDetailPatch(before, updatesForItem(before))
         if (before.startDate === after.startDate && before.endDate === after.endDate) continue
         void logItemActivity(before.id, 'wijzigde de timeline',
           `${before.startDate ?? '—'} – ${before.endDate ?? '—'} → ${after.startDate ?? '—'} – ${after.endDate ?? '—'}`,
@@ -5560,6 +5586,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         // raken ownerHours stale wanneer een bulk-owner-wijziging eigenaren
         // wegneemt of een bulk-uren-wijziging totalen verandert.
         if (selectedIds.has(i.id)) {
+          if ('ownerIds' in patch && nextItem.subitems?.length) {
+            const inherited = inheritParentOwners(nextItem.subitems, patch.ownerIds ?? [])
+            if (inherited.some((subitem, index) => subitem !== nextItem.subitems![index])) {
+              nextItem = { ...nextItem, subitems: inherited }
+            }
+          }
           if ('ownerIds' in patch && nextItem.ownerHours && Object.keys(nextItem.ownerHours).length > 0) {
             const active = new Set(patch.ownerIds ?? [])
             const cleaned: Record<string, number> = {}
