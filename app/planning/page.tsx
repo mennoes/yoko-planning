@@ -560,7 +560,7 @@ function TodayMarker({ gridRef, nowOffset, nameW, namePad, zoom, cols, goToday }
   )
 }
 
-function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragEnd, onClick, onReassign }: {
+function DraggableBar({ project, memberId, team, left, width, colW, small, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, hideStartHandle, hideEndHandle, onDragEnd, onClick, onReassign }: {
   project: Project; memberId: string
   team?: TeamMember[]
   left: number; width: number; colW: number
@@ -587,6 +587,8 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // hieronder, zodat de sqrt-curve niet dubbel wordt toegepast.
   barHeightOverride?: number
   topOverride?: number
+  hideStartHandle?: boolean
+  hideEndHandle?: boolean
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick:    () => void
   onReassign?: (project: Project, fromMemberId: string, toMemberId: string) => void
@@ -1064,7 +1066,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           duidelijker op zodra je over de balk hovert. */}
       {!isReadOnly && hoverBar && (
         <>
-          <div
+          {!hideStartHandle && <div
             onMouseEnter={() => setHoverBar(true)}
             onMouseLeave={() => setHoverBar(false)}
             onMouseDown={e => { e.stopPropagation(); startDrag(e, 'start') }}
@@ -1079,8 +1081,8 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               opacity: project.status === 'done' ? 0.6 : 1,
             }}>
             <div style={{ width: 2, height: Math.max(6, barH - 6), background: 'rgba(255,255,255,0.85)', borderRadius: 1 }} />
-          </div>
-          <div
+          </div>}
+          {!hideEndHandle && <div
             onMouseEnter={() => setHoverBar(true)}
             onMouseLeave={() => setHoverBar(false)}
             onMouseDown={e => { e.stopPropagation(); startDrag(e, 'end') }}
@@ -1095,7 +1097,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
               opacity: project.status === 'done' ? 0.6 : 1,
             }}>
             <div style={{ width: 2, height: Math.max(6, barH - 6), background: 'rgba(255,255,255,0.85)', borderRadius: 1 }} />
-          </div>
+          </div>}
         </>
       )}
     </>
@@ -2280,7 +2282,13 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   type SingleBar  = { kind: 'single';  p: Project; left: number; width: number; packWidth: number; isMeeting: boolean; durationDays: number }
   type Bar = SingleBar
 
-  const finalBars: Bar[] = rawBars.map(b => ({ kind: 'single', ...b }))
+  // Knip vóór lane-packing alles weg wat volledig buiten het horizontale
+  // venster ligt. Voorheen bleven honderden oude/toekomstige balken wel
+  // meedoen aan sorteren, packen en renderen terwijl ze achter de sticky
+  // gebruikerskolom of buiten de rechterrand lagen. Dat maakte scrollen
+  // zwaarder en kon de rijhoogte nog door onzichtbare items laten bepalen.
+  const viewportBars = rawBars.filter(b => b.left < viewportEnd && b.left + b.width > viewportStart)
+  const finalBars: Bar[] = viewportBars.map(b => ({ kind: 'single', ...b }))
 
   // Project-balken packen we horizontaal. Gap-aware first-fit: elke lane
   // houdt z'n volledige intervallenlijst bij i.p.v. alleen het einde van
@@ -2461,7 +2469,21 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   // aan de verticale stapeling. Een balk die links achter de sticky
   // gebruikerskolom is verdwenen mag dus ook geen onzichtbare rijhoogte
   // meer reserveren.
-  const visibleBars = bars.filter(b => b.left < viewportEnd && b.left + b.width > viewportStart)
+  // Bewaar uitsluitend de werkelijk zichtbare geometrie in React. Een balk
+  // die deels achter de sticky persoonskolom ligt krijgt dus niet alleen een
+  // masker: zijn DOM-breedte wordt echt ingekort. Daardoor verdwijnen titel,
+  // hit-area en schaduw tegelijk met het verborgen deel.
+  const visibleBars = bars.map(b => {
+    const renderLeft = Math.max(viewportStart, b.left)
+    const renderRight = Math.min(viewportEnd, b.left + b.width)
+    return {
+      ...b,
+      renderLeft,
+      renderWidth: Math.max(1, renderRight - renderLeft),
+      clippedStart: b.left < viewportStart,
+      clippedEnd: b.left + b.width > viewportEnd,
+    }
+  })
   const naturalHeights = new Map<string, number>(
     visibleBars.map(b => [b.p.id, planningBarPixelHeight(BASELINE_AVAIL_H, hoursScaleRatio(b.p, memberId))]),
   )
@@ -2530,9 +2552,9 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   for (const b of placementBars) {
     // Clamp de plaatsingsrechthoek tot het viewport. Alleen het zichtbare
     // stuk kan daar immers met een andere zichtbare balk botsen.
-    const bStart = Math.max(viewportStart, b.left)
-    const bVisualStart = Math.max(viewportStart, b.left)
-    const bVisualEnd = Math.min(viewportEnd, b.left + b.width)
+    const bStart = b.renderLeft
+    const bVisualStart = b.renderLeft
+    const bVisualEnd = b.renderLeft + b.renderWidth
     const bEnd = Math.max(bStart + 1, Math.min(bVisualEnd, b.left + (b.packWidth || b.width)))
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
     const blockers = placed
@@ -2609,6 +2631,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
         const dayStart = new Date(`${day}T00:00:00`)
         const daySlice = colW / 5
         const left = dateToWeekPx(dayStart, gridStart, colW)
+        if (left >= viewportEnd || left + daySlice <= viewportStart) return null
         return (
           <MeetingDaySummary key={`meeting-summary-${day}`} meetings={dayMeetings} memberId={memberId} left={left} width={daySlice}
             onOpen={onBarClick} onDone={p => onMarkDone(p, memberId)} />
@@ -2622,7 +2645,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
           duidelijke palmboom, BOVEN alle andere bars en boven de
           vandaag-lijn. 't is je vrije dag — die mag niet wegvallen
           onder een meeting-pill. */}
-      {vrijBars.map(b => {
+      {vrijBars.filter(b => b.left < viewportEnd && b.left + b.width > viewportStart).map(b => {
         // Vrij-bars zijn óók sleepbaar — Google-gesynchroniseerde events
         // blijven read-only (bewerk via Google Calendar). Inline drag-flow
         // i.p.v. DraggableBar omdat we de full-height groene tape-styling
@@ -2703,6 +2726,9 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
           window.addEventListener('mousemove', onMove)
           window.addEventListener('mouseup', onUp)
         }
+        const renderLeft = Math.max(viewportStart, b.left)
+        const renderRight = Math.min(viewportEnd, b.left + b.width)
+        const renderWidth = Math.max(1, renderRight - renderLeft)
         return (
           <div key={`vrij_${b.p.id}`}
             onPointerEnter={() => setHoveredBarId(b.p.id)}
@@ -2721,7 +2747,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
               // dag ineens hoger ogen dan op een rustige dag.
                position: 'absolute', top: 2 + meetingSummaryHeight,
               height: Math.max(20, BASELINE_AVAIL_H),
-              left: b.left + 2, width: Math.max(20, b.width - 4),
+              left: renderLeft + 2, width: Math.max(1, renderWidth - 4),
               background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
               border: '2px solid rgba(72,130,82,1)',
               borderRadius: 10,
@@ -2744,7 +2770,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
           tile. Nu gaan ze via dezelfde lane-packing als gewone project-
           bars zodat 'n 8u/dag bar overal even hoog oogt en proportioneel
           is met 4u/dag, 2u/dag, etc. */}
-      {bars.map(b => {
+      {visibleBars.map(b => {
         const top = 0
         const wrapperH = height
         const barH = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
@@ -2758,13 +2784,15 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
                  elke bar krijgt gewoon z'n eigen hoogte + gap. barHeight-
                  Override/topOverride komen uit de skyline-berekening
                  hierboven (zie comment daar). */}
-            <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.left} width={b.width} colW={colW}
+            <MeetingHoverBar project={b.p} memberId={memberId} team={team} left={b.renderLeft} width={b.renderWidth} colW={colW}
               laneH={barH + BAR_GAP_S}
               stackH={wrapperH}
               laneIdx={b.lane}
               scaleByHours={zoom === 'week' || zoom === 'maand'}
               barHeightOverride={barH}
-               topOverride={(barTops.get(b.p.id) ?? 0) + meetingSummaryHeight}
+              topOverride={(barTops.get(b.p.id) ?? 0) + meetingSummaryHeight}
+              hideStartHandle={b.clippedStart}
+              hideEndHandle={b.clippedEnd}
               onDragEnd={(s, e) => onDragEnd(b.p, s, e)}
               onClick={() => onBarClick(b.p)}
               onReassign={onReassign} />
@@ -2785,7 +2813,7 @@ const MEETING_BAR_H = 18
 // Eén meeting-bar met hover-popover. Wraps DraggableBar zodat de balk
 // gewoon sleep-/klikbaar blijft, maar bij hover een mini-kaartje toont
 // met naam, tijd, uren en link naar Google Calendar.
-function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, onDragEnd, onClick, onReassign }: {
+function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, stackH, laneIdx, scaleByHours, barHeightOverride, topOverride, hideStartHandle, hideEndHandle, onDragEnd, onClick, onReassign }: {
   project: Project
   memberId: string
   team?: TeamMember[]
@@ -2798,6 +2826,8 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
   scaleByHours?: boolean
   barHeightOverride?: number
   topOverride?: number
+  hideStartHandle?: boolean
+  hideEndHandle?: boolean
   onDragEnd:  (s: string | null, e: string | null) => void
   onClick: () => void
   onReassign?: (p: Project, fromMemberId: string, toMemberId: string) => void
@@ -2913,6 +2943,7 @@ function MeetingHoverBar({ project, memberId, team, left, width, colW, laneH, st
       <DraggableBar project={project} memberId={memberId} team={team} left={left} width={width} colW={colW} small={false}
         laneH={laneH} stackH={stackH} laneIdx={laneIdx} scaleByHours={scaleByHours ?? false}
         barHeightOverride={barHeightOverride} topOverride={topOverride}
+        hideStartHandle={hideStartHandle} hideEndHandle={hideEndHandle}
         onDragEnd={onDragEnd} onClick={toggleMobilePopover} onReassign={onReassign} />
       {hovered && popPos && typeof document !== 'undefined' && createPortal(
         // pointer-events: none op de buitenkant zodat de muis door 't
@@ -5445,7 +5476,11 @@ export default function PlanningPage() {
           // Kleine stappen houden de rijhoogte dicht bij de sticky rand;
           // de settle-update hierboven zet na het scrollen ook de laatste
           // paar pixels exact goed.
-          const step = Math.max(8, Math.min(16, grid.clientWidth * 0.012))
+          // Nu alleen zichtbare balken renderen kunnen we de viewportgrens
+          // vaker bijwerken zonder de hele planning zwaar te maken. Een stap
+          // van 4–8px houdt de linker afsnede tijdens scrollen strak tegen de
+          // sticky gebruikerskolom, in plaats van zichtbaar na te ijlen.
+          const step = Math.max(4, Math.min(8, grid.clientWidth * 0.006))
           const widthChanged = Math.abs((prev.end - prev.start) - grid.clientWidth) > 1
           return prev.end === 0 || widthChanged || Math.abs(prev.start - cur) >= step ? next : prev
         })

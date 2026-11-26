@@ -5,9 +5,11 @@ import { readFileSync } from 'node:fs'
 const source = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
 
 test('planning row height only counts bars inside the current viewport', () => {
-  assert.match(source, /const visibleBars = bars\.filter\(b => b\.left < viewportEnd && b\.left \+ b\.width > viewportStart\)/)
+  assert.match(source, /const viewportBars = rawBars\.filter\(b => b\.left < viewportEnd && b\.left \+ b\.width > viewportStart\)/)
+  assert.match(source, /const visibleBars = bars\.map\(b => \{/)
+  assert.match(source, /renderWidth: Math\.max\(1, renderRight - renderLeft\)/)
   assert.match(source, /const placementBars = \[\.\.\.visibleBars\]/)
-  assert.match(source, /const bStart = Math\.max\(viewportStart, b\.left\)/)
+  assert.match(source, /const bStart = b\.renderLeft/)
   assert.match(source, /const emptyViewportHeight = Math\.max\(8, Math\.round\(10 \* RS\)\)/)
   assert.match(source, /: Math\.max\(emptyViewportHeight, meetingSummaryHeight \+ BAR_GAP_S \* 2\)/)
   assert.doesNotMatch(source, /WINDOW_DAYS/)
@@ -40,8 +42,15 @@ test('off-screen meetings do not reserve a summary lane', () => {
 })
 
 test('horizontal scrolling refreshes the height in small steps and settles exactly', () => {
-  assert.match(source, /const step = Math\.max\(8, Math\.min\(16, grid\.clientWidth \* 0\.012\)\)/)
+  assert.match(source, /const step = Math\.max\(4, Math\.min\(8, grid\.clientWidth \* 0\.006\)\)/)
   assert.match(source, /setVisibleGridRange\(\{ start: settledStart, end: settledStart \+ settledGrid\.clientWidth \}\)/)
   assert.match(source, /data-testid="planning-grid-scroll"/)
   assert.match(source, /data-testid=\{`planning-timeline-\$\{memberId\}`\}/)
+})
+
+test('off-screen bars are not rendered and partial bars use clipped geometry', () => {
+  assert.match(source, /\{visibleBars\.map\(b => \{/)
+  assert.match(source, /left=\{b\.renderLeft\} width=\{b\.renderWidth\}/)
+  assert.match(source, /hideStartHandle=\{b\.clippedStart\}/)
+  assert.match(source, /vrijBars\.filter\(b => b\.left < viewportEnd && b\.left \+ b\.width > viewportStart\)/)
 })
