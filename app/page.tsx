@@ -38,6 +38,7 @@ import teamData  from '@/data/team.json'
 import { loadGroups, saveGroups, pushBoardToRemote } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
 import { homeWeekTone } from '@/lib/homeWeekTone'
+import { isWorkWeekFinished } from '@/lib/homeWorkWeek'
 import { setVrijDaysFromProjects } from '@/lib/vrijDays'
 import {
   CAT_COLOR, CAT_LABEL,
@@ -850,12 +851,22 @@ export default function HomePage() {
     { name: c.project.name, hours: c.hours, source: c.project.source },
     categoryOverrides[c.project.id],
   )
-  const makenContribs = myThisContribs.filter(c => cat(c) === 'maken')
-
   // ── Day-aware partition: where are we in the week? ─────────────────────
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const todayDay  = (today.getDay() + 6) % 7  // Mon=0..Sun=6
   const isWeekend = todayDay >= 5
+
+  // Volg de persoonlijke werkdagen in plaats van alleen za/zo. De lokale
+  // instelling uit Team is leidend; remote profieldagen vullen die aan.
+  const memberNameForSchedule = liveTeam.find(m => m.id === memberId)?.name
+    ?? teamData.members.find(m => m.id === memberId)?.name
+    ?? profile?.name
+  const personalDaysOff = new Set(lookupDaysOff(memberId, memberNameForSchedule))
+  for (const code of profilesById[memberId]?.days_off ?? []) {
+    const dayIndex = NL_DAY_CODES.indexOf(code.toLowerCase())
+    if (dayIndex >= 0) personalDaysOff.add(dayIndex === 0 ? 7 : dayIndex)
+  }
+  const workWeekFinished = isWorkWeekFinished(new Date(), [...personalDaysOff])
 
   type GroupedProj = {
     name: string
@@ -868,28 +879,32 @@ export default function HomePage() {
   // Combine contribs that share a project name (subitems / split bars) into
   // one entry. Track the earliest start day so we can place the project in
   // the past / today / future bucket.
-  const grouped = new Map<string, GroupedProj>()
-  for (const c of makenContribs) {
-    const key = c.project.name.trim().toLowerCase()
-    const sd  = c.project.startDate ? new Date(c.project.startDate) : null
-    const day = sd && !isNaN(sd.getTime()) ? (sd.getDay() + 6) % 7 : null
-    const cur = grouped.get(key)
-    if (cur) {
-      cur.hours += c.hours
-      for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
-      if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
-    } else {
-      const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
-        ? c.project.id.slice(c.project.board.length + 2)
-        : c.project.id
-      const focusId = c.project.completionParentItemId ?? rawItemId
-      const subitem = c.project.completionSubitemId
-      grouped.set(key, { name: c.project.name, hours: c.hours,
-        ownerIds: new Set(c.project.ownerIds || []), startDay: day,
-        href: `/projects/${c.project.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${subitem ? `&subitem=${encodeURIComponent(subitem)}` : ''}` })
+  const groupProjects = (contribs: typeof myThisContribs): GroupedProj[] => {
+    const grouped = new Map<string, GroupedProj>()
+    for (const c of contribs.filter(entry => cat(entry) === 'maken')) {
+      const key = c.project.name.trim().toLowerCase()
+      const sd  = c.project.startDate ? new Date(c.project.startDate) : null
+      const day = sd && !isNaN(sd.getTime()) ? (sd.getDay() + 6) % 7 : null
+      const cur = grouped.get(key)
+      if (cur) {
+        cur.hours += c.hours
+        for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
+        if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
+      } else {
+        const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
+          ? c.project.id.slice(c.project.board.length + 2)
+          : c.project.id
+        const focusId = c.project.completionParentItemId ?? rawItemId
+        const subitem = c.project.completionSubitemId
+        grouped.set(key, { name: c.project.name, hours: c.hours,
+          ownerIds: new Set(c.project.ownerIds || []), startDay: day,
+          href: `/projects/${c.project.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${subitem ? `&subitem=${encodeURIComponent(subitem)}` : ''}` })
+      }
     }
+    return [...grouped.values()].sort((a, b) => b.hours - a.hours)
   }
-  const groupedArr = [...grouped.values()].sort((a, b) => b.hours - a.hours)
+  const groupedArr = groupProjects(myThisContribs)
+  const nextWeekProjects = groupProjects(myNextContribs).slice(0, 3)
 
   const withNamesOf = (p: GroupedProj) => [...p.ownerIds]
     .filter(id => id !== memberId)
@@ -942,7 +957,7 @@ export default function HomePage() {
       .filter(item => !item.done)
       .map(item => ({ ...item, sectionId: section.id, sectionTitle: section.title })))[0]
 
-  const spaceSuggestion = slack >= 4
+  const spaceSuggestion = !workWeekFinished && slack >= 4
     ? suggestedIdea
       ? <>
           Je hebt deze week nog ongeveer {Math.round(slack)}u ruimte. Idee om op te pakken:{' '}
@@ -1500,7 +1515,14 @@ export default function HomePage() {
               zodat het bij langere tekst leesbaar blijft. */}
           <div style={{ fontSize: isMobile ? 14 : 15, color: '#1a1a1a', lineHeight: 1.6, maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <p style={{ margin: 0 }}>
-              {isWeekend ? (
+              {workWeekFinished ? (
+                <>
+                  Je werkweek zit erop.
+                  {groupedArr.length > 0 && (
+                    <> Deze week ging het vooral over {renderProjects(groupedArr.slice(0, 3))}.</>
+                  )}
+                </>
+              ) : isWeekend ? (
                 <>
                   Lekker weekend!
                   {weekendProjects.length > 0 && (
@@ -1529,6 +1551,15 @@ export default function HomePage() {
                 </>
               )}
             </p>
+            {workWeekFinished && (
+              <p style={{ margin: 0 }}>
+                {nextWeekProjects.length > 0 ? (
+                  <>Vooruitkijkend: volgende week staan {renderProjects(nextWeekProjects)} op de planning.</>
+                ) : (
+                  <>Vooruitkijkend: voor volgende week staat nog geen maakwerk ingepland.</>
+                )}
+              </p>
+            )}
             {otherInfo && (
               <p style={{ margin: 0 }}>Daarnaast staat er {otherInfo} op de planning.</p>
             )}
@@ -1549,7 +1580,7 @@ export default function HomePage() {
                 {' '}{behindSchedule.length === 1 ? 'staat' : 'staan'} nog op actief terwijl de einddatum al voorbij is — afronden? ⏳
               </p>
             )}
-            {(tonePast || spaceSuggestion) && (
+            {(!workWeekFinished && (tonePast || spaceSuggestion)) && (
               <p style={{ margin: 0 }}>
                 {tonePast && <>{tonePastCap}, {toneNext}.</>}
                 {spaceSuggestion && <> {spaceSuggestion}</>}

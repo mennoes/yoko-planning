@@ -19,3 +19,12 @@ test('free-time suggestion follows ideas, busy colleagues and todo fallbacks', (
   assert.match(home, /misschien kun je daar iets overnemen/)
   assert.match(home, /In \{suggestedTodo\.sectionTitle\} staat nog/)
 })
+
+test('personal message follows working days and looks ahead after the workweek', () => {
+  assert.match(home, /lookupDaysOff\(memberId, memberNameForSchedule\)/)
+  assert.match(home, /isWorkWeekFinished\(new Date\(\), \[\.\.\.personalDaysOff\]\)/)
+  assert.match(home, /Je werkweek zit erop/)
+  assert.match(home, /Vooruitkijkend: volgende week staan/)
+  assert.match(home, /const nextWeekProjects = groupProjects\(myNextContribs\)/)
+  assert.match(home, /!workWeekFinished && slack >= 4/)
+})
