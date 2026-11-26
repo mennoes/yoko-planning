@@ -625,7 +625,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // real project bars in the timeline at a glance.
   const color   = isVrij
     ? CAT_COLOR.vrij
-    : (small ? '#D8B62E' : (BOARD_COLORS[project.board] ?? '#888'))
+    : (small ? '#D8B62E' : (project.color ?? BOARD_COLORS[project.board] ?? '#888'))
   // Multi-owner-visualisatie: bij meerdere eigenaars splitsen we de
   // bar-fill in horizontale segmenten naar verhouding van ownerHours.
   // 't deel WAT JIJ moet doen krijgt de volle item-kleur, andermans
@@ -913,6 +913,14 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
   // DOM-element bij. CSS positioneert de titel daardoor zonder dat iedere
   // balk een eigen listener en React-render nodig heeft.
   const titleShift = `clamp(0px, calc(var(--planner-scroll-left, 0px) + 8px - ${barLeftAbs}px), ${maxShift}px)`
+  const contextLabel = project.parentName && project.parentName !== project.name
+    ? project.parentName
+    : project.board
+      ? (getBoardConfig(project.board)?.name ?? project.board)
+      : ''
+  const secondLineMinHeight = gezichten.length > 0 ? 44 : 26
+  const showSecondLineContext = scaleByHours && !small && !!contextLabel && barH >= secondLineMinHeight
+  const showInlineContext = scaleByHours && !small && !!contextLabel && barH < secondLineMinHeight
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
@@ -1006,6 +1014,12 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.15 }}>
               {project.name}
             </span>
+            {showInlineContext && (
+              <span title={contextLabel} style={{
+                flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap', opacity: 0.78, fontSize: 9.5, lineHeight: 1.15,
+              }}>↳ {contextLabel}</span>
+            )}
             {project.source === 'google' && <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 'auto' }}>G</span>}
             {isMultiOwner && gezichten.length === 0 && (
               <span aria-label={`${ownerCount} mensen`} title={`${ownerCount} mensen werken aan dit item`}
@@ -1028,7 +1042,7 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
           {/* Alleen als er ook echt ruimte is: staan er gezichten
               onderlangs, dan gaat daar 18px af en liep deze regel eerder
               dwars achter die gezichten langs. */}
-          {scaleByHours && !small && barH >= (gezichten.length > 0 ? 44 : 26) && (
+          {showSecondLineContext && (
             project.parentName && project.parentName !== project.name ? (
               <span style={{
                 fontSize: 9.5, fontWeight: 500,
@@ -1589,7 +1603,7 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
             )
           })}
           {allDayBars.map(b => {
-            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            const color = b.p.color ?? BOARD_COLORS[b.p.board] ?? '#888'
             const top = 6 + b.lane * (allDayLaneH + 4)
             // Hoogte van de pill zelf schaalt met uren/dag (zelfde ratio als
             // de balken in Week/Overzicht-zoom) — top-anchored binnen de
@@ -1797,7 +1811,7 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
               en zachtere achtergrond. Korte meetings die op dezelfde dag
               vallen sitten daar bovenop. */}
           {synthBackgroundBars.map(b => {
-            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            const color = b.p.color ?? BOARD_COLORS[b.p.board] ?? '#888'
             return (
               <div key={`synth-${b.p.id}`}
                 onClick={() => onSelect(b.p)}
@@ -1827,7 +1841,7 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
           })}
           {timedBars.map(b => {
             const isDragging = drag?.p.id === b.p.id
-            const color = BOARD_COLORS[b.p.board] ?? '#888'
+            const color = b.p.color ?? BOARD_COLORS[b.p.board] ?? '#888'
             const owners = b.p.ownerIds.filter(id => id !== 'unassigned').map(id => team.find(t => t.id === id)).filter((m): m is TeamMember => !!m)
             const isGoogle = b.p.source === 'google'
             const renderInfo = isDragging && drag ? (() => {
@@ -2098,8 +2112,10 @@ function SmoothCollapse({ open, children }: { open: boolean; children: React.Rea
         display: 'grid',
         gridTemplateRows: visuallyOpen ? '1fr' : '0fr',
         opacity: visuallyOpen ? 1 : 0,
-        transition: 'grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease',
+        transform: visuallyOpen ? 'translateY(0)' : 'translateY(-4px)',
+        transition: 'grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1), opacity 260ms ease, transform 320ms cubic-bezier(0.22, 1, 0.36, 1)',
         overflow: 'hidden',
+        pointerEvents: visuallyOpen ? 'auto' : 'none',
       }}
     >
       <div style={{ minHeight: 0, overflow: 'hidden' }}>{children}</div>
@@ -2583,7 +2599,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
     <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}/>
     <div data-testid={`planning-timeline-${memberId}`} style={{
       position: 'relative', height, overflow: 'hidden', isolation: 'isolate',
-      transition: 'height 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+      transition: 'height 380ms cubic-bezier(0.22, 1, 0.36, 1)',
       willChange: 'height',
     }}>
       {cols.map((col, i) => (
@@ -3095,7 +3111,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   onDuplicate?: () => void
   onDelete?: () => void
 }) {
-  const color   = BOARD_COLORS[project.board] ?? '#888'
+  const color   = project.color ?? BOARD_COLORS[project.board] ?? '#888'
   // Team = seed (team.json) + live team_members. Eerder gebruikten we
   // alleen de seed, waardoor leden die later via /team-admin zijn
   // toegevoegd (bv. Manuel) niet in de Verdeling-pie verschenen — hun
@@ -3787,7 +3803,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
         <Row label="Bord">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-primary)', background: 'var(--bg-hover)', borderRadius: 14, padding: '3px 10px', border: '1px solid var(--border-light)', fontWeight: 600 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: BOARD_COLORS[project.board] ?? '#888' }} />
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: project.color ?? BOARD_COLORS[project.board] ?? '#888' }} />
               {getBoardConfig(project.board)?.name ?? project.board}
             </span>
             <select
@@ -5395,6 +5411,7 @@ export default function PlanningPage() {
     if (!el) return
     let queued = false
     let saveTimer: number | null = null
+    let settleTimer: number | null = null
     function updateVisibleRange() {
       const gridNow = gridRef.current
       if (!gridNow) return
@@ -5409,6 +5426,13 @@ export default function PlanningPage() {
           window.localStorage.setItem('planning-scroll-left-at', String(Date.now()))
         } catch {}
       }, 160)
+      if (settleTimer != null) window.clearTimeout(settleTimer)
+      settleTimer = window.setTimeout(() => {
+        const settledGrid = gridRef.current
+        if (!settledGrid) return
+        const settledStart = settledGrid.scrollLeft
+        setVisibleGridRange({ start: settledStart, end: settledStart + settledGrid.clientWidth })
+      }, 80)
       if (queued) return
       queued = true
       requestAnimationFrame(() => {
@@ -5418,11 +5442,10 @@ export default function PlanningPage() {
         const cur = grid.scrollLeft
         setVisibleGridRange(prev => {
           const next = { start: cur, end: cur + grid.clientWidth }
-          // De rijhoogte volgt alleen wat zichtbaar is. Update daarom in
-          // kleine stappen tijdens horizontaal scrollen: snel genoeg om
-          // een binnenkomende balk direct ruimte te geven, zonder bij elke
-          // losse pixel de volledige planner opnieuw te renderen.
-          const step = Math.max(24, Math.min(56, grid.clientWidth * 0.04))
+          // Kleine stappen houden de rijhoogte dicht bij de sticky rand;
+          // de settle-update hierboven zet na het scrollen ook de laatste
+          // paar pixels exact goed.
+          const step = Math.max(8, Math.min(16, grid.clientWidth * 0.012))
           const widthChanged = Math.abs((prev.end - prev.start) - grid.clientWidth) > 1
           return prev.end === 0 || widthChanged || Math.abs(prev.start - cur) >= step ? next : prev
         })
@@ -5435,6 +5458,7 @@ export default function PlanningPage() {
       el.removeEventListener('scroll', updateVisibleRange)
       window.removeEventListener('resize', updateVisibleRange)
       if (saveTimer != null) window.clearTimeout(saveTimer)
+      if (settleTimer != null) window.clearTimeout(settleTimer)
     }
   }, [])
 
@@ -7316,7 +7340,11 @@ export default function PlanningPage() {
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars onDeadlineChange={handleDeadlineChange} memberId={member.id} projects={memberProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         rowScale={rowScale}
-                        visibleStartPx={Math.max(0, visibleGridRange.start - nameW - namePad)}
+                        // De sticky kolom en de normale startpositie van de
+                        // tijdlijn zijn even breed; voor de LINKER zichtgrens
+                        // vallen die dus tegen elkaar weg. Alleen rechts moet
+                        // de sticky breedte van het viewport af.
+                        visibleStartPx={Math.max(0, visibleGridRange.start)}
                         visibleEndPx={Math.max(0, visibleGridRange.end - nameW - namePad)}
                         onDragMove={handleDragMove} onDragEnd={handleDragEnd} onBarClick={openDetail}
                         onMarkDone={markProjectDone} onReassign={handleReassignOwner} />

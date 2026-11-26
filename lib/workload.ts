@@ -10,6 +10,8 @@ export type Project = {
   name: string
   board: string
   group?: string
+  /** Actuele kleur van de agendagroep. De vaste bordkleur is fallback. */
+  color?: string
   ownerIds: string[]
   startDate: string | null
   endDate: string | null
@@ -145,6 +147,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
                            : (i.name as string),
               board:     boardName,
               group:     g.name,
+              color:     g.color,
               ownerIds:  owners,
               // Opgeslagen verdelingen kunnen achterlopen wanneer het totaal
               // later is aangepast. Planning mag nooit meer uren tonen dan
@@ -174,7 +177,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               parentProjectId: `${boardName}__${i.id}`,
               parentProject: {
                 id: `${boardName}__${i.id}`, completionParentItemId: i.id as string,
-                name: i.name as string, board: boardName, group:g.name,
+                name: i.name as string, board: boardName, group:g.name, color:g.color,
                 ownerIds: (i.ownerIds as string[]) ?? [],
                 startDate: (i.startDate as string | null) ?? null,
                 endDate: (i.endDate as string | null) ?? null,
@@ -228,6 +231,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
             name: i.name as string,
             board: boardName,
             group: g.name,
+            color: g.color,
             ownerIds,
             startDate: (i.startDate as string | null) ?? (i.endDate as string | null) ?? null,
             endDate: (i.endDate as string | null) ?? (i.startDate as string | null) ?? null,
@@ -261,6 +265,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           name: i.name as string,
           board: boardName,
           group: g.name,
+          color: g.color,
           ownerIds,
           startDate: i.startDate as string | null,
           endDate:   i.endDate   as string | null,
