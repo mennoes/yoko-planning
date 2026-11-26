@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useProfile } from './ProfileContext'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { IconClose, IconComment } from './Icon'
+import { feedbackContextPrefix, feedbackKindFromLabel } from '@/lib/feedbackContext'
 import {
   loadFeedback, submitFeedback, toggleUpvote, deleteFeedback, setFeedbackStatus, onFeedbackChange,
   FEEDBACK_STATUSES,
@@ -53,7 +54,7 @@ export function FeedbackBubble() {
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [filter, setFilter] = useState<FeedbackKind | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | 'all'>('all')
-  const [draftKind, setDraftKind] = useState<FeedbackKind>('idee')
+  const [draftKindLabel, setDraftKindLabel] = useState<string | null>('Idee')
   const [draftBody, setDraftBody] = useState('')
   const defaultContext = pathname.startsWith('/planning') ? 'Planning'
     : pathname.startsWith('/todos') ? "To do's"
@@ -61,10 +62,7 @@ export function FeedbackBubble() {
     : pathname === '/' ? 'Home' : pathname.split('/').filter(Boolean).join(' / ') || 'Home'
   const [draftContext, setDraftContext] = useState<string | null>(defaultContext)
   const [busy, setBusy] = useState(false)
-  const kindInSentence = KIND_LABEL[draftKind].toLocaleLowerCase('nl-NL')
-  const contextPrefix = draftContext
-    ? `Op ${draftContext} pagina heb ik een ${kindInSentence}… `
-    : `Ik heb een ${kindInSentence}… `
+  const contextPrefix = feedbackContextPrefix(draftContext, draftKindLabel)
 
   useEffect(() => {
     setItems(loadFeedback())
@@ -101,7 +99,7 @@ export function FeedbackBubble() {
     setBusy(true)
     try {
       const contextualBody = `${contextPrefix}${body}`
-      await submitFeedback(draftKind, contextualBody, profile?.memberId ?? null, profile?.name ?? null)
+      await submitFeedback(feedbackKindFromLabel(draftKindLabel), contextualBody, profile?.memberId ?? null, profile?.name ?? null)
       setDraftBody('')
     } finally {
       setBusy(false)
@@ -200,8 +198,10 @@ export function FeedbackBubble() {
           }}>
             <div style={{
               display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5,
-              padding: '8px 9px 0', color: 'var(--text-primary)', fontSize: 13.5,
+              padding: '8px 9px 1px', color: 'var(--text-muted)', fontSize: 12,
+              opacity: 0.82,
             }}>
+              <span style={{ fontSize: 10.5, fontWeight: 600 }}>Bijv.</span>
               {draftContext ? (
                 <>
                   <span>Op</span>
@@ -231,23 +231,44 @@ export function FeedbackBubble() {
                       <IconClose size={12} />
                     </button>
                   </span>
-                  <span>pagina heb ik een</span>
+                  <span>{draftKindLabel ? 'pagina heb ik een' : 'pagina'}</span>
                 </>
-              ) : <span>Ik heb een</span>}
-              <select value={draftKind} onChange={e => setDraftKind(e.target.value as FeedbackKind)}
-                aria-label="Soort bericht"
-                style={{
-                  width: `${Math.max(7, KIND_LABEL[draftKind].length + 3)}ch`,
-                  background: 'var(--bg-card)', color: KIND_COLOR[draftKind],
-                  border: '1px solid var(--border)', borderRadius: 6,
-                  padding: '3px 20px 3px 7px', fontSize: 13, fontWeight: 700,
-                  cursor: 'pointer', colorScheme: 'light dark',
+              ) : draftKindLabel ? <span>Ik heb een</span> : null}
+              {draftKindLabel ? (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden',
+                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
                 }}>
-                {(['idee', 'bug', 'feedback'] as FeedbackKind[]).map(kind => (
-                  <option key={kind} value={kind} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>{KIND_LABEL[kind]}</option>
-                ))}
-              </select>
-              <span>…</span>
+                  <input value={draftKindLabel} onChange={e => setDraftKindLabel(e.target.value)}
+                    list="feedback-kind-suggestions" aria-label="Soort bericht (optioneel)"
+                    style={{
+                      width: `${Math.max(6, draftKindLabel.length + 2)}ch`, minWidth: 54,
+                      background: 'transparent', color: 'var(--text-secondary)',
+                      border: 0, borderRadius: 0,
+                      padding: '3px 5px 3px 7px', fontSize: 12.5, fontWeight: 700,
+                      outline: 'none',
+                    }} />
+                  <datalist id="feedback-kind-suggestions">
+                    {['Idee', 'Bug', 'Feedback', 'Vraag', 'Wens', 'Opmerking'].map(value => <option key={value} value={value} />)}
+                  </datalist>
+                  <button type="button" onClick={() => setDraftKindLabel(null)}
+                    aria-label="Soort uit bericht verwijderen" title="Soort verwijderen"
+                    style={{ width: 24, minWidth: 24, padding: 0,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      border: 0, borderLeft: '1px solid var(--border)', background: 'transparent',
+                      color: 'var(--text-muted)', cursor: 'pointer' }}>
+                    <IconClose size={12} />
+                  </button>
+                </span>
+              ) : (
+                <button type="button" onClick={() => setDraftKindLabel('Idee')}
+                  style={{ padding: '3px 7px', border: '1px solid var(--border)',
+                    borderRadius: 6, background: 'var(--bg-card)', color: 'var(--text-muted)',
+                    fontSize: 11.5, cursor: 'pointer' }}>
+                  + soort
+                </button>
+              )}
+              {(draftContext || draftKindLabel) && <span>…</span>}
               {!draftContext && (
                 <button type="button" onClick={() => setDraftContext(defaultContext)}
                   style={{ marginLeft: 'auto', padding: '3px 7px', border: '1px solid var(--border)',
@@ -260,7 +281,7 @@ export function FeedbackBubble() {
             <textarea value={draftBody}
               onChange={e => setDraftBody(e.target.value)}
               onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSubmit() }}
-              placeholder="Schrijf je bericht verder… (Cmd+Enter om te versturen)"
+              placeholder="Schrijf je bericht… (Cmd+Enter om te versturen)"
               rows={3}
               style={{ width: '100%', boxSizing: 'border-box', display: 'block',
                 background: 'transparent', border: 0, padding: '5px 10px 8px',
