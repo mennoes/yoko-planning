@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ItemLink } from '@/lib/boards'
 
 const LINK_TYPES: Array<{ icon: string; label: string; test: (host: string, url: string) => boolean }> = [
@@ -25,6 +25,32 @@ function detectType(url: string): { icon: string; label: string } {
   }
 }
 
+function isPdfLink(link: ItemLink): boolean {
+  if (/\.pdf(?:$|[?#])/i.test(link.url)) return true
+  return /\.pdf$/i.test(link.label?.trim() ?? '')
+}
+
+/**
+ * Drive blokkeert de gewone deel-URL in een iframe. De preview-variant is
+ * juist bedoeld om een PDF in onze item-popup te tonen. Andere PDF-links
+ * kunnen rechtstreeks naar de ingebouwde PDF-viewer van de browser.
+ */
+function pdfPreviewUrl(url: string): string | null {
+  const clean = url.trim()
+  if (!clean) return null
+  try {
+    const parsed = new URL(clean)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null
+    const driveMatch = parsed.hostname === 'drive.google.com'
+      ? parsed.pathname.match(/^\/file\/d\/([^/]+)/)
+      : null
+    if (driveMatch) return `https://drive.google.com/file/d/${driveMatch[1]}/preview`
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
 function newLinkId(): string {
   return 'l-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6)
 }
@@ -42,7 +68,14 @@ export function LinksRow({ links, onChange, readonly }: {
   const [adding, setAdding] = useState(false)
   const [url, setUrl]       = useState('')
   const [label, setLabel]   = useState('')
+  const [previewId, setPreviewId] = useState<string | null>(null)
   const arr = links ?? []
+  const previewLink = arr.find(link => link.id === previewId && isPdfLink(link))
+  const previewUrl = previewLink ? pdfPreviewUrl(previewLink.url) : null
+
+  useEffect(() => {
+    if (previewId && !arr.some(link => link.id === previewId)) setPreviewId(null)
+  }, [arr, previewId])
 
   function add() {
     const u = url.trim()
@@ -76,11 +109,26 @@ export function LinksRow({ links, onChange, readonly }: {
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
               }}>{t.icon}</span>
-              <a href={link.url} target="_blank" rel="noopener noreferrer"
-                title={link.url}
-                style={{ color: 'inherit', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
-                {text}
-              </a>
+              {isPdfLink(link) ? (
+                <button type="button" onClick={() => setPreviewId(current => current === link.id ? null : link.id)}
+                  title="PDF hier bekijken"
+                  aria-expanded={previewId === link.id}
+                  style={{ color: 'inherit', border: 0, padding: 0, background: 'none', cursor: 'pointer',
+                    font: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+                  {text}
+                </button>
+              ) : (
+                <a href={link.url} target="_blank" rel="noopener noreferrer"
+                  title={link.url}
+                  style={{ color: 'inherit', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+                  {text}
+                </a>
+              )}
+              {isPdfLink(link) && (
+                <a href={link.url} target="_blank" rel="noopener noreferrer" aria-label={`${text} apart openen`}
+                  title="Open PDF in een nieuw tabblad"
+                  style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: 12, lineHeight: 1, padding: '1px 3px' }}>↗</a>
+              )}
               {!readonly && (
                 <button onClick={() => remove(link.id)}
                   title="Verwijder"
@@ -126,6 +174,31 @@ export function LinksRow({ links, onChange, readonly }: {
               Annuleer
             </button>
           </div>
+        </div>
+      )}
+      {previewLink && previewUrl && (
+        <div data-pdf-preview style={{
+          overflow: 'hidden', border: '1px solid var(--border)', borderRadius: 10,
+          background: 'var(--bg-base)', minWidth: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ width: 24, height: 24, borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#e4474730', color: '#c83e3e', fontSize: 9, fontWeight: 900 }}>PDF</span>
+            <strong style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {previewLink.label || 'PDF-voorbeeld'}
+            </strong>
+            <a href={previewLink.url} target="_blank" rel="noopener noreferrer"
+              style={{ color: 'var(--text-secondary)', fontSize: 11.5, textDecoration: 'none', fontWeight: 700 }}>
+              Apart openen ↗
+            </a>
+            <button type="button" onClick={() => setPreviewId(null)} aria-label="PDF-voorbeeld sluiten"
+              style={{ border: 0, background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
+          </div>
+          <iframe
+            src={previewUrl}
+            title={`Voorbeeld van ${previewLink.label || 'PDF'}`}
+            loading="lazy"
+            style={{ display: 'block', width: '100%', height: 'min(52vh, 480px)', minHeight: 320, border: 0, background: '#fff' }}
+          />
         </div>
       )}
     </div>

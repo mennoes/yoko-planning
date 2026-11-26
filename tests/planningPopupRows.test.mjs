@@ -28,7 +28,8 @@ test('een agenda hernoemen gaat rechtstreeks naar de database', () => {
 test('het itemvenster toont alleen nog wat we gebruiken', () => {
   assert.doesNotMatch(planning, /<Row label="Categorie">/)
   assert.doesNotMatch(planning, /<Row label="Contactpersoon">/)
-  assert.doesNotMatch(planning, /<Row label="Bestanden">/)
+  assert.match(planning, /<Row label="Bestanden">/)
+  assert.match(planning, /<LinksRow links=\{links\}/)
   assert.doesNotMatch(planning, /<Row label="Journaal">/)
   // Notes blijft — dat dekt wat het journaal ook deed.
   assert.match(planning, /<Row label="Notes">/)

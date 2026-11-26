@@ -39,6 +39,7 @@ import { createNotification } from '@/lib/notificationsStore'
 import { logItemActivity, logItemCreated } from '@/lib/itemActivity'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { ItemHistory } from '@/components/ItemHistory'
+import { LinksRow } from '@/components/LinksRow'
 import { useProfile }    from '@/components/ProfileContext'
 import { useTeamPhotos } from '@/components/TeamPhotosContext'
 import { useTeam } from '@/components/TeamContext'
@@ -3857,6 +3858,11 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </Row>
           )
         })}
+        <Row label="Bestanden">
+          <LinksRow links={links}
+            onChange={next => { setLinks(next); commit({ links: next }) }}
+            readonly={isGoogle} />
+        </Row>
         <Row label="Notes">
           <textarea value={notes} disabled={isGoogle}
             onChange={e => setNotes(e.target.value)}

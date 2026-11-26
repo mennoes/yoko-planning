@@ -19,6 +19,7 @@ import {
   editInput, fmtDate, fmtRange, pushRecentPeriod,
 } from './DateRangeCell'
 import { ItemHistory }    from './ItemHistory'
+import { LinksRow }       from './LinksRow'
 import { useUndo }        from './UndoContext'
 import Link from 'next/link'
 import { GoogleBadge }    from './GoogleBadge'
@@ -3011,6 +3012,16 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
               completionTarget={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
             />
           })()}
+
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                Bestanden
+              </div>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            </div>
+            <LinksRow links={item.links} onChange={links => onUpdate({ links })} readonly={isGoogle} />
+          </div>
 
           <div style={{ marginBottom: 24 }}>
             <label htmlFor={`item-description-${item.id}`} style={{ display: 'block', marginBottom: 8, fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
