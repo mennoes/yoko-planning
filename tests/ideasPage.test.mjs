@@ -31,6 +31,15 @@ test('ideas page supports categories, colors and progress', () => {
   assert.doesNotMatch(page, /setFilter\('doing'\)|setFilter\('done'\)/)
 })
 
+test('a new idea can introduce a reusable custom category', () => {
+  assert.match(page, /Eigen categorie toevoegen/)
+  assert.match(page, /const \[newCategory, setNewCategory\]/)
+  assert.match(page, /const categoryOptions = useMemo/)
+  assert.match(page, /ideas\.map\(idea => idea\.category\.trim\(\)\)/)
+  assert.match(page, /category: selectedCategory/)
+  assert.match(store, /category: row\.category\?\.trim\(\) \|\| 'inspiratie'/)
+})
+
 test('post-its can be moved playfully without turning a drag into an edit', () => {
   assert.match(page, /yoko-ideas-positions-v1/)
   assert.match(page, /onPointerDown=\{event => startNoteDrag\(event, idea\.id\)\}/)

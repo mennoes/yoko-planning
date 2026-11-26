@@ -25,7 +25,7 @@ type NotePositions = Record<string, NotePosition>
 const POSITIONS_KEY = 'yoko-ideas-positions-v1'
 
 function categoryLabel(value: IdeaCategory) {
-  return CATEGORIES.find(category => category.value === value)?.label ?? 'Inspiratie'
+  return CATEGORIES.find(category => category.value === value)?.label ?? value
 }
 
 function relativeDate(value: string) {
@@ -45,6 +45,8 @@ export default function IdeasPage() {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [category, setCategory] = useState<IdeaCategory>('inspiratie')
+  const [creatingCategory, setCreatingCategory] = useState(false)
+  const [newCategory, setNewCategory] = useState('')
   const [color, setColor] = useState(COLORS[0])
   const [editing, setEditing] = useState<IdeaItem | null>(null)
   const [deleteArmed, setDeleteArmed] = useState(false)
@@ -98,18 +100,28 @@ export default function IdeasPage() {
       })
   }, [ideas, categoryFilter, statusFilter])
 
+  const categoryOptions = useMemo(() => {
+    const known = new Set(CATEGORIES.map(item => item.value))
+    const custom = [...new Set(ideas.map(idea => idea.category.trim()).filter(Boolean))]
+      .filter(value => !known.has(value))
+      .sort((a, b) => a.localeCompare(b, 'nl'))
+      .map(value => ({ value, label: value, short: 'Eigen categorie' }))
+    return [...CATEGORIES, ...custom]
+  }, [ideas])
+
   const openCount = ideas.filter(idea => idea.status === 'open').length
   const doingCount = ideas.filter(idea => idea.status === 'doing').length
   const doneCount = ideas.filter(idea => idea.status === 'done').length
 
   async function addIdea(event: FormEvent) {
     event.preventDefault()
-    if (!title.trim() || saving) return
+    const selectedCategory = creatingCategory ? newCategory.trim() : category
+    if (!title.trim() || !selectedCategory || saving) return
     setSaving(true)
     await createIdea({
       title,
       body,
-      category,
+      category: selectedCategory,
       color,
       authorId: profile?.memberId ?? null,
       authorName: profile?.name ?? null,
@@ -117,6 +129,8 @@ export default function IdeasPage() {
     setTitle('')
     setBody('')
     setCategory('inspiratie')
+    setCreatingCategory(false)
+    setNewCategory('')
     setColor(COLORS[Math.floor(Math.random() * COLORS.length)])
     setSaving(false)
     setComposerOpen(false)
@@ -218,7 +232,7 @@ export default function IdeasPage() {
       <section className={styles.toolbar} aria-label="Ideeën filteren">
         <div className={styles.categoryFilters} aria-label="Filter op soort">
           <button className={categoryFilter === 'all' ? styles.activeFilter : ''} onClick={() => setCategoryFilter('all')}>Alles</button>
-          {CATEGORIES.map(item => (
+          {categoryOptions.map(item => (
             <button key={item.value} className={categoryFilter === item.value ? styles.activeFilter : ''} onClick={() => setCategoryFilter(item.value)}>
               {item.label}
             </button>
@@ -246,10 +260,25 @@ export default function IdeasPage() {
             <textarea value={body} onChange={event => setBody(event.target.value)} placeholder="Een gedachte, link of kleine toelichting (mag leeg)" rows={3} />
           </div>
           <div className={styles.composerOptions}>
-            <label>Soort
-              <select value={category} onChange={event => setCategory(event.target.value as IdeaCategory)}>
-                {CATEGORIES.map(item => <option key={item.value} value={item.value}>{item.label} — {item.short}</option>)}
+            <label className={styles.categoryControl}>Soort
+              <select value={creatingCategory ? '__new__' : category} onChange={event => {
+                if (event.target.value === '__new__') {
+                  setCreatingCategory(true)
+                  window.setTimeout(() => document.getElementById('new-idea-category')?.focus(), 0)
+                } else {
+                  setCreatingCategory(false)
+                  setNewCategory('')
+                  setCategory(event.target.value)
+                }
+              }}>
+                {categoryOptions.map(item => <option key={item.value} value={item.value}>{item.label} — {item.short}</option>)}
+                <option value="__new__">＋ Eigen categorie toevoegen…</option>
               </select>
+              {creatingCategory && (
+                <input id="new-idea-category" className={styles.newCategoryInput} value={newCategory}
+                  onChange={event => setNewCategory(event.target.value)}
+                  placeholder="Naam van categorie" maxLength={40} />
+              )}
             </label>
             <fieldset>
               <legend>Kleur</legend>
@@ -257,7 +286,7 @@ export default function IdeasPage() {
                 {COLORS.map(value => <button key={value} type="button" aria-label={`Kleur ${value}`} className={color === value ? styles.selectedSwatch : ''} style={{ background: value }} onClick={() => setColor(value)} />)}
               </div>
             </fieldset>
-            <button className={styles.pinButton} type="submit" disabled={!title.trim() || saving}>{saving ? 'Plakken…' : 'Op de muur'}</button>
+            <button className={styles.pinButton} type="submit" disabled={!title.trim() || (creatingCategory && !newCategory.trim()) || saving}>{saving ? 'Plakken…' : 'Op de muur'}</button>
           </div>
         </form>
       )}
@@ -330,7 +359,7 @@ export default function IdeasPage() {
             <textarea value={editing.body} onChange={event => setEditing({ ...editing, body: event.target.value })} placeholder="Voeg een toelichting toe…" rows={6} />
             <div className={styles.editOptions}>
               <select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value as IdeaCategory })}>
-                {CATEGORIES.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+                {categoryOptions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
               <div className={styles.swatches}>{COLORS.map(value => <button key={value} type="button" aria-label={`Kleur ${value}`} className={editing.color === value ? styles.selectedSwatch : ''} style={{ background: value }} onClick={() => setEditing({ ...editing, color: value })} />)}</div>
             </div>

@@ -1,7 +1,9 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 
-export type IdeaCategory = 'inspiratie' | 'tussendoor' | 'experiment' | 'verbetering'
+// De vier oorspronkelijke categorieën blijven de standaard, maar ideeën
+// mogen ook een zelfgekozen categorienaam bewaren.
+export type IdeaCategory = string
 export type IdeaStatus = 'open' | 'doing' | 'done'
 
 export type IdeaItem = {
@@ -22,7 +24,6 @@ export type IdeaItem = {
 const STORAGE_KEY = 'yoko-ideas-v1'
 const UPDATE_EVENT = 'yoko-ideas-update'
 
-const CATEGORIES: IdeaCategory[] = ['inspiratie', 'tussendoor', 'experiment', 'verbetering']
 const STATUSES: IdeaStatus[] = ['open', 'doing', 'done']
 
 type IdeaRow = {
@@ -45,7 +46,7 @@ function rowToIdea(row: IdeaRow): IdeaItem {
     id: row.id,
     title: row.title,
     body: row.body ?? '',
-    category: CATEGORIES.includes(row.category as IdeaCategory) ? row.category as IdeaCategory : 'inspiratie',
+    category: row.category?.trim() || 'inspiratie',
     color: row.color || '#fff0a8',
     status: STATUSES.includes(row.status as IdeaStatus) ? row.status as IdeaStatus : 'open',
     authorId: row.author_id,
@@ -122,7 +123,7 @@ export async function createIdea(input: {
     id: crypto.randomUUID(),
     title: input.title.trim(),
     body: input.body?.trim() ?? '',
-    category: input.category,
+    category: input.category.trim() || 'inspiratie',
     color: input.color,
     status: 'open',
     authorId: input.authorId,
