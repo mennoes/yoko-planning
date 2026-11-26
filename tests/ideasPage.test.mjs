@@ -24,6 +24,11 @@ test('ideas page supports categories, colors and progress', () => {
   assert.match(page, /COLORS/)
   assert.match(page, /status: 'doing'/)
   assert.match(page, /status: 'done'/)
+  assert.match(page, /<span>Status<\/span>/)
+  assert.match(page, /Open en bezig/)
+  assert.match(page, /<option value="doing">Wordt opgepakt/)
+  assert.match(page, /<option value="done">Klaar/)
+  assert.doesNotMatch(page, /setFilter\('doing'\)|setFilter\('done'\)/)
 })
 
 test('ideas are shared through their own realtime store with a local cache', () => {

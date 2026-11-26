@@ -18,7 +18,8 @@ const CATEGORIES: Array<{ value: IdeaCategory; label: string; short: string }> =
 ]
 
 const COLORS = ['#fff0a8', '#ffd1bd', '#cce9db', '#dce5ff', '#ead7f0', '#f8d3df']
-type Filter = 'all' | IdeaCategory | 'doing' | 'done'
+type CategoryFilter = 'all' | IdeaCategory
+type StatusFilter = 'active' | 'doing' | 'done'
 
 function categoryLabel(value: IdeaCategory) {
   return CATEGORIES.find(category => category.value === value)?.label ?? 'Inspiratie'
@@ -35,7 +36,8 @@ function relativeDate(value: string) {
 export default function IdeasPage() {
   const { profile } = useProfile()
   const [ideas, setIdeas] = useState<IdeaItem[]>([])
-  const [filter, setFilter] = useState<Filter>('all')
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [composerOpen, setComposerOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -61,7 +63,8 @@ export default function IdeasPage() {
   useEffect(() => {
     const ideaId = new URLSearchParams(window.location.search).get('idea')
     if (!ideaId || !ideas.some(idea => idea.id === ideaId)) return
-    setFilter('all')
+    setCategoryFilter('all')
+    setStatusFilter('active')
     setHighlighted(ideaId)
     const scrollTimer = window.setTimeout(() => {
       boardRef.current?.querySelector<HTMLElement>(`[data-idea-id="${CSS.escape(ideaId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -73,18 +76,19 @@ export default function IdeasPage() {
   const visible = useMemo(() => {
     return ideas
       .filter(idea => {
-        if (filter === 'all') return idea.status !== 'done'
-        if (filter === 'doing' || filter === 'done') return idea.status === filter
-        return idea.category === filter && idea.status !== 'done'
+        const categoryMatches = categoryFilter === 'all' || idea.category === categoryFilter
+        const statusMatches = statusFilter === 'active' ? idea.status !== 'done' : idea.status === statusFilter
+        return categoryMatches && statusMatches
       })
       .sort((a, b) => {
         if (a.status !== b.status) return a.status === 'doing' ? -1 : 1
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       })
-  }, [ideas, filter])
+  }, [ideas, categoryFilter, statusFilter])
 
   const openCount = ideas.filter(idea => idea.status === 'open').length
   const doingCount = ideas.filter(idea => idea.status === 'doing').length
+  const doneCount = ideas.filter(idea => idea.status === 'done').length
 
   async function addIdea(event: FormEvent) {
     event.preventDefault()
@@ -104,7 +108,8 @@ export default function IdeasPage() {
     setColor(COLORS[Math.floor(Math.random() * COLORS.length)])
     setSaving(false)
     setComposerOpen(false)
-    setFilter('all')
+    setCategoryFilter('all')
+    setStatusFilter('active')
   }
 
   async function claim(idea: IdeaItem) {
@@ -119,7 +124,8 @@ export default function IdeasPage() {
     const options = ideas.filter(idea => idea.status === 'open')
     if (!options.length) return
     const chosen = options[Math.floor(Math.random() * options.length)]
-    setFilter('all')
+    setCategoryFilter('all')
+    setStatusFilter('active')
     setHighlighted(chosen.id)
     window.setTimeout(() => {
       boardRef.current?.querySelector<HTMLElement>(`[data-idea-id="${chosen.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -144,7 +150,7 @@ export default function IdeasPage() {
       <header className={styles.hero}>
         <div>
           <div className={styles.titleRow}><IconIdea size={30} /><h1>Ideeën</h1></div>
-          <p>Bewaar losse ideeën, inspiratie en kleine experimenten. Pak ze op wanneer er ruimte is.</p>
+          <p>Inspiratie, experimenten en ideeën voor als je ruimte hebt.</p>
         </div>
         <div className={styles.heroActions}>
           <button className={styles.surpriseButton} type="button" onClick={surpriseMe} disabled={openCount === 0}>
@@ -157,14 +163,22 @@ export default function IdeasPage() {
       </header>
 
       <section className={styles.toolbar} aria-label="Ideeën filteren">
-        <button className={filter === 'all' ? styles.activeFilter : ''} onClick={() => setFilter('all')}>Op de muur <span>{openCount + doingCount}</span></button>
-        {CATEGORIES.map(item => (
-          <button key={item.value} className={filter === item.value ? styles.activeFilter : ''} onClick={() => setFilter(item.value)}>
-            {item.label}
-          </button>
-        ))}
-        <button className={filter === 'doing' ? styles.activeFilter : ''} onClick={() => setFilter('doing')}>Wordt opgepakt <span>{doingCount}</span></button>
-        <button className={filter === 'done' ? styles.activeFilter : ''} onClick={() => setFilter('done')}>Klaar</button>
+        <div className={styles.categoryFilters} aria-label="Filter op soort">
+          <button className={categoryFilter === 'all' ? styles.activeFilter : ''} onClick={() => setCategoryFilter('all')}>Alles</button>
+          {CATEGORIES.map(item => (
+            <button key={item.value} className={categoryFilter === item.value ? styles.activeFilter : ''} onClick={() => setCategoryFilter(item.value)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <label className={styles.statusFilter}>
+          <span>Status</span>
+          <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as StatusFilter)}>
+            <option value="active">Open en bezig ({openCount + doingCount})</option>
+            <option value="doing">Wordt opgepakt ({doingCount})</option>
+            <option value="done">Klaar ({doneCount})</option>
+          </select>
+        </label>
       </section>
 
       {composerOpen && (
@@ -201,9 +215,9 @@ export default function IdeasPage() {
             <div className={styles.emptyNotes} aria-hidden>
               <span>podcastvorm?</span><span>klein experiment</span><span>ooit eens maken</span>
             </div>
-            <h2>{filter === 'done' ? 'Nog niets afgerond' : 'Hier is nog alle ruimte.'}</h2>
+            <h2>{statusFilter === 'done' ? 'Nog niets afgerond' : 'Hier is nog alle ruimte.'}</h2>
             <p>Plak het eerste idee op de muur. Een halve gedachte is ook welkom.</p>
-            {filter !== 'done' && <button type="button" onClick={() => setComposerOpen(true)}>+ Eerste idee</button>}
+            {statusFilter !== 'done' && <button type="button" onClick={() => setComposerOpen(true)}>+ Eerste idee</button>}
           </div>
         ) : visible.map((idea, index) => (
           <article
