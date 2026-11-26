@@ -1598,12 +1598,14 @@ export default function Sidebar({
               const active = navigationPathname === item.href
               const NavIcon = MAIN_ICONS[item.href]
               return <Link key={item.id} href={item.href} aria-label={item.label} title={item.label}
-                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)', background: active ? 'var(--control-active)' : 'transparent', textDecoration: 'none' }}>
-                {NavIcon ? <NavIcon size={22} /> : null}
+                className={`sidebar-collapsed-action${active ? ' is-active' : ''}`}
+                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+                <span className="sidebar-collapsed-icon">{NavIcon ? <NavIcon size={22} /> : null}</span>
               </Link>
             })}
             {onOpenSearch && <button onClick={onOpenSearch} aria-label="Zoeken" title="Zoeken (⌘K)"
-              style={{ height: 44, borderRadius: 9, border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconSearch size={20} /></button>}
+              className="sidebar-collapsed-action"
+              style={{ height: 44, borderRadius: 9, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="sidebar-collapsed-icon"><IconSearch size={20} /></span></button>}
           </nav>
           <div style={{ width: '100%', padding: '10px 8px', boxSizing: 'border-box', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <NotificationBell />
