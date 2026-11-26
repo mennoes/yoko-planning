@@ -3,6 +3,7 @@
 import { FormEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useProfile } from '@/components/ProfileContext'
 import { IconClose, IconIdea } from '@/components/Icon'
+import { UserAvatar } from '@/components/UserAvatar'
 import {
   createIdea, deleteIdea, loadIdeas, onIdeasChange, pullIdeas,
   subscribeRemoteIdeas, updateIdea,
@@ -37,6 +38,19 @@ function relativeDate(value: string) {
   if (days === 1) return 'gisteren'
   if (days < 7) return `${days} dagen geleden`
   return new Date(value).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+}
+
+function IdeaAuthor({ id, name, createdAt }: { id: string | null; name: string | null; createdAt: string }) {
+  const label = name || 'Onbekend'
+  const initials = label.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase() || '?'
+  return (
+    <span className={styles.noteAuthor} title={`Ingevoerd door ${label}`}>
+      {id
+        ? <UserAvatar memberId={id} size={22} />
+        : <span className={styles.authorFallback} aria-hidden>{initials}</span>}
+      <span>{name ?? relativeDate(createdAt)}</span>
+    </span>
+  )
 }
 
 export default function IdeasPage() {
@@ -461,7 +475,7 @@ export default function IdeasPage() {
               {idea.body && <p>{idea.body}</p>}
             </button>
             <footer className={styles.noteFooter}>
-              <span>{idea.authorName ? `van ${idea.authorName}` : relativeDate(idea.createdAt)}</span>
+              <IdeaAuthor id={idea.authorId} name={idea.authorName} createdAt={idea.createdAt} />
               {idea.status === 'open' && <button type="button" onClick={() => claim(idea)}>Pak op →</button>}
               {idea.status === 'doing' && <button type="button" onClick={() => updateIdea(idea.id, { status: 'done' })}>{idea.claimedName ?? 'Iemand'} · klaar</button>}
               {idea.status === 'done' && <button type="button" onClick={() => updateIdea(idea.id, { status: 'open', claimedBy: null, claimedName: null })}>Terug op muur</button>}

@@ -47,6 +47,7 @@
 .swatches .selectedSwatch { transform: scale(1.14); box-shadow: 0 0 0 2px #252019; }
 
 .canvasViewport { position: relative; max-width: 1480px; height: max(560px, calc(100vh - 285px)); margin: 0 auto; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background-color: color-mix(in srgb, var(--bg-card) 58%, var(--bg-base)); background-image: radial-gradient(circle, color-mix(in srgb, var(--text-muted) 32%, transparent) 1px, transparent 1.2px); background-size: 24px 24px; cursor: grab; touch-action: none; user-select: none; }
+:global([data-theme="dark"]) .canvasViewport { border-color: color-mix(in srgb, var(--border) 52%, transparent); background-color: color-mix(in srgb, var(--bg-card) 38%, var(--bg-base)); background-image: radial-gradient(circle, rgba(255,255,255,.055) .8px, transparent 1px); }
 .canvasViewport.panning { cursor: grabbing; }
 .canvasHint { position: absolute; z-index: 30; top: 12px; left: 14px; padding: 6px 9px; border-radius: 8px; background: color-mix(in srgb, var(--bg-card) 86%, transparent); color: var(--text-muted); font-size: 12px; font-weight: 700; pointer-events: none; }
 .canvasControls { position: absolute; z-index: 30; left: 14px; bottom: 14px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); box-shadow: var(--surface-shadow); }
@@ -71,6 +72,9 @@
 .note h2 { margin: 21px 0 10px; font-size: 25px; line-height: 1.08; letter-spacing: -.025em; }
 .note p { margin: 0; color: rgba(41,35,27,.78); font-size: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .noteFooter { min-height: 54px; padding: 9px 13px 11px 20px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(41,35,27,.10); font-size: 12px; color: rgba(41,35,27,.58); }
+.noteAuthor { min-width: 0; display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
+.noteAuthor > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.authorFallback { width: 22px; height: 22px; flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(41,35,27,.11); color: rgba(41,35,27,.72); font-size: 9px; font-weight: 900; }
 .noteFooter button { border: 0; border-radius: 999px; background: rgba(255,255,255,.48); color: #29231b; padding: 8px 11px; font: inherit; font-weight: 800; cursor: pointer; }
 .doing { box-shadow: 0 0 0 3px rgba(111,161,129,.42), 0 10px 22px rgba(43,36,18,.12); }
 .highlighted { animation: spotlight 1s ease 2; box-shadow: 0 0 0 5px #1d1b18, 0 25px 55px rgba(43,36,18,.25); }
