@@ -46,7 +46,7 @@ import { useTeam } from '@/components/TeamContext'
 import { upsertTeamMember } from '@/lib/teamStore'
 import { DistributionPie } from '@/components/DistributionPie'
 import { normalizeOwnerHours, rebalanceOwnerHours } from '@/lib/ownerHours'
-import { relevantOwnerHours } from '@/lib/relevantOwners'
+import { effectiveDetailOwners, relevantOwnerHours } from '@/lib/relevantOwners'
 import { useIsMobile }   from '@/lib/useIsMobile'
 import { downloadIcs }   from '@/lib/ical'
 import { logActivity }   from '@/lib/activityLog'
@@ -3202,11 +3202,12 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
   const [editingName, setEditingName] = useState(false)
   const [nameDraft,   setNameDraft]   = useState(project.name)
   const [links,     setLinks]     = useState<import('@/lib/boards').ItemLink[]>((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
+  const detailOwners = effectiveDetailOwners(rawItem, project)
   const [newEntry,  setNewEntry]  = useState('')
   const [ownerHours, setOwnerHours] = useState<Record<string, number>>(
-    (rawItem?.ownerHours as Record<string, number> | undefined) ?? {}
+    detailOwners.ownerHours
   )
-  const [ownerIds, setOwnerIds] = useState<string[]>(rawItem?.ownerIds ?? project.ownerIds)
+  const [ownerIds, setOwnerIds] = useState<string[]>(detailOwners.ownerIds)
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const ownerPickerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -3254,8 +3255,9 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     setContactpersoon((rawItem?.contactpersoon as string) ?? '')
     setJournal((rawItem?.journal as import('@/lib/boards').JournalEntry[]) ?? [])
     setLinks((rawItem?.links as import('@/lib/boards').ItemLink[] | undefined) ?? [])
-    setOwnerHours((rawItem?.ownerHours as Record<string, number> | undefined) ?? {})
-    setOwnerIds(rawItem?.ownerIds ?? project.ownerIds)
+    const nextOwners = effectiveDetailOwners(rawItem, project)
+    setOwnerHours(nextOwners.ownerHours)
+    setOwnerIds(nextOwners.ownerIds)
   }, [project.id, project.startDate, project.endDate, project.estHours, JSON.stringify(project.ownerIds), JSON.stringify(rawItem)]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

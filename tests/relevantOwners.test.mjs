@@ -39,6 +39,24 @@ test('relevant owner hours ignore completed and distant subitems', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(exports.relevantOwnerHours(relevant))), { menno: 8, odette: 5 })
 })
 
+test('planning detail inherits the effective parent owner of an empty subitem', () => {
+  const result = exports.effectiveDetailOwners(
+    { ownerIds: [], ownerHours: {} },
+    { ownerIds: ['menno'], ownerHours: { menno: 10 } },
+  )
+  assert.deepEqual(Array.from(result.ownerIds), ['menno'])
+  assert.deepEqual(JSON.parse(JSON.stringify(result.ownerHours)), { menno: 10 })
+})
+
+test('an explicitly assigned subitem owner still wins in planning detail', () => {
+  const result = exports.effectiveDetailOwners(
+    { ownerIds: ['odette'], ownerHours: { odette: 10 } },
+    { ownerIds: ['menno'], ownerHours: { menno: 10 } },
+  )
+  assert.deepEqual(Array.from(result.ownerIds), ['odette'])
+  assert.deepEqual(JSON.parse(JSON.stringify(result.ownerHours)), { odette: 10 })
+})
+
 test('parent rollup uses the stored distribution of relevant subitems', () => {
   const relevant = [
     sub({ ownerIds: ['menno', 'odette'], estHours: 24, ownerHours: { menno: 2.5, odette: 21.5 } }),

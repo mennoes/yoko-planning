@@ -32,6 +32,31 @@ function orderedUnique(ids: string[]): string[] {
   return [...new Set(ids.filter(id => id && id !== 'unassigned'))]
 }
 
+/**
+ * De planning materialiseert een subitem zonder eigen owner als project met
+ * de owners van het hoofditem. Het detailvenster leest daarnaast de ruwe
+ * subitemrij. Houd die twee bronnen gelijk: alleen echte, toegewezen owners
+ * op het subitem winnen; leeg of alleen `unassigned` valt terug op dezelfde
+ * effectieve owners en urenverdeling als de balk.
+ */
+export function effectiveDetailOwners(
+  raw: { ownerIds?: string[]; ownerHours?: Record<string, number> } | null | undefined,
+  project: { ownerIds: string[]; ownerHours?: Record<string, number> },
+): { ownerIds: string[]; ownerHours: Record<string, number> } {
+  const rawOwners = orderedUnique(raw?.ownerIds ?? [])
+  const projectOwners = orderedUnique(project.ownerIds ?? [])
+  if (rawOwners.length > 0) {
+    return {
+      ownerIds: rawOwners,
+      ownerHours: raw?.ownerHours ?? project.ownerHours ?? {},
+    }
+  }
+  return {
+    ownerIds: projectOwners.length > 0 ? projectOwners : ['unassigned'],
+    ownerHours: project.ownerHours ?? raw?.ownerHours ?? {},
+  }
+}
+
 export type RelevantOwnerRollup = {
   relevantOwnerIds: string[]
   historicalOwnerIds: string[]
