@@ -34,6 +34,7 @@ import {
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
 import { NotificationBell } from './NotificationBell'
+import { AgendaSnapshotPreview, type AgendaSnapshotSummary } from './AgendaSnapshotPreview'
 import { isOnDemoRoute, notifyDemoBlocked } from '@/lib/demoFixtures'
 import {
   type ThemePreference as Theme,
@@ -757,7 +758,8 @@ function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
   onCreate: () => void
 }) {
   const [tab, setTab] = useState<'agendas' | 'history' | 'trash'>('agendas')
-  const [snapshots, setSnapshots] = useState<Array<{ id: string; board_id: string; snapshot_at: string; trigger: string }>>([])
+  const [snapshots, setSnapshots] = useState<AgendaSnapshotSummary[]>([])
+  const [previewSnapshot, setPreviewSnapshot] = useState<AgendaSnapshotSummary | null>(null)
   const [trash, setTrash] = useState<TrashItem[]>([])
   useEffect(() => {
     if (tab !== 'history' || !supabase) return
@@ -765,18 +767,19 @@ function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
       .order('snapshot_at', { ascending: false }).limit(40)
       .then(({ data }) => setSnapshots((data ?? []) as typeof snapshots))
   }, [tab])
-  async function restoreSnapshot(snapshot: { id: string; board_id: string; snapshot_at: string }) {
-    if (!supabase || !window.confirm(`Agenda terugzetten naar ${new Date(snapshot.snapshot_at).toLocaleString('nl-NL')}? De huidige versie wordt eerst bewaard.`)) return
+  async function restoreSnapshot(snapshot: AgendaSnapshotSummary): Promise<boolean> {
+    if (!supabase || !window.confirm(`Agenda terugzetten naar ${new Date(snapshot.snapshot_at).toLocaleString('nl-NL')}? De huidige versie wordt eerst bewaard.`)) return false
     const session = await supabase.auth.getSession()
     const token = session.data.session?.access_token
-    if (!token) return
+    if (!token) return false
     const response = await fetch('/api/snapshots/restore', {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ snapshotId: snapshot.id }),
     })
-    if (!response.ok) { window.alert('Herstellen mislukt. Probeer opnieuw.'); return }
+    if (!response.ok) { window.alert('Herstellen mislukt. Probeer opnieuw.'); return false }
     await pullBoardFromRemote(snapshot.board_id).catch(() => {})
     window.alert(`'${getBoardConfig(snapshot.board_id)?.name ?? snapshot.board_id}' is hersteld.`)
+    return true
   }
   if (typeof document === 'undefined') return null
   const boards = getBoards()
@@ -842,16 +845,18 @@ function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
           </div>
           </>}
 
-          {tab === 'history' && <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          {tab === 'history' && <><div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 9, background: 'var(--bg-base)', color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.45 }}>
+            Open altijd eerst een voorbeeld. Herstellen kan pas vanuit het grote, alleen-lezen venster.
+          </div><div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
             {snapshots.length === 0 ? <div style={{ padding: 14, color: 'var(--text-muted)', fontSize: 13 }}>Geen versies gevonden.</div> : snapshots.map((snap, index) => (
               <div key={snap.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr auto auto', gap: 10, padding: '10px 12px', borderBottom: index < snapshots.length - 1 ? '1px solid var(--border-light)' : 'none', alignItems: 'center' }}>
                 <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{getBoardConfig(snap.board_id)?.name ?? snap.board_id}</strong>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{new Date(snap.snapshot_at).toLocaleString('nl-NL')}</span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{snap.trigger}</span>
-                <button onClick={() => void restoreSnapshot(snap)} style={agendaActionStyle(false)}>Herstel</button>
+                <button onClick={() => setPreviewSnapshot(snap)} style={agendaActionStyle(true)}>Voorbeeld</button>
               </div>
             ))}
-          </div>}
+          </div></>}
 
           {tab === 'trash' && <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
             {trash.length === 0 ? <div style={{ padding: 14, color: 'var(--text-muted)', fontSize: 13 }}>De papierbak is leeg.</div> : trash.map((entry, index) => (
@@ -864,6 +869,7 @@ function AgendaManagerModal({ items, onClose, onHide, onRestore, onCreate }: {
           </div>}
         </div>
       </div>
+      {previewSnapshot && <AgendaSnapshotPreview snapshot={previewSnapshot} onClose={() => setPreviewSnapshot(null)} onRestore={restoreSnapshot} />}
     </>,
     document.body,
   )
