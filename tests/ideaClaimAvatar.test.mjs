@@ -7,10 +7,10 @@ const css = readFileSync(new URL('../app/ideas/ideas.module.css', import.meta.ur
 
 test('claiming an idea places the participant avatar on the note', () => {
   assert.match(page, /className=\{styles\.claimButton\}/)
-  assert.match(page, /<UserAvatar memberId=\{profile\.memberId\} size=\{24\}/)
+  assert.doesNotMatch(page, /<UserAvatar memberId=\{profile\.memberId\} size=\{24\}/)
   assert.match(page, /<UserAvatar memberId=\{idea\.claimedBy\} size=\{26\}/)
   assert.match(page, /Opgepakt door/)
   assert.match(page, /profile\?\.memberId === idea\.claimedBy/)
-  assert.match(css, /\.claimAvatar/)
+  assert.doesNotMatch(css, /\.claimAvatar/)
   assert.match(css, /\.claimedState/)
 })

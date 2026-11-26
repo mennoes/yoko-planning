@@ -28,10 +28,6 @@ const POSITIONS_KEY = 'yoko-ideas-positions-v1'
 const VIEW_KEY = 'yoko-ideas-canvas-view-v1'
 const DEFAULT_VIEW: CanvasView = { x: 0, y: 0, zoom: 1 }
 
-function categoryLabel(value: IdeaCategory) {
-  return CATEGORIES.find(category => category.value === value)?.label ?? value
-}
-
 function relativeDate(value: string) {
   const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000)
   if (days <= 0) return 'vandaag'
@@ -463,19 +459,12 @@ export default function IdeasPage() {
             ><span /><span /><span /><span /><span /><span /></button>
             <button className={styles.noteMain} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} bewerken`}>
               {idea.goal && <div className={styles.noteGoal} title={`Doel: ${idea.goal}`}><strong>{idea.goal}</strong></div>}
-              <div className={styles.noteTop}>
-                <span className={styles.noteCategoryMarker} title={`Categorie: ${categoryLabel(idea.category)}`} aria-label={`Categorie: ${categoryLabel(idea.category)}`} />
-                <span className={styles.notePin} aria-hidden />
-              </div>
               <h2>{idea.title}</h2>
-              {idea.body && <p>{idea.body}</p>}
             </button>
             <footer className={styles.noteFooter}>
               <IdeaAuthor id={idea.authorId} name={idea.authorName} createdAt={idea.createdAt} />
               {idea.status === 'open' && <button className={styles.claimButton} type="button" onClick={() => claim(idea)} title="Ik pak dit idee op" aria-label="Ik pak dit idee op">
-                {profile?.memberId
-                  ? <span className={styles.claimAvatar}><UserAvatar memberId={profile.memberId} size={24} /><span className={styles.claimPlus} aria-hidden>+</span></span>
-                  : <span className={styles.claimFallback} aria-hidden>+</span>}
+                <span className={styles.claimFallback} aria-hidden>+</span>
               </button>}
               {idea.status === 'doing' && <div className={styles.claimedState} title={`Opgepakt door ${idea.claimedName ?? 'iemand'}`} aria-label={`Opgepakt door ${idea.claimedName ?? 'iemand'}`}>
                 {idea.claimedBy ? <UserAvatar memberId={idea.claimedBy} size={26} /> : <span className={styles.claimFallback} aria-hidden>?</span>}

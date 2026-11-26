@@ -51,6 +51,13 @@ test('ideas explain which larger goal they contribute to', () => {
   assert.match(goalsMigration, /add column if not exists goal text not null default ''/)
 })
 
+test('idea cards keep one context line and only show an avatar after claiming', () => {
+  assert.doesNotMatch(page, /\{idea\.body && <p>\{idea\.body\}<\/p>\}/)
+  assert.doesNotMatch(page, /styles\.noteCategoryMarker|styles\.notePin/)
+  assert.doesNotMatch(page, /memberId=\{profile\.memberId\} size=\{24\}/)
+  assert.match(page, /memberId=\{idea\.claimedBy\} size=\{26\}/)
+})
+
 test('post-its can be moved playfully without turning a drag into an edit', () => {
   assert.match(page, /yoko-ideas-positions-v1/)
   assert.match(page, /onPointerDown=\{event => startNoteDrag\(event, idea\.id\)\}/)

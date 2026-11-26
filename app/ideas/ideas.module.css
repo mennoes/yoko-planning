@@ -61,22 +61,17 @@
 .noteMain { flex: 1; width: 100%; padding: 22px 22px 12px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .noteGoal { max-width: calc(100% - 30px); margin: -2px 0 14px; padding-left: 9px; border-left: 2px solid rgba(41,35,27,.45); }
 .noteGoal strong { display: block; color: rgba(41,35,27,.68); font-size: 13px; line-height: 1.25; }
-.noteTop { display: flex; justify-content: space-between; align-items: center; padding-right: 24px; }
-.noteCategoryMarker { width: 18px; height: 5px; border-radius: 999px; background: rgba(41,35,27,.38); }
-.notePin { width: 12px; height: 12px; border-radius: 50%; background: rgba(83,66,32,.24); box-shadow: inset 0 1px 2px rgba(255,255,255,.5); }
 .dragHandle { position: absolute; top: 12px; right: 12px; z-index: 4; width: 28px; height: 28px; display: grid; grid-template-columns: repeat(2, 3px); grid-auto-rows: 3px; place-content: center; gap: 3px; border: 0; border-radius: 8px; background: rgba(255,255,255,.24); padding: 0; cursor: grab; touch-action: none; opacity: .48; transition: opacity .15s ease, background .15s ease; }
 .dragHandle span { width: 3px; height: 3px; border-radius: 50%; background: rgba(41,35,27,.72); }
 .note:hover .dragHandle, .dragHandle:focus-visible { opacity: 1; background: rgba(255,255,255,.5); outline: none; }
 .dragging .dragHandle { cursor: grabbing; opacity: 1; }
-.note h2 { margin: 21px 0 10px; font-size: 25px; line-height: 1.08; letter-spacing: -.025em; }
+.note h2 { margin: 24px 0 10px; font-size: 25px; line-height: 1.08; letter-spacing: -.025em; }
 .note p { margin: 0; color: rgba(41,35,27,.78); font-size: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .noteFooter { min-height: 54px; padding: 9px 13px 11px 20px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(41,35,27,.10); font-size: 12px; color: rgba(41,35,27,.58); }
 .noteAuthor { display: inline-flex; align-items: center; }
 .authorFallback { width: 22px; height: 22px; flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(41,35,27,.11); color: rgba(41,35,27,.72); font-size: 9px; font-weight: 900; }
 .noteFooter button { border: 0; border-radius: 999px; background: rgba(255,255,255,.48); color: #29231b; padding: 8px 11px; font: inherit; font-weight: 800; cursor: pointer; }
 .noteFooter .claimButton { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: rgba(255,255,255,.42); }
-.claimAvatar { position: relative; display: inline-flex; }
-.claimAvatar .claimPlus { position: absolute; right: -3px; bottom: -2px; width: 12px; height: 12px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #29231b; color: #fff; font-size: 10px; font-weight: 900; line-height: 1; box-shadow: 0 0 0 2px var(--note-color); }
 .claimFallback { width: 24px; height: 24px; flex: 0 0 24px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(41,35,27,.35); border-radius: 50%; color: rgba(41,35,27,.65); font-weight: 900; }
 .claimedState { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(111,161,129,.20); }
 .noteFooter .claimedState button { width: 26px; height: 26px; padding: 0; background: rgba(255,255,255,.58); font-size: 14px; }
