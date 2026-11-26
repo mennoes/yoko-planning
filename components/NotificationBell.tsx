@@ -94,8 +94,9 @@ export function NotificationBell({ label }: { label?: string } = {}) {
     refresh()
     const offEvent  = onNotificationsChange(refresh)
     const offRemote = subscribeRemoteNotifications(memberId)
-    // Realtime may reconnect after sleep, or be disabled on older databases.
-    const timer = window.setInterval(() => { if (!document.hidden) refresh() }, 30_000)
+    // Realtime houdt de badge direct bij. Alleen iedere 30 minuten een
+    // herstelcheck voor een gemiste websocket-update; niet meer elke 30 sec.
+    const timer = window.setInterval(() => { if (!document.hidden) refresh() }, 30 * 60_000)
     window.addEventListener('focus', refresh)
     return () => { offEvent(); offRemote(); window.clearInterval(timer); window.removeEventListener('focus', refresh) }
   }, [memberId])

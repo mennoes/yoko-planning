@@ -5203,12 +5203,13 @@ export default function PlanningPage() {
     }
     // Polling is alleen vangnet voor als de Supabase-realtime websocket
     // hapert; primair komen updates direct via subscribeRemoteBoard binnen.
-    // 4 sec was egress-zwaar (~7200 calls/dag/user) — 60 sec is genoeg
-    // als safety-net en bespaart ~93% Supabase-bandwidth.
+    // Realtime is leidend. Elke vijf minuten controleren is alleen een
+    // vangnet voor een weggevallen websocket; focus/zichtbaarheid forceren
+    // daarnaast meteen een verse controle wanneer iemand terugkomt.
     const pollTimer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       pullAll()
-    }, 60000)
+    }, 5 * 60_000)
     function onFocus() { pullAll() }
     function onVisibility() { if (document.visibilityState === 'visible') pullAll() }
     function onPushFail(e: Event) {

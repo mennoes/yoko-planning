@@ -137,6 +137,7 @@ async function deleteCommentRemote(id: string): Promise<void> {
 type VersionedComment = CommentRow & { version: string }
 let commentSnapshot: { userId: string; rows: Map<string, VersionedComment> } | undefined
 const commentReads = new Map<string, Promise<boolean>>()
+let lastRemoteRefreshAt = 0
 
 export async function pullCommentsAll(): Promise<boolean> {
   const userId = await getCurrentUserId()
@@ -189,6 +190,7 @@ async function refreshComments(userId: string): Promise<boolean> {
     return !result.error
   }
   commentSnapshot = { userId, rows: new Map(data.map(row => [row.id, row])) }
+  lastRemoteRefreshAt = Date.now()
   const next: CommentThread[] = (data as CommentRow[]).map(r => ({
     id:        r.id,
     contextId: r.context_id,
@@ -219,14 +221,47 @@ function schedulePull() {
   }, 400)
 }
 
+function applyRemoteChange(payload: { eventType?: string; new?: unknown; old?: unknown }) {
+  const eventType = payload.eventType
+  if (eventType === 'DELETE') {
+    const id = String((payload.old as { id?: unknown } | null)?.id ?? '')
+    if (!id) return
+    const previous = loadComment(id)
+    writeCache(loadAllComments().filter(comment => comment.id !== id), previous?.contextId)
+    lastRemoteRefreshAt = Date.now()
+    return
+  }
+  const row = payload.new as Partial<CommentRow> | null
+  if (!row?.id || !row.context_id || !row.created_at || !Array.isArray(row.thread)) {
+    // Onvolledige realtime-payload (bijvoorbeeld door een oudere
+    // replica-configuratie): herstel één keer via de zuinige versiecheck.
+    schedulePull()
+    return
+  }
+  cacheComment({
+    id: row.id,
+    contextId: row.context_id,
+    quote: row.quote ?? '',
+    thread: row.thread,
+    resolved: row.resolved ?? false,
+    createdAt: row.created_at,
+  })
+  lastRemoteRefreshAt = Date.now()
+}
+
 export function subscribeRemoteComments(): () => void {
   if (!supabase) return () => {}
   if (channel) return () => {}
   channel = supabase.channel('comments:all')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => schedulePull())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, applyRemoteChange)
     .subscribe()
-  const refreshVisible = () => { if (!document.hidden) schedulePull() }
-  const timer = window.setInterval(refreshVisible, 30_000)
+  // Realtime verwerkt een wijziging direct uit de payload. Deze langzame
+  // controle is uitsluitend herstel voor een laptop die geslapen heeft of
+  // tijdelijk z'n websocket kwijt was; vroeger downloadden we elke 30 sec.
+  const refreshVisible = () => {
+    if (!document.hidden && Date.now() - lastRemoteRefreshAt >= 30 * 60_000) schedulePull()
+  }
+  const timer = window.setInterval(refreshVisible, 30 * 60_000)
   window.addEventListener('focus', refreshVisible)
   return () => {
     window.clearInterval(timer)
