@@ -2,9 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
-const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
-const registry = readFileSync(new URL('../lib/boardsRegistry.ts', import.meta.url), 'utf8')
+const source = file => readFileSync(new URL(file, import.meta.url), 'utf8').replaceAll('\r\n', '\n')
+const planning = source('../app/planning/page.tsx')
+const board = source('../components/BoardTable.tsx')
+const registry = source('../lib/boardsRegistry.ts')
 
 test('sorteren op timeline gebruikt dezelfde datum als de kolom toont', () => {
   // Liep dit uit elkaar, dan stond een rij op een onnavolgbare plek: je

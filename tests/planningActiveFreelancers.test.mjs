@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
+const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n')
 
 test('freelancers met werk binnen twee weken blijven zichtbaar', () => {
   assert.match(planning, /const ACTIVE_FREELANCER_DAYS = 14/)

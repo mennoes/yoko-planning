@@ -2,8 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const home = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8')
-const todos = readFileSync(new URL('../app/todos/page.tsx', import.meta.url), 'utf8')
+const source = file => readFileSync(new URL(file, import.meta.url), 'utf8').replaceAll('\r\n', '\n')
+const home = source('../app/page.tsx')
+const todos = source('../app/todos/page.tsx')
 
 test('de kop van Overbelast blijft één regel: titel, week, percentage', () => {
   const card = home.slice(home.indexOf('overload: ('), home.indexOf('overload: (') + 3500)

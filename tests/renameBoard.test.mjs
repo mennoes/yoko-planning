@@ -88,7 +88,7 @@ test('mislukt alles, dan komt de oude naam terug mét reden', async () => {
 })
 
 test('een mislukte hernoeming blijft in beeld staan bij het invoerveld', () => {
-  const sidebar = readFileSync(new URL('../components/Sidebar.tsx', import.meta.url), 'utf8')
+  const sidebar = readFileSync(new URL('../components/Sidebar.tsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n')
   // Een toast is te makkelijk te missen: je ziet de naam terugspringen
   // zonder te weten waarom. De reden blijft nu onder het veld staan en
   // het veld blijft open met wat je typte.

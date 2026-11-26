@@ -2,14 +2,17 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const deadlines = readFileSync(new URL('../components/PlanningDeadlines.tsx', import.meta.url), 'utf8')
-const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
+const source = file => readFileSync(new URL(file, import.meta.url), 'utf8').replaceAll('\r\n', '\n')
+const deadlines = source('../components/PlanningDeadlines.tsx')
+const planning = source('../app/planning/page.tsx')
 
 test('deadline flags have their own lane instead of covering project bars', () => {
   assert.doesNotMatch(deadlines, /anchors/)
   assert.match(deadlines, /height:ends\.length\*22\+4/)
   assert.match(deadlines, /borderBottom:'1px solid var\(--border-light\)'/)
-  assert.match(planning, /<PlanningDeadlines projects=\{owned\}[\s\S]{0,260}?\/>\s*<div[^>]*style=\{\{ position: 'relative', height/)
+  const timeline = planning.slice(planning.indexOf('<PlanningDeadlines projects={owned}'), planning.indexOf('<PlanningDeadlines projects={owned}') + 600)
+  assert.match(timeline, /data-testid=\{`planning-timeline-\$\{memberId\}`\}/)
+  assert.match(timeline, /position: 'relative', height/)
 })
 
 test('day view places all deadlines in the separate lane', () => {

@@ -25,11 +25,13 @@ type Window = {
   includeDone?: boolean
 }
 
-function dayStart(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+function shiftedDayStart(date: Date, offsetDays: number): number {
+  const shifted = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  // Kalenderdagen verschuiven, niet telkens 24 uur optellen. Rond de
+  // winter-/zomertijdwissel duurt een lokale dag soms 23 of 25 uur.
+  shifted.setDate(shifted.getDate() + offsetDays)
+  return shifted.getTime()
 }
-
-const DAY = 86400000
 
 /** Alle member-id's met werk dat het venster raakt. */
 export function membersWithWorkInWindow(projects: Project[], options: Window = {}): Set<string> {
@@ -40,8 +42,8 @@ export function membersWithWorkInWindow(projects: Project[], options: Window = {
     includeDone = true,
   } = options
 
-  const vanaf = dayStart(now) - backDays * DAY
-  const tot   = dayStart(now) + forwardDays * DAY + (DAY - 1)
+  const vanaf = shiftedDayStart(now, -backDays)
+  const tot   = shiftedDayStart(now, forwardDays + 1) - 1
 
   const ids = new Set<string>()
   for (const project of projects) {
@@ -49,8 +51,13 @@ export function membersWithWorkInWindow(projects: Project[], options: Window = {
     const startIso = project.startDate ?? project.endDate
     const endIso   = project.endDate ?? project.startDate
     if (!startIso || !endIso) continue
-    const start = new Date(startIso).getTime()
-    const end   = new Date(endIso).getTime() + (DAY - 1)
+    // YYYY-MM-DD als lokale kalenderdag lezen. `new Date('YYYY-MM-DD')`
+    // wordt als UTC geïnterpreteerd en kan daardoor aan vensterranden één
+    // dag verkeerd vallen.
+    const start = new Date(`${startIso}T00:00:00`).getTime()
+    const endDate = new Date(`${endIso}T00:00:00`)
+    endDate.setDate(endDate.getDate() + 1)
+    const end = endDate.getTime() - 1
     if (Number.isNaN(start) || Number.isNaN(end)) continue
     // Overlapt het werk het venster? Iets dat vóór het venster begon en
     // er nog doorheen loopt telt dus ook mee.

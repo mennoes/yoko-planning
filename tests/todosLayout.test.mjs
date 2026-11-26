@@ -2,8 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const page = readFileSync(new URL('../app/todos/page.tsx', import.meta.url), 'utf8')
-const weekly = readFileSync(new URL('../components/MemberWeeklyTodos.tsx', import.meta.url), 'utf8')
+const source = file => readFileSync(new URL(file, import.meta.url), 'utf8').replaceAll('\r\n', '\n')
+const page = source('../app/todos/page.tsx')
+const weekly = source('../components/MemberWeeklyTodos.tsx')
 
 test('de kop "To do’s" staat niet bij elke collega opnieuw', () => {
   // De pagina heet al To do's en de naam van de persoon staat er direct

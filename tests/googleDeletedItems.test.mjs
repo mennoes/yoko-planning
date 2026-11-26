@@ -2,9 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const sync = readFileSync(new URL('../lib/googleSync.ts', import.meta.url), 'utf8')
-const store = readFileSync(new URL('../lib/boardStore.ts', import.meta.url), 'utf8')
-const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
+const source = file => readFileSync(new URL(file, import.meta.url), 'utf8').replaceAll('\r\n', '\n')
+const sync = source('../lib/googleSync.ts')
+const store = source('../lib/boardStore.ts')
+const board = source('../components/BoardTable.tsx')
 
 test('a Google item you delete yourself stays deleted after a sync', () => {
   // De sync zette deleted_at onvoorwaardelijk op null ("revive"), dus een
