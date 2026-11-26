@@ -14,7 +14,7 @@ test('ideas page is a visual inspiration wall rather than a checkbox list', () =
   assert.match(page, /IconIdea/)
   assert.doesNotMatch(page, /Yoko ideeënmuur|Een goed idee hoeft nog geen taak te zijn/)
   assert.match(page, /Verras me/)
-  assert.match(page, /Pak op →/)
+  assert.match(page, /aria-label="Ik pak dit idee op"/)
   assert.doesNotMatch(page, /type="checkbox"/)
 })
 
@@ -43,8 +43,8 @@ test('a new idea can introduce a reusable custom category', () => {
 })
 
 test('ideas explain which larger goal they contribute to', () => {
-  assert.match(page, /Draagt bij aan/)
-  assert.match(page, /Nog geen doel gekoppeld/)
+  assert.match(page, /idea\.goal && <div className=\{styles\.noteGoal\}/)
+  assert.match(page, /title=\{`Doel: \$\{idea\.goal\}`\}/)
   assert.match(page, /Nieuw doel toevoegen/)
   assert.match(page, /const goalOptions = useMemo/)
   assert.match(store, /goal: row\.goal\?\.trim\(\) \?\? ''/)

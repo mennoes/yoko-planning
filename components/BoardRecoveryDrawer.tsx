@@ -342,6 +342,9 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
           Kies een versie om verdwenen hoofditems, groepen of subitems terug te halen. Bestaande items en
           recente wijzigingen blijven staan; Recovery voegt uitsluitend ontbrekende gegevens toe.
         </p>
+        <p style={{ margin: '5px 0 0', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+          Let op: bewust verwijderde Google-afspraken komen niet terug.
+        </p>
         <button
           onClick={() => void herstelOntbrekendeAfspraken()}
           disabled={busy !== null || loading}
