@@ -137,6 +137,7 @@ function Inner({ children }: { children: ReactNode }) {
       const root = seg[0]
       if (root === 'planning')  return 'Planning'
       if (root === 'todos')     return "To do's"
+      if (root === 'ideas')     return 'Ideeën'
       if (root === 'team')      return 'Team'
       if (root === 'kantoor')   return 'Kantoor'
       if (root === 'activity')  return 'Activiteit'
@@ -450,7 +451,7 @@ function Inner({ children }: { children: ReactNode }) {
 }
 
 // Top-level routes have their own sidebar entry — no back button needed.
-const TOP_LEVEL_ROUTES = new Set(['/', '/planning', '/todos', '/team', '/accounts', '/activity', '/kantoor'])
+const TOP_LEVEL_ROUTES = new Set(['/', '/planning', '/todos', '/ideas', '/team', '/accounts', '/activity', '/kantoor'])
 
 function BackButton({ pathname }: { pathname: string }) {
   const router = useRouter()
