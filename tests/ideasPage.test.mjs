@@ -7,6 +7,7 @@ const store = fs.readFileSync('lib/ideasStore.ts', 'utf8')
 const sidebar = fs.readFileSync('components/Sidebar.tsx', 'utf8')
 const shell = fs.readFileSync('components/AppShell.tsx', 'utf8')
 const migration = fs.readFileSync('supabase/0044_ideas.sql', 'utf8')
+const goalsMigration = fs.readFileSync('supabase/0045_idea_goals_and_custom_categories.sql', 'utf8')
 
 test('ideas page is a visual inspiration wall rather than a checkbox list', () => {
   assert.match(page, /<h1>Ideeën<\/h1>/)
@@ -38,6 +39,16 @@ test('a new idea can introduce a reusable custom category', () => {
   assert.match(page, /ideas\.map\(idea => idea\.category\.trim\(\)\)/)
   assert.match(page, /category: selectedCategory/)
   assert.match(store, /category: row\.category\?\.trim\(\) \|\| 'inspiratie'/)
+  assert.match(goalsMigration, /drop constraint if exists ideas_category_check/)
+})
+
+test('ideas explain which larger goal they contribute to', () => {
+  assert.match(page, /Draagt bij aan/)
+  assert.match(page, /Nog geen doel gekoppeld/)
+  assert.match(page, /Nieuw doel toevoegen/)
+  assert.match(page, /const goalOptions = useMemo/)
+  assert.match(store, /goal: row\.goal\?\.trim\(\) \?\? ''/)
+  assert.match(goalsMigration, /add column if not exists goal text not null default ''/)
 })
 
 test('post-its can be moved playfully without turning a drag into an edit', () => {
@@ -63,6 +74,9 @@ test('ideas are shared through their own realtime store with a local cache', () 
   assert.match(store, /from\('ideas'\)/)
   assert.match(store, /supabase\.channel\('ideas'\)/)
   assert.match(store, /yoko-ideas-v1/)
+  assert.match(store, /yoko-ideas-remote-bootstrap-v1/)
+  assert.match(store, /const missing = local\.filter\(item => !remoteIds\.has\(item\.id\)\)/)
+  assert.match(store, /localStorage\.setItem\(REMOTE_BOOTSTRAP_KEY, 'done'\)/)
 })
 
 test('ideas is a first-class page in navigation and browser history', () => {

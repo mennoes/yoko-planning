@@ -47,6 +47,9 @@ export default function IdeasPage() {
   const [composerOpen, setComposerOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
+  const [goal, setGoal] = useState('')
+  const [creatingGoal, setCreatingGoal] = useState(false)
+  const [newGoal, setNewGoal] = useState('')
   const [category, setCategory] = useState<IdeaCategory>('inspiratie')
   const [creatingCategory, setCreatingCategory] = useState(false)
   const [newCategory, setNewCategory] = useState('')
@@ -134,6 +137,9 @@ export default function IdeasPage() {
     return [...CATEGORIES, ...custom]
   }, [ideas])
 
+  const goalOptions = useMemo(() => [...new Set(ideas.map(idea => idea.goal?.trim()).filter(Boolean) as string[])]
+    .sort((a, b) => a.localeCompare(b, 'nl')), [ideas])
+
   const openCount = ideas.filter(idea => idea.status === 'open').length
   const doingCount = ideas.filter(idea => idea.status === 'doing').length
   const doneCount = ideas.filter(idea => idea.status === 'done').length
@@ -141,11 +147,13 @@ export default function IdeasPage() {
   async function addIdea(event: FormEvent) {
     event.preventDefault()
     const selectedCategory = creatingCategory ? newCategory.trim() : category
+    const selectedGoal = creatingGoal ? newGoal.trim() : goal
     if (!title.trim() || !selectedCategory || saving) return
     setSaving(true)
     await createIdea({
       title,
       body,
+      goal: selectedGoal,
       category: selectedCategory,
       color,
       authorId: profile?.memberId ?? null,
@@ -153,6 +161,9 @@ export default function IdeasPage() {
     })
     setTitle('')
     setBody('')
+    setGoal('')
+    setCreatingGoal(false)
+    setNewGoal('')
     setCategory('inspiratie')
     setCreatingCategory(false)
     setNewCategory('')
@@ -188,6 +199,7 @@ export default function IdeasPage() {
     await updateIdea(editing.id, {
       title: editing.title.trim(),
       body: editing.body.trim(),
+      goal: editing.goal.trim(),
       category: editing.category,
       color: editing.color,
     })
@@ -339,6 +351,27 @@ export default function IdeasPage() {
             <textarea value={body} onChange={event => setBody(event.target.value)} placeholder="Een gedachte, link of kleine toelichting (mag leeg)" rows={3} />
           </div>
           <div className={styles.composerOptions}>
+            <label className={styles.goalControl}>Draagt bij aan
+              <select value={creatingGoal ? '__new_goal__' : goal} onChange={event => {
+                if (event.target.value === '__new_goal__') {
+                  setCreatingGoal(true)
+                  window.setTimeout(() => document.getElementById('new-idea-goal')?.focus(), 0)
+                } else {
+                  setCreatingGoal(false)
+                  setNewGoal('')
+                  setGoal(event.target.value)
+                }
+              }}>
+                <option value="">Nog geen doel</option>
+                {goalOptions.map(value => <option key={value} value={value}>{value}</option>)}
+                <option value="__new_goal__">＋ Nieuw doel toevoegen…</option>
+              </select>
+              {creatingGoal && (
+                <input id="new-idea-goal" className={styles.newCategoryInput} value={newGoal}
+                  onChange={event => setNewGoal(event.target.value)}
+                  placeholder="Bijvoorbeeld: meer eigen werk" maxLength={70} />
+              )}
+            </label>
             <label className={styles.categoryControl}>Soort
               <select value={creatingCategory ? '__new__' : category} onChange={event => {
                 if (event.target.value === '__new__') {
@@ -416,6 +449,10 @@ export default function IdeasPage() {
               }}
             ><span /><span /><span /><span /><span /><span /></button>
             <button className={styles.noteMain} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} bewerken`}>
+              <div className={`${styles.noteGoal} ${idea.goal ? '' : styles.noteGoalEmpty}`}>
+                <span>Draagt bij aan</span>
+                <strong>{idea.goal || 'Nog geen doel gekoppeld'}</strong>
+              </div>
               <div className={styles.noteTop}>
                 <span>{categoryLabel(idea.category)}</span>
                 <span className={styles.notePin} aria-hidden />
@@ -447,6 +484,11 @@ export default function IdeasPage() {
             <span className={styles.editLabel}>Idee aanpassen</span>
             <input value={editing.title} onChange={event => setEditing({ ...editing, title: event.target.value })} maxLength={120} />
             <textarea value={editing.body} onChange={event => setEditing({ ...editing, body: event.target.value })} placeholder="Voeg een toelichting toe…" rows={6} />
+            <label className={styles.editGoal}>Draagt bij aan
+              <input value={editing.goal} onChange={event => setEditing({ ...editing, goal: event.target.value })}
+                placeholder="Welk groter doel helpt dit idee?" maxLength={70} list="idea-goals" />
+              <datalist id="idea-goals">{goalOptions.map(value => <option key={value} value={value} />)}</datalist>
+            </label>
             <div className={styles.editOptions}>
               <select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value as IdeaCategory })}>
                 {categoryOptions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}

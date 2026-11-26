@@ -27,7 +27,7 @@
 .statusFilter { display: flex; align-items: center; gap: 9px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .statusFilter select { min-height: 40px; max-width: 210px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); color: var(--text-primary); padding: 0 34px 0 12px; font: inherit; font-size: 14px; font-weight: 700; text-transform: none; letter-spacing: 0; cursor: pointer; }
 
-.composer { position: relative; max-width: 1040px; margin: 0 auto 34px; padding: 24px; display: grid; grid-template-columns: 190px 1fr; gap: 22px; background: #fff0a8; color: #252019; box-shadow: 0 18px 50px rgba(54, 43, 14, .14); border-radius: 3px 3px 16px 3px; transform: rotate(-.2deg); }
+.composer { position: relative; max-width: 1160px; margin: 0 auto 34px; padding: 24px; display: grid; grid-template-columns: 190px 1fr; gap: 22px; background: #fff0a8; color: #252019; box-shadow: 0 18px 50px rgba(54, 43, 14, .14); border-radius: 3px 3px 16px 3px; transform: rotate(-.2deg); }
 .composerIntro { padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
 .composerIntro span { font-size: 21px; font-weight: 900; }
 .composerIntro small { font-size: 15px; line-height: 1.4; opacity: .64; }
@@ -38,6 +38,7 @@
 .composerOptions label, .composerOptions fieldset { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; color: #514735; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .composerOptions select, .editOptions select { min-height: 40px; border: 1px solid rgba(30,25,15,.18); border-radius: 9px; background: rgba(255,255,255,.48); color: #252019; padding: 0 10px; font: inherit; font-weight: 700; text-transform: none; letter-spacing: 0; }
 .categoryControl { min-width: 240px; }
+.goalControl { min-width: 250px; }
 .composerOptions .newCategoryInput { min-height: 40px; padding: 8px 10px; border: 1px solid rgba(30,25,15,.18); border-radius: 9px; background: rgba(255,255,255,.62); font-size: 15px; font-weight: 700; text-transform: none; letter-spacing: 0; }
 .composerOptions .pinButton { margin-left: auto; }
 .closeButton { position: absolute; top: 13px; right: 13px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255,255,255,.45); color: inherit; cursor: pointer; }
@@ -57,6 +58,10 @@
 .note:hover { transform: translate(var(--note-x), calc(var(--note-y) - 4px)) rotate(0); box-shadow: 0 16px 30px rgba(43,36,18,.14); z-index: 3; }
 .note.dragging { transform: translate(var(--note-x), var(--note-y)) rotate(1.2deg) scale(1.025); transition: none; box-shadow: 0 22px 45px rgba(43,36,18,.25); z-index: 20; }
 .noteMain { flex: 1; width: 100%; padding: 22px 22px 12px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.noteGoal { margin: -3px 25px 16px 0; padding: 8px 10px; display: grid; gap: 2px; border-left: 3px solid rgba(41,35,27,.58); background: rgba(255,255,255,.28); }
+.noteGoal span { color: rgba(41,35,27,.55); font-size: 10px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.noteGoal strong { font-size: 14px; line-height: 1.25; }
+.noteGoalEmpty { border-left-color: rgba(41,35,27,.16); opacity: .58; }
 .noteTop { display: flex; justify-content: space-between; align-items: center; padding-right: 24px; color: rgba(41,35,27,.62); font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .notePin { width: 12px; height: 12px; border-radius: 50%; background: rgba(83,66,32,.24); box-shadow: inset 0 1px 2px rgba(255,255,255,.5); }
 .dragHandle { position: absolute; top: 12px; right: 12px; z-index: 4; width: 28px; height: 28px; display: grid; grid-template-columns: repeat(2, 3px); grid-auto-rows: 3px; place-content: center; gap: 3px; border: 0; border-radius: 8px; background: rgba(255,255,255,.24); padding: 0; cursor: grab; touch-action: none; opacity: .48; transition: opacity .15s ease, background .15s ease; }
@@ -85,6 +90,8 @@
 .editModal { --note-color: #fff0a8; position: relative; width: min(560px, 100%); display: grid; gap: 14px; padding: 34px; background: var(--note-color); color: #29231b; border-radius: 3px 3px 20px 3px; box-shadow: 0 30px 90px rgba(0,0,0,.28); }
 .editLabel { color: rgba(41,35,27,.58); font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
 .editModal input { font-size: 27px; font-weight: 900; }
+.editGoal { display: grid; gap: 6px; color: rgba(41,35,27,.62); font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.editModal .editGoal input { font-size: 15px; font-weight: 700; letter-spacing: 0; text-transform: none; }
 .editOptions { display: flex; justify-content: space-between; gap: 15px; align-items: center; }
 .modalActions { display: flex; justify-content: space-between; margin-top: 8px; }
 .deleteButton { border: 0; background: transparent; color: #a13c34; font: inherit; font-weight: 800; cursor: pointer; }
