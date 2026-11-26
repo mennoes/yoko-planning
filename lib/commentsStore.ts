@@ -134,21 +134,49 @@ async function deleteCommentRemote(id: string): Promise<void> {
   await supabase.from('comments').delete().eq('id', id)
 }
 
+type VersionedComment = CommentRow & { version: string }
+let commentSnapshot: { userId: string; rows: Map<string, VersionedComment> } | undefined
+const commentReads = new Map<string, Promise<boolean>>()
+
 export async function pullCommentsAll(): Promise<boolean> {
+  const userId = await getCurrentUserId()
+  if (!userId || !supabase) return false
+  const pending = commentReads.get(userId)
+  if (pending) return pending
+  const task = refreshComments(userId)
+  commentReads.set(userId, task)
+  try { return await task } finally { commentReads.delete(userId) }
+}
+
+async function refreshComments(userId: string): Promise<boolean> {
   if (!supabase) return false
-  if (!await getCurrentUserId()) return false
-  const data: CommentRow[] = []
+  const previous = commentSnapshot?.userId === userId ? commentSnapshot.rows : undefined
+  const data: VersionedComment[] = []
   for (let offset = 0; ; offset += 500) {
-    const page = await supabase.from('comments').select('*')
+    const columns = previous ? 'id,version:xmin' : '*,version:xmin'
+    const page = await supabase.from('comments').select(columns)
       .order('created_at', { ascending: false }).order('id').range(offset, offset + 499)
     if (page.error || !page.data) return false
-    data.push(...page.data as CommentRow[])
+    if (!previous) data.push(...page.data as unknown as VersionedComment[])
+    else {
+      const changed: string[] = []
+      for (const row of page.data as unknown as VersionedComment[]) {
+        const cached = previous.get(row.id)
+        if (cached && cached.version === row.version) data.push(cached)
+        else changed.push(row.id)
+      }
+      for (let i = 0; i < changed.length; i += 50) {
+        const result = await supabase.from('comments').select('*,version:xmin').in('id', changed.slice(i, i + 50))
+        if (result.error || !result.data) return false
+        data.push(...result.data as unknown as VersionedComment[])
+      }
+    }
     if (page.data.length < 500) break
   }
-  if (data.length === 0) {
+  if (await getCurrentUserId() !== userId) return false
+  if (data.length === 0 && !previous && loadAllComments().length > 0) {
     // Remote leeg — upload de huidige lokale cache (eerste sync).
     const local = loadAllComments()
-    if (local.length === 0) return true
     const rows = local.map(c => ({
       id:           c.id,
       context_kind: inferKind(c.contextId),
@@ -157,9 +185,10 @@ export async function pullCommentsAll(): Promise<boolean> {
       thread:       c.thread,
       resolved:     c.resolved,
     }))
-    await supabase.from('comments').upsert(rows, { onConflict: 'id' })
-    return true
+    const result = await supabase.from('comments').upsert(rows, { onConflict: 'id' })
+    return !result.error
   }
+  commentSnapshot = { userId, rows: new Map(data.map(row => [row.id, row])) }
   const next: CommentThread[] = (data as CommentRow[]).map(r => ({
     id:        r.id,
     contextId: r.context_id,

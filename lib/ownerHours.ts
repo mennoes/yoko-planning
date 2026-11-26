@@ -104,3 +104,40 @@ export function commonOwnerIds(items: { ownerIds?: string[] }[]): string[] {
   return [...new Set(items[0]?.ownerIds ?? [])].filter(id =>
     id !== 'unassigned' && items.every(item => item.ownerIds?.includes(id)))
 }
+
+type OwnerAssignableSubitem = {
+  id: string
+  ownerIds?: string[]
+  ownerHours?: Record<string, number>
+  estHours?: number
+  source?: 'manual' | 'google'
+  externalLink?: string | null
+  ownerIdsLocked?: boolean
+}
+
+/**
+ * Neem de owners van een hoofditem alleen over op subitems die nog echt
+ * niemand hebben. Een bewust toegewezen subitem blijft dus altijd met rust.
+ *
+ * Google-subitems worden meteen gelockt: anders zou de volgende sync de
+ * handmatige overname weer vervangen door de deelnemers uit Calendar.
+ */
+export function inheritParentOwners<T extends OwnerAssignableSubitem>(
+  subitems: T[],
+  parentOwnerIds: string[],
+): T[] {
+  const owners = [...new Set(parentOwnerIds.filter(id => id && id !== 'unassigned'))]
+  if (owners.length === 0) return subitems
+
+  return subitems.map(subitem => {
+    const assigned = (subitem.ownerIds ?? []).some(id => id && id !== 'unassigned')
+    if (assigned) return subitem
+    const google = subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')
+    return {
+      ...subitem,
+      ownerIds: [...owners],
+      ownerHours: normalizeOwnerHours(owners, Number(subitem.estHours) || 0, subitem.ownerHours),
+      ...(google ? { ownerIdsLocked: true } : {}),
+    }
+  })
+}

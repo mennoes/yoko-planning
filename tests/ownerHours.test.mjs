@@ -93,3 +93,43 @@ test('bulk owners start with the shared selection, including multiple owners', (
   assert.deepEqual([...exports.commonOwnerIds([{ ownerIds: ['a', 'b'] }, { ownerIds: ['a', 'b', 'c'] }])], ['a', 'b'])
   assert.deepEqual([...exports.commonOwnerIds([])], [])
 })
+
+test('parent owners fill only empty subitems', () => {
+  const assigned = { id: 'kept', ownerIds: ['odette'], estHours: 4, ownerHours: { odette: 4 } }
+  const result = exports.inheritParentOwners([
+    { id: 'empty', ownerIds: [], estHours: 8 },
+    { id: 'placeholder', ownerIds: ['unassigned'], estHours: 4 },
+    assigned,
+  ], ['menno', 'menno', 'unassigned'])
+
+  assert.deepEqual([...result[0].ownerIds], ['menno'])
+  assert.deepEqual({ ...result[0].ownerHours }, { menno: 8 })
+  assert.deepEqual([...result[1].ownerIds], ['menno'])
+  assert.deepEqual({ ...result[1].ownerHours }, { menno: 4 })
+  assert.equal(result[2], assigned)
+})
+
+test('multiple inherited owners get an exact hours distribution', () => {
+  const [result] = exports.inheritParentOwners([
+    { id: 'empty', ownerIds: [], estHours: 7 },
+  ], ['menno', 'take'])
+
+  assert.deepEqual([...result.ownerIds], ['menno', 'take'])
+  assert.equal(Object.values(result.ownerHours).reduce((sum, value) => sum + value, 0), 7)
+})
+
+test('inherited owners on Google subitems are locked against the next sync', () => {
+  const [result] = exports.inheritParentOwners([
+    { id: 'si_g_1', source: 'google', ownerIds: [], estHours: 2 },
+  ], ['menno'])
+
+  assert.deepEqual([...result.ownerIds], ['menno'])
+  assert.equal(result.ownerIdsLocked, true)
+})
+
+test('no usable parent owner leaves the original subitem array untouched', () => {
+  const input = [{ id: 'empty', ownerIds: [], estHours: 2 }]
+  const result = exports.inheritParentOwners(input, ['unassigned'])
+  assert.equal(result, input)
+  assert.equal(result[0], input[0])
+})

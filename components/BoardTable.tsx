@@ -41,7 +41,7 @@ import { MentionTextarea } from './MentionTextarea'
 import { ReactionRow }     from './ReactionRow'
 import { useIsMobile }     from '@/lib/useIsMobile'
 import { DistributionPie } from './DistributionPie'
-import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours, commonOwnerIds } from '@/lib/ownerHours'
+import { normalizeOwnerHours, rebalanceOwnerHours, scaleOwnerHours, commonOwnerIds, inheritParentOwners } from '@/lib/ownerHours'
 import { autoMoveDoneItems } from '@/lib/doneAutoMove'
 import { itemDatums, subitemsGevenPeriode } from '@/lib/itemDatums'
 import { BoardActivityDrawer } from './BoardActivityDrawer'
@@ -63,7 +63,7 @@ import { moveTimelineItem } from '@/lib/moveTimelineItem'
 import { splitCompletedArchive } from '@/lib/completedArchive'
 import { itemRollupHours } from '@/lib/itemHours'
 import { prepareItemForGroupMove } from '@/lib/groupMove'
-import { suggestSubitemDateRanges, type SuggestedDateRange } from '@/lib/subitemDateSuggestions'
+import { suggestSubitemPlans, type SuggestedDateRange, type SuggestedSubitemPlan } from '@/lib/subitemDateSuggestions'
 import { MASTER_PLANNING_SHEET_URL } from '@/lib/masterPlanningSync'
 
 import { OwnersCell, OwnerUsageCtx, MemberAvatar, ownerHoursDrafts } from './OwnersCell'
@@ -527,11 +527,13 @@ function ProRatableNumberCell({ displayValue, editValue, isProrated, onChange }:
 }
 
 function EditableCell({
-  value, inputType, onChange,
+  value, inputType, onChange, suggestedValue, suggestionTitle,
 }: {
   value:     string | number | null | undefined
   inputType: 'text' | 'number' | 'date' | 'url'
   onChange:  (v: string | number | null) => void
+  suggestedValue?: string | null
+  suggestionTitle?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [draft,   setDraft]   = useState('')
@@ -569,6 +571,16 @@ function EditableCell({
       onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
       style={editInput}
     />
+  )
+
+  if (!display && inputType === 'date' && suggestedValue) return (
+    <button type="button" onClick={() => onChange(suggestedValue)}
+      title={suggestionTitle ?? 'Gebruik deze voorgestelde datum'}
+      style={{ width: '100%', minWidth: 0, border: 0, background: 'transparent', padding: '0 4px',
+        color: 'var(--accent)', cursor: 'pointer', fontSize: celFont(11.5), fontWeight: 650,
+        textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      Suggestie · {fmtDate(suggestedValue)}
+    </button>
   )
 
   return (
@@ -1086,7 +1098,7 @@ function subitemAsItem(s: SubItem): BoardItem {
 }
 
 // ─── Subitem rij ──────────────────────────────────────────────────────────────
-function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, suggestedRange, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
+function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelect, isLast, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, defaultEditName, suggestedPlan, colWidths, onResizeCol, onUpdate, onDelete, onReorderBefore }: {
   subitem: SubItem; cols: ColumnDef[]; gridTemplate: string
   rail?: string
   selected?: boolean
@@ -1105,7 +1117,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
   onOpenDetail?: () => void
   // Net-aangemaakt subitem? Start dan meteen in edit-mode voor de naam.
   defaultEditName?: boolean
-  suggestedRange?: SuggestedDateRange
+  suggestedPlan?: SuggestedSubitemPlan
   // Column-resize: gebruiker kan vanuit subitem-rijen kolommen verbreden/
   // versmallen, niet alleen vanaf de sticky header bovenaan.
   colWidths?: Record<string, number>
@@ -1177,7 +1189,7 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
           })} />
         </div>
       case 'timeline':
-        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} suggestedRange={suggestedRange} onChange={(s,e) => onUpdate({
+        return <div style={cellBorder}><DateRangeCell startDate={subitem.startDate} endDate={subitem.endDate} suggestedRange={suggestedPlan} onChange={(s,e) => onUpdate({
           startDate: s, endDate: e,
           ...((subitem.source === 'google' || !!subitem.externalLink || subitem.id.startsWith('si_g_')) ? { datesOverride: true } : {}),
         })} /></div>
@@ -1205,7 +1217,12 @@ function SubItemRow({ subitem, cols, gridTemplate, rail, selected, onToggleSelec
       case 'echtGewerkt':
         return <div style={cellBorder}><EditableCell value={subitem.echtGewerkt ?? null} inputType="number" onChange={v => onUpdate({ echtGewerkt: v != null ? (v as number) : undefined })} /></div>
       case 'deadline':
-        return <div style={cellBorder}><EditableCell value={subitem.deadline ?? null} inputType="date" onChange={v => onUpdate({ deadline: (v as string) || null })} /></div>
+        return <div style={cellBorder}><EditableCell value={subitem.deadline ?? null} inputType="date"
+          suggestedValue={suggestedPlan?.deadline}
+          suggestionTitle={suggestedPlan
+            ? `${Math.round(suggestedPlan.effortDays * 10) / 10} werkdagen voor deze stap · ${suggestedPlan.availableDays} werkdagen beschikbaar${suggestedPlan.isTight ? ' · planning is krap' : ''}`
+            : undefined}
+          onChange={v => onUpdate({ deadline: (v as string) || null })} /></div>
       case 'dagen': {
         // Zelfde gedrag als bij top-level items: altijd afgeleid van
         // estHours ÷ 8, nooit los invulbaar. Zonder deze case viel 'dagen'
@@ -1483,15 +1500,19 @@ function dismissTombstones(
   return [...new Set([...(existing ?? []), id, ...(subitem?.sourceItemId ? [subitem.sourceItemId] : [])])]
 }
 
-function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, parentStartDate, parentEndDate, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
+function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor, selectedIds, onToggleSelect, parentItemId, parentOwnerIds, emptyOwnerCount, onInheritParentOwners, parentStartDate, parentEndDate, parentDeadline, fromGroupId, parentExternalLink, onOpenDetail, colWidths, onResizeCol, dismissedInstanceIds, onUpdate }: {
   agendaSort?: AgendaSort
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string
   accentColor?: string
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
   parentItemId?: string
+  parentOwnerIds?: string[]
+  emptyOwnerCount?: number
+  onInheritParentOwners?: () => void
   parentStartDate?: string | null
   parentEndDate?: string | null
+  parentDeadline?: string | null
   fromGroupId?: string
   parentExternalLink?: string | null
   onOpenDetail?: (sub: SubItem) => void
@@ -1530,9 +1551,9 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
   const sortedSubitems = useMemo(() => sortSubitems(subitems, sortBy, id =>
     sortingMembers.find(member => member.id === id)?.name ?? teamData.members.find(member => member.id === id)?.name ?? id
   ), [subitems, sortBy, sortingMembers])
-  const suggestedRanges = useMemo(
-    () => suggestSubitemDateRanges(parentStartDate, parentEndDate, subitems),
-    [parentStartDate, parentEndDate, subitems],
+  const suggestedPlans = useMemo(
+    () => suggestSubitemPlans(parentStartDate, parentEndDate, parentDeadline, subitems),
+    [parentStartDate, parentEndDate, parentDeadline, subitems],
   )
   function updateOne(id: string, u: Partial<SubItem>) {
     // Bulk-bewustzijn: als deze subitem in een grotere selectie zit, pas de
@@ -1585,7 +1606,8 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
       return
     }
     const id = Date.now().toString()
-    onUpdate([...subitems, { id, name: 'Nieuw subitem', ownerIds: [], status: '', startDate: null, endDate: null, estHours: 0 }])
+    const inheritedOwners = [...new Set((parentOwnerIds ?? []).filter(ownerId => ownerId && ownerId !== 'unassigned'))]
+    onUpdate([...subitems, { id, name: 'Nieuw subitem', ownerIds: inheritedOwners, status: '', startDate: null, endDate: null, estHours: 0 }])
     // Onthoud de net-aangemaakte id zodat de rij meteen in edit-mode
     // staat en de gebruiker direct kan typen i.p.v. de placeholder
     // 'Nieuw subitem' apart te moeten aanklikken.
@@ -1594,8 +1616,9 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
   }
   function createMobileSubitem(values: MobileCreateValues) {
     const id = Date.now().toString()
+    const inheritedOwners = [...new Set((parentOwnerIds ?? []).filter(ownerId => ownerId && ownerId !== 'unassigned'))]
     onUpdate([...subitems, {
-      id, name: values.name, ownerIds: values.ownerIds, status: values.status,
+      id, name: values.name, ownerIds: values.ownerIds.length > 0 ? values.ownerIds : inheritedOwners, status: values.status,
       startDate: values.startDate, endDate: values.endDate,
       deadline: values.deadline, estHours: values.estHours,
     }])
@@ -1659,6 +1682,16 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
                     avatarSize={24} onChange={assignSelectedOwners} />
                 </div>
               )}
+              {(c.key === 'owner' || c.key === 'ownerIds') && selectedSubs.length === 0 && (parentOwnerIds ?? []).some(ownerId => ownerId && ownerId !== 'unassigned') && (emptyOwnerCount ?? 0) > 0 && onInheritParentOwners && (
+                <button type="button" onClick={event => { event.stopPropagation(); onInheritParentOwners() }}
+                  aria-label={`Neem owners over voor ${emptyOwnerCount} lege subitems`}
+                  title={`Vul ${emptyOwnerCount} lege subitem${emptyOwnerCount === 1 ? '' : 's'} met de owners van het hoofditem`}
+                  style={{ display: 'block', marginTop: 5, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 5,
+                    background: 'var(--bg-hover)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 10.5,
+                    fontWeight: 700, lineHeight: 1.2, textTransform: 'none', letterSpacing: 0, whiteSpace: 'nowrap' }}>
+                  ↓ Neem over
+                </button>
+              )}
               {onResizeCol && (
                 <div
                   title="Kolom breder/smaller slepen"
@@ -1684,7 +1717,7 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
         </div>
         <SubitemRows subitems={sortedSubitems} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
-          suggestedRanges={suggestedRanges}
+          suggestedPlans={suggestedPlans}
           selectedIds={selectedIds} onToggleSelect={onToggleSelect}
           parentItemId={parentItemId} fromGroupId={fromGroupId} parentExternalLink={parentExternalLink}
           onOpenDetail={onOpenDetail}
@@ -1725,9 +1758,9 @@ function SubItemsSection({ agendaSort, subitems, cols, gridTemplate, accentColor
 
 // Subitem-rijen met Done-subgroep collapse. Active eerst (vroegste datum
 // bovenaan), daarna een inklapbare "Done (N)" sectie.
-function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedRanges, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
+function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedPlans, selectedIds, onToggleSelect, parentItemId, fromGroupId, parentExternalLink, onOpenDetail, justCreatedSubId, colWidths, onResizeCol, updateOne, deleteOne, reorderOne }: {
   subitems: SubItem[]; cols: ColumnDef[]; gridTemplate: string; rail: string
-  suggestedRanges?: Record<string, SuggestedDateRange>
+  suggestedPlans?: Record<string, SuggestedSubitemPlan>
   selectedIds?: Set<string>; onToggleSelect?: (id: string) => void
   parentItemId?: string
   fromGroupId?: string
@@ -1760,7 +1793,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedRanges, sele
       {active.map((sub, idx) => (
         <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
           rail={rail}
-          suggestedRange={suggestedRanges?.[sub.id]}
+          suggestedPlan={suggestedPlans?.[sub.id]}
           selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
           onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
           isLast={!hasDone && idx === lastActiveIdx}
@@ -1816,7 +1849,7 @@ function SubitemRows({ subitems, cols, gridTemplate, rail, suggestedRanges, sele
           {doneOpen && done.map((sub, idx) => (
             <SubItemRow key={sub.id} subitem={sub} cols={cols} gridTemplate={gridTemplate}
               rail={rail}
-              suggestedRange={suggestedRanges?.[sub.id]}
+              suggestedPlan={suggestedPlans?.[sub.id]}
               selected={selectedIds?.has(`sub:${sub.id}`) ?? false}
               onToggleSelect={onToggleSelect ? () => onToggleSelect(`sub:${sub.id}`) : undefined}
               isLast={idx === lastDoneIdx}
@@ -2377,7 +2410,11 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
           accentColor={accentColor}
           selectedIds={selectedIds}
           onToggleSelect={onToggleSubitem}
-          parentItemId={item.id} parentStartDate={item.startDate} parentEndDate={item.endDate} fromGroupId={groupId}
+          parentItemId={item.id}
+          parentOwnerIds={item.ownerIds}
+          emptyOwnerCount={allSubitems.filter(subitem => !(subitem.ownerIds ?? []).some(ownerId => ownerId && ownerId !== 'unassigned')).length}
+          onInheritParentOwners={() => onUpdate({ subitems: inheritParentOwners(allSubitems, item.ownerIds) })}
+          parentStartDate={item.startDate} parentEndDate={item.endDate} parentDeadline={item.deadline} fromGroupId={groupId}
           parentExternalLink={item.externalLink ?? null}
           onOpenDetail={sub => setOpenSub(sub)}
           colWidths={subColWidths ?? colWidths} onResizeCol={onResizeSubCol ?? onResizeCol}
@@ -3304,6 +3341,13 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
     // wijziging op alle geselecteerde items binnen deze groep toe. Cross-
     // group bulk (zelden gebruikt) blijft per-groep.
     const bulk = selectedIds.size > 1 && selectedIds.has(itemId)
+    const updatesForItem = (current: BoardItem): Partial<BoardItem> => {
+      if (!('ownerIds' in updates) || !current.subitems?.length) return updates
+      const inherited = inheritParentOwners(current.subitems, updates.ownerIds ?? [])
+      return inherited.some((subitem, index) => subitem !== current.subitems![index])
+        ? { ...updates, subitems: inherited }
+        : updates
+    }
     // Snapshot voor undo — alleen bij geen-bulk en als er daadwerkelijk
     // iets verandert. Subitem-edits (onUpdate met subitems-array) doen we
     // ook mee, anders is een uren-correctie niet terug te draaien.
@@ -3312,13 +3356,13 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
       ...group,
       items: group.items.map(i => {
         if (!(bulk ? selectedIds.has(i.id) : i.id === itemId)) return i
-        return mergeDetailPatch(i, updates)
+        return mergeDetailPatch(i, updatesForItem(i))
       }),
     })
     const affectedItems = group.items.filter(i => bulk ? selectedIds.has(i.id) : i.id === itemId)
     if ('startDate' in updates || 'endDate' in updates) {
       for (const before of affectedItems) {
-        const after = mergeDetailPatch(before, updates)
+        const after = mergeDetailPatch(before, updatesForItem(before))
         if (before.startDate === after.startDate && before.endDate === after.endDate) continue
         void logItemActivity(before.id, 'wijzigde de timeline',
           `${before.startDate ?? '—'} – ${before.endDate ?? '—'} → ${after.startDate ?? '—'} – ${after.endDate ?? '—'}`,
@@ -5589,6 +5633,12 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
         // raken ownerHours stale wanneer een bulk-owner-wijziging eigenaren
         // wegneemt of een bulk-uren-wijziging totalen verandert.
         if (selectedIds.has(i.id)) {
+          if ('ownerIds' in patch && nextItem.subitems?.length) {
+            const inherited = inheritParentOwners(nextItem.subitems, patch.ownerIds ?? [])
+            if (inherited.some((subitem, index) => subitem !== nextItem.subitems![index])) {
+              nextItem = { ...nextItem, subitems: inherited }
+            }
+          }
           if ('ownerIds' in patch && nextItem.ownerHours && Object.keys(nextItem.ownerHours).length > 0) {
             const active = new Set(patch.ownerIds ?? [])
             const cleaned: Record<string, number> = {}

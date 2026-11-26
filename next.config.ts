@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
+    agentUpgrade: "security",
     // Bewaar Turbopack-resultaten ook tussen productiebuilds. Dit verandert
     // niets aan de gegenereerde app, maar voorkomt dat lokale/CI-validaties
     // na iedere kleine wijziging al het onveranderde werk opnieuw doen.

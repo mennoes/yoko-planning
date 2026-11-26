@@ -94,6 +94,10 @@ const BAR_H    = 32
 // meer — die zat altijd al in de vaste-pitch-benadering, niet hier.
 const BAR_GAP  = 1
 const HANDLE_W = 8
+const ITEM_COLOR_PALETTE = [
+  '#579bfc','#0086c0','#9c7ee8','#784bd1','#e2445c','#bb3354','#ff642e',
+  '#ff7a00','#ffcb00','#cab641','#00c875','#037f4c','#ff5ac4','#9aadbd',
+]
 
 // Gedeelde uren-per-dag → hoogte-ratio, gebruikt door zowel DraggableBar
 // (Week/Overzicht-zoom) als de all-day-pills in WeekTimeGrid (Dag-zoom).
@@ -3183,6 +3187,13 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     board: project.board,
     itemId: project.id.slice(project.board.length + 2),
   })
+  // Open vanuit Planning niet alleen het juiste bord, maar ook precies de
+  // juiste rij en het bijbehorende detailvenster. Voor subitems gebruiken
+  // we de stabiele parent/subitem-id's; `__siN` is alleen een afgeleide
+  // Planning-id en kan de agenda-drawer zelf niet openen.
+  const agendaItemId = personalCompletion?.parentItemId ?? rawParent?.id ?? rawProjectId
+  const agendaSubitemId = personalCompletion?.subitemId
+  const agendaItemHref = `/projects/${project.board}?focus=${encodeURIComponent(agendaItemId)}&drawer=${encodeURIComponent(agendaItemId)}${agendaSubitemId ? `&subitem=${encodeURIComponent(agendaSubitemId)}` : ''}`
 
   const [startDate, setStartDate] = useState(project.startDate ?? '')
   const [endDate,   setEndDate]   = useState(project.endDate ?? '')
@@ -3298,6 +3309,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
     ownerIds:  string[]
     links:     import('@/lib/boards').ItemLink[]
     status:    string
+    color:     string | undefined
     hiddenFromPlanning: boolean
   }>
   function commit(patch: Patch) {
@@ -3314,6 +3326,7 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
       if (patch.ownerHours          !== undefined) allowed.ownerHours          = patch.ownerHours
       if (patch.ownerIds            !== undefined) allowed.ownerIds            = patch.ownerIds
       if (patch.hiddenFromPlanning  !== undefined) allowed.hiddenFromPlanning  = patch.hiddenFromPlanning
+      if (Object.prototype.hasOwnProperty.call(patch, 'color')) allowed.color = patch.color
       if (Object.keys(allowed).length === 0) return
       onUpdate(project, project.startDate ?? null, project.endDate ?? null, allowed)
       return
@@ -3563,8 +3576,8 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
               in → <Link
-                href={`/projects/${project.board}?focus=${encodeURIComponent(project.id.slice(project.board.length + 2))}`}
-                title="Open op het bord"
+                href={agendaItemHref}
+                title="Open en licht dit item uit in de agenda"
                 style={{ color, fontWeight: 600, textDecoration: 'none' }}
                 onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
                 onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}>
@@ -3822,6 +3835,26 @@ function DetailPanel({ project, allGroups, anchor, onClose, onUpdate, onDuplicat
             value={(rawItem?.status as string) ?? project.status ?? ''}
             onChange={v => commit({ status: v })}
           />
+        </Row>
+        <Row label="Kleur">
+          <div aria-label="Itemkleur" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            {ITEM_COLOR_PALETTE.map(itemColor => (
+              <button key={itemColor} type="button" aria-label={`Kies itemkleur ${itemColor}`}
+                title={`Gebruik ${itemColor}`}
+                onClick={() => commit({ color: itemColor })}
+                style={{ width: 20, height: 20, padding: 0, borderRadius: 5, cursor: 'pointer',
+                  background: itemColor,
+                  border: project.color === itemColor ? '3px solid var(--text-primary)' : '2px solid transparent',
+                  boxShadow: '0 0 0 1px rgba(0,0,0,0.10)' }} />
+            ))}
+            <button type="button" onClick={() => commit({ color: undefined })}
+              title="Gebruik de groepskleur" aria-label="Gebruik groepskleur"
+              style={{ height: 20, padding: '0 7px', borderRadius: 5, cursor: 'pointer',
+                border: project.color ? '1px solid var(--border)' : '2px solid var(--text-primary)',
+                background: 'var(--bg-hover)', color: 'var(--text-muted)', fontSize: 10, fontWeight: 700 }}>
+              Groep
+            </button>
+          </div>
         </Row>
         {personalCompletion && (
           <PersonalCompletionSection
@@ -5910,7 +5943,10 @@ export default function PlanningPage() {
           }
           subs[subIdx] = { ...subs[subIdx], ...subPatch }
         }
-        return { ...i, subitems: subs }
+        const colorPatch = extra && Object.prototype.hasOwnProperty.call(extra, 'color')
+          ? { color: typeof extra.color === 'string' ? extra.color : undefined }
+          : {}
+        return { ...i, ...colorPatch, subitems: subs }
       }),
     }))
     // Top-level items die op Done worden gezet verhuizen meteen naar de
@@ -5922,9 +5958,14 @@ export default function PlanningPage() {
     setAllGroups(prev => ({ ...prev, [boardName]: groups }))
     // Houd detailProject in sync zodat project.startDate/endDate up-to-date
     // blijven na een commit (gebruikt door child components zoals de bar).
-    setDetailProject(prev => prev && prev.id === project.id
-      ? { ...prev, startDate: newStart, endDate: newEnd, ...(extra ? { ownerIds: extra.ownerIds ?? prev.ownerIds, estHours: extra.estHours ?? prev.estHours, ownerHours: extra.ownerHours ?? prev.ownerHours, status: (extra.status as Project['status']) ?? prev.status } : {}) }
-      : prev)
+    setDetailProject(prev => {
+      if (!prev || prev.id !== project.id) return prev
+      const colorPatch = extra && Object.prototype.hasOwnProperty.call(extra, 'color')
+        ? { color: typeof extra.color === 'string' ? extra.color : undefined }
+        : {}
+      return { ...prev, startDate: newStart, endDate: newEnd, ...colorPatch,
+        ...(extra ? { ownerIds: extra.ownerIds ?? prev.ownerIds, estHours: extra.estHours ?? prev.estHours, ownerHours: extra.ownerHours ?? prev.ownerHours, status: (extra.status as Project['status']) ?? prev.status } : {}) }
+    })
     pushUndo(() => {
       saveGroups(boardName, before)
       setAllGroups(prev => ({ ...prev, [boardName]: before }))
