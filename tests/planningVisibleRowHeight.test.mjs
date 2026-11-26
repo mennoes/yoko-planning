@@ -5,11 +5,19 @@ import { readFileSync } from 'node:fs'
 const source = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
 
 test('planning row height only counts bars inside the current viewport', () => {
-  assert.match(source, /const windowed = placed\.filter\(r => r\.start < viewportEnd && r\.end > viewportStart\)/)
+  assert.match(source, /const visibleBars = bars\.filter\(b => b\.left < viewportEnd && b\.left \+ b\.width > viewportStart\)/)
+  assert.match(source, /const placementBars = \[\.\.\.visibleBars\]/)
+  assert.match(source, /const bStart = Math\.max\(viewportStart, b\.left\)/)
   assert.match(source, /const emptyViewportHeight = Math\.max\(8, Math\.round\(10 \* RS\)\)/)
   assert.match(source, /: Math\.max\(emptyViewportHeight, meetingSummaryHeight \+ BAR_GAP_S \* 2\)/)
   assert.doesNotMatch(source, /WINDOW_DAYS/)
   assert.doesNotMatch(source, /viewportEnd \+ windowPx/)
+})
+
+test('sticky member mask stays above bars and row height animates smoothly', () => {
+  assert.match(source, /zIndex: 7000, background: stickyBg/)
+  assert.match(source, /gridTemplateRows: visuallyOpen \? '1fr' : '0fr'/)
+  assert.match(source, /height 320ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/)
 })
 
 test('off-screen meetings do not reserve a summary lane', () => {

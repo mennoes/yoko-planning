@@ -2075,6 +2075,38 @@ function MeetingDaySummary({ meetings, memberId, left, width, onOpen, onDone }: 
   )
 }
 
+function SmoothCollapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(open)
+  const [visuallyOpen, setVisuallyOpen] = useState(open)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      const frame = requestAnimationFrame(() => setVisuallyOpen(true))
+      return () => cancelAnimationFrame(frame)
+    }
+    setVisuallyOpen(false)
+  }, [open])
+
+  if (!mounted) return null
+  return (
+    <div
+      onTransitionEnd={event => {
+        if (event.propertyName === 'grid-template-rows' && !open) setMounted(false)
+      }}
+      style={{
+        display: 'grid',
+        gridTemplateRows: visuallyOpen ? '1fr' : '0fr',
+        opacity: visuallyOpen ? 1 : 0,
+        transition: 'grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ minHeight: 0, overflow: 'hidden' }}>{children}</div>
+    </div>
+  )
+}
+
 function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, zoom, hideMeetings, rowScale, visibleStartPx, visibleEndPx, onDragMove, onDragEnd, onBarClick, onMarkDone, onReassign }: {
   onDeadlineChange: (p:Project,date:string)=>void
   memberId: string; projects: Project[]; cols: Col[]; colW: number
@@ -2409,8 +2441,13 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   // meeting controls (5000) above bars and preserve the normal layout.
   const barZIndex = (id: string, days: number): number =>
     hoveredBarId === id ? 2002 : activeBarId === id ? 2001 : durationZIndex(days)
+  // Alleen balken die het zichtbare deel van de tijdlijn raken doen mee
+  // aan de verticale stapeling. Een balk die links achter de sticky
+  // gebruikerskolom is verdwenen mag dus ook geen onzichtbare rijhoogte
+  // meer reserveren.
+  const visibleBars = bars.filter(b => b.left < viewportEnd && b.left + b.width > viewportStart)
   const naturalHeights = new Map<string, number>(
-    bars.map(b => [b.p.id, planningBarPixelHeight(BASELINE_AVAIL_H, hoursScaleRatio(b.p, memberId))]),
+    visibleBars.map(b => [b.p.id, planningBarPixelHeight(BASELINE_AVAIL_H, hoursScaleRatio(b.p, memberId))]),
   )
   const barTops = new Map<string, number>()
   const placed: { start: number; end: number; visualStart: number; visualEnd: number; top: number; bottom: number }[] = []
@@ -2464,7 +2501,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
     covered += Math.max(0, rangeEnd - rangeStart)
     return covered / Math.max(1, visualEnd - visualStart)
   }
-  const placementBars = [...bars].sort((a, b) => {
+  const placementBars = [...visibleBars].sort((a, b) => {
     if (a.isMeeting !== b.isMeeting) return a.isMeeting ? -1 : 1
     if (!a.isMeeting && !b.isMeeting) {
       const aSpan = a.packWidth || a.width
@@ -2475,9 +2512,12 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
     return a.lane - b.lane
   })
   for (const b of placementBars) {
-    const bStart = b.left
-    const bEnd = b.left + (b.packWidth || b.width)
-    const bVisualEnd = b.left + b.width
+    // Clamp de plaatsingsrechthoek tot het viewport. Alleen het zichtbare
+    // stuk kan daar immers met een andere zichtbare balk botsen.
+    const bStart = Math.max(viewportStart, b.left)
+    const bVisualStart = Math.max(viewportStart, b.left)
+    const bVisualEnd = Math.min(viewportEnd, b.left + b.width)
+    const bEnd = Math.max(bStart + 1, Math.min(bVisualEnd, b.left + (b.packWidth || b.width)))
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
     const blockers = placed
       .filter(rec => {
@@ -2515,7 +2555,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
         ...blockers.map(blocker => Math.max(BAR_GAP_S, blocker.bottom + BAR_GAP_S - overlapAllowance)),
       ].sort((a, b) => a - b)
       for (const candidate of candidates) {
-        if (horizontalCoverageAt(candidate, h, b.left, bVisualEnd, blockers, overlapAllowance) > 0.18) continue
+        if (horizontalCoverageAt(candidate, h, bVisualStart, bVisualEnd, blockers, overlapAllowance) > 0.18) continue
         if (top - candidate >= meaningfulSaving) top = candidate
         break
       }
@@ -2523,7 +2563,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
     barTops.set(b.p.id, top)
     placed.push({
       start: bStart, end: bEnd,
-      visualStart: b.left, visualEnd: bVisualEnd,
+      visualStart: bVisualStart, visualEnd: bVisualEnd,
       top, bottom: top + h,
     })
   }
@@ -2532,17 +2572,20 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   // kon een drukke dag buiten beeld honderden pixels lege rijhoogte geven.
   // Bij horizontaal scrollen verandert viewportStart/End en groeit of krimpt
   // de rij precies wanneer de betreffende balk zichtbaar wordt.
-  const windowed = placed.filter(r => r.start < viewportEnd && r.end > viewportStart)
   const emptyViewportHeight = Math.max(8, Math.round(10 * RS))
-  const baseHeight = windowed.length > 0
-    ? Math.max(...windowed.map(r => r.bottom)) + BAR_GAP_S + meetingSummaryHeight
+  const baseHeight = placed.length > 0
+    ? Math.max(...placed.map(r => r.bottom)) + BAR_GAP_S + meetingSummaryHeight
     : Math.max(emptyViewportHeight, meetingSummaryHeight + BAR_GAP_S * 2)
   const height = baseHeight
 
   return (
     <div>
     <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}/>
-    <div data-testid={`planning-timeline-${memberId}`} style={{ position: 'relative', height, overflow: 'hidden', isolation: 'isolate' }}>
+    <div data-testid={`planning-timeline-${memberId}`} style={{
+      position: 'relative', height, overflow: 'hidden', isolation: 'isolate',
+      transition: 'height 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+      willChange: 'height',
+    }}>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
@@ -7258,10 +7301,18 @@ export default function PlanningPage() {
                   })}
                 </div>
 
-                {/* Timeline bars (expanded) */}
-                {isExp && memberProjects.length > 0 && (
+                {/* Timeline bars (expanded). CSS-grid animeert ook naar de
+                    intrinsieke hoogte, zodat inklappen niet hard verspringt. */}
+                <SmoothCollapse open={isExp}>
+                  {memberProjects.length > 0 ? (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{
+                      width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0,
+                      // Balken hebben een verhoogde stacking-order voor
+                      // hover/drag. Dit masker moet daar altijd boven liggen.
+                      zIndex: 7000, background: stickyBg,
+                      borderRight: '1px solid var(--border)',
+                    }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars onDeadlineChange={handleDeadlineChange} memberId={member.id} projects={memberProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
                         rowScale={rowScale}
@@ -7271,13 +7322,13 @@ export default function PlanningPage() {
                         onMarkDone={markProjectDone} onReassign={handleReassignOwner} />
                     </div>
                   </div>
-                )}
-                {isExp && memberProjects.length === 0 && (
+                  ) : (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 20, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 7000, background: stickyBg, borderRight: '1px solid var(--border)' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
-                )}
+                  )}
+                </SmoothCollapse>
               </div>
             )
             }
