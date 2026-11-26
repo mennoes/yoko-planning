@@ -31,6 +31,15 @@ test('ideas page supports categories, colors and progress', () => {
   assert.doesNotMatch(page, /setFilter\('doing'\)|setFilter\('done'\)/)
 })
 
+test('post-its can be moved playfully without turning a drag into an edit', () => {
+  assert.match(page, /yoko-ideas-positions-v1/)
+  assert.match(page, /onPointerDown=\{event => startNoteDrag\(event, idea\.id\)\}/)
+  assert.match(page, /aria-label=\{`\$\{idea\.title\} verplaatsen`\}/)
+  assert.match(page, /window\.addEventListener\('pointermove', onMove\)/)
+  assert.match(page, /localStorage\.setItem\(POSITIONS_KEY/)
+  assert.match(page, /event\.stopPropagation\(\)/)
+})
+
 test('ideas are shared through their own realtime store with a local cache', () => {
   assert.match(store, /from\('ideas'\)/)
   assert.match(store, /supabase\.channel\('ideas'\)/)

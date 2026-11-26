@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useProfile } from '@/components/ProfileContext'
 import { IconClose, IconIdea } from '@/components/Icon'
 import {
@@ -20,6 +20,9 @@ const CATEGORIES: Array<{ value: IdeaCategory; label: string; short: string }> =
 const COLORS = ['#fff0a8', '#ffd1bd', '#cce9db', '#dce5ff', '#ead7f0', '#f8d3df']
 type CategoryFilter = 'all' | IdeaCategory
 type StatusFilter = 'active' | 'doing' | 'done'
+type NotePosition = { x: number; y: number }
+type NotePositions = Record<string, NotePosition>
+const POSITIONS_KEY = 'yoko-ideas-positions-v1'
 
 function categoryLabel(value: IdeaCategory) {
   return CATEGORIES.find(category => category.value === value)?.label ?? 'Inspiratie'
@@ -46,6 +49,8 @@ export default function IdeasPage() {
   const [editing, setEditing] = useState<IdeaItem | null>(null)
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [highlighted, setHighlighted] = useState<string | null>(null)
+  const [positions, setPositions] = useState<NotePositions>({})
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const boardRef = useRef<HTMLDivElement>(null)
 
@@ -56,6 +61,13 @@ export default function IdeasPage() {
     const stopLocal = onIdeasChange(refresh)
     const stopRemote = subscribeRemoteIdeas()
     return () => { stopLocal(); stopRemote() }
+  }, [])
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(POSITIONS_KEY) ?? '{}') as NotePositions
+      if (stored && typeof stored === 'object') setPositions(stored)
+    } catch {}
   }, [])
 
   // Een suggestie op Home kan rechtstreeks naar een specifiek idee linken.
@@ -145,6 +157,47 @@ export default function IdeasPage() {
     setEditing(null)
   }
 
+  function persistPositions(next: NotePositions) {
+    setPositions(next)
+    try { localStorage.setItem(POSITIONS_KEY, JSON.stringify(next)) } catch {}
+  }
+
+  function startNoteDrag(event: ReactPointerEvent<HTMLButtonElement>, ideaId: string) {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const start = positions[ideaId] ?? { x: 0, y: 0 }
+    const startX = event.clientX
+    const startY = event.clientY
+    const maxX = Math.max(70, Math.min(360, window.innerWidth * .24))
+    const maxY = Math.max(140, Math.min(320, window.innerHeight * .32))
+    let latest = start
+    setDraggingId(ideaId)
+
+    const onMove = (moveEvent: PointerEvent) => {
+      latest = {
+        x: Math.round(Math.max(-maxX, Math.min(maxX, start.x + moveEvent.clientX - startX))),
+        y: Math.round(Math.max(-maxY, Math.min(maxY, start.y + moveEvent.clientY - startY))),
+      }
+      setPositions(current => ({ ...current, [ideaId]: latest }))
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      persistPositions({ ...positions, [ideaId]: latest })
+      setDraggingId(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp, { once: true })
+    window.addEventListener('pointercancel', onUp, { once: true })
+  }
+
+  function nudgeNote(ideaId: string, dx: number, dy: number) {
+    const current = positions[ideaId] ?? { x: 0, y: 0 }
+    persistPositions({ ...positions, [ideaId]: { x: current.x + dx, y: current.y + dy } })
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.hero}>
@@ -223,9 +276,33 @@ export default function IdeasPage() {
           <article
             key={idea.id}
             data-idea-id={idea.id}
-            className={`${styles.note} ${idea.status === 'doing' ? styles.doing : ''} ${highlighted === idea.id ? styles.highlighted : ''}`}
-            style={{ '--note-color': idea.color, '--tilt': `${[-1.2, .7, -.4, 1.1, -.8][index % 5]}deg` } as React.CSSProperties}
+            className={`${styles.note} ${idea.status === 'doing' ? styles.doing : ''} ${highlighted === idea.id ? styles.highlighted : ''} ${draggingId === idea.id ? styles.dragging : ''}`}
+            style={{
+              '--note-color': idea.color,
+              '--tilt': `${[-1.2, .7, -.4, 1.1, -.8][index % 5]}deg`,
+              '--note-x': `${positions[idea.id]?.x ?? 0}px`,
+              '--note-y': `${positions[idea.id]?.y ?? 0}px`,
+            } as React.CSSProperties}
           >
+            <button
+              className={styles.dragHandle}
+              type="button"
+              aria-label={`${idea.title} verplaatsen`}
+              title="Sleep om deze post-it te verplaatsen"
+              onPointerDown={event => startNoteDrag(event, idea.id)}
+              onClick={event => { event.preventDefault(); event.stopPropagation() }}
+              onKeyDown={event => {
+                const step = event.shiftKey ? 30 : 10
+                const delta = event.key === 'ArrowLeft' ? [-step, 0]
+                  : event.key === 'ArrowRight' ? [step, 0]
+                    : event.key === 'ArrowUp' ? [0, -step]
+                      : event.key === 'ArrowDown' ? [0, step]
+                        : null
+                if (!delta) return
+                event.preventDefault()
+                nudgeNote(idea.id, delta[0], delta[1])
+              }}
+            ><span /><span /><span /><span /><span /><span /></button>
             <button className={styles.noteMain} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} bewerken`}>
               <div className={styles.noteTop}>
                 <span>{categoryLabel(idea.category)}</span>
