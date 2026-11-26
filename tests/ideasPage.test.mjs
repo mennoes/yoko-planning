@@ -49,6 +49,16 @@ test('post-its can be moved playfully without turning a drag into an edit', () =
   assert.match(page, /event\.stopPropagation\(\)/)
 })
 
+test('ideas live on a pannable and zoomable free canvas', () => {
+  assert.match(page, /yoko-ideas-canvas-view-v1/)
+  assert.match(page, /onPointerDown=\{startCanvasPan\}/)
+  assert.match(page, /onWheel=\{handleCanvasWheel\}/)
+  assert.match(page, /scale\(\$\{canvasView\.zoom\}\)/)
+  assert.match(page, /\/ canvasView\.zoom/)
+  assert.match(page, /Math\.max\(\.45, Math\.min\(1\.8/)
+  assert.match(page, /Sleep de lege ruimte om rond te kijken/)
+})
+
 test('ideas are shared through their own realtime store with a local cache', () => {
   assert.match(store, /from\('ideas'\)/)
   assert.match(store, /supabase\.channel\('ideas'\)/)

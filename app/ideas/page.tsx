@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useProfile } from '@/components/ProfileContext'
 import { IconClose, IconIdea } from '@/components/Icon'
 import {
@@ -22,7 +22,10 @@ type CategoryFilter = 'all' | IdeaCategory
 type StatusFilter = 'active' | 'doing' | 'done'
 type NotePosition = { x: number; y: number }
 type NotePositions = Record<string, NotePosition>
+type CanvasView = { x: number; y: number; zoom: number }
 const POSITIONS_KEY = 'yoko-ideas-positions-v1'
+const VIEW_KEY = 'yoko-ideas-canvas-view-v1'
+const DEFAULT_VIEW: CanvasView = { x: 0, y: 0, zoom: 1 }
 
 function categoryLabel(value: IdeaCategory) {
   return CATEGORIES.find(category => category.value === value)?.label ?? value
@@ -53,8 +56,28 @@ export default function IdeasPage() {
   const [highlighted, setHighlighted] = useState<string | null>(null)
   const [positions, setPositions] = useState<NotePositions>({})
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [canvasView, setCanvasView] = useState<CanvasView>(DEFAULT_VIEW)
+  const [panning, setPanning] = useState(false)
   const [saving, setSaving] = useState(false)
   const boardRef = useRef<HTMLDivElement>(null)
+
+  function persistCanvasView(next: CanvasView) {
+    setCanvasView(next)
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify(next)) } catch {}
+  }
+
+  function focusNote(ideaId: string) {
+    const viewport = boardRef.current
+    const note = viewport?.querySelector<HTMLElement>(`[data-idea-id="${CSS.escape(ideaId)}"]`)
+    if (!viewport || !note) return
+    const viewportRect = viewport.getBoundingClientRect()
+    const noteRect = note.getBoundingClientRect()
+    persistCanvasView({
+      ...canvasView,
+      x: canvasView.x + viewportRect.left + viewportRect.width / 2 - (noteRect.left + noteRect.width / 2),
+      y: canvasView.y + viewportRect.top + viewportRect.height / 2 - (noteRect.top + noteRect.height / 2),
+    })
+  }
 
   useEffect(() => {
     const refresh = () => setIdeas(loadIdeas())
@@ -69,6 +92,10 @@ export default function IdeasPage() {
     try {
       const stored = JSON.parse(localStorage.getItem(POSITIONS_KEY) ?? '{}') as NotePositions
       if (stored && typeof stored === 'object') setPositions(stored)
+      const savedView = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null') as CanvasView | null
+      if (savedView && Number.isFinite(savedView.x) && Number.isFinite(savedView.y) && Number.isFinite(savedView.zoom)) {
+        setCanvasView({ x: savedView.x, y: savedView.y, zoom: Math.max(.45, Math.min(1.8, savedView.zoom)) })
+      }
     } catch {}
   }, [])
 
@@ -80,9 +107,7 @@ export default function IdeasPage() {
     setCategoryFilter('all')
     setStatusFilter('active')
     setHighlighted(ideaId)
-    const scrollTimer = window.setTimeout(() => {
-      boardRef.current?.querySelector<HTMLElement>(`[data-idea-id="${CSS.escape(ideaId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 30)
+    const scrollTimer = window.setTimeout(() => focusNote(ideaId), 30)
     const clearTimer = window.setTimeout(() => setHighlighted(null), 2600)
     return () => { window.clearTimeout(scrollTimer); window.clearTimeout(clearTimer) }
   }, [ideas])
@@ -153,9 +178,7 @@ export default function IdeasPage() {
     setCategoryFilter('all')
     setStatusFilter('active')
     setHighlighted(chosen.id)
-    window.setTimeout(() => {
-      boardRef.current?.querySelector<HTMLElement>(`[data-idea-id="${chosen.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 30)
+    window.setTimeout(() => focusNote(chosen.id), 30)
     window.setTimeout(() => setHighlighted(null), 2600)
   }
 
@@ -176,6 +199,64 @@ export default function IdeasPage() {
     try { localStorage.setItem(POSITIONS_KEY, JSON.stringify(next)) } catch {}
   }
 
+  function startCanvasPan(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 && event.button !== 1) return
+    const target = event.target as HTMLElement
+    if (target.closest('article, button, input, textarea, select, label')) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startY = event.clientY
+    const start = canvasView
+    let latest = start
+    setPanning(true)
+    const onMove = (moveEvent: PointerEvent) => {
+      latest = { ...start, x: start.x + moveEvent.clientX - startX, y: start.y + moveEvent.clientY - startY }
+      setCanvasView(latest)
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      persistCanvasView(latest)
+      setPanning(false)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp, { once: true })
+    window.addEventListener('pointercancel', onUp, { once: true })
+  }
+
+  function handleCanvasWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    event.preventDefault()
+    if (event.ctrlKey || event.metaKey) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      const pointerX = event.clientX - rect.left
+      const pointerY = event.clientY - rect.top
+      const nextZoom = Math.max(.45, Math.min(1.8, canvasView.zoom * Math.exp(-event.deltaY * .005)))
+      const ratio = nextZoom / canvasView.zoom
+      persistCanvasView({
+        x: pointerX - (pointerX - canvasView.x) * ratio,
+        y: pointerY - (pointerY - canvasView.y) * ratio,
+        zoom: nextZoom,
+      })
+      return
+    }
+    persistCanvasView({ ...canvasView, x: canvasView.x - event.deltaX, y: canvasView.y - event.deltaY })
+  }
+
+  function zoomCanvas(factor: number) {
+    const viewport = boardRef.current
+    if (!viewport) return
+    const nextZoom = Math.max(.45, Math.min(1.8, canvasView.zoom * factor))
+    const centerX = viewport.clientWidth / 2
+    const centerY = viewport.clientHeight / 2
+    const ratio = nextZoom / canvasView.zoom
+    persistCanvasView({
+      x: centerX - (centerX - canvasView.x) * ratio,
+      y: centerY - (centerY - canvasView.y) * ratio,
+      zoom: nextZoom,
+    })
+  }
+
   function startNoteDrag(event: ReactPointerEvent<HTMLButtonElement>, ideaId: string) {
     if (event.button !== 0) return
     event.preventDefault()
@@ -183,15 +264,13 @@ export default function IdeasPage() {
     const start = positions[ideaId] ?? { x: 0, y: 0 }
     const startX = event.clientX
     const startY = event.clientY
-    const maxX = Math.max(70, Math.min(360, window.innerWidth * .24))
-    const maxY = Math.max(140, Math.min(320, window.innerHeight * .32))
     let latest = start
     setDraggingId(ideaId)
 
     const onMove = (moveEvent: PointerEvent) => {
       latest = {
-        x: Math.round(Math.max(-maxX, Math.min(maxX, start.x + moveEvent.clientX - startX))),
-        y: Math.round(Math.max(-maxY, Math.min(maxY, start.y + moveEvent.clientY - startY))),
+        x: Math.round(start.x + (moveEvent.clientX - startX) / canvasView.zoom),
+        y: Math.round(start.y + (moveEvent.clientY - startY) / canvasView.zoom),
       }
       setPositions(current => ({ ...current, [ideaId]: latest }))
     }
@@ -291,7 +370,9 @@ export default function IdeasPage() {
         </form>
       )}
 
-      <div className={styles.board} ref={boardRef}>
+      <div className={`${styles.canvasViewport} ${panning ? styles.panning : ''}`} ref={boardRef}
+        onPointerDown={startCanvasPan} onWheel={handleCanvasWheel}>
+        <div className={styles.canvasHint}>Sleep de lege ruimte om rond te kijken</div>
         {visible.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyNotes} aria-hidden>
@@ -301,7 +382,9 @@ export default function IdeasPage() {
             <p>Plak het eerste idee op de muur. Een halve gedachte is ook welkom.</p>
             {statusFilter !== 'done' && <button type="button" onClick={() => setComposerOpen(true)}>+ Eerste idee</button>}
           </div>
-        ) : visible.map((idea, index) => (
+        ) : (
+          <div className={styles.board} style={{ transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.zoom})` }}>
+          {visible.map((idea, index) => (
           <article
             key={idea.id}
             data-idea-id={idea.id}
@@ -347,7 +430,14 @@ export default function IdeasPage() {
               {idea.status === 'done' && <button type="button" onClick={() => updateIdea(idea.id, { status: 'open', claimedBy: null, claimedName: null })}>Terug op muur</button>}
             </footer>
           </article>
-        ))}
+          ))}
+          </div>
+        )}
+        <div className={styles.canvasControls} aria-label="Canvasweergave">
+          <button type="button" onClick={() => zoomCanvas(1 / 1.15)} aria-label="Uitzoomen">−</button>
+          <button className={styles.zoomValue} type="button" onClick={() => persistCanvasView(DEFAULT_VIEW)} title="Herstel beeld">{Math.round(canvasView.zoom * 100)}%</button>
+          <button type="button" onClick={() => zoomCanvas(1.15)} aria-label="Inzoomen">+</button>
+        </div>
       </div>
 
       {editing && (

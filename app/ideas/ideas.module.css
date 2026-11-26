@@ -45,7 +45,14 @@
 .swatches button { width: 30px; height: 30px; border: 2px solid rgba(30,25,15,.11); border-radius: 50%; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
 .swatches .selectedSwatch { transform: scale(1.14); box-shadow: 0 0 0 2px #252019; }
 
-.board { max-width: 1480px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 30px 26px; align-items: start; }
+.canvasViewport { position: relative; max-width: 1480px; height: max(560px, calc(100vh - 285px)); margin: 0 auto; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background-color: color-mix(in srgb, var(--bg-card) 58%, var(--bg-base)); background-image: radial-gradient(circle, color-mix(in srgb, var(--text-muted) 32%, transparent) 1px, transparent 1.2px); background-size: 24px 24px; cursor: grab; touch-action: none; user-select: none; }
+.canvasViewport.panning { cursor: grabbing; }
+.canvasHint { position: absolute; z-index: 30; top: 12px; left: 14px; padding: 6px 9px; border-radius: 8px; background: color-mix(in srgb, var(--bg-card) 86%, transparent); color: var(--text-muted); font-size: 12px; font-weight: 700; pointer-events: none; }
+.canvasControls { position: absolute; z-index: 30; left: 14px; bottom: 14px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); box-shadow: var(--surface-shadow); }
+.canvasControls button { width: 38px; height: 38px; border: 0; border-right: 1px solid var(--border); background: transparent; color: var(--text-primary); font: inherit; font-size: 20px; font-weight: 800; cursor: pointer; }
+.canvasControls button:last-child { border-right: 0; }
+.canvasControls .zoomValue { width: 58px; font-size: 12px; }
+.board { position: absolute; top: 0; left: 0; width: 2200px; min-height: 1600px; padding: 72px; display: grid; grid-template-columns: repeat(6, 280px); grid-auto-rows: min-content; gap: 30px 26px; align-items: start; transform-origin: 0 0; will-change: transform; }
 .note { --note-color: #fff0a8; --tilt: 0deg; --note-x: 0px; --note-y: 0px; position: relative; min-height: 250px; display: flex; flex-direction: column; overflow: visible; background: var(--note-color); color: #29231b; border-radius: 2px 3px 16px 3px; box-shadow: 0 8px 18px rgba(43, 36, 18, .09), 0 2px 3px rgba(43, 36, 18, .08); transform: translate(var(--note-x), var(--note-y)) rotate(var(--tilt)); transition: transform .2s ease, box-shadow .2s ease; z-index: 1; }
 .note:hover { transform: translate(var(--note-x), calc(var(--note-y) - 4px)) rotate(0); box-shadow: 0 16px 30px rgba(43,36,18,.14); z-index: 3; }
 .note.dragging { transform: translate(var(--note-x), var(--note-y)) rotate(1.2deg) scale(1.025); transition: none; box-shadow: 0 22px 45px rgba(43,36,18,.25); z-index: 20; }
@@ -64,7 +71,7 @@
 .highlighted { animation: spotlight 1s ease 2; box-shadow: 0 0 0 5px #1d1b18, 0 25px 55px rgba(43,36,18,.25); }
 @keyframes spotlight { 50% { transform: rotate(0) scale(1.04); } }
 
-.empty { grid-column: 1 / -1; min-height: 390px; display: grid; place-items: center; align-content: center; text-align: center; }
+.empty { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; align-content: center; text-align: center; }
 .emptyNotes { height: 90px; display: flex; align-items: center; margin-bottom: 20px; }
 .emptyNotes span { width: 110px; height: 84px; display: grid; place-items: center; padding: 10px; background: #fff0a8; color: #6d5f35; box-shadow: 0 5px 12px rgba(0,0,0,.08); font-size: 12px; font-weight: 800; }
 .emptyNotes span:nth-child(1) { transform: rotate(-8deg); background: #dce5ff; }
@@ -96,7 +103,9 @@
   .composerIntro, .composerOptions { grid-column: 1; }
   .composerOptions { align-items: stretch; flex-direction: column; }
   .composerOptions .pinButton { margin-left: 0; }
-  .board { grid-template-columns: 1fr; gap: 20px; }
+  .canvasViewport { height: max(520px, calc(100vh - 330px)); border-radius: 14px; }
+  .canvasHint { display: none; }
+  .board { width: 1500px; min-height: 1400px; padding: 56px; grid-template-columns: repeat(4, 270px); gap: 20px; }
   .note { min-height: 225px; }
   .editModal { padding: 28px 20px 22px; }
   .editOptions { align-items: stretch; flex-direction: column; }
