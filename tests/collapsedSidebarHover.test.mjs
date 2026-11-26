@@ -10,5 +10,8 @@ test('collapsed sidebar navigation uses a full-row hover treatment', () => {
   assert.match(sidebar, /className="sidebar-collapsed-action"/)
   assert.match(css, /\.sidebar-collapsed-action:hover[\s\S]*background: var\(--bg-hover\)/)
   assert.match(css, /\.sidebar-collapsed-action::before[\s\S]*background: var\(--sup-yellow\)/)
+  assert.match(sidebar, /showCollapsedTip\(e, item\.label\)/)
+  assert.match(sidebar, /role="tooltip" className="sidebar-collapsed-tooltip"/)
+  assert.match(css, /\.sidebar-collapsed-tooltip[\s\S]*position: fixed/)
   assert.match(css, /prefers-reduced-motion: reduce/)
 })

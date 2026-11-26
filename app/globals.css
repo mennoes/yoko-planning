@@ -422,8 +422,29 @@ select:focus {
 .sidebar-collapsed-action:focus-visible .sidebar-collapsed-icon {
   transform: translateX(2px);
 }
+.sidebar-collapsed-tooltip {
+  position: fixed;
+  z-index: 10020;
+  transform: translateY(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .12);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  animation: sidebar-tooltip-in 100ms ease-out both;
+}
+@keyframes sidebar-tooltip-in {
+  from { opacity: 0; transform: translate(-3px, -50%); }
+}
 @media (prefers-reduced-motion: reduce) {
   .sidebar-collapsed-action,
   .sidebar-collapsed-action::before,
   .sidebar-collapsed-icon { transition: none; }
+  .sidebar-collapsed-tooltip { animation: none; }
 }
