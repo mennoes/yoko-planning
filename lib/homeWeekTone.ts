@@ -1,4 +1,4 @@
-import { isVrijTitle, type WorkloadCategory } from './workloadCategory'
+import { isVrijItem, type WorkloadCategory } from './workloadCategory'
 
 type Contribution = {
   hours: number
@@ -16,8 +16,7 @@ export function homeWeekTone(
     // Houd dezelfde Vrij-detectie aan als projectHoursInWeek: het totaalcijfer
     // telt deze uren mee als onbeschikbaar, maar de tekst mag ze niet werk noemen.
     const isFree = overrides[entry.project.id] === 'vrij'
-      || isVrijTitle(entry.project.name)
-      || (entry.project.group ?? '').toLowerCase().includes('vrij')
+      || isVrijItem(entry.project)
     return sum + (isFree === (kind === 'vrij') ? entry.hours : 0)
   }, 0)
   const free = hours('vrij')

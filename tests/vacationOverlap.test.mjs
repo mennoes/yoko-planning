@@ -25,7 +25,10 @@ function workload(overrides = {}) {
   runInNewContext(js, { exports, Date, require(id) {
     const mocks = {
       './boardsRegistry': { getBoardColor: () => '#579bfc' },
-      './workloadCategory': { isVrijTitle: name => /vakantie|vrij/i.test(name), loadCategoryOverrides: () => overrides },
+      './workloadCategory': {
+        isVrijItem: item => /vakantie|\bvrij\b/i.test(item.name) || /^vrij$/i.test(item.group ?? ''),
+        loadCategoryOverrides: () => overrides,
+      },
       './freeCapacity': freeCapacity(),
       './recurringMeetingWindow': { visibleRecurringSubitems: (_source, subitems) => subitems },
       './itemHours': { itemRollupHours: item => Math.max(0, Number(item.estHours) || 0) },
@@ -107,4 +110,13 @@ test('een Google-item blijft de hele dag blokkeren', () => {
   }
   const { memberTotalHours } = workload()
   assert.equal(memberTotalHours([vakantie], 'menno', week), 40)
+})
+
+test('Vrijheid in de groep Vrij blokkeert ook als Google-item de hele dag', () => {
+  const vrijheid = {
+    ...project('vrijheid', 'Vrijheid', '2026-09-14', '2026-09-14', 0, 'Vrij'),
+    source: 'google',
+  }
+  const { memberTotalHours } = workload()
+  assert.equal(memberTotalHours([vrijheid], 'menno', week), 8)
 })

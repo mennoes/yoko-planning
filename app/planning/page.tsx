@@ -30,7 +30,7 @@ function isOffDayInline(memberId: string, date: Date): boolean {
 import { loadCapacities, setCapacity, onCapacitiesChange, pullCapacities } from '@/lib/capacitiesStore'
 import {
   CAT_COLOR,
-  effectiveCategory, isVrijTitle,
+  effectiveCategory, isVrijItem, isVrijTitle,
   loadCategoryOverrides, setCategoryOverride, onCategoryOverridesChange,
   type WorkloadCategory,
 } from '@/lib/workloadCategory'
@@ -100,11 +100,11 @@ const HANDLE_W = 8
 // Lineaire schaal maakt verschillen nadrukkelijker dan de oude sqrt:
 // 2u/dag=29%, 4u=53%, 6u=76%, 8u=100%. De renderers houden een
 // minimale klikbare hoogte aan; skyline-packing volgt de echte hoogte.
-function hoursScaleRatio(project: Pick<Project, 'name' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
+function hoursScaleRatio(project: Pick<Project, 'name' | 'group' | 'startDate' | 'endDate' | 'ownerIds' | 'estHours' | 'ownerHours'>, memberId?: string): number {
   // Vrij (vakantie, hemelvaart, …) is altijd 'de hele dag vrij' (8u),
   // ongeacht wat estHours toevallig zegt (soms 0 in de data) — dus 100%,
   // exact zoals een echte 8u/dag-werkdag.
-  if (isVrijTitle(project.name)) return 1.0
+  if (isVrijItem(project)) return 1.0
   const owners = Math.max(1, project.ownerIds.filter(id => id !== 'unassigned').length)
   const memberHours = memberId && project.ownerHours && memberId in project.ownerHours
     ? Number(project.ownerHours[memberId]) || 0
@@ -180,7 +180,7 @@ function hoursInRange(project: Project, memberId: string, rs: Date, re: Date, ca
   // afwezigheid tellen wanneer ze als Meeting zijn geclassificeerd.
   const isVrij = categoryOverride
     ? categoryOverride === 'vrij'
-    : isVrijTitle(project.name) || (project.source !== 'google' && (project.group ?? '').toLowerCase().includes('vrij'))
+    : isVrijItem(project)
   // Gebruik voor de noemer exact dezelfde werkdagen als voor de overlap.
   const totalWork = countWorkdaysMs(pS.getTime(), pE.getTime())
   if (totalWork === 0) return 0
@@ -273,7 +273,7 @@ function contributionsPerCell(
     const explicitCategory = overrides[project.id]
     const isVrij = explicitCategory
       ? explicitCategory === 'vrij'
-      : isVrijTitle(project.name) || (project.source !== 'google' && (project.group ?? '').toLowerCase().includes('vrij'))
+      : isVrijItem(project)
 
     // Eerste kolom die op of ná de projectstart eindigt; daarna doorlopen tot
     // een kolom voorbij het projecteinde begint.
@@ -1205,9 +1205,7 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
   // workday-blok in het uur-grid (09:00–17:00) ipv in de all-day banner —
   // dan zie je ze duidelijk de werkdag opvullen.
   function isVrij(p: Project) {
-    if (isVrijTitle(p.name)) return true
-    const g = (p.group ?? '').toLowerCase()
-    return g === 'vrij' || g.includes('vakantie')
+    return isVrijItem(p)
   }
   for (const p of visible) {
     if (p.startTime) {
@@ -2174,7 +2172,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   // laat zien. Done-afspraken blijven zichtbaar en worden alleen gedempt;
   // een afgeronde recurring parent mag toekomstige instances niet verbergen.
   const googleMeetings = (hideMeetings ? [] : owned).filter(p =>
-    p.source === 'google' && !isVrijTitle(p.name))
+    p.source === 'google' && !isVrijItem(p))
   const meetingsByDay = new Map<string, Project[]>()
   if (zoom === 'week') {
     for (const p of googleMeetings) {
@@ -2266,7 +2264,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
       //      heeft gezet (override), OF
       //   2. 't echt 'n Google-event is (source==='google').
       const explicitCat = overrides[p.id]
-      const isMeeting = (p.source === 'google' && !isVrijTitle(p.name))
+      const isMeeting = (p.source === 'google' && !isVrijItem(p))
         || effectiveCategory({ name: p.name, hours: p.estHours || 0, source: p.source }, explicitCat) === 'meeting'
       // Google-meetings zitten voortaan in de compacte dagteller hierboven,
       // niet meer als losse gekleurde balken tussen het projectwerk.
@@ -2376,7 +2374,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   // ze worden los gerenderd over de volle hoogte van de container, achter
   // de andere events.
   const projectAllSingles = finalBars
-  const isVrijBar = (b: SingleBar) => isVrijTitle(b.p.name)
+  const isVrijBar = (b: SingleBar) => isVrijItem(b.p)
   // Hele-dag items: één enkele dag waarop het project (bijna) een volle
   // werkdag duurt. Die renderen we als full-height achtergrond-blok zodat
   // je in één oogopslag ziet dat de dag 'op slot' staat — vergelijkbaar

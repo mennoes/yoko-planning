@@ -17,7 +17,7 @@ runInNewContext(itemHoursJs, { exports: itemHours })
 const exports = {}
 runInNewContext(js, { exports, URL, require(id) {
   if (id === './boardsRegistry') return { getBoardColor: () => '#000' }
-  if (id === './workloadCategory') return { isVrijTitle: () => false, loadCategoryOverrides: () => ({}) }
+  if (id === './workloadCategory') return { isVrijItem: () => false, loadCategoryOverrides: () => ({}) }
   if (id === './freeCapacity') return { blockedHoursForWorkdays: days => days * 8 }
   if (id === './recurringMeetingWindow') return { visibleRecurringSubitems: (_source, rows) => rows }
   if (id === './itemHours') return itemHours

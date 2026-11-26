@@ -16,11 +16,20 @@ function loadModule(file, mocks, globals = {}) {
   } })
   return exports
 }
-const category = { isVrijTitle: () => false, loadCategoryOverrides: () => ({}) }
+const category = {
+  isVrijTitle: () => false,
+  isVrijItem: item => /^vrij$/i.test(item.group ?? ''),
+  loadCategoryOverrides: () => ({}),
+}
+const freeCapacity = {
+  blockedHoursForWorkdays: days => days * 8,
+  vrijHoursForOverlap: ({ overlapWorkdays, totalWorkdays, ownHours, allowOwnHours }) =>
+    allowOwnHours && ownHours > 0 ? ownHours * overlapWorkdays / totalWorkdays : overlapWorkdays * 8,
+}
 const itemHours = loadModule('../lib/itemHours.ts', {})
 const { groupsToProjects } = loadModule('../lib/workload.ts', {
   './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
-  './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+  './freeCapacity': freeCapacity,
   './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
   './itemHours': itemHours,
 })
@@ -85,10 +94,10 @@ test('a recurring Google parent never duplicates the hours of its dated occurren
   assert.equal(output.reduce((sum, project) => sum + project.estHours, 0), 1.5)
 })
 
-test('a Google meeting in a wrongly named Vrij group stays a meeting, not an 8-hour day', () => {
+test('a Google item in the Vrij group blocks the day unless meeting is explicit', () => {
   const api = loadModule('../lib/workload.ts', {
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
-    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './freeCapacity': freeCapacity,
     './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
     './itemHours': itemHours,
   })
@@ -98,7 +107,7 @@ test('a Google meeting in a wrongly named Vrij group stays a meeting, not an 8-h
     estHours: 1.5, status: 'active',
   }
   const week = new Date('2026-10-12T00:00:00')
-  assert.equal(api.projectHoursInWeek(project, 'menno', week), 1.5)
+  assert.equal(api.projectHoursInWeek(project, 'menno', week), 8)
   assert.equal(api.projectHoursInWeek(project, 'menno', week, 'meeting'), 1.5)
 })
 
@@ -129,7 +138,7 @@ test('personal calendar view ignores a manually retained owner who is not an acc
   const week = new Date('2026-10-12T00:00:00')
   const strict = loadModule('../lib/workload.ts', {
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
-    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './freeCapacity': freeCapacity,
     './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
     './itemHours': itemHours,
   }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
@@ -145,7 +154,7 @@ test('personal calendar view hides legacy Google rows without verified participa
   const week = new Date('2026-10-12T00:00:00')
   const strict = loadModule('../lib/workload.ts', {
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
-    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './freeCapacity': freeCapacity,
     './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
     './itemHours': itemHours,
   }).memberContributions(projects, 'menno', week, { acceptedGoogleOnly: true })
@@ -184,7 +193,7 @@ test('a meeting that synced through a colleague calendar still counts for the ac
   const week = new Date('2026-10-12T00:00:00')
   const workload = loadModule('../lib/workload.ts', {
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
-    './freeCapacity': { blockedHoursForWorkdays: days => days * 8 },
+    './freeCapacity': freeCapacity,
     './recurringMeetingWindow': { visibleRecurringSubitems: (_source, rows) => rows },
     './itemHours': itemHours,
   })

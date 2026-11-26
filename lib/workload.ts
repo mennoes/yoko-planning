@@ -50,7 +50,7 @@ export type Project = {
 
 import { getBoardColor } from './boardsRegistry'
 import type { BoardGroup } from './boards'
-import { isVrijTitle, loadCategoryOverrides } from './workloadCategory'
+import { isVrijItem, loadCategoryOverrides } from './workloadCategory'
 import { vrijHoursForOverlap } from './freeCapacity'
 import { visibleRecurringSubitems } from './recurringMeetingWindow'
 import { itemRollupHours } from './itemHours'
@@ -497,7 +497,7 @@ export function projectHoursInWeek(
   // een vakantieblok met een neutrale titel telt daardoor eveneens mee.
   const isVrij = categoryOverride
     ? categoryOverride === 'vrij'
-    : isVrijTitle(project.name) || (project.source !== 'google' && (project.group ?? '').toLowerCase().includes('vrij'))
+    : isVrijItem(project)
   const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime())
   if (totalWork === 0) return 0
   const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime())

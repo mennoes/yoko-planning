@@ -6,7 +6,7 @@
 // die persoon als off-day → workload-distributie skipt die dag, zodat de
 // uren naar andere werkdagen rollen.
 
-import { isVrijTitle } from './workloadCategory'
+import { isVrijItem } from './workloadCategory'
 
 export type VrijDayMap = Map<string, Set<string>>   // memberId → set of 'YYYY-MM-DD'
 
@@ -29,7 +29,7 @@ export function setVrijDaysFromProjects(projects: Array<{
   const next: VrijDayMap = new Map()
   for (const p of projects) {
     if (!p.startDate) continue
-    const isVrij = isVrijTitle(p.name) || ((p.group ?? '').toLowerCase()).includes('vrij')
+    const isVrij = isVrijItem(p)
     if (!isVrij) continue
     const owners = (p.ownerIds ?? []).filter(o => o && o !== 'unassigned')
     if (owners.length === 0) continue

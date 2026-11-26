@@ -11,7 +11,7 @@ const js = ts.transpileModule(source, { compilerOptions: {
 const exports = {}
 runInNewContext(js, { exports, require(id) {
   if (id !== './workloadCategory') throw new Error(`Unexpected dependency ${id}`)
-  return { isVrijTitle: name => /vakantie|vrij/i.test(name) }
+  return { isVrijItem: item => /vakantie|\bvrij\b/i.test(item.name) || /^vrij$/i.test(item.group ?? '') }
 } })
 
 const contribution = (id, name, hours, group) => ({ hours, project: { id, name, group } })
@@ -36,6 +36,11 @@ test('partial time off with work inside capacity is not called an overlap', () =
 test('a manual free category counts even with a neutral title', () => {
   assert.equal(exports.homeWeekTone([contribution('holiday', 'Zwitserland', 24)], 40, 'next', { holiday: 'vrij' }),
     'volgende week heb je 24u vrij')
+})
+
+test('a neutral title in the Vrij group is described as time off', () => {
+  assert.equal(exports.homeWeekTone([contribution('holiday', 'Vrijheid', 8, 'Vrij')], 40, 'next', {}),
+    'volgende week heb je 8u vrij')
 })
 
 test('ordinary work keeps its load description', () => {

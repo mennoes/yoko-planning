@@ -57,6 +57,22 @@ export function isVrijTitle(name: string | undefined | null): boolean {
   return VRIJ_PATTERNS.some(re => re.test(n))
 }
 
+// De groep is een bewuste categorie-keuze en hoort daarom zwaarder te
+// wegen dan de titel. Zo is een item met de neutrale naam 'Vrijheid' in de
+// groep 'Vrij' wel degelijk een vrij-item, zonder dat ieder project waarin
+// toevallig het woord 'vrijheid' staat als vakantie wordt gezien.
+export function isVrijGroup(group: string | undefined | null): boolean {
+  const name = (group ?? '').trim()
+  return /(^|[\s/·-])(vrij|vakantie|verlof)(?=$|[\s/·-])/i.test(name)
+}
+
+export function isVrijItem(item: {
+  name?: string | null
+  group?: string | null
+}): boolean {
+  return isVrijTitle(item.name) || isVrijGroup(item.group)
+}
+
 function isValidCategory(c: unknown): c is WorkloadCategory {
   return c === 'meeting' || c === 'overhead' || c === 'maken' || c === 'vrij'
 }
