@@ -2633,6 +2633,12 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
     <div>
     <div data-testid={`planning-timeline-${memberId}`} style={{
       position: 'relative', height, overflow: 'hidden', isolation: 'isolate',
+      // De tijdlijn schuift horizontaal achter de sticky personenkolom.
+      // Balken werden al op viewportStart ingekort, maar de kolomlijnen
+      // niet. Knip daarom de hele laag op exact dezelfde lokale x-grens af.
+      // Zo kunnen weeklijnen, deadlines en schaduwen nooit door de vaste
+      // sectie met naam/avatar heen tekenen.
+      clipPath: `inset(0 0 0 ${Math.max(0, viewportStart)}px)`,
       transition: 'height 380ms cubic-bezier(0.22, 1, 0.36, 1)',
       willChange: 'height',
     }}>

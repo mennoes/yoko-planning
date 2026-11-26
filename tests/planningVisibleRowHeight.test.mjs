@@ -24,6 +24,7 @@ test('past bars stop reserving height as soon as today is visible', () => {
 
 test('sticky member mask stays above bars and row height animates smoothly', () => {
   assert.match(source, /zIndex: 7000, background: stickyBg/)
+  assert.match(source, /clipPath: `inset\(0 0 0 \$\{Math\.max\(0, viewportStart\)\}px\)`/)
   assert.match(source, /gridTemplateRows: visuallyOpen \? '1fr' : '0fr'/)
   assert.match(source, /height 380ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/)
   assert.match(source, /visibleStartPx=\{Math\.max\(0, visibleGridRange\.start\)\}/)
