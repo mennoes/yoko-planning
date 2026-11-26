@@ -476,8 +476,17 @@ export default function IdeasPage() {
             </button>
             <footer className={styles.noteFooter}>
               <IdeaAuthor id={idea.authorId} name={idea.authorName} createdAt={idea.createdAt} />
-              {idea.status === 'open' && <button type="button" onClick={() => claim(idea)}>Pak op →</button>}
-              {idea.status === 'doing' && <button type="button" onClick={() => updateIdea(idea.id, { status: 'done' })}>{idea.claimedName ?? 'Iemand'} · klaar</button>}
+              {idea.status === 'open' && <button className={styles.claimButton} type="button" onClick={() => claim(idea)} title="Zet jezelf bij dit idee">
+                {profile?.memberId
+                  ? <span className={styles.claimAvatar}><UserAvatar memberId={profile.memberId} size={24} /><span className={styles.claimPlus} aria-hidden>+</span></span>
+                  : <span className={styles.claimFallback} aria-hidden>+</span>}
+                <span>Ik pak dit op</span>
+              </button>}
+              {idea.status === 'doing' && <div className={styles.claimedState} title={`Opgepakt door ${idea.claimedName ?? 'iemand'}`}>
+                {idea.claimedBy ? <UserAvatar memberId={idea.claimedBy} size={26} /> : <span className={styles.claimFallback} aria-hidden>?</span>}
+                <span>{idea.claimedName ?? 'Iemand'}</span>
+                {profile?.memberId === idea.claimedBy && <button type="button" onClick={() => updateIdea(idea.id, { status: 'done' })}>Klaar</button>}
+              </div>}
               {idea.status === 'done' && <button type="button" onClick={() => updateIdea(idea.id, { status: 'open', claimedBy: null, claimedName: null })}>Terug op muur</button>}
             </footer>
           </article>

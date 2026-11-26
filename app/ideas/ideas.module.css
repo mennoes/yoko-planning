@@ -76,6 +76,13 @@
 .noteAuthor > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .authorFallback { width: 22px; height: 22px; flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(41,35,27,.11); color: rgba(41,35,27,.72); font-size: 9px; font-weight: 900; }
 .noteFooter button { border: 0; border-radius: 999px; background: rgba(255,255,255,.48); color: #29231b; padding: 8px 11px; font: inherit; font-weight: 800; cursor: pointer; }
+.noteFooter .claimButton { display: inline-flex; align-items: center; gap: 7px; padding: 4px 9px 4px 4px; background: rgba(255,255,255,.42); }
+.claimAvatar { position: relative; display: inline-flex; }
+.claimAvatar .claimPlus { position: absolute; right: -3px; bottom: -2px; width: 12px; height: 12px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #29231b; color: #fff; font-size: 10px; font-weight: 900; line-height: 1; box-shadow: 0 0 0 2px var(--note-color); }
+.claimFallback { width: 24px; height: 24px; flex: 0 0 24px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(41,35,27,.35); border-radius: 50%; color: rgba(41,35,27,.65); font-weight: 900; }
+.claimedState { min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 3px; border-radius: 999px; background: rgba(111,161,129,.20); color: rgba(41,35,27,.76); font-weight: 800; }
+.claimedState > span:not(.claimFallback) { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.noteFooter .claimedState button { padding: 6px 9px; background: rgba(255,255,255,.58); }
 .doing { box-shadow: 0 0 0 3px rgba(111,161,129,.42), 0 10px 22px rgba(43,36,18,.12); }
 .highlighted { animation: spotlight 1s ease 2; box-shadow: 0 0 0 5px #1d1b18, 0 25px 55px rgba(43,36,18,.25); }
 @keyframes spotlight { 50% { transform: rotate(0) scale(1.04); } }
