@@ -128,6 +128,13 @@ test('recurring Google meetings are limited to eight weeks ahead', () => {
   assert.match(sync, /prev\?\.hoursOverride/)
   assert.match(sync, /eventHours\(ev\) \* occurrenceOwners\.length/)
 })
+
+test('Google vacation titles always land in the Vrij group', () => {
+  const sync = readFileSync(new URL('../lib/googleSync.ts', import.meta.url), 'utf8')
+  assert.match(sync, /const keepGroup = isVrij\s*\? fallbackGroup/)
+  assert.match(sync, /const keepGroup = isVrij\s*\? recFallback/)
+  assert.match(sync, /\.filter\(u => isVrijTitle\(u\.name as string\)\)/)
+})
 test('personal calendar view ignores a manually retained owner who is not an accepted Google participant', () => {
   const google = {
     ...meeting,
