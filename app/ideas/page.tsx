@@ -44,11 +44,10 @@ function IdeaAuthor({ id, name, createdAt }: { id: string | null; name: string |
   const label = name || 'Onbekend'
   const initials = label.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase() || '?'
   return (
-    <span className={styles.noteAuthor} title={`Ingevoerd door ${label}`}>
+    <span className={styles.noteAuthor} title={`Ingevoerd door ${label} · ${relativeDate(createdAt)}`} aria-label={`Ingevoerd door ${label}`}>
       {id
         ? <UserAvatar memberId={id} size={22} />
         : <span className={styles.authorFallback} aria-hidden>{initials}</span>}
-      <span>{name ?? relativeDate(createdAt)}</span>
     </span>
   )
 }
@@ -463,12 +462,9 @@ export default function IdeasPage() {
               }}
             ><span /><span /><span /><span /><span /><span /></button>
             <button className={styles.noteMain} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} bewerken`}>
-              <div className={`${styles.noteGoal} ${idea.goal ? '' : styles.noteGoalEmpty}`}>
-                <span>Draagt bij aan</span>
-                <strong>{idea.goal || 'Nog geen doel gekoppeld'}</strong>
-              </div>
+              {idea.goal && <div className={styles.noteGoal} title={`Doel: ${idea.goal}`}><strong>{idea.goal}</strong></div>}
               <div className={styles.noteTop}>
-                <span>{categoryLabel(idea.category)}</span>
+                <span className={styles.noteCategoryMarker} title={`Categorie: ${categoryLabel(idea.category)}`} aria-label={`Categorie: ${categoryLabel(idea.category)}`} />
                 <span className={styles.notePin} aria-hidden />
               </div>
               <h2>{idea.title}</h2>
@@ -476,18 +472,16 @@ export default function IdeasPage() {
             </button>
             <footer className={styles.noteFooter}>
               <IdeaAuthor id={idea.authorId} name={idea.authorName} createdAt={idea.createdAt} />
-              {idea.status === 'open' && <button className={styles.claimButton} type="button" onClick={() => claim(idea)} title="Zet jezelf bij dit idee">
+              {idea.status === 'open' && <button className={styles.claimButton} type="button" onClick={() => claim(idea)} title="Ik pak dit idee op" aria-label="Ik pak dit idee op">
                 {profile?.memberId
                   ? <span className={styles.claimAvatar}><UserAvatar memberId={profile.memberId} size={24} /><span className={styles.claimPlus} aria-hidden>+</span></span>
                   : <span className={styles.claimFallback} aria-hidden>+</span>}
-                <span>Ik pak dit op</span>
               </button>}
-              {idea.status === 'doing' && <div className={styles.claimedState} title={`Opgepakt door ${idea.claimedName ?? 'iemand'}`}>
+              {idea.status === 'doing' && <div className={styles.claimedState} title={`Opgepakt door ${idea.claimedName ?? 'iemand'}`} aria-label={`Opgepakt door ${idea.claimedName ?? 'iemand'}`}>
                 {idea.claimedBy ? <UserAvatar memberId={idea.claimedBy} size={26} /> : <span className={styles.claimFallback} aria-hidden>?</span>}
-                <span>{idea.claimedName ?? 'Iemand'}</span>
-                {profile?.memberId === idea.claimedBy && <button type="button" onClick={() => updateIdea(idea.id, { status: 'done' })}>Klaar</button>}
+                {profile?.memberId === idea.claimedBy && <button type="button" onClick={() => updateIdea(idea.id, { status: 'done' })} title="Markeer als klaar" aria-label="Markeer als klaar">✓</button>}
               </div>}
-              {idea.status === 'done' && <button type="button" onClick={() => updateIdea(idea.id, { status: 'open', claimedBy: null, claimedName: null })}>Terug op muur</button>}
+              {idea.status === 'done' && <button className={styles.doneReturn} type="button" onClick={() => updateIdea(idea.id, { status: 'open', claimedBy: null, claimedName: null })} title="Terug op de muur" aria-label="Terug op de muur">↩</button>}
             </footer>
           </article>
           ))}
