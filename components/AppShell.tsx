@@ -45,6 +45,7 @@ function Inner({ children }: { children: ReactNode }) {
   const profileRef = useRef(profile)
   useEffect(() => { profileRef.current = profile }, [profile])
   const pathname = usePathname()
+  const isDemoRoute = pathname.startsWith('/demo')
   const router   = useRouter()
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -185,6 +186,10 @@ function Inner({ children }: { children: ReactNode }) {
 
   // Remote sync — pulls + subscribes when user is signed in.
   useEffect(() => {
+    // De publieke demo is volledig lokaal. Ook wanneer de bezoeker toevallig
+    // nog bij Yoko is ingelogd mag deze schil geen echte Supabase-data
+    // pullen, wijzigen of snapshots voor de echte agenda's aanmaken.
+    if (isDemoRoute) return
     const unsubs: Array<() => void> = []
     async function start() {
       const syncing = await isSyncing()
@@ -255,10 +260,13 @@ function Inner({ children }: { children: ReactNode }) {
       start()
     })
     return () => { offAuth(); while (unsubs.length) unsubs.pop()?.() }
-  }, [])
+  }, [isDemoRoute])
 
   // Google Calendar sync — pull on mount + periodiek zolang de tab open is.
   useEffect(() => {
+    // Zelfde harde grens als hierboven: /demo start geen Google-sync,
+    // auto-status, notificaties of recovery-snapshots van echte borden.
+    if (isDemoRoute) return
     let cancelled = false
     let lastSyncAt = 0
     const MIN_VISIBILITY_INTERVAL_MS = 5 * 60 * 1000
@@ -328,7 +336,7 @@ function Inner({ children }: { children: ReactNode }) {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility)
       offAuth()
     }
-  }, [])
+  }, [isDemoRoute])
 
   // Login + share + auth routes: geen sidebar, geen ProfileSetup, geen auth-redirect
   if (pathname === '/login' || pathname.startsWith('/share') || pathname.startsWith('/auth')) {
