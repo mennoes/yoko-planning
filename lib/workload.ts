@@ -50,7 +50,7 @@ export type Project = {
 
 import { getBoardColor } from './boardsRegistry'
 import type { BoardGroup } from './boards'
-import { isVrijItem, loadCategoryOverrides } from './workloadCategory'
+import { effectiveCategory, isVrijItem, loadCategoryOverrides } from './workloadCategory'
 import { vrijHoursForOverlap } from './freeCapacity'
 import { visibleRecurringSubitems } from './recurringMeetingWindow'
 import { itemRollupHours } from './itemHours'
@@ -499,9 +499,16 @@ export function projectHoursInWeek(
   //
   // Dezelfde categoriedetectie geldt voor naam, override en groepsnaam;
   // een vakantieblok met een neutrale titel telt daardoor eveneens mee.
+  // Een Google-afspraak blijft een meeting, ook wanneer een oude of
+  // handmatig verplaatste rij toevallig in de groep 'Vrij' staat. Anders
+  // wordt een check-in van een halfuur als een volledige vrije werkdag van
+  // 8 uur geteld. Een expliciete Vrij-keuze of een duidelijke vakantietitel
+  // blijft wel gewoon leidend.
   const isVrij = categoryOverride
     ? categoryOverride === 'vrij'
-    : isVrijItem(project)
+    : project.source === 'google'
+      ? effectiveCategory({ name: project.name, hours: project.estHours, source: project.source }) === 'vrij'
+      : isVrijItem(project)
   const totalWork = countWorkdays(pStart.getTime(), pEnd.getTime())
   if (totalWork === 0) return 0
   const overlapWork = countWorkdays(overlapStart.getTime(), overlapEnd.getTime())

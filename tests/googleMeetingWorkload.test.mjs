@@ -19,6 +19,7 @@ function loadModule(file, mocks, globals = {}) {
 const category = {
   isVrijTitle: () => false,
   isVrijItem: item => /^vrij$/i.test(item.group ?? ''),
+  effectiveCategory: (item, override) => override ?? (item.source === 'google' ? 'meeting' : 'maken'),
   loadCategoryOverrides: () => ({}),
 }
 const freeCapacity = {
@@ -94,7 +95,7 @@ test('a recurring Google parent never duplicates the hours of its dated occurren
   assert.equal(output.reduce((sum, project) => sum + project.estHours, 0), 1.5)
 })
 
-test('a Google item in the Vrij group blocks the day unless meeting is explicit', () => {
+test('a Google meeting in the Vrij group keeps its real duration', () => {
   const api = loadModule('../lib/workload.ts', {
     './boardsRegistry': { getBoardColor: () => '#000' }, './workloadCategory': category,
     './freeCapacity': freeCapacity,
@@ -102,13 +103,14 @@ test('a Google item in the Vrij group blocks the day unless meeting is explicit'
     './itemHours': itemHours,
   })
   const project = {
-    id: 'weekstart', name: 'Weekstart', group: 'Vrij', source: 'google',
-    ownerIds: ['menno'], startDate: '2026-10-12', endDate: '2026-10-12',
+    id: 'checkin', name: 'Check-in Menno <> Odette', group: 'Vrij', source: 'google',
+    ownerIds: ['menno', 'odette', 'vincent'], ownerHours: { menno: .5, odette: .5, vincent: .5 },
+    startDate: '2026-10-12', endDate: '2026-10-12', startTime: '09:30', endTime: '10:00',
     estHours: 1.5, status: 'active',
   }
   const week = new Date('2026-10-12T00:00:00')
-  assert.equal(api.projectHoursInWeek(project, 'menno', week), 8)
-  assert.equal(api.projectHoursInWeek(project, 'menno', week, 'meeting'), 1.5)
+  assert.equal(api.projectHoursInWeek(project, 'menno', week), .5)
+  assert.equal(api.projectHoursInWeek(project, 'menno', week, 'vrij'), 8)
 })
 
 test('agenda and workload use the same canonical item roll-up', () => {
