@@ -14,6 +14,8 @@ test('deadline flags sit on the corresponding planning bars', () => {
   const timeline = planning.slice(planning.indexOf('data-testid={`planning-timeline-'), planning.indexOf('data-testid={`planning-timeline-') + 1800)
   assert.match(timeline, /<PlanningDeadlines projects=\{owned\}/)
   assert.match(timeline, /anchors=\{visibleBars\.map/)
+  assert.match(deadlines, /background:'transparent',color:'var\(--yellow\)'/)
+  assert.doesNotMatch(deadlines, /background:'var\(--bg-card\)'/)
 })
 
 test('day view attaches deadline flags to all-day and timed items', () => {
