@@ -6,16 +6,18 @@ const source = file => readFileSync(new URL(file, import.meta.url), 'utf8').repl
 const deadlines = source('../components/PlanningDeadlines.tsx')
 const planning = source('../app/planning/page.tsx')
 
-test('deadline flags have their own lane instead of covering project bars', () => {
-  assert.doesNotMatch(deadlines, /anchors/)
-  assert.match(deadlines, /height:ends\.length\*22\+4/)
-  assert.match(deadlines, /borderBottom:'1px solid var\(--border-light\)'/)
-  const timeline = planning.slice(planning.indexOf('<PlanningDeadlines projects={owned}'), planning.indexOf('<PlanningDeadlines projects={owned}') + 600)
-  assert.match(timeline, /data-testid=\{`planning-timeline-\$\{memberId\}`\}/)
-  assert.match(timeline, /position: 'relative', height/)
+test('deadline flags sit on the corresponding planning bars', () => {
+  assert.match(deadlines, /anchors:PlanningDeadlineAnchor\[\]/)
+  assert.match(deadlines, /const anchorFor=/)
+  assert.match(deadlines, /position:'absolute',inset:0,pointerEvents:'none'/)
+  assert.doesNotMatch(deadlines, /height:ends\.length\*22\+4/)
+  const timeline = planning.slice(planning.indexOf('data-testid={`planning-timeline-'), planning.indexOf('data-testid={`planning-timeline-') + 1000)
+  assert.match(timeline, /<PlanningDeadlines projects=\{owned\}/)
+  assert.match(timeline, /anchors=\{visibleBars\.map/)
 })
 
-test('day view places all deadlines in the separate lane', () => {
-  assert.match(planning, /<PlanningDeadlines projects=\{visible\} cols=\{cols\} zoom="dag"/)
-  assert.doesNotMatch(planning, /<PlanningDeadlines[^>]+anchors=/)
+test('day view attaches deadline flags to all-day and timed items', () => {
+  assert.match(planning, /anchors=\{allDayBars\.map/)
+  assert.match(planning, /anchors=\{timedBars\.map/)
+  assert.doesNotMatch(planning, /<div style=\{\{display:'flex'\}\}><div[^\n]+<PlanningDeadlines/)
 })

@@ -1571,7 +1571,6 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
 
   return (
     <div>
-      <div style={{display:'flex'}}><div style={{width:nameW,flexShrink:0,position:'sticky',left:0,zIndex:20,background:stickyBg}}/><PlanningDeadlines projects={visible} cols={cols} zoom="dag" onOpen={onSelect} onChange={onDeadlineChange}/></div>
       {/* All-day banner — sticky-left cel toont 'De hele dag' OR de avatar
           (bij per-persoon-rendering, zodat het eerste event op dezelfde
           hoogte als de avatar start). */}
@@ -1582,6 +1581,8 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
           fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>{leftHeader ?? 'De hele dag'}</div>
         <div style={{ position: 'relative', width: totalWidth, minHeight: allDayH, background: stickyBg, overflowX: 'clip', overflowY: 'visible' }}>
+          <PlanningDeadlines projects={visible} cols={cols} zoom="dag" onOpen={onSelect} onChange={onDeadlineChange}
+            anchors={allDayBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:6+b.lane*(allDayLaneH+4),left:b.left+2,right:b.left+b.width}))}/>
           {cols.map((col, idx) => {
             const left = cols.slice(0, idx).reduce((s, c) => s + c.widthPx, 0)
             const dow = col.rangeStart.getDay()
@@ -1749,6 +1750,8 @@ function WeekTimeGrid({ onDeadlineChange, cols, projects, isMemberVisible, membe
           // overspill onder/boven het raster.
           overflow: 'hidden', cursor: onCreateAt && memberId ? 'cell' : 'default',
           userSelect: createSel ? 'none' : undefined }}>
+          <PlanningDeadlines projects={visible} cols={cols} zoom="dag" onOpen={onSelect} onChange={onDeadlineChange}
+            anchors={timedBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:b.top,left:b.left,right:b.left+b.width}))}/>
           {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => (
             <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * HOUR_H, height: HOUR_H,
               borderBottom: '1px solid var(--border)', pointerEvents: 'none' }} />
@@ -2624,12 +2627,13 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
 
   return (
     <div>
-    <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}/>
     <div data-testid={`planning-timeline-${memberId}`} style={{
       position: 'relative', height, overflow: 'hidden', isolation: 'isolate',
       transition: 'height 380ms cubic-bezier(0.22, 1, 0.36, 1)',
       willChange: 'height',
     }}>
+      <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}
+        anchors={visibleBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:(barTops.get(b.p.id)??0)+meetingSummaryHeight,left:b.renderLeft,right:b.renderLeft+b.renderWidth}))}/>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
