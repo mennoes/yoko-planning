@@ -2482,6 +2482,14 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
       clippedEnd: b.left + b.width > viewportEnd,
     }
   })
+  // Zodra vandaag in beeld staat, bepalen afgeronde/verlopen balken links
+  // van de vandaaglijn niet langer de rijhoogte. Ze mogen nog gedempt in
+  // beeld staan, maar de gebruiker hoeft niet eerst een hele extra week
+  // naar rechts te scrollen voordat de rij al inklapt.
+  const layoutStart = todayPx > viewportStart && todayPx < viewportEnd
+    ? todayPx
+    : viewportStart
+  const layoutBars = visibleBars.filter(b => b.renderLeft + b.renderWidth > layoutStart)
   const naturalHeights = new Map<string, number>(
     visibleBars.map(b => [b.p.id, planningBarPixelHeight(BASELINE_AVAIL_H, hoursScaleRatio(b.p, memberId))]),
   )
@@ -2537,7 +2545,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
     covered += Math.max(0, rangeEnd - rangeStart)
     return covered / Math.max(1, visualEnd - visualStart)
   }
-  const placementBars = [...visibleBars].sort((a, b) => {
+  const placementBars = [...layoutBars].sort((a, b) => {
     if (a.isMeeting !== b.isMeeting) return a.isMeeting ? -1 : 1
     if (!a.isMeeting && !b.isMeeting) {
       const aSpan = a.packWidth || a.width

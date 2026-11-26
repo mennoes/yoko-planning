@@ -8,12 +8,18 @@ test('planning row height only counts bars inside the current viewport', () => {
   assert.match(source, /const viewportBars = rawBars\.filter\(b => b\.left < viewportEnd && b\.left \+ b\.width > viewportStart\)/)
   assert.match(source, /const visibleBars = bars\.map\(b => \{/)
   assert.match(source, /renderWidth: Math\.max\(1, renderRight - renderLeft\)/)
-  assert.match(source, /const placementBars = \[\.\.\.visibleBars\]/)
+  assert.match(source, /const placementBars = \[\.\.\.layoutBars\]/)
   assert.match(source, /const bStart = b\.renderLeft/)
   assert.match(source, /const emptyViewportHeight = Math\.max\(8, Math\.round\(10 \* RS\)\)/)
   assert.match(source, /: Math\.max\(emptyViewportHeight, meetingSummaryHeight \+ BAR_GAP_S \* 2\)/)
   assert.doesNotMatch(source, /WINDOW_DAYS/)
   assert.doesNotMatch(source, /viewportEnd \+ windowPx/)
+})
+
+test('past bars stop reserving height as soon as today is visible', () => {
+  assert.match(source, /const layoutStart = todayPx > viewportStart && todayPx < viewportEnd/)
+  assert.match(source, /const layoutBars = visibleBars\.filter\(b => b\.renderLeft \+ b\.renderWidth > layoutStart\)/)
+  assert.match(source, /const placementBars = \[\.\.\.layoutBars\]/)
 })
 
 test('sticky member mask stays above bars and row height animates smoothly', () => {

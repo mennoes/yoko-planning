@@ -1954,6 +1954,8 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
   const { profile } = useProfile()
   const { members: liveTeam } = useTeam()
   const [hover,     setHover]     = useState(false)
+  const [itemColorPicker, setItemColorPicker] = useState(false)
+  const itemColorBtnRef = useRef<HTMLButtonElement>(null)
   const [editName,  setEditName]  = useState(!!defaultEditName)
   const [nameDraft, setNameDraft] = useState(item.name)
   const [expanded, setExpandedState] = useState(() => loadRememberedItemExpansion(item.id))
@@ -2171,6 +2173,40 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
               ruis toe. Het chevron-icoon laat al genoeg zien dat er
               subitems onder zitten. */}
 
+          <button ref={itemColorBtnRef}
+            data-no-detail
+            onClick={e => { e.stopPropagation(); setItemColorPicker(open => !open) }}
+            title={item.color ? 'Itemkleur wijzigen' : 'Eigen itemkleur instellen'}
+            aria-label={`Kleur van ${item.name || 'item'} wijzigen`}
+            style={{
+              width: 13, height: 13, borderRadius: 4, flexShrink: 0, padding: 0,
+              background: item.color ?? accentColor ?? '#9aadbd', cursor: 'pointer',
+              border: item.color ? '2px solid transparent' : '1px dashed var(--text-muted)',
+              boxShadow: item.color ? '0 0 0 1px rgba(0,0,0,0.08)' : 'none',
+            }} />
+          {itemColorPicker && (
+            <PortalDropdown anchor={itemColorBtnRef} onClose={() => setItemColorPicker(false)}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.4)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Itemkleur</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
+                  {PALETTE.map(color => (
+                    <button key={color} aria-label={`Kies kleur ${color}`}
+                      onClick={() => { onUpdate({ color }); setItemColorPicker(false) }}
+                      style={{ width: 24, height: 24, borderRadius: 5, background: color,
+                        border: item.color === color ? '3px solid var(--text-primary)' : '2px solid transparent',
+                        cursor: 'pointer', padding: 0 }} />
+                  ))}
+                </div>
+                <button onClick={() => { onUpdate({ color: undefined }); setItemColorPicker(false) }}
+                  style={{ marginTop: 9, width: '100%', padding: '6px 8px', borderRadius: 6,
+                    border: '1px solid var(--border-light)', background: 'var(--bg-hover)',
+                    color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  Gebruik groepskleur
+                </button>
+              </div>
+            </PortalDropdown>
+          )}
+
           {item.source === 'google' && !isMobile && <GoogleBadge href={googleHref} />}
           {typeof item.meetLink === 'string' && item.meetLink && !isMobile && (
             <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
@@ -2357,7 +2393,7 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
           }} />
       )}
       {showDetail && (
-        <ItemDetailDrawer item={effectiveItem} cols={cols} accentColor={accentColor}
+        <ItemDetailDrawer item={effectiveItem} cols={cols} accentColor={item.color ?? accentColor}
           onUpdate={onUpdate} onClose={() => { setShowDetail(false); if (openRequest?.id === item.id) onCloseRequest?.() }} />
       )}
       {openSub && (
@@ -2367,7 +2403,7 @@ function BoardRow({ agendaSort, item, cols, gridTemplate, subGridTemplate, subCo
           parentStatus={item.status}
           parentName={item.name}
           cols={cols}
-          accentColor={accentColor}
+          accentColor={item.color ?? accentColor}
           onUpdate={u => {
             // Vertaal BoardItem-update terug naar SubItem-update; alleen
             // velden die SubItem ook kent landen in de array.

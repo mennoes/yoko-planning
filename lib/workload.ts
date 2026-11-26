@@ -100,6 +100,10 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
   const projects = groups.flatMap(g =>
     g.items
       .flatMap((i): Project[] => {
+        // Een item mag binnen een groep een eigen herkenningskleur hebben.
+        // Subitems erven die kleur van hun hoofditem; zonder keuze blijft de
+        // bestaande groepskleur leidend.
+        const itemColor = typeof i.color === 'string' && i.color ? i.color : g.color
         const allSubs = (i.subitems as Array<{ id?: string; name?: string; estHours?: number; ownerHours?: Record<string, number>; googleParticipantIds?: string[]; googleCalendarMemberIds?: string[]; startDate?: string | null; endDate?: string | null; deadline?: string | null; startTime?: string | null; endTime?: string | null; ownerIds?: string[]; status?: string; source?: 'manual' | 'google'; meetLink?: string; externalLink?: string | null; externalSyncedAt?: string }> | undefined) ?? []
         const subs = visibleRecurringSubitems(i.source as string | undefined, allSubs)
         // Subitems mét eigen datums → eigen Project per subitem. Done blijft
@@ -147,7 +151,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
                            : (i.name as string),
               board:     boardName,
               group:     g.name,
-              color:     g.color,
+              color:     itemColor,
               ownerIds:  owners,
               // Opgeslagen verdelingen kunnen achterlopen wanneer het totaal
               // later is aangepast. Planning mag nooit meer uren tonen dan
@@ -177,7 +181,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
               parentProjectId: `${boardName}__${i.id}`,
               parentProject: {
                 id: `${boardName}__${i.id}`, completionParentItemId: i.id as string,
-                name: i.name as string, board: boardName, group:g.name, color:g.color,
+                name: i.name as string, board: boardName, group:g.name, color:itemColor,
                 ownerIds: (i.ownerIds as string[]) ?? [],
                 startDate: (i.startDate as string | null) ?? null,
                 endDate: (i.endDate as string | null) ?? null,
@@ -231,7 +235,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
             name: i.name as string,
             board: boardName,
             group: g.name,
-            color: g.color,
+            color: itemColor,
             ownerIds,
             startDate: (i.startDate as string | null) ?? (i.endDate as string | null) ?? null,
             endDate: (i.endDate as string | null) ?? (i.startDate as string | null) ?? null,
@@ -265,7 +269,7 @@ export function groupsToProjects(boardName: string, groups: BoardGroup[]): Proje
           name: i.name as string,
           board: boardName,
           group: g.name,
-          color: g.color,
+          color: itemColor,
           ownerIds,
           startDate: i.startDate as string | null,
           endDate:   i.endDate   as string | null,

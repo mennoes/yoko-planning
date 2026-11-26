@@ -46,6 +46,25 @@ test('dated subitems carry their stable completion target without an agenda look
   assert.equal(project.completionSubitemId, 'stable-sub')
 })
 
+test('an item color overrides its group color and is inherited by dated subitems', () => {
+  const groups = [{ id: 'work', name: 'Werk', color: '#579bfc', items: [{
+    id: 'parent', name: 'Parent', color: '#e2445c', ownerIds: ['menno'], status: '',
+    startDate: null, endDate: null, estHours: 8,
+    subitems: [{ id: 'sub', name: 'Sub', ownerIds: ['menno'], status: '', startDate: '2026-10-12', endDate: '2026-10-13', estHours: 8 }],
+  }] }]
+  const project = exports.groupsToProjects('yoko', groups)[0]
+  assert.equal(project.color, '#e2445c')
+  assert.equal(project.parentProject.color, '#e2445c')
+})
+
+test('items without their own color keep the group color', () => {
+  const groups = [{ id: 'work', name: 'Werk', color: '#579bfc', items: [{
+    id: 'project', name: 'Project', ownerIds: ['menno'], status: '',
+    startDate: '2026-10-12', endDate: '2026-10-13', estHours: 8,
+  }] }]
+  assert.equal(exports.groupsToProjects('yoko', groups)[0].color, '#579bfc')
+})
+
 test('parent rollup is not added again on top of dated subitems', () => {
   const groups = [{ id: 'work', name: 'Werk', items: [{
     id: 'parent', name: 'Project', ownerIds: ['menno'], status: '',

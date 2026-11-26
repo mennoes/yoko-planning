@@ -66,6 +66,8 @@ export type JournalEntry = {
 export type BoardItem = {
   id:             string
   name:           string
+  /** Eigen planningskleur. Zonder waarde erft het item de groepskleur. */
+  color?:         string
   ownerIds:       string[]
   status:         string
   startDate:      string | null
