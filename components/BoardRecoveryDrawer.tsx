@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { pullBoardFromRemote } from '@/lib/boardStore'
 import type { BoardGroup, BoardItem } from '@/lib/boards'
+import { AgendaSnapshotPreview, type AgendaSnapshotSummary } from './AgendaSnapshotPreview'
 
 type Snapshot = {
   id:          string
@@ -23,6 +24,8 @@ type Snapshot = {
   itemCount?:  number
   subCount?:   number
 }
+type PreviewMode = 'missing' | 'items' | 'subs' | 'hours' | 'full'
+type RecoveryPreview = { snapshot: AgendaSnapshotSummary; mode: PreviewMode }
 
 function fmtDate(iso: string): string {
   try {
@@ -50,6 +53,7 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
   const [loading, setLoading]     = useState(true)
   const [busy, setBusy]           = useState<string | null>(null)
   const [msg, setMsg]             = useState<string | null>(null)
+  const [preview, setPreview]     = useState<RecoveryPreview | null>(null)
   const zeroHourItems = groups.flatMap(group => group.items).filter(item => {
     if (!item.subitems?.length) return false
     const manualSubTotal = item.subitems
@@ -66,10 +70,10 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
 
   useEffect(() => {
     if (!open) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !preview) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, onClose, preview])
 
   useEffect(() => {
     if (!open || !supabase) return
@@ -101,16 +105,11 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
     return () => { cancelled = true }
   }, [open, boardId])
 
-  async function herstel(snap: Snapshot) {
-    if (!supabase) return
-    if (!window.confirm(
-      `Verdwenen subitems herstellen uit de versie van ${fmtDate(snap.snapshot_at)}?\n\n` +
-      `Top-level fields op huidige items blijven zoals ze nu zijn. Alleen subs die in ` +
-      `deze versie zaten maar nu missen worden teruggeplaatst.`,
-    )) return
+  async function herstel(snap: Snapshot): Promise<boolean> {
+    if (!supabase) return false
     const sess = await supabase.auth.getSession()
     const token = sess.data.session?.access_token
-    if (!token) { window.alert('Niet ingelogd.'); return }
+    if (!token) { window.alert('Niet ingelogd.'); return false }
     setBusy(snap.id); setMsg(null)
     try {
       const res = await fetch('/api/snapshots/merge-missing-subitems', {
@@ -119,40 +118,49 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
         body: JSON.stringify({ boardId, since: snap.snapshot_at }),
       })
       const json = await res.json() as { ok: boolean; error?: string; touchedItems?: number; restoredSubs?: number; status?: string }
-      if (!json.ok) { setMsg(`Recovery mislukt: ${json.error ?? 'onbekend'}`); return }
+      if (!json.ok) { setMsg(`Recovery mislukt: ${json.error ?? 'onbekend'}`); return false }
       await pullBoardFromRemote(boardId).catch(() => {})
       if (json.status === 'nothing_to_restore') {
         setMsg(`Niets terug te halen uit deze versie — alle subs staan al op de huidige items.`)
       } else {
         setMsg(`✓ Hersteld: ${json.restoredSubs ?? 0} subitem(s) op ${json.touchedItems ?? 0} item(s).`)
       }
+      return true
     } finally {
       setBusy(null)
     }
   }
 
-  async function herstelOntbrekendeAfspraken() {
-    if (!supabase) return
+  async function herstelOntbrekendeAfspraken(confirmed = false): Promise<boolean> {
+    if (!supabase) return false
     const sess = await supabase.auth.getSession()
     const token = sess.data.session?.access_token
-    if (!token) { window.alert('Niet ingelogd.'); return }
+    if (!token) { window.alert('Niet ingelogd.'); return false }
     setBusy('history-scan'); setMsg(null)
     try {
-      const previewRes = await fetch('/api/snapshots/merge-missing-subitems', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ boardId, dryRun: true }),
-      })
-      const preview = await previewRes.json() as { ok: boolean; error?: string; touchedItems?: number; restoredSubs?: number; status?: string }
-      if (!preview.ok) { setMsg(`Controle mislukt: ${preview.error ?? 'onbekend'}`); return }
-      if (preview.status === 'nothing_to_restore' || !preview.restoredSubs) {
-        setMsg('Geen ontbrekende afspraken gevonden. Er is niets gewijzigd.')
-        return
+      if (!confirmed) {
+        const previewRes = await fetch('/api/snapshots/merge-missing-subitems', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ boardId, dryRun: true }),
+        })
+        const result = await previewRes.json() as { ok: boolean; error?: string; touchedItems?: number; restoredSubs?: number; status?: string; usedSnapshotId?: string; usedSnapshot?: string }
+        if (!result.ok) { setMsg(`Controle mislukt: ${result.error ?? 'onbekend'}`); return false }
+        if (result.status === 'nothing_to_restore' || !result.restoredSubs) {
+          setMsg('Geen ontbrekende afspraken gevonden. Er is niets gewijzigd.')
+          return false
+        }
+        if (!result.usedSnapshotId || !result.usedSnapshot) {
+          setMsg('Voorbeeld kon niet worden opgebouwd; er is niets gewijzigd.')
+          return false
+        }
+        setMsg(`${result.restoredSubs} ontbrekende afspraak/afspraken gevonden op ${result.touchedItems ?? 0} item(s). Bekijk eerst de gebruikte versie.`)
+        setPreview({
+          mode: 'missing',
+          snapshot: { id: result.usedSnapshotId, board_id: boardId, snapshot_at: result.usedSnapshot, trigger: 'auto' },
+        })
+        return false
       }
-      if (!window.confirm(
-        `${preview.restoredSubs} unieke ontbrekende afspraak/afspraken gevonden op ${preview.touchedItems ?? 0} item(s).\n\n` +
-        `Deze nu toevoegen? Er wordt eerst automatisch een herstelpunt gemaakt; bewust verwijderde Google-afspraken komen niet terug.`,
-      )) return
       const res = await fetch('/api/snapshots/merge-missing-subitems', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -166,28 +174,24 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
         scannedSnapshots?: number
         status?: string
       }
-      if (!json.ok) { setMsg(`Afspraken herstellen mislukt: ${json.error ?? 'onbekend'}`); return }
+      if (!json.ok) { setMsg(`Afspraken herstellen mislukt: ${json.error ?? 'onbekend'}`); return false }
       await pullBoardFromRemote(boardId).catch(() => {})
       if (json.status === 'nothing_to_restore') {
         setMsg(`Geen ontbrekende afspraken gevonden in ${json.scannedSnapshots ?? 0} eerdere versies.`)
       } else {
         setMsg(`✓ ${json.restoredSubs ?? 0} afspraak/afspraken hersteld op ${json.touchedItems ?? 0} item(s).`)
       }
+      return true
     } finally {
       setBusy(null)
     }
   }
 
-  async function herstelEst(snap: Snapshot) {
-    if (!supabase) return
-    if (!window.confirm(
-      `Est-uren terugzetten op alle items/subitems vanuit ${fmtDate(snap.snapshot_at)}?\n\n` +
-      `Alleen est_hours wordt overschreven — naam, status, owners, datums blijven ongemoeid. ` +
-      `Bedoeld voor het terugdraaien van de oude 'autofill werkdagen × 8'-inflatie.`,
-    )) return
+  async function herstelEst(snap: Snapshot): Promise<boolean> {
+    if (!supabase) return false
     const sess = await supabase.auth.getSession()
     const token = sess.data.session?.access_token
-    if (!token) { window.alert('Niet ingelogd.'); return }
+    if (!token) { window.alert('Niet ingelogd.'); return false }
     setBusy(snap.id); setMsg(null)
     try {
       const res = await fetch('/api/snapshots/restore-est', {
@@ -196,27 +200,24 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
         body: JSON.stringify({ boardId, since: snap.snapshot_at }),
       })
       const json = await res.json() as { ok: boolean; error?: string; touchedItems?: number; changedItemEst?: number; changedSubEst?: number; status?: string }
-      if (!json.ok) { setMsg(`Est-rollback mislukt: ${json.error ?? 'onbekend'}`); return }
+      if (!json.ok) { setMsg(`Est-rollback mislukt: ${json.error ?? 'onbekend'}`); return false }
       await pullBoardFromRemote(boardId).catch(() => {})
       if (json.status === 'nothing_to_restore') {
         setMsg(`Niets te wijzigen — est-uren staan al gelijk aan deze snapshot.`)
       } else {
         setMsg(`✓ Est-uren teruggezet: ${json.changedItemEst ?? 0} items + ${json.changedSubEst ?? 0} subs op ${json.touchedItems ?? 0} rijen.`)
       }
+      return true
     } finally {
       setBusy(null)
     }
   }
 
-  async function volledigTerugzetten(snap: Snapshot) {
-    if (!supabase) return
-    if (!window.confirm(
-      `Hele bord '${boardTitle}' terugzetten naar ${fmtDate(snap.snapshot_at)}?\n\n` +
-      `Gebruik dit alleen om een mislukte herstelactie terug te draaien. De huidige staat wordt eerst opnieuw veilig opgeslagen.`,
-    )) return
+  async function volledigTerugzetten(snap: Snapshot): Promise<boolean> {
+    if (!supabase) return false
     const sess = await supabase.auth.getSession()
     const token = sess.data.session?.access_token
-    if (!token) { window.alert('Niet ingelogd.'); return }
+    if (!token) { window.alert('Niet ingelogd.'); return false }
     setBusy(`full:${snap.id}`); setMsg(null)
     try {
       const res = await fetch('/api/snapshots/restore', {
@@ -225,34 +226,19 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
         body: JSON.stringify({ snapshotId: snap.id }),
       })
       const json = await res.json() as { ok: boolean; error?: string; groupsRestored?: number; itemsRestored?: number }
-      if (!json.ok) { setMsg(`Volledige restore mislukt: ${json.error ?? 'onbekend'}`); return }
+      if (!json.ok) { setMsg(`Volledige restore mislukt: ${json.error ?? 'onbekend'}`); return false }
       await pullBoardFromRemote(boardId).catch(() => {})
       setMsg(`✓ Bord teruggezet: ${json.groupsRestored ?? 0} groepen en ${json.itemsRestored ?? 0} items.`)
+      return true
     } finally {
       setBusy(null)
     }
   }
 
   async function laatsteRecoveryTerugdraaien() {
-    if (!supabase) return
-    if (!window.confirm(
-      `De laatste herstelactie op '${boardTitle}' volledig terugdraaien?\n\nDe staat vlak vóór die actie wordt hersteld.`,
-    )) return
-    const sess = await supabase.auth.getSession()
-    const token = sess.data.session?.access_token
-    if (!token) { window.alert('Niet ingelogd.'); return }
-    setBusy('revert-latest'); setMsg(null)
-    try {
-      const res = await fetch('/api/snapshots/restore', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ boardId, latestPreRestore: true }),
-      })
-      const json = await res.json() as { ok: boolean; error?: string; groupsRestored?: number; itemsRestored?: number }
-      if (!json.ok) { setMsg(`Terugdraaien mislukt: ${json.error ?? 'onbekend'}`); return }
-      await pullBoardFromRemote(boardId).catch(() => {})
-      setMsg(`✓ Laatste herstelactie teruggedraaid: ${json.itemsRestored ?? 0} items.`)
-    } finally { setBusy(null) }
+    const snap = snapshots.find(snapshot => snapshot.trigger === 'restore')
+    if (!snap) { setMsg('Geen eerdere herstelactie gevonden om terug te draaien.'); return }
+    setPreview({ mode: 'full', snapshot: summaryFor(snap) })
   }
 
   async function herstelItemUren(item: BoardItem) {
@@ -283,15 +269,11 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
     }
   }
 
-  async function herstelItems(snap: Snapshot) {
-    if (!supabase) return
-    if (!window.confirm(
-      `Verdwenen hoofditems herstellen uit de versie van ${fmtDate(snap.snapshot_at)}?\n\n` +
-      `Alleen items en groepen die nu ontbreken worden teruggezet. Bestaande items en recente wijzigingen blijven onaangeroerd.`,
-    )) return
+  async function herstelItems(snap: Snapshot): Promise<boolean> {
+    if (!supabase) return false
     const sess = await supabase.auth.getSession()
     const token = sess.data.session?.access_token
-    if (!token) { window.alert('Niet ingelogd.'); return }
+    if (!token) { window.alert('Niet ingelogd.'); return false }
     setBusy(snap.id); setMsg(null)
     try {
       const res = await fetch('/api/snapshots/merge-missing-items', {
@@ -300,16 +282,40 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
         body: JSON.stringify({ boardId, since: snap.snapshot_at }),
       })
       const json = await res.json() as { ok: boolean; error?: string; restoredItems?: number; restoredGroups?: number; status?: string }
-      if (!json.ok) { setMsg(`Item-recovery mislukt: ${json.error ?? 'onbekend'}`); return }
+      if (!json.ok) { setMsg(`Item-recovery mislukt: ${json.error ?? 'onbekend'}`); return false }
       await pullBoardFromRemote(boardId).catch(() => {})
       if (json.status === 'nothing_to_restore') {
         setMsg('Geen ontbrekende hoofditems of groepen gevonden in deze versie.')
       } else {
         setMsg(`✓ Hersteld: ${json.restoredItems ?? 0} hoofditem(s) en ${json.restoredGroups ?? 0} groep(en).`)
       }
+      return true
     } finally {
       setBusy(null)
     }
+  }
+
+  function summaryFor(snap: Snapshot): AgendaSnapshotSummary {
+    return { id: snap.id, board_id: boardId, snapshot_at: snap.snapshot_at, trigger: snap.trigger }
+  }
+
+  async function applyPreviewAction(snapshot: AgendaSnapshotSummary): Promise<boolean> {
+    if (!preview) return false
+    if (preview.mode === 'missing') return herstelOntbrekendeAfspraken(true)
+    const source = snapshots.find(item => item.id === snapshot.id)
+    if (!source) { setMsg('Deze versie is niet meer beschikbaar.'); return false }
+    if (preview.mode === 'items') return herstelItems(source)
+    if (preview.mode === 'subs') return herstel(source)
+    if (preview.mode === 'hours') return herstelEst(source)
+    return volledigTerugzetten(source)
+  }
+
+  function previewLabel(mode: PreviewMode): string {
+    if (mode === 'missing') return 'Voeg ontbrekende afspraken toe'
+    if (mode === 'items') return 'Herstel ontbrekende items'
+    if (mode === 'subs') return 'Herstel ontbrekende subitems'
+    if (mode === 'hours') return 'Zet uren terug naar deze versie'
+    return 'Zet volledige agenda terug'
   }
 
   if (!open || typeof document === 'undefined') return null
@@ -341,7 +347,7 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
           disabled={busy !== null || loading}
           style={{
             marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 7,
-            border: 'none', background: 'var(--accent)', color: 'white',
+            border: 'none', background: 'var(--accent)', color: '#172033',
             fontSize: 12.5, fontWeight: 800, cursor: busy || loading ? 'wait' : 'pointer',
           }}
         >
@@ -398,38 +404,45 @@ export function BoardRecoveryDrawer({ boardId, boardTitle, groups, open, onClose
                 {' · '}{s.groupCount ?? 0} groepen · {s.itemCount ?? 0} items · {s.subCount ?? 0} subs
               </div>
             </div>
-            <button onClick={() => herstelItems(s)} disabled={busy === s.id}
+            <button onClick={() => setPreview({ mode: 'items', snapshot: summaryFor(s) })} disabled={busy === s.id}
               title="Zet alleen ontbrekende hoofditems en groepen terug; bestaande items veranderen niet."
               style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--accent)',
                 background: 'var(--accent-light, rgba(88,150,255,0.18))', color: 'var(--text-primary)',
                 fontSize: 12, fontWeight: 700, cursor: busy === s.id ? 'wait' : 'pointer', flexShrink: 0 }}>
-              {busy === s.id ? 'Bezig…' : 'Herstel items'}
+              {busy === s.id ? 'Bezig…' : 'Bekijk · items'}
             </button>
-            <button onClick={() => herstel(s)} disabled={busy === s.id}
+            <button onClick={() => setPreview({ mode: 'subs', snapshot: summaryFor(s) })} disabled={busy === s.id}
               style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--accent)',
                 background: 'var(--accent-light, rgba(88,150,255,0.18))', color: 'var(--text-primary)',
                 fontSize: 12, fontWeight: 700, cursor: busy === s.id ? 'wait' : 'pointer', flexShrink: 0 }}>
-              {busy === s.id ? 'Bezig…' : 'Herstel subs'}
+              {busy === s.id ? 'Bezig…' : 'Bekijk · subs'}
             </button>
-            <button onClick={() => herstelEst(s)} disabled={busy === s.id}
+            <button onClick={() => setPreview({ mode: 'hours', snapshot: summaryFor(s) })} disabled={busy === s.id}
               title="Zet alleen est-uren terug naar de waarden uit deze snapshot. Verandert verder niets."
               style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)',
                 background: 'transparent', color: 'var(--text-secondary)',
                 fontSize: 12, fontWeight: 700, cursor: busy === s.id ? 'wait' : 'pointer', flexShrink: 0 }}>
-              Herstel uren
+              Bekijk · uren
             </button>
             {s.trigger === 'restore' && (
-              <button onClick={() => void volledigTerugzetten(s)} disabled={busy !== null}
+              <button onClick={() => setPreview({ mode: 'full', snapshot: summaryFor(s) })} disabled={busy !== null}
                 title="Zet het volledige bord terug naar deze automatisch gemaakte pre-restoreversie."
                 style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--red)',
                   background: 'transparent', color: 'var(--red)', fontSize: 12, fontWeight: 700,
                   cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}>
-                {busy === `full:${s.id}` ? 'Terugzetten…' : 'Draai restore terug'}
+                {busy === `full:${s.id}` ? 'Terugzetten…' : 'Bekijk · terugdraaien'}
               </button>
             )}
           </div>
         ))}
       </div>
+      {preview && <AgendaSnapshotPreview
+        snapshot={preview.snapshot}
+        onClose={() => setPreview(null)}
+        onRestore={applyPreviewAction}
+        actionLabel={previewLabel(preview.mode)}
+        eyebrow="Controleer eerst deze alleen-lezen versie"
+      />}
     </div>,
     document.body,
   )

@@ -204,6 +204,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       status: 'preview',
       scannedSnapshots: snapshotRows.length,
+      usedSnapshotId: snapshotRows[0].id,
       usedSnapshot: snapshotRows[0].snapshot_at,
       touchedItems: touchedItemCount,
       restoredSubs: restoredSubCount,
