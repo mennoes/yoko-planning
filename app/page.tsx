@@ -18,6 +18,10 @@ import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconA
 import { UserAvatar } from '@/components/UserAvatar'
 import { VacationButton } from '@/components/VacationButton'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
+import {
+  loadIdeas, onIdeasChange, pullIdeas, subscribeRemoteIdeas,
+  type IdeaItem,
+} from '@/lib/ideasStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
 import {
@@ -124,13 +128,6 @@ function joinAnd(names: string[]): string {
   if (names.length === 2) return `${names[0]} en ${names[1]}`
   return `${names.slice(0, -1).join(', ')} en ${names[names.length - 1]}`
 }
-function helpHint({ slack, others }: { slack: number; others: { member: { name: string }; pct: number }[] }): string | null {
-  if (slack < 4 || others.length === 0) return null
-  const top   = others[0]
-  const first = top.member.name.split(' ')[0]
-  return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
-}
-
 type WorkloadItem = { parentItemId?: string; subitemId?: string; id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean; parentName?: string }
 
 type Category = WorkloadCategory
@@ -265,6 +262,8 @@ export default function HomePage() {
 
   const [recentPages,  setRecentPages]  = useState<PageDoc[]>([])
   const [myTodos,      setMyTodos]      = useState<TodoStoreItem[]>([])
+  const [todoSections, setTodoSections] = useState<TodoSection[]>([])
+  const [ideas,        setIdeas]        = useState<IdeaItem[]>([])
   const [newTodoText,  setNewTodoText]  = useState('')
   // Per-bucket-iso user-override voor de week-collapse op de home-widget.
   // false=expliciet ingeklapt, true=expliciet open, missing=default (open
@@ -336,6 +335,15 @@ export default function HomePage() {
   const memberId = profile?.memberId ?? ''
 
   useEffect(() => {
+    const refresh = () => setIdeas(loadIdeas())
+    refresh()
+    void pullIdeas().then(refresh)
+    const stopLocal = onIdeasChange(refresh)
+    const stopRemote = subscribeRemoteIdeas()
+    return () => { stopLocal(); stopRemote() }
+  }, [])
+
+  useEffect(() => {
     setCategoryOverrides(loadCategoryOverrides())
     setRecentPages(loadRecentPages().slice(0, 9))
 
@@ -353,6 +361,7 @@ export default function HomePage() {
     function loadMine() {
       const fallback: TodoSection[] = todosData.sections as TodoSection[]
       const sections = loadTodoSectionsStore(fallback)
+      setTodoSections(sections)
       const s = sections.find(x => x.id === memberId)
       const stored = (s?.items ?? []) as TodoStoreItem[]
       setMyTodos(mergeStoredWithProjects(stored))
@@ -363,6 +372,7 @@ export default function HomePage() {
         const fallback: TodoSection[] = todosData.sections as TodoSection[]
         const local = loadTodoSectionsStore(fallback)
         const merged = mergeTodoSections(local, remote)
+        setTodoSections(merged)
         const s = merged.find(x => x.id === memberId)
         const stored = (s?.items ?? []) as TodoStoreItem[]
         setMyTodos(mergeStoredWithProjects(stored))
@@ -852,6 +862,7 @@ export default function HomePage() {
     hours: number
     ownerIds: Set<string>
     startDay: number | null
+    href: string
   }
 
   // Combine contribs that share a project name (subitems / split bars) into
@@ -868,8 +879,14 @@ export default function HomePage() {
       for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
       if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
     } else {
+      const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
+        ? c.project.id.slice(c.project.board.length + 2)
+        : c.project.id
+      const focusId = c.project.completionParentItemId ?? rawItemId
+      const subitem = c.project.completionSubitemId
       grouped.set(key, { name: c.project.name, hours: c.hours,
-        ownerIds: new Set(c.project.ownerIds || []), startDay: day })
+        ownerIds: new Set(c.project.ownerIds || []), startDay: day,
+        href: `/projects/${c.project.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${subitem ? `&subitem=${encodeURIComponent(subitem)}` : ''}` })
     }
   }
   const groupedArr = [...grouped.values()].sort((a, b) => b.hours - a.hours)
@@ -909,8 +926,45 @@ export default function HomePage() {
   const tonePast    = weekCapacity > 0 ? homeWeekTone(myLastContribs, weekCapacity, 'past', categoryOverrides) : ''
   const toneNext    = weekCapacity > 0 ? homeWeekTone(myNextContribs, weekCapacity, 'next', categoryOverrides) : ''
   const tonePastCap = tonePast ? tonePast[0].toUpperCase() + tonePast.slice(1) : ''
-  const help        = memberId
-    ? helpHint({ slack: weekCapacity - myThisHours, others: overloaded.filter(o => o.member.id !== memberId) })
+  const slack = weekCapacity - myThisHours
+  const suggestedIdea = ideas
+    .filter(idea => idea.status === 'open')
+    .sort((a, b) => {
+      if (a.category === 'tussendoor' && b.category !== 'tussendoor') return -1
+      if (b.category === 'tussendoor' && a.category !== 'tussendoor') return 1
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    })[0]
+  const busyColleague = overloaded.find(person => person.member.id !== memberId)
+  const suggestedTodo = todoSections
+    .filter(section => section.id === 'ideeen' || section.id === 'socials'
+      || ['ideeën', 'socials'].includes(section.title.trim().toLowerCase()))
+    .flatMap(section => section.items
+      .filter(item => !item.done)
+      .map(item => ({ ...item, sectionId: section.id, sectionTitle: section.title })))[0]
+
+  const spaceSuggestion = slack >= 4
+    ? suggestedIdea
+      ? <>
+          Je hebt deze week nog ongeveer {Math.round(slack)}u ruimte. Idee om op te pakken:{' '}
+          <Link href={`/ideas?idea=${encodeURIComponent(suggestedIdea.id)}`} style={{ color: '#000', fontWeight: 800 }}>
+            {suggestedIdea.title}
+          </Link>.
+        </>
+      : busyColleague
+        ? <>
+            Je hebt deze week nog ongeveer {Math.round(slack)}u ruimte.{' '}
+            <Link href="/planning" style={{ color: '#000', fontWeight: 800 }}>
+              {busyColleague.member.name.split(' ')[0]} zit op {busyColleague.pct}%
+            </Link>; misschien kun je daar iets overnemen.
+          </>
+        : suggestedTodo
+          ? <>
+              Je hebt deze week nog ongeveer {Math.round(slack)}u ruimte. In {suggestedTodo.sectionTitle} staat nog:{' '}
+              <Link href="/todos" style={{ color: '#000', fontWeight: 800 }}>
+                {(suggestedTodo.text ?? '').split('\n')[0]}
+              </Link>.
+            </>
+          : null
     : null
 
   // Render a comma/and-joined list of bold project names with collaborator hints.
@@ -919,7 +973,7 @@ export default function HomePage() {
     return (
       <span key={p.name}>
         {i > 0 && (i === items.length - 1 ? ' en ' : ', ')}
-        <strong style={{ color: '#000' }}>{p.name}</strong>
+        <Link href={p.href} style={{ color: '#000', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>{p.name}</Link>
         {wn.length > 0 && <> (met {joinAnd(wn)})</>}
       </span>
     )
@@ -1481,19 +1535,24 @@ export default function HomePage() {
             {behindSchedule.length > 0 && (
               <p style={{ margin: 0 }}>
                 Check even:{' '}
-                {behindSchedule.map((p, i) => (
-                  <span key={p.id}>
-                    {i > 0 && (i === behindSchedule.length - 1 ? ' en ' : ', ')}
-                    <strong style={{ color: '#000' }}>{p.name}</strong>
-                  </span>
-                ))}
+                {behindSchedule.map((p, i) => {
+                  const rawItemId = p.id.startsWith(`${p.board}__`) ? p.id.slice(p.board.length + 2) : p.id
+                  const focusId = p.completionParentItemId ?? rawItemId
+                  const href = `/projects/${p.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${p.completionSubitemId ? `&subitem=${encodeURIComponent(p.completionSubitemId)}` : ''}`
+                  return (
+                    <span key={p.id}>
+                      {i > 0 && (i === behindSchedule.length - 1 ? ' en ' : ', ')}
+                      <Link href={href} style={{ color: '#000', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>{p.name}</Link>
+                    </span>
+                  )
+                })}
                 {' '}{behindSchedule.length === 1 ? 'staat' : 'staan'} nog op actief terwijl de einddatum al voorbij is — afronden? ⏳
               </p>
             )}
-            {(tonePast || help) && (
+            {(tonePast || spaceSuggestion) && (
               <p style={{ margin: 0 }}>
                 {tonePast && <>{tonePastCap}, {toneNext}.</>}
-                {help && <> {help}</>}
+                {spaceSuggestion && <> {spaceSuggestion}</>}
               </p>
             )}
           </div>

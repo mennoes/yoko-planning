@@ -29,7 +29,7 @@ import {
   IconHome, IconAgenda, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
   IconDocument, IconFolder, IconFolderOpen, IconSort, IconRefresh, IconActivity,
-  IconSearch, IconHourglass, IconSpark,
+  IconSearch, IconHourglass, IconIdea,
 } from './Icon'
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
@@ -46,7 +46,7 @@ const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   '/':         IconHome,
   '/planning': IconHourglass,
   '/todos':    IconCheckList,
-  '/ideas':    IconSpark,
+  '/ideas':    IconIdea,
 }
 const DEFAULT_MAIN = [
   { id: 'home',     href: '/',         label: 'Home' },

@@ -9,8 +9,9 @@ const shell = fs.readFileSync('components/AppShell.tsx', 'utf8')
 const migration = fs.readFileSync('supabase/0044_ideas.sql', 'utf8')
 
 test('ideas page is a visual inspiration wall rather than a checkbox list', () => {
-  assert.match(page, /Yoko ideeënmuur/)
-  assert.match(page, /Een goed idee hoeft nog geen taak te zijn/)
+  assert.match(page, /<h1>Ideeën<\/h1>/)
+  assert.match(page, /IconIdea/)
+  assert.doesNotMatch(page, /Yoko ideeënmuur|Een goed idee hoeft nog geen taak te zijn/)
   assert.match(page, /Verras me/)
   assert.match(page, /Pak op →/)
   assert.doesNotMatch(page, /type="checkbox"/)
@@ -33,7 +34,7 @@ test('ideas are shared through their own realtime store with a local cache', () 
 
 test('ideas is a first-class page in navigation and browser history', () => {
   assert.match(sidebar, /href: '\/ideas'/)
-  assert.match(sidebar, /'\/ideas':\s+IconSpark/)
+  assert.match(sidebar, /'\/ideas':\s+IconIdea/)
   assert.match(shell, /root === 'ideas'/)
   assert.match(shell, /'\/ideas'/)
 })

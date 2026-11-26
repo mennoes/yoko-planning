@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useProfile } from '@/components/ProfileContext'
-import { IconClose, IconSpark } from '@/components/Icon'
+import { IconClose, IconIdea } from '@/components/Icon'
 import {
   createIdea, deleteIdea, loadIdeas, onIdeasChange, pullIdeas,
   subscribeRemoteIdeas, updateIdea,
@@ -55,6 +55,20 @@ export default function IdeasPage() {
     const stopRemote = subscribeRemoteIdeas()
     return () => { stopLocal(); stopRemote() }
   }, [])
+
+  // Een suggestie op Home kan rechtstreeks naar een specifiek idee linken.
+  // Open geen bewerkvenster ongevraagd: breng de kaart rustig in beeld.
+  useEffect(() => {
+    const ideaId = new URLSearchParams(window.location.search).get('idea')
+    if (!ideaId || !ideas.some(idea => idea.id === ideaId)) return
+    setFilter('all')
+    setHighlighted(ideaId)
+    const scrollTimer = window.setTimeout(() => {
+      boardRef.current?.querySelector<HTMLElement>(`[data-idea-id="${CSS.escape(ideaId)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 30)
+    const clearTimer = window.setTimeout(() => setHighlighted(null), 2600)
+    return () => { window.clearTimeout(scrollTimer); window.clearTimeout(clearTimer) }
+  }, [ideas])
 
   const visible = useMemo(() => {
     return ideas
@@ -129,9 +143,8 @@ export default function IdeasPage() {
     <main className={styles.page}>
       <header className={styles.hero}>
         <div>
-          <div className={styles.eyebrow}><IconSpark size={17} /> Yoko ideeënmuur</div>
-          <h1>Een goed idee hoeft nog geen taak te zijn.</h1>
-          <p>Bewaar inspiratie, kleine experimenten en dingen die je kunt oppakken als je even ruimte hebt.</p>
+          <div className={styles.titleRow}><IconIdea size={30} /><h1>Ideeën</h1></div>
+          <p>Bewaar losse ideeën, inspiratie en kleine experimenten. Pak ze op wanneer er ruimte is.</p>
         </div>
         <div className={styles.heroActions}>
           <button className={styles.surpriseButton} type="button" onClick={surpriseMe} disabled={openCount === 0}>
