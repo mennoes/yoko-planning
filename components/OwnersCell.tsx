@@ -24,7 +24,7 @@ function resolveOwnerHours(ownerIds: string[], total: number, stored?: Record<st
 export const ownerHoursDrafts = (ids: string[], hours: Record<string, number>) =>
   Object.fromEntries(ids.map(id => [id, String(Math.round((hours[id] ?? 0) * 10) / 10)]))
 
-export function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange, avatarSize = 34, triggerLabel, distributionFromSubitems = false }: {
+export function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDistributionChange, avatarSize = 34, triggerLabel, distributionFromSubitems = false, readOnly = false }: {
   value: string[]
   onChange: (v: string[], distribution?: Record<string, number>) => void
   ownerHours?: Record<string, number>
@@ -34,6 +34,11 @@ export function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDist
    *  te verschuiven: een wijziging op het hoofditem wordt bij de
    *  volgende render overschreven door die optelsom. */
   distributionFromSubitems?: boolean
+  /** Bij een hoofditem dat volledig uit subitems is opgeteld, zijn deze
+   *  gezichten een samenvatting. Aanpassen gebeurt op de subitems zelf;
+   *  anders lijkt een wijziging hier opgeslagen terwijl de optelsom hem
+   *  direct weer overschrijft. */
+  readOnly?: boolean
   /** In een rij moet een gezicht klein blijven; in het item-venster is
    *  er ruimte zat en wil je gewoon zien wie het doet. */
   avatarSize?: number
@@ -188,8 +193,13 @@ export function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDist
 
   return (
     <div>
-      <div ref={trigRef} role="button" aria-label={triggerLabel ?? 'Owners wijzigen'} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) } }} onClick={() => { setOpen(o => !o); setQuery('') }}
-        style={{ display: 'flex', gap: 2, cursor: 'pointer', flexWrap: triggerLabel ? 'wrap' : 'nowrap', minWidth: 24 }}>
+      <div ref={trigRef} role={readOnly ? 'group' : 'button'}
+        aria-label={readOnly ? 'Owners, opgeteld uit de subitems' : (triggerLabel ?? 'Owners wijzigen')}
+        title={readOnly ? 'Opgeteld uit de subitems' : undefined}
+        tabIndex={readOnly ? -1 : 0}
+        onKeyDown={e => { if (!readOnly && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(o => !o) } }}
+        onClick={() => { if (!readOnly) { setOpen(o => !o); setQuery('') } }}
+        style={{ display: 'flex', gap: 2, cursor: readOnly ? 'default' : 'pointer', flexWrap: triggerLabel ? 'wrap' : 'nowrap', minWidth: 24 }}>
         {triggerLabel && <span style={{ fontSize: 12, fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>{triggerLabel}</span>}
         {visibleOwners.length === 0
           ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
@@ -197,7 +207,7 @@ export function OwnersCell({ value, onChange, ownerHours, totalHours = 0, onDist
         }
       </div>
 
-      {open && (
+      {open && !readOnly && (
         <PortalDropdown anchor={trigRef} onClose={() => setOpen(false)}>
           <div style={{
             background: 'var(--bg-card)', border: '1px solid var(--border)',

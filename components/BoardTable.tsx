@@ -958,6 +958,7 @@ function Cell({ item, col, onUpdate, statusExtra, avatarSize }: {
     ownerHours={item.ownerHours}
     totalHours={Number.isFinite(rolledOwnerTotal) ? rolledOwnerTotal : effectiveHours(item)}
     distributionFromSubitems={item.__ownerHoursUitSubitems === true}
+    readOnly={item.__ownerHoursUitSubitems === true}
     onDistributionChange={hours => onUpdate({
       ownerHours: hours,
       ...(item.source === 'google' ? { ownerIdsLocked: true } : {}),
@@ -2864,8 +2865,10 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
   }, [item])
   const vensterItem: BoardItem = volledig.uitSubitems && Object.keys(volledig.verdeling).length > 0
     // Ook hier geldt: deze uren komen uit de subitems, dus de owner-kaart
-    // in dit venster laat ze zien en laat je er niet aan sleuren.
-    ? { ...item, ownerHours: volledig.verdeling, __relevantOwnerHoursTotal: volledig.totaal, __ownerHoursUitSubitems: true }
+    // in dit venster laat exact dezelfde mensen zien als de verdeling en
+    // laat je er niet aan sleuren. Eerder kon boven bijvoorbeeld drie
+    // owners staan terwijl de taart er vijf verantwoordde.
+    ? { ...item, ownerIds: Object.keys(volledig.verdeling), ownerHours: volledig.verdeling, __relevantOwnerHoursTotal: volledig.totaal, __ownerHoursUitSubitems: true }
     : item
 
   // Agenda › groep › hoofditem. Lege stukken vallen weg in plaats van een
