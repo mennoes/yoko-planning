@@ -924,9 +924,13 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     : project.board
       ? (getBoardConfig(project.board)?.name ?? project.board)
       : ''
-  const secondLineMinHeight = gezichten.length > 0 ? 44 : 26
-  const showSecondLineContext = scaleByHours && !small && !!contextLabel && barH >= secondLineMinHeight
-  const showInlineContext = scaleByHours && !small && !!contextLabel && barH < secondLineMinHeight
+  // Alleen een werkelijk lage balk blijft één tekstregel. Zodra er
+  // verticaal plek is, staat de context bewust onder de titel — ook als
+  // er onderaan avatars staan. De oude, hogere drempel hield titel en
+  // context bij middelhoge balken onnodig naast elkaar.
+  const oneLineBar = small || barH < 24
+  const showSecondLineContext = scaleByHours && !oneLineBar && !!contextLabel
+  const showInlineContext = scaleByHours && oneLineBar && !small && !!contextLabel
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}

@@ -32,7 +32,9 @@ test('sticky member mask stays above bars and row height animates smoothly', () 
 })
 
 test('very low bars keep their agenda context inline', () => {
-  assert.match(source, /const showInlineContext = scaleByHours && !small && !!contextLabel && barH < secondLineMinHeight/)
+  assert.match(source, /const oneLineBar = small \|\| barH < 24/)
+  assert.match(source, /const showSecondLineContext = scaleByHours && !oneLineBar && !!contextLabel/)
+  assert.match(source, /const showInlineContext = scaleByHours && oneLineBar && !small && !!contextLabel/)
   assert.match(source, /\{showInlineContext && \(/)
   assert.match(source, />↳ \{contextLabel\}<\/span>/)
 })
