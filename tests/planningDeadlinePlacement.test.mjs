@@ -11,7 +11,7 @@ test('deadline flags sit on the corresponding planning bars', () => {
   assert.match(deadlines, /const anchorFor=/)
   assert.match(deadlines, /position:'absolute',inset:0,pointerEvents:'none'/)
   assert.doesNotMatch(deadlines, /height:ends\.length\*22\+4/)
-  const timeline = planning.slice(planning.indexOf('data-testid={`planning-timeline-'), planning.indexOf('data-testid={`planning-timeline-') + 1000)
+  const timeline = planning.slice(planning.indexOf('data-testid={`planning-timeline-'), planning.indexOf('data-testid={`planning-timeline-') + 1800)
   assert.match(timeline, /<PlanningDeadlines projects=\{owned\}/)
   assert.match(timeline, /anchors=\{visibleBars\.map/)
 })

@@ -2642,9 +2642,13 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
       // niet. Knip daarom de hele laag op exact dezelfde lokale x-grens af.
       // Zo kunnen weeklijnen, deadlines en schaduwen nooit door de vaste
       // sectie met naam/avatar heen tekenen.
-      clipPath: `inset(0 0 0 ${Math.max(0, viewportStart)}px)`,
+      // Gebruik de CSS-scrollwaarde die in dezelfde scroll-event direct op
+      // het raster wordt gezet. De React viewport-state loopt bij een harde
+      // trackpad-swipe bewust enkele pixels achter om renders te beperken;
+      // als masker gaf dat een kort flitsend lek onder de naamkolom.
+      clipPath: 'inset(0 0 0 var(--planner-scroll-left, 0px))',
       transition: 'height 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-      willChange: 'height',
+      willChange: 'height, clip-path',
     }}>
       <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}
         anchors={visibleBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:(barTops.get(b.p.id)??0)+meetingSummaryHeight,left:b.renderLeft,right:b.renderLeft+b.renderWidth}))}/>
@@ -7428,12 +7432,15 @@ export default function PlanningPage() {
                 <SmoothCollapse open={isExp}>
                   {memberProjects.length > 0 ? (
                   <div style={{ display: 'flex' }}>
-                    <div style={{
+                    <div data-testid={`planning-name-mask-${member.id}`} style={{
                       width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0,
                       // Balken hebben een verhoogde stacking-order voor
                       // hover/drag. Dit masker moet daar altijd boven liggen.
-                      zIndex: 7000, background: stickyBg,
+                      // Een eigen compositorlaag voorkomt dat snel inertieel
+                      // scrollen de balklaag één frame eerder tekent.
+                      zIndex: 10000, background: stickyBg,
                       borderRight: '1px solid var(--border)',
+                      transform: 'translateZ(0)', willChange: 'transform', contain: 'paint',
                     }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars onDeadlineChange={handleDeadlineChange} memberId={member.id} projects={memberProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
@@ -7450,7 +7457,7 @@ export default function PlanningPage() {
                   </div>
                   ) : (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 7000, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div data-testid={`planning-name-mask-${member.id}`} style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10000, background: stickyBg, borderRight: '1px solid var(--border)', transform: 'translateZ(0)', willChange: 'transform', contain: 'paint' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
                   )}
