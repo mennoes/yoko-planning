@@ -448,7 +448,7 @@ export default function IdeasPage() {
             data-idea-id={idea.id}
             className={`${styles.note} ${idea.status === 'doing' ? styles.doing : ''} ${highlighted === idea.id ? styles.highlighted : ''} ${draggingId === idea.id ? styles.dragging : ''}`}
             style={{
-              '--note-color': idea.color,
+              '--note-color': editing?.id === idea.id ? editing.color : idea.color,
               '--tilt': `${[-1.2, .7, -.4, 1.1, -.8][index % 5]}deg`,
               '--note-x': `${positions[idea.id]?.x ?? 0}px`,
               '--note-y': `${positions[idea.id]?.y ?? 0}px`,
@@ -473,20 +473,64 @@ export default function IdeasPage() {
                 nudgeNote(idea.id, delta[0], delta[1])
               }}
             ><span /><span /><span /><span /><span /><span /></button>
-            <button className={styles.noteMain} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} bewerken`}>
-              {idea.goal && <div className={styles.noteGoal} title={`Doel: ${idea.goal}`}><strong>{idea.goal}</strong></div>}
-              <h2>{idea.title}</h2>
-            </button>
+            {editing?.id === idea.id ? (
+              <form className={styles.inlineEditor} onSubmit={saveEdit} onClick={event => event.stopPropagation()}>
+                <label className={styles.inlineField}>
+                  <span>Idee</span>
+                  <textarea autoFocus value={editing.title} onChange={event => setEditing({ ...editing, title: event.target.value })}
+                    maxLength={120} rows={3} aria-label="Titel van het idee" />
+                </label>
+                <label className={styles.inlineField}>
+                  <span>Doel</span>
+                  <textarea value={editing.goal} onChange={event => setEditing({ ...editing, goal: event.target.value })}
+                    placeholder="Waarom willen we dit doen?" maxLength={70} rows={2} aria-label="Doel van het idee" />
+                </label>
+                <label className={`${styles.inlineField} ${styles.optionalField}`}>
+                  <span>Notitie</span>
+                  <textarea value={editing.body} onChange={event => setEditing({ ...editing, body: event.target.value })}
+                    placeholder="Eventuele extra context" rows={3} aria-label="Notitie bij het idee" />
+                </label>
+                <div className={styles.inlineMeta}>
+                  <select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value as IdeaCategory })} aria-label="Categorie">
+                    {categoryOptions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                  <div className={styles.inlineSwatches} aria-label="Kleur">
+                    {COLORS.map(value => <button key={value} type="button" aria-label={`Kleur ${value}`}
+                      className={editing.color === value ? styles.selectedSwatch : ''} style={{ background: value }}
+                      onClick={() => setEditing({ ...editing, color: value })} />)}
+                  </div>
+                </div>
+                <div className={styles.inlineActions}>
+                  <button className={styles.deleteButton} type="button" onClick={async () => {
+                    if (!deleteArmed) { setDeleteArmed(true); return }
+                    await deleteIdea(editing.id)
+                    setEditing(null)
+                    setDeleteArmed(false)
+                  }}>{deleteArmed ? 'Zeker weten?' : 'Verwijder'}</button>
+                  <span />
+                  <button type="button" onClick={() => { setEditing(null); setDeleteArmed(false) }}>Annuleer</button>
+                  <button className={styles.inlineSave} type="submit">Bewaar</button>
+                </div>
+              </form>
+            ) : (
+              <button className={styles.noteMain} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} in de post-it bewerken`}>
+                <h2>{idea.title}</h2>
+                {idea.goal && <div className={styles.noteGoal} title={`Doel: ${idea.goal}`}><span>Doel</span><strong>{idea.goal}</strong></div>}
+              </button>
+            )}
             <footer className={styles.noteFooter}>
               <IdeaAuthor id={idea.authorId} name={idea.authorName} createdAt={idea.createdAt} />
-              {idea.status === 'open' && <button className={styles.claimButton} type="button" onClick={() => claim(idea)} title="Ik pak dit idee op" aria-label="Ik pak dit idee op">
-                <span className={styles.claimFallback} aria-hidden>+</span>
-              </button>}
-              {idea.status === 'doing' && <div className={styles.claimedState} title={`Opgepakt door ${idea.claimedName ?? 'iemand'}`} aria-label={`Opgepakt door ${idea.claimedName ?? 'iemand'}`}>
-                {idea.claimedBy ? <UserAvatar memberId={idea.claimedBy} size={26} /> : <span className={styles.claimFallback} aria-hidden>?</span>}
-                {profile?.memberId === idea.claimedBy && <button type="button" onClick={() => updateIdea(idea.id, { status: 'done' })} title="Markeer als klaar" aria-label="Markeer als klaar">✓</button>}
-              </div>}
-              {idea.status === 'done' && <button className={styles.doneReturn} type="button" onClick={() => updateIdea(idea.id, { status: 'open', claimedBy: null, claimedName: null })} title="Terug op de muur" aria-label="Terug op de muur">↩</button>}
+              <div className={styles.noteTools} aria-label="Idee-acties">
+                {editing?.id !== idea.id && <button type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} title="Bewerk in deze post-it" aria-label="Bewerk in deze post-it">✎</button>}
+                {idea.status === 'open' && <button className={styles.claimButton} type="button" onClick={() => claim(idea)} title="Steek je hand op en pak dit idee" aria-label="Ik pak dit idee op">
+                  <span aria-hidden>✋</span>
+                </button>}
+                {idea.status === 'doing' && <div className={styles.claimedState} title={`Opgepakt door ${idea.claimedName ?? 'iemand'}`} aria-label={`Opgepakt door ${idea.claimedName ?? 'iemand'}`}>
+                  {idea.claimedBy ? <UserAvatar memberId={idea.claimedBy} size={26} /> : <span className={styles.claimFallback} aria-hidden>?</span>}
+                  {profile?.memberId === idea.claimedBy && <button type="button" onClick={() => updateIdea(idea.id, { status: 'done' })} title="Markeer als klaar" aria-label="Markeer als klaar">✓</button>}
+                </div>}
+                {idea.status === 'done' && <button className={styles.doneReturn} type="button" onClick={() => updateIdea(idea.id, { status: 'open', claimedBy: null, claimedName: null })} title="Terug op de muur" aria-label="Terug op de muur">↩</button>}
+              </div>
             </footer>
           </article>
           ))}
@@ -499,36 +543,6 @@ export default function IdeasPage() {
         </div>
       </div>
 
-      {editing && (
-        <div className={styles.modalBackdrop} role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) { setEditing(null); setDeleteArmed(false) } }}>
-          <form className={styles.editModal} onSubmit={saveEdit} style={{ '--note-color': editing.color } as React.CSSProperties}>
-            <button className={styles.closeButton} type="button" onClick={() => { setEditing(null); setDeleteArmed(false) }} aria-label="Sluiten"><IconClose size={20} /></button>
-            <span className={styles.editLabel}>Idee aanpassen</span>
-            <input value={editing.title} onChange={event => setEditing({ ...editing, title: event.target.value })} maxLength={120} />
-            <textarea value={editing.body} onChange={event => setEditing({ ...editing, body: event.target.value })} placeholder="Voeg een toelichting toe…" rows={6} />
-            <label className={styles.editGoal}>Draagt bij aan
-              <input value={editing.goal} onChange={event => setEditing({ ...editing, goal: event.target.value })}
-                placeholder="Welk groter doel helpt dit idee?" maxLength={70} list="idea-goals" />
-              <datalist id="idea-goals">{goalOptions.map(value => <option key={value} value={value} />)}</datalist>
-            </label>
-            <div className={styles.editOptions}>
-              <select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value as IdeaCategory })}>
-                {categoryOptions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-              <div className={styles.swatches}>{COLORS.map(value => <button key={value} type="button" aria-label={`Kleur ${value}`} className={editing.color === value ? styles.selectedSwatch : ''} style={{ background: value }} onClick={() => setEditing({ ...editing, color: value })} />)}</div>
-            </div>
-            <div className={styles.modalActions}>
-              <button className={styles.deleteButton} type="button" onClick={async () => {
-                if (!deleteArmed) { setDeleteArmed(true); return }
-                await deleteIdea(editing.id)
-                setEditing(null)
-                setDeleteArmed(false)
-              }}>{deleteArmed ? 'Zeker weten?' : 'Verwijder'}</button>
-              <button className={styles.saveButton} type="submit">Bewaar</button>
-            </div>
-          </form>
-        </div>
-      )}
     </main>
   )
 }

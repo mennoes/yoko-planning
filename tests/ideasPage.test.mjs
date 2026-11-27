@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 
 const page = fs.readFileSync('app/ideas/page.tsx', 'utf8')
+const css = fs.readFileSync('app/ideas/ideas.module.css', 'utf8')
 const store = fs.readFileSync('lib/ideasStore.ts', 'utf8')
 const sidebar = fs.readFileSync('components/Sidebar.tsx', 'utf8')
 const shell = fs.readFileSync('components/AppShell.tsx', 'utf8')
@@ -56,6 +57,21 @@ test('idea cards keep one context line and only show an avatar after claiming', 
   assert.doesNotMatch(page, /styles\.noteCategoryMarker|styles\.notePin/)
   assert.doesNotMatch(page, /memberId=\{profile\.memberId\} size=\{24\}/)
   assert.match(page, /memberId=\{idea\.claimedBy\} size=\{26\}/)
+})
+
+test('ideas are edited inside their post-it with title before a labelled goal', () => {
+  assert.match(page, /className=\{styles\.inlineEditor\}/)
+  assert.match(page, /aria-label="Titel van het idee"/)
+  assert.match(page, /aria-label="Doel van het idee"/)
+  assert.match(page, /<h2>\{idea\.title\}<\/h2>[\s\S]*?<span>Doel<\/span>/)
+  assert.doesNotMatch(page, /styles\.modalBackdrop|styles\.editModal/)
+})
+
+test('post-its have a compact bottom action bar and a hand-up claim action', () => {
+  assert.match(page, /className=\{styles\.noteTools\}/)
+  assert.match(page, /Steek je hand op en pak dit idee/)
+  assert.match(page, /Bewerk in deze post-it/)
+  assert.match(css, /\.noteTools/)
 })
 
 test('post-its can be moved playfully without turning a drag into an edit', () => {
