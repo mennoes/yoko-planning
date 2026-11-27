@@ -4,11 +4,16 @@ import fs from 'node:fs'
 
 const home = fs.readFileSync('app/page.tsx', 'utf8')
 
-test('welcome summary links mentioned agenda items to their detail drawer', () => {
-  assert.match(home, /href: `\/projects\/\$\{c\.project\.board\}\?focus=/)
-  assert.match(home, /<Link href=\{p\.href\}/)
+test('welcome summary opens mentioned agenda items inside Home', () => {
+  assert.match(home, /boardId: c\.project\.board, parentItemId: focusId, subitemId: subitem/)
+  assert.match(home, /setHomeDetail\(\{ boardId: p\.boardId, parentItemId: p\.parentItemId, subitemId: p\.subitemId \}\)/)
   assert.match(home, /behindSchedule\.map/)
-  assert.match(home, /drawer=\$\{encodeURIComponent\(focusId\)\}/)
+  assert.match(home, /setHomeDetail\(\{ boardId: p\.board, parentItemId: focusId, subitemId: p\.completionSubitemId \}\)/)
+})
+
+test('overdue subitems name their main project', () => {
+  assert.match(home, /const parentLabel = p\.parentName \?\? p\.parentProject\?\.name/)
+  assert.match(home, /↳ \{parentLabel\}/)
 })
 
 test('free-time suggestion follows ideas, busy colleagues and todo fallbacks', () => {

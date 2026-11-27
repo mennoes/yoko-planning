@@ -887,7 +887,9 @@ export default function HomePage() {
     hours: number
     ownerIds: Set<string>
     startDay: number | null
-    href: string
+    boardId: string
+    parentItemId: string
+    subitemId?: string
   }
 
   // Combine contribs that share a project name (subitems / split bars) into
@@ -912,7 +914,7 @@ export default function HomePage() {
         const subitem = c.project.completionSubitemId
         grouped.set(key, { name: c.project.name, hours: c.hours,
           ownerIds: new Set(c.project.ownerIds || []), startDay: day,
-          href: `/projects/${c.project.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${subitem ? `&subitem=${encodeURIComponent(subitem)}` : ''}` })
+          boardId: c.project.board, parentItemId: focusId, subitemId: subitem })
       }
     }
     return [...grouped.values()].sort((a, b) => b.hours - a.hours)
@@ -1002,7 +1004,11 @@ export default function HomePage() {
     return (
       <span key={p.name}>
         {i > 0 && (i === items.length - 1 ? ' en ' : ', ')}
-        <Link href={p.href} style={{ color: '#000', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>{p.name}</Link>
+        <button type="button"
+          onClick={() => setHomeDetail({ boardId: p.boardId, parentItemId: p.parentItemId, subitemId: p.subitemId })}
+          style={{ border: 0, padding: 0, background: 'transparent', color: '#000', font: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>
+          {p.name}
+        </button>
         {wn.length > 0 && <> (met {joinAnd(wn)})</>}
       </span>
     )
@@ -1576,11 +1582,18 @@ export default function HomePage() {
                 {behindSchedule.map((p, i) => {
                   const rawItemId = p.id.startsWith(`${p.board}__`) ? p.id.slice(p.board.length + 2) : p.id
                   const focusId = p.completionParentItemId ?? rawItemId
-                  const href = `/projects/${p.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${p.completionSubitemId ? `&subitem=${encodeURIComponent(p.completionSubitemId)}` : ''}`
+                  const parentLabel = p.parentName ?? p.parentProject?.name
                   return (
                     <span key={p.id}>
                       {i > 0 && (i === behindSchedule.length - 1 ? ' en ' : ', ')}
-                      <Link href={href} style={{ color: '#000', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>{p.name}</Link>
+                      <button type="button"
+                        onClick={() => setHomeDetail({ boardId: p.board, parentItemId: focusId, subitemId: p.completionSubitemId })}
+                        style={{ border: 0, padding: 0, background: 'transparent', color: '#000', font: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>
+                        {p.name}
+                        {parentLabel && parentLabel !== p.name && (
+                          <span style={{ fontWeight: 600, opacity: .72 }}> ↳ {parentLabel}</span>
+                        )}
+                      </button>
                     </span>
                   )
                 })}
