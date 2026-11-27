@@ -3381,14 +3381,24 @@ function BoardGroupSection({ boardId, group, cols, allColumns, accentColor, colW
         const nextById = new Map(updates.subitems.map(sub => [sub.id, sub]))
         for (const before of parent.subitems ?? []) {
           const after = nextById.get(before.id)
-          if (!after || (before.startDate === after.startDate && before.endDate === after.endDate)) continue
-          void logItemActivity(parent.id, 'wijzigde de timeline',
-            `${before.name}: ${before.startDate ?? '—'} – ${before.endDate ?? '—'} → ${after.startDate ?? '—'} – ${after.endDate ?? '—'}`,
-            {
-              field: 'startDate', boardId, itemName: parent.name,
-              before: { startDate: before.startDate, endDate: before.endDate },
-              after: { startDate: after.startDate, endDate: after.endDate },
-            })
+          if (!after) continue
+          if (before.startDate !== after.startDate || before.endDate !== after.endDate) {
+            void logItemActivity(parent.id, 'wijzigde de timeline',
+              `${before.name}: ${before.startDate ?? '—'} – ${before.endDate ?? '—'} → ${after.startDate ?? '—'} – ${after.endDate ?? '—'}`,
+              {
+                field: 'startDate', boardId, itemName: `${parent.name} › ${before.name}`,
+                before: { startDate: before.startDate, endDate: before.endDate },
+                after: { startDate: after.startDate, endDate: after.endDate },
+              })
+          }
+          if (before.status !== after.status) {
+            void logItemActivity(parent.id, 'zette status',
+              `${before.name}: ${before.status || '—'} → ${after.status || '—'}`,
+              {
+                field: 'status', boardId, itemName: `${parent.name} › ${before.name}`,
+                before: before.status, after: after.status,
+              })
+          }
         }
       }
     }
