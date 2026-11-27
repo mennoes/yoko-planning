@@ -2677,15 +2677,18 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
   }
 
   return (
-    <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-        Verdeling
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Verdeling</span>
+        <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+          {uitSubitems ? 'Opgeteld uit subitems' : 'Verschuif of vul uren in'}
+        </span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 16px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
         <DistributionPie
           segments={segments}
           total={total}
-          size={120}
+          size={96}
           interactive={!uitSubitems}
           showAvatars
           innerLabel={`${round1(total)}u`}
@@ -2749,11 +2752,6 @@ function OwnerDistributionSection({ item, owners, total, onUpdate, completionTar
           )}
         </div>
       </div>
-      <p style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-muted)' }}>
-        {uitSubitems
-          ? 'Opgeteld uit de subitems — pas de uren daar aan, dan loopt dit mee.'
-          : 'Sleep de witte bolletjes of vul de uren per persoon rechtstreeks in.'}
-      </p>
     </div>
   )
 }
@@ -2871,10 +2869,10 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
     ? { ...item, ownerIds: Object.keys(volledig.verdeling), ownerHours: volledig.verdeling, __relevantOwnerHoursTotal: volledig.totaal, __ownerHoursUitSubitems: true }
     : item
 
-  // Agenda › groep › hoofditem. Lege stukken vallen weg in plaats van een
-  // los liggend pijltje achter te laten.
+  // De agenda is de belangrijkste herkomst. Groep en eventueel hoofditem
+  // zijn de onderliggende locatie en krijgen daarom minder nadruk.
   const { boardName, groupName } = useContext(GroupCtx)
-  const kruimels = [boardName, groupName, parentName].filter((deel): deel is string => !!deel)
+  const locatieDelen = [groupName, parentName].filter((deel): deel is string => !!deel)
 
   const thread = threads.find(t => !t.thread.some(r => r.personalCompletion))
   const replies = threads.flatMap(t => t.thread).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -2953,6 +2951,32 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
 
   const accent = accentColor ?? '#579bfc'
   const isGoogle = item.source === 'google'
+  const propertyCols = cols.filter(col => !isPersonalColumn(col.key) && col.key !== 'notes')
+  const primaryPropertyKeys = new Set(['ownerIds', 'status', 'timeline', 'deadline', 'estHours'])
+  const primaryPropertyCols = propertyCols.filter(col => primaryPropertyKeys.has(col.key))
+  const secondaryPropertyCols = propertyCols.filter(col => !primaryPropertyKeys.has(col.key))
+
+  const propertyCard = (col: ColumnDef) => (
+    <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6,
+      minWidth: 0, padding: '9px 11px', borderRadius: 8, background: 'var(--bg-card)',
+      border: '1px solid var(--border-light)' }}>
+      <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        {col.key === 'status' ? 'Status' : col.key === 'timeline' ? 'Timeline' : col.label}
+      </span>
+      <div style={{ minHeight: 32, display: 'flex', alignItems: 'center', fontSize: 15 }}>
+        <Cell item={vensterItem} col={col} onUpdate={onUpdate} avatarSize={32} />
+      </div>
+      {col.key === 'status' && <PersonalCompletionSection
+        key={item.id}
+        target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
+        ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status}
+        onAllDone={() => {
+          onUpdate({ status: 'Done' })
+          notifyOwnersOfStatusChange(item, item.status, 'Done')
+        }}
+        renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} />}
+    </div>
+  )
 
   if (typeof document === 'undefined') return null
   return createPortal(
@@ -2982,18 +3006,21 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
         }}>
           <div style={{ width: 5, alignSelf: 'stretch', borderRadius: 3, background: accent, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Waar sta je? Zonder dit is een item dat je via de planning
-                of een zoekactie opent een naam zonder plek: in welke
-                agenda, in welke groep, en — bij een subitem — onder welk
-                item. */}
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span style={{ flexShrink: 0 }}>{parentItemId ? 'Subitem' : 'Item'}</span>
+            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 850, textTransform: 'uppercase', letterSpacing: '0.1em', flexShrink: 0 }}>Agenda</span>
+              {agendaHref ? (
+                <Link href={agendaHref} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 6,
+                  background: `color-mix(in srgb, ${accent} 18%, var(--bg-hover))`, color: 'var(--text-primary)',
+                  fontSize: 15, lineHeight: 1.2, fontWeight: 800, textDecoration: 'none' }}>
+                  {boardName}<span aria-hidden style={{ fontSize: 12 }}>↗</span>
+                </Link>
+              ) : <strong style={{ color: 'var(--text-primary)', fontSize: 15 }}>{boardName}</strong>}
               {isGoogle && <span style={{ background: 'var(--sup-yellow)', color: '#000', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>GOOGLE</span>}
-              {kruimels.length > 0 && (
-                <span title={kruimels.join('  ›  ')}
-                  style={{ textTransform: 'none', letterSpacing: 'normal', fontWeight: 600,
+              {locatieDelen.length > 0 && (
+                <span title={locatieDelen.join('  ›  ')}
+                  style={{ color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-                  · {kruimels.join('  ›  ')}
+                  {locatieDelen.join('  ›  ')}
                 </span>
               )}
             </div>
@@ -3021,43 +3048,25 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
               width: 32, height: 32, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
 
-        {agendaHref && <div style={{ padding: '10px 22px', borderBottom: '1px solid var(--border-light)' }}>
-          <Link href={agendaHref} style={{ display: 'inline-flex', padding: '7px 12px', borderRadius: 7, background: 'var(--bg-hover)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Open agenda →</Link>
-        </div>}
-
         {/* Body: properties + comments */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px 22px' }}>
-          {/* Properties grid */}
-          {/* Smallere vakken dan eerst, want een datum of een getal heeft
-              geen 250px nodig. Zo passen Deadline, Est Time en Dagen op
-              één rij. Alle velden gebruiken één kolom; langere tekst
-              blijft binnen het eigen vlak. */}
+          {/* De vijf gegevens die je steeds nodig hebt staan direct in
+              beeld. Minder gebruikte/agendaspecifieke velden blijven
+              bereikbaar, maar nemen niet standaard een hele rij in. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginBottom: 20 }}>
-            {cols.filter(col => !isPersonalColumn(col.key) && col.key !== 'notes').map(col => (
-              // Elk veld in een eigen vlak: eerder liepen label en waarde
-              // van de buurman in elkaar over en was het één grijze soep.
-              <div key={col.key} style={{ display: 'flex', flexDirection: 'column', gap: 6,
-                minWidth: 0,
-                padding: '9px 11px', borderRadius: 8, background: 'var(--bg-card)',
-                border: '1px solid var(--border-light)' }}>
-                <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                  {col.key === 'status' ? 'Status' : col.key === 'timeline' ? 'Timeline' : col.label}
-                </span>
-                <div style={{ minHeight: 32, display: 'flex', alignItems: 'center', fontSize: 15 }}>
-                  <Cell item={vensterItem} col={col} onUpdate={onUpdate} avatarSize={32} />
-                </div>
-                {col.key === 'status' && <PersonalCompletionSection
-                  key={item.id}
-                  target={{ parentItemId: parentItemId ?? item.id, ...(parentItemId ? { subitemId: item.id } : {}) }}
-                  ownerIds={item.ownerIds} status={parentStatus === 'Done' ? 'Done' : item.status}
-                  onAllDone={() => {
-                    onUpdate({ status: 'Done' })
-                    notifyOwnersOfStatusChange(item, item.status, 'Done')
-                  }}
-                  renderStatus={(value, onChange, disabled) => <StatusCell value={value} onChange={onChange} disabled={disabled} ariaLabel="Jouw status" />} />}
-              </div>
-            ))}
+            {primaryPropertyCols.map(propertyCard)}
           </div>
+
+          {secondaryPropertyCols.length > 0 && (
+            <details style={{ margin: '-8px 0 18px' }}>
+              <summary style={{ width: 'fit-content', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 700 }}>
+                Meer gegevens ({secondaryPropertyCols.length})
+              </summary>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginTop: 10 }}>
+                {secondaryPropertyCols.map(propertyCard)}
+              </div>
+            </details>
+          )}
 
           {/* Verdeling — alleen wanneer meerdere eigenaren EN er uren zijn,
               dan heeft 't visueel iets te zeggen. Anders skip 'm.
@@ -3117,8 +3126,8 @@ function ItemDetailDrawer({ item, cols, accentColor, onUpdate, onClose, parentIt
                 }
               }}
               placeholder="Voeg een korte briefing of omschrijving toe…"
-              rows={5}
-              style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 112, padding: '11px 12px', borderRadius: 8, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: 15, lineHeight: 1.5, outline: 'none' }}
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 78, padding: '11px 12px', borderRadius: 8, border: '1px solid var(--border-light)', background: 'var(--bg-card)', color: 'var(--text-primary)', font: 'inherit', fontSize: 15, lineHeight: 1.5, outline: 'none' }}
             />
           </div>
 
