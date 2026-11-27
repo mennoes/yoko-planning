@@ -15,3 +15,9 @@ test('collapsed sidebar navigation uses a full-row hover treatment', () => {
   assert.match(css, /\.sidebar-collapsed-tooltip[\s\S]*position: fixed/)
   assert.match(css, /prefers-reduced-motion: reduce/)
 })
+
+test("Agenda's appears directly before To do's in both menu widths", () => {
+  assert.match(sidebar, /mainNavBeforeTodos\.map[\s\S]*collapsedAgendaHref[\s\S]*mainNavFromTodos\.map/)
+  assert.match(sidebar, /mainNavBeforeTodos\.map[\s\S]*section=\{agendaSection\}[\s\S]*mainNavFromTodos\.map/)
+  assert.match(sidebar, /aria-label="Agenda's"/)
+})

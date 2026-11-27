@@ -1555,6 +1555,69 @@ export default function Sidebar({
     setCollapsedTip({ label, top: rect.top + rect.height / 2 })
   }
 
+  const agendaSectionIndex = sections.findIndex(section => section.type === 'projects')
+  const agendaSection = agendaSectionIndex >= 0 ? sections[agendaSectionIndex] : null
+  const todosIndex = mainNav.findIndex(item => item.href === '/todos')
+  const mainNavBeforeTodos = todosIndex >= 0 ? mainNav.slice(0, todosIndex) : mainNav
+  const mainNavFromTodos = todosIndex >= 0 ? mainNav.slice(todosIndex) : []
+  const collapsedAgendaHref = agendaSection?.items.find(item => item.id === 'yoko')?.href
+    ?? agendaSection?.items[0]?.href
+    ?? '/projects/yoko'
+
+  function renderMainNavItem(item: MainNavItem, idx: number) {
+    const active = navigationPathname === item.href
+    const editing = editingMainId === item.id
+    return (
+      <div key={item.id} draggable={!editOrder}
+        onDragStart={() => mainDS(idx)}
+        onDragOver={e => mainDO(e, idx)}
+        onDragEnd={mainDE}
+        style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 1, position: 'relative' }}
+        onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.mn-action').forEach(b => (b.style.opacity = '1')) }}
+        onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.mn-action').forEach(b => (b.style.opacity = '0')) }}
+      >
+        {editing ? (
+          <input autoFocus defaultValue={item.label}
+            onBlur={e => { const v = e.target.value.trim(); if (v) renameMainItem(item.id, v); setEditingMainId(null) }}
+            onKeyDown={e => { if (e.key === 'Enter') { const v = e.currentTarget.value.trim(); if (v) renameMainItem(item.id, v); setEditingMainId(null) } if (e.key === 'Escape') setEditingMainId(null) }}
+            style={{ flex: 1, margin: '1px 4px', background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '5px 8px', color: 'var(--text-primary)', fontSize: 13.5, outline: 'none', boxSizing: 'border-box' }}
+          />
+        ) : (
+          <Link href={item.href}
+            onClick={e => { if (editOrder) e.preventDefault() }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 11, flex: 1,
+              padding: '11px 12px', borderRadius: 8,
+              color: 'var(--text-primary)',
+              background: active ? 'var(--control-active)' : 'transparent',
+              textDecoration: 'none', fontSize: 18, fontWeight: active ? 800 : 600,
+              letterSpacing: '-0.02em',
+              borderLeft: '3px solid transparent',
+              paddingLeft: 12,
+            }}
+            onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+            onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+          >
+            {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={22} /> : null })()}
+            <span>{item.label}</span>
+          </Link>
+        )}
+        {editOrder && !editing && (
+          <>
+            <button onClick={() => moveMainNav(idx, -1)} disabled={idx === 0} title="Omhoog"
+              style={reorderArrowBtn(idx === 0)}><IconArrowUp size={14} /></button>
+            <button onClick={() => moveMainNav(idx, 1)} disabled={idx === mainNav.length - 1} title="Omlaag"
+              style={reorderArrowBtn(idx === mainNav.length - 1)}><IconArrowDown size={14} /></button>
+          </>
+        )}
+        {!editOrder && !editing && (
+          <button className="mn-action" onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingMainId(item.id) }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: '2px 5px', opacity: 0, flexShrink: 0, position: 'absolute', right: 0 }}>✎</button>
+        )}
+      </div>
+    )
+  }
+
   function onResizeMouseDown(e: React.MouseEvent) {
     e.preventDefault()
     resizingRef.current = true
@@ -1603,7 +1666,25 @@ export default function Sidebar({
               style={{ width: 38, height: 38, borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-hover)', color: 'var(--sup-yellow)', cursor: 'pointer', fontSize: 27, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
           </div>
           <nav aria-label="Hoofdnavigatie" style={{ width: '100%', padding: '8px 8px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
-            {mainNav.map(item => {
+            {mainNavBeforeTodos.map(item => {
+              const active = navigationPathname === item.href
+              const NavIcon = MAIN_ICONS[item.href]
+              return <Link key={item.id} href={item.href} aria-label={item.label}
+                className={`sidebar-collapsed-action${active ? ' is-active' : ''}`}
+                onMouseEnter={e => showCollapsedTip(e, item.label)} onMouseLeave={() => setCollapsedTip(null)}
+                onFocus={e => showCollapsedTip(e, item.label)} onBlur={() => setCollapsedTip(null)}
+                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+                <span className="sidebar-collapsed-icon">{NavIcon ? <NavIcon size={22} /> : null}</span>
+              </Link>
+            })}
+            <Link href={collapsedAgendaHref} aria-label="Agenda's"
+              className={`sidebar-collapsed-action${navigationPathname.startsWith('/projects/') ? ' is-active' : ''}`}
+              onMouseEnter={e => showCollapsedTip(e, "Agenda's")} onMouseLeave={() => setCollapsedTip(null)}
+              onFocus={e => showCollapsedTip(e, "Agenda's")} onBlur={() => setCollapsedTip(null)}
+              style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+              <span className="sidebar-collapsed-icon"><IconAgenda size={22} /></span>
+            </Link>
+            {mainNavFromTodos.map(item => {
               const active = navigationPathname === item.href
               const NavIcon = MAIN_ICONS[item.href]
               return <Link key={item.id} href={item.href} aria-label={item.label}
@@ -1732,62 +1813,34 @@ export default function Sidebar({
         <nav style={{ padding: '8px 8px', flex: '1 1 0', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
 
           {/* Main nav */}
-          {mainNav.map((item, idx) => {
-            const active  = navigationPathname === item.href
-            const editing = editingMainId === item.id
-            return (
-              <div key={item.id} draggable={!editOrder}
-                onDragStart={() => mainDS(idx)}
-                onDragOver={e => mainDO(e, idx)}
-                onDragEnd={mainDE}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 1, position: 'relative' }}
-                onMouseEnter={e => { e.currentTarget.querySelectorAll<HTMLElement>('.mn-action').forEach(b => (b.style.opacity = '1')) }}
-                onMouseLeave={e => { e.currentTarget.querySelectorAll<HTMLElement>('.mn-action').forEach(b => (b.style.opacity = '0')) }}
-              >
-                {editing ? (
-                  <input autoFocus defaultValue={item.label}
-                    onBlur={e => { const v = e.target.value.trim(); if (v) renameMainItem(item.id, v); setEditingMainId(null) }}
-                    onKeyDown={e => { if (e.key === 'Enter') { const v = e.currentTarget.value.trim(); if (v) renameMainItem(item.id, v); setEditingMainId(null) } if (e.key === 'Escape') setEditingMainId(null) }}
-                    style={{ flex: 1, margin: '1px 4px', background: 'var(--bg-base)', border: '1px solid var(--accent)', borderRadius: 4, padding: '5px 8px', color: 'var(--text-primary)', fontSize: 13.5, outline: 'none', boxSizing: 'border-box' }}
-                  />
-                ) : (
-                  <Link href={item.href}
-                    onClick={e => { if (editOrder) e.preventDefault() }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 11, flex: 1,
-                      padding: '11px 12px', borderRadius: 8,
-                      color: 'var(--text-primary)',
-                      background: active ? 'var(--control-active)' : 'transparent',
-                      textDecoration: 'none', fontSize: 18, fontWeight: active ? 800 : 600,
-                      letterSpacing: '-0.02em',
-                      borderLeft: '3px solid transparent',
-                      paddingLeft: 12,
-                    }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
-                  >
-                    {(() => { const NavIcon = MAIN_ICONS[item.href]; return NavIcon ? <NavIcon size={22} /> : null })()}
-                    <span>{item.label}</span>
-                  </Link>
-                )}
-                {editOrder && !editing && (
-                  <>
-                    <button onClick={() => moveMainNav(idx, -1)} disabled={idx === 0} title="Omhoog"
-                      style={reorderArrowBtn(idx === 0)}><IconArrowUp size={14} /></button>
-                    <button onClick={() => moveMainNav(idx, 1)} disabled={idx === mainNav.length - 1} title="Omlaag"
-                      style={reorderArrowBtn(idx === mainNav.length - 1)}><IconArrowDown size={14} /></button>
-                  </>
-                )}
-                {!editOrder && !editing && (
-                  <button className="mn-action" onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingMainId(item.id) }}
-                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11, padding: '2px 5px', opacity: 0, flexShrink: 0, position: 'absolute', right: 0 }}>✎</button>
-                )}
-              </div>
-            )
-          })}
+          {mainNavBeforeTodos.map(item => renderMainNavItem(item, mainNav.indexOf(item)))}
+
+          {hydrated && agendaSection && (
+            <div draggable={!editOrder}
+              onDragStart={() => secDS(agendaSectionIndex)}
+              onDragOver={e => secDO(e, agendaSectionIndex)}
+              onDragEnd={secDE}
+            >
+              <SectionBlock
+                section={agendaSection}
+                allSections={sections}
+                setAllSections={setSections}
+                pathname={navigationPathname}
+                onDelete={() => deleteSection(agendaSection.id)}
+                editOrder={editOrder}
+                isFirstSection={agendaSectionIndex === 0}
+                isLastSection={agendaSectionIndex === sections.length - 1}
+                onMoveSection={dir => moveSection(agendaSectionIndex, dir)}
+                showToast={showToast}
+                onNavigate={isMobile ? onClose : undefined}
+              />
+            </div>
+          )}
+
+          {mainNavFromTodos.map(item => renderMainNavItem(item, mainNav.indexOf(item)))}
 
           {/* Dynamic sections — draggable */}
-          {hydrated && sections.map((section, idx) => (
+          {hydrated && sections.map((section, idx) => section.type !== 'projects' && (
             <div key={section.id} draggable={!editOrder}
               onDragStart={() => secDS(idx)}
               onDragOver={e => secDO(e, idx)}
