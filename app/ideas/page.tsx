@@ -255,17 +255,27 @@ export default function IdeasPage() {
     window.setTimeout(() => setHighlighted(null), 2600)
   }
 
+  function finishEditing(draft: IdeaItem): Promise<void> {
+    // Sluit direct en alleen wanneer dit nog steeds dezelfde post-it is.
+    // updateIdea schrijft eerst naar de lokale cache en bevestigt daarna
+    // online, dus een klik op het canvas voelt meteen klaar zonder invoer
+    // kwijt te raken.
+    setEditing(current => current?.id === draft.id ? null : current)
+    setDeleteArmed(false)
+    if (!draft.title.trim()) return Promise.resolve()
+    return updateIdea(draft.id, {
+      title: draft.title.trim(),
+      body: draft.body.trim(),
+      goal: draft.goal.trim(),
+      category: draft.category,
+      color: draft.color,
+    })
+  }
+
   async function saveEdit(event: FormEvent) {
     event.preventDefault()
-    if (!editing?.title.trim()) return
-    await updateIdea(editing.id, {
-      title: editing.title.trim(),
-      body: editing.body.trim(),
-      goal: editing.goal.trim(),
-      category: editing.category,
-      color: editing.color,
-    })
-    setEditing(null)
+    if (!editing) return
+    await finishEditing(editing)
   }
 
   function persistPositions(next: NotePositions) {
@@ -277,6 +287,7 @@ export default function IdeasPage() {
     if (event.button !== 0 && event.button !== 1) return
     const target = event.target as HTMLElement
     if (target.closest('article, button, input, textarea, select, label')) return
+    if (editing) void finishEditing(editing)
     event.preventDefault()
     const startX = event.clientX
     const startY = event.clientY

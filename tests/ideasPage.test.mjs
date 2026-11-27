@@ -77,6 +77,13 @@ test('ideas are edited inside their post-it with title before a labelled goal', 
   assert.doesNotMatch(page, /styles\.modalBackdrop|styles\.editModal/)
 })
 
+test('clicking the empty canvas saves and closes an edited post-it', () => {
+  assert.match(page, /function finishEditing\(draft: IdeaItem\)/)
+  assert.match(page, /setEditing\(current => current\?\.id === draft\.id \? null : current\)/)
+  assert.match(page, /if \(editing\) void finishEditing\(editing\)/)
+  assert.match(page, /if \(target\.closest\('article, button, input, textarea, select, label'\)\) return/)
+})
+
 test('post-its have a compact bottom action bar and a hand-up claim action', () => {
   assert.match(page, /className=\{styles\.noteTools\}/)
   assert.match(page, /Steek je hand op en pak dit idee/)
