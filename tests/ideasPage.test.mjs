@@ -43,6 +43,16 @@ test('a new idea can introduce a reusable custom category', () => {
   assert.match(goalsMigration, /drop constraint if exists ideas_category_check/)
 })
 
+test('the canvas groups ideas beneath visible category headings', () => {
+  assert.match(page, /const visibleSections = useMemo/)
+  assert.match(page, /className=\{styles\.categoryLane\}/)
+  assert.match(page, /className=\{styles\.categoryHeading\}/)
+  assert.match(page, /Idee toevoegen aan/)
+  assert.match(page, />\+ Categorie<\/button>/)
+  assert.match(css, /\.categoryLane/)
+  assert.match(css, /\.categoryNotes/)
+})
+
 test('ideas explain which larger goal they contribute to', () => {
   assert.match(page, /idea\.goal && <div className=\{styles\.noteGoal\}/)
   assert.match(page, /title=\{`Doel: \$\{idea\.goal\}`\}/)

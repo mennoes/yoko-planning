@@ -183,6 +183,10 @@ export default function IdeasPage() {
   const goalOptions = useMemo(() => [...new Set(ideas.map(idea => idea.goal?.trim()).filter(Boolean) as string[])]
     .sort((a, b) => a.localeCompare(b, 'nl')), [ideas])
 
+  const visibleSections = useMemo(() => categoryOptions
+    .map(option => ({ ...option, ideas: visible.filter(idea => idea.category === option.value) }))
+    .filter(section => section.ideas.length > 0), [categoryOptions, visible])
+
   const openCount = ideas.filter(idea => idea.status === 'open').length
   const doingCount = ideas.filter(idea => idea.status === 'doing').length
   const doneCount = ideas.filter(idea => idea.status === 'done').length
@@ -223,6 +227,21 @@ export default function IdeasPage() {
       claimedBy: profile?.memberId ?? null,
       claimedName: profile?.name ?? 'Iemand',
     })
+  }
+
+  function addToCategory(value: IdeaCategory) {
+    setCategory(value)
+    setCreatingCategory(false)
+    setNewCategory('')
+    setComposerOpen(true)
+    window.setTimeout(() => document.querySelector<HTMLInputElement>(`.${styles.composerFields} input`)?.focus(), 0)
+  }
+
+  function addCategory() {
+    setCreatingCategory(true)
+    setNewCategory('')
+    setComposerOpen(true)
+    window.setTimeout(() => document.getElementById('new-idea-category')?.focus(), 0)
   }
 
   function surpriseMe() {
@@ -362,6 +381,7 @@ export default function IdeasPage() {
             <option value="done">Klaar ({doneCount})</option>
           </select>
         </label>
+        <button className={styles.addCategoryButton} type="button" onClick={addCategory}>+ Categorie</button>
       </section>
 
       {composerOpen && (
@@ -442,7 +462,19 @@ export default function IdeasPage() {
           </div>
         ) : (
           <div className={styles.board} style={{ transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.zoom})` }}>
-          {visible.map((idea, index) => (
+          {visibleSections.map(section => (
+          <section className={styles.categoryLane} key={section.value} aria-labelledby={`idea-category-${section.value}`}>
+            <header className={styles.categoryHeading}>
+              <div>
+                <h2 id={`idea-category-${section.value}`}>{section.label}</h2>
+                <span>{section.ideas.length} {section.ideas.length === 1 ? 'idee' : 'ideeën'}</span>
+              </div>
+              <button type="button" onClick={() => addToCategory(section.value)} title={`Idee toevoegen aan ${section.label}`} aria-label={`Idee toevoegen aan ${section.label}`}>+</button>
+            </header>
+            <div className={styles.categoryNotes}>
+          {section.ideas.map(idea => {
+          const index = visible.findIndex(entry => entry.id === idea.id)
+          return (
           <article
             key={idea.id}
             data-idea-id={idea.id}
@@ -533,6 +565,9 @@ export default function IdeasPage() {
               </div>
             </footer>
           </article>
+          )})}
+            </div>
+          </section>
           ))}
           </div>
         )}

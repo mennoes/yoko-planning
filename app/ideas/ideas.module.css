@@ -19,11 +19,12 @@
 .surpriseButton { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--surface-shadow); }
 .surpriseButton:disabled { opacity: .4; cursor: default; }
 
-.toolbar { max-width: 1480px; margin: 0 auto 28px; display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 3px 2px 8px; }
+.toolbar { max-width: 1480px; margin: 0 auto 28px; display: flex; justify-content: space-between; gap: 14px; align-items: center; padding: 3px 2px 8px; }
 .categoryFilters { display: flex; gap: 7px; align-items: center; overflow-x: auto; scrollbar-width: none; }
 .toolbar button { border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--bg-card) 88%, transparent); color: var(--text-secondary); padding: 9px 14px; white-space: nowrap; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .toolbar button span { margin-left: 5px; opacity: .55; }
 .toolbar .activeFilter { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-card); }
+.toolbar .addCategoryButton { flex-shrink: 0; border-style: dashed; color: var(--text-primary); }
 .statusFilter { display: flex; align-items: center; gap: 9px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .statusFilter select { min-height: 40px; max-width: 210px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); color: var(--text-primary); padding: 0 34px 0 12px; font: inherit; font-size: 14px; font-weight: 700; text-transform: none; letter-spacing: 0; cursor: pointer; }
 
@@ -54,7 +55,14 @@
 .canvasControls button { width: 38px; height: 38px; border: 0; border-right: 1px solid var(--border); background: transparent; color: var(--text-primary); font: inherit; font-size: 20px; font-weight: 800; cursor: pointer; }
 .canvasControls button:last-child { border-right: 0; }
 .canvasControls .zoomValue { width: 58px; font-size: 12px; }
-.board { position: absolute; top: 0; left: 0; width: 3200px; min-height: 2400px; padding: 82px; display: grid; grid-template-columns: repeat(8, 290px); grid-auto-rows: min-content; gap: 32px 28px; align-items: start; transform-origin: 0 0; will-change: transform; }
+.board { position: absolute; top: 0; left: 0; width: 3200px; min-height: 2400px; padding: 74px 82px 120px; display: flex; align-items: flex-start; gap: 38px; transform-origin: 0 0; will-change: transform; }
+.categoryLane { width: 290px; flex: 0 0 290px; display: flex; flex-direction: column; gap: 18px; }
+.categoryHeading { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 4px 10px; border-bottom: 2px solid color-mix(in srgb, var(--text-primary) 20%, transparent); color: var(--text-primary); }
+.categoryHeading h2 { margin: 0 0 3px; font-size: 16px; line-height: 1.15; letter-spacing: -.01em; }
+.categoryHeading span { display: block; color: var(--text-muted); font-size: 11px; font-weight: 700; }
+.categoryHeading button { width: 30px; height: 30px; flex: 0 0 30px; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--bg-card) 86%, transparent); color: var(--text-primary); font: inherit; font-size: 19px; line-height: 1; cursor: pointer; }
+.categoryHeading button:hover, .categoryHeading button:focus-visible { background: var(--text-primary); color: var(--bg-card); outline: none; }
+.categoryNotes { display: flex; flex-direction: column; gap: 22px; }
 .note { --note-color: #fff0a8; --tilt: 0deg; --note-x: 0px; --note-y: 0px; position: relative; min-height: 290px; display: flex; flex-direction: column; overflow: visible; background: var(--note-color); color: #29231b; border-radius: 2px 3px 16px 3px; box-shadow: 0 8px 18px rgba(43, 36, 18, .09), 0 2px 3px rgba(43, 36, 18, .08); transform: translate(var(--note-x), var(--note-y)) rotate(var(--tilt)); transition: transform .2s ease, box-shadow .2s ease, background-color .15s ease; z-index: 1; }
 .note:hover { transform: translate(var(--note-x), calc(var(--note-y) - 4px)) rotate(0); box-shadow: 0 16px 30px rgba(43,36,18,.14); z-index: 3; }
 .note.dragging { transform: translate(var(--note-x), var(--note-y)) rotate(1.2deg) scale(1.025); transition: none; box-shadow: 0 22px 45px rgba(43,36,18,.25); z-index: 20; }
@@ -126,7 +134,8 @@
   .composerOptions .pinButton { margin-left: 0; }
   .canvasViewport { height: max(520px, calc(100vh - 330px)); border-radius: 14px; }
   .canvasHint { display: none; }
-  .board { width: 1500px; min-height: 1400px; padding: 56px; grid-template-columns: repeat(4, 270px); gap: 20px; }
+  .board { width: 1800px; min-height: 1600px; padding: 56px; gap: 24px; }
+  .categoryLane { width: 270px; flex-basis: 270px; }
   .note { min-height: 225px; }
 }
 
