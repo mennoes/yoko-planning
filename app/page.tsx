@@ -254,6 +254,20 @@ export default function HomePage() {
   const { showMember } = useMemberPopup()
   const router         = useRouter()
   const isMobile       = useIsMobile()
+  const [homeDetail, setHomeDetail] = useState<{
+    boardId: string
+    parentItemId: string
+    subitemId?: string
+  } | null>(null)
+
+  function openHomeItem(boardId: string, itemId: string) {
+    const target = completionTargetForProject({ board: boardId, itemId })
+    setHomeDetail({
+      boardId,
+      parentItemId: target?.parentItemId ?? itemId,
+      subitemId: target?.subitemId,
+    })
+  }
   // Helper: classificeer als yoko-crew op basis van team_members.kind,
   // fallback hardcoded set. Wordt gebruikt voor 'Team vandaag'.
   const HARDCODED_YOKO = new Set(['menno','vincent','odette','anne-fleur','kars'])
@@ -971,7 +985,11 @@ export default function HomePage() {
                           alignItems: 'center', justifyContent: 'center',
                           color: '#fff', fontSize: 11, lineHeight: 1,
                         }}>{t.done ? '✓' : ''}</button>
-                      <span style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                      <button type="button"
+                        onClick={() => t.projectRef && openHomeItem(t.projectRef.board, t.projectRef.itemId)}
+                        disabled={!t.projectRef}
+                        title={t.projectRef ? `Open ${t.projectRef.name || t.text} op Home` : undefined}
+                        style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, padding: 0, border: 0, background: 'transparent', textAlign: 'left', cursor: t.projectRef ? 'pointer' : 'default', fontFamily: 'inherit' }}>
                         {(() => {
                           const lines = (t.text ?? '').split('\n')
                           return <>
@@ -981,11 +999,11 @@ export default function HomePage() {
                             ))}
                           </>
                         })()}
-                      </span>
+                      </button>
                       {t.projectRef && (
-                        <Link href={`/projects/${t.projectRef.board}`}
-                          title={`Open ${t.projectRef.board}-agenda`}
-                          onClick={e => e.stopPropagation()}
+                        <button type="button"
+                          title={`Open '${t.projectRef.name || t.text}' op Home`}
+                          onClick={() => openHomeItem(t.projectRef!.board, t.projectRef!.itemId)}
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
                             flexShrink: 0, fontSize: 9.5, fontWeight: 700,
@@ -994,11 +1012,11 @@ export default function HomePage() {
                             background: (BOARD_COLORS[t.projectRef.board] ?? '#888') + '22',
                             border: `1px solid ${BOARD_COLORS[t.projectRef.board] ?? '#888'}55`,
                             color: BOARD_COLORS[t.projectRef.board] ?? 'var(--text-muted)',
-                            textDecoration: 'none', marginTop: 1,
+                            textDecoration: 'none', marginTop: 1, cursor: 'pointer',
                           }}>
                           <span style={{ width: 6, height: 6, borderRadius: 2, background: BOARD_COLORS[t.projectRef.board] ?? '#888' }} />
                           {t.projectRef.board}
-                        </Link>
+                        </button>
                       )}
                     </div>
                   ))}
@@ -1233,10 +1251,10 @@ export default function HomePage() {
                        :              { bg: 'transparent', fg: 'var(--text-muted)' }
             const owners = (item.ownerIds ?? []).slice(0, 3)
             return (
-              <Link key={`${board}-${item.id}`}
-                href={`/projects/${board}?focus=${encodeURIComponent(item.id)}&drawer=${encodeURIComponent(item.id)}`}
-                title={`Open '${item.name}' in de agenda`}
-                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none' }}
+              <button type="button" key={`${board}-${item.id}`}
+                onClick={() => openHomeItem(board, item.id)}
+                title={`Open '${item.name}' op Home`}
+                style={{ width: '100%', border: 0, background: 'transparent', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, padding: '6px 18px', textDecoration: 'none', textAlign: 'left' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: BOARD_COLORS[board] ?? 'var(--accent)', flexShrink: 0 }} />
@@ -1251,7 +1269,7 @@ export default function HomePage() {
                 <span style={{ fontSize: 11, fontWeight: 700, color: tone.fg, background: tone.bg, padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
                   {days < 0 ? `${Math.abs(days)}d te laat` : days === 0 ? 'vandaag' : `${days}d`}
                 </span>
-              </Link>
+              </button>
             )
           })}
         </div>
@@ -1532,6 +1550,13 @@ export default function HomePage() {
               </div>
             ))}
         </div>
+      )}
+
+      {homeDetail && (
+        <LinkedItemDetailDrawer
+          {...homeDetail}
+          onClose={() => setHomeDetail(null)}
+        />
       )}
 
     </div>
