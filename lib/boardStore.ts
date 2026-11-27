@@ -326,7 +326,13 @@ async function refreshBoard(boardName: string, userId: string, scope: string): P
   if (typeof window !== 'undefined') {
     const dirtyRaw = localStorage.getItem(dirtyKey(boardName))
     if (dirtyRaw) {
-      {
+      // Zonder laatst-geziene remote baseline weten we niet welke delen van
+      // deze cache echte edits zijn. Dit komt vooral voor op een oud/tweede
+      // apparaat. Nooit zo'n volledige cache omhoog sturen: haal eerst de
+      // actuele online versie op.
+      if (!localStorage.getItem(pulledKey(boardName))) {
+        localStorage.removeItem(dirtyKey(boardName))
+      } else {
         const localRaw = localStorage.getItem(key(boardName))
         if (localRaw) {
           try {
@@ -703,17 +709,25 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
   if (itemRows.length > 0) {
     // A stale tab must not move a row back by saving its old board snapshot.
     // Cross-board changes belong exclusively to moveItemToBoard.
-    const liveColumns = 'id, board_id, group_id, position, name, owner_ids, status, start_date, end_date, deadline, est_hours, dagen, notes, contactpersoon, uitzenddag, framelink, nummers, subitems, journal, source, external_link, external_synced_at, extra'
+    const liveColumns = 'id, board_id, group_id, position, name, owner_ids, status, start_date, end_date, deadline, est_hours, dagen, notes, contactpersoon, uitzenddag, framelink, nummers, subitems, journal, source, external_link, external_synced_at, updated_at, extra'
     const { data: locations, error: locationError } = await supabase.from('board_items')
       .select(liveColumns).in('id', itemRows.map(row => String(row.id)))
     if (locationError) return fail(`Items controleren mislukt: ${locationError.message}`)
     const movedAway = new Set((locations ?? []).filter((row: { id: string; board_id: string }) => row.board_id !== boardName).map((row: { id: string }) => row.id))
-    const safeRows = itemRows.filter(row => !movedAway.has(String(row.id)))
     const storedById = new Map((locations ?? []).map(row => [String(row.id), row as Record<string, unknown> & {
       id: string
       subitems?: SubItem[] | null
       extra?: Record<string, unknown> | null
+      updated_at?: string | null
     }]))
+    // Bestaat een rij online maar ontbreekt onze pulled baseline, dan is de
+    // lokale kopie niet betrouwbaar genoeg om die rij te wijzigen. Alleen
+    // werkelijk nieuwe ids (nog niet online) mogen zonder baseline worden
+    // toegevoegd.
+    const safeRows = itemRows.filter(row => {
+      const id = String(row.id)
+      return !movedAway.has(id) && (baselineSerialized.has(id) || !storedById.has(id))
+    })
 
     // Three-way merge: een lokale wijziging aan bijvoorbeeld notities of
     // positie mag geen nieuwere remote timeline terugzetten. Vergelijk de
@@ -725,7 +739,14 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
       const base = baselineSerialized.get(String(row.id))
       if (!stored || !base) continue
       const baselineRow = itemToRow(boardName, base.groupId, base.idx, base.item)
-      safeRows[index] = mergeBoardRowAgainstRemote(row, baselineRow, stored)
+      const pendingSince = Number(localStorage.getItem(dirtyKey(boardName)) ?? 0)
+      const remoteUpdatedAt = Date.parse(stored.updated_at ?? '')
+      // Is de online rij aangepast nadat deze lokale wijziging klaarstond,
+      // dan wint online uitsluitend bij velden die aan beide kanten zijn
+      // veranderd. Een laptop van gisteren kan zo nooit een latere Done-
+      // status of timeline van de werk-pc terugzetten.
+      const remoteWinsConflicts = Number.isFinite(remoteUpdatedAt) && pendingSince > 0 && remoteUpdatedAt > pendingSince
+      safeRows[index] = mergeBoardRowAgainstRemote(row, baselineRow, stored, remoteWinsConflicts)
     }
 
     // SAFETY GUARD #2 — merge de live databasehistorie vlak vóór iedere
@@ -747,7 +768,7 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
         dismissed,
       )
     }
-    const columns = 'id, name, owner_ids, status, start_date, end_date, deadline, est_hours, notes, extra'
+    const columns = 'id, name, owner_ids, status, start_date, end_date, deadline, est_hours, notes, subitems, extra'
     let writeResult = safeRows.length > 0
       ? await supabase.from('board_items').upsert(safeRows, { onConflict: 'id' })
           .select(columns)
@@ -792,7 +813,7 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
     for (const expected of safeRows) {
       const actual = confirmed.get(String(expected.id))
       if (!actual) return fail(`Opslaan van '${String(expected.name ?? 'item')}' kon niet worden bevestigd.`)
-      const fields = ['name', 'owner_ids', 'status', 'start_date', 'end_date', 'deadline', 'est_hours', 'notes'] as const
+      const fields = ['name', 'owner_ids', 'status', 'start_date', 'end_date', 'deadline', 'est_hours', 'notes', 'subitems'] as const
       if (fields.some(field => !same(actual[field], expected[field]))) {
         return fail(`Opslaan van '${String(expected.name ?? 'item')}' week af van de gevraagde wijziging.`)
       }

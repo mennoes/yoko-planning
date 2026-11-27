@@ -35,3 +35,16 @@ test('de eigen timeline-edit blijft staan terwijl een remote notitie behouden bl
   assert.equal(merged.notes, 'Nieuw vanuit een andere tab')
   assert.equal(JSON.stringify(merged.extra), JSON.stringify({ datesOverride: true, remoteOnly: 'nieuw' }))
 })
+
+test('een latere remote edit wint wanneer beide apparaten dezelfde velden wijzigden', () => {
+  const baseline = { id: 'ad', status: 'Working on...', start_date: '2026-11-01', end_date: '2026-11-30', extra: { datesOverride: false } }
+  const staleLaptop = { ...baseline, status: '', start_date: '2026-10-01', end_date: '2026-10-31', extra: { datesOverride: true } }
+  const laterWorkPc = { ...baseline, status: 'Done', start_date: '2026-12-01', end_date: '2026-12-12', extra: { datesOverride: true } }
+
+  const merged = mergeBoardRowAgainstRemote(staleLaptop, baseline, laterWorkPc, true)
+
+  assert.equal(merged.status, 'Done')
+  assert.equal(merged.start_date, '2026-12-01')
+  assert.equal(merged.end_date, '2026-12-12')
+  assert.equal(merged.extra.datesOverride, true)
+})

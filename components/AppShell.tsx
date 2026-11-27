@@ -20,7 +20,7 @@ import BoardSaveIndicator from './BoardSaveIndicator'
 import { requiresAuth } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { pullPagesFromRemote, subscribeRemotePages } from '@/lib/pagesStore'
-import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES, pushBoardToRemote, loadGroups } from '@/lib/boardStore'
+import { pullBoardFromRemote, subscribeRemoteBoard, BOARD_NAMES } from '@/lib/boardStore'
 import { pullBoardsFromRemote, subscribeRemoteBoards } from '@/lib/boardsRegistry'
 import { loadSections as loadNavSections } from '@/lib/navStore'
 import teamData from '@/data/team.json'
@@ -36,7 +36,6 @@ import { routeOmdenkenNow, syncGoogleNow } from '@/lib/googleClient'
 import { applySubitemRules } from '@/lib/subitemRules'
 import { applyAutoStatus, notifyOverdueItems } from '@/lib/autoStatus'
 import { pullExtrasFromRemote, subscribeRemoteExtras } from '@/lib/teamExtras'
-import type { BoardGroup } from '@/lib/boards'
 
 function Inner({ children }: { children: ReactNode }) {
   const { needsSetup, editOpen, isAuthenticated, authChecked, profile, openEdit } = useProfile()
@@ -52,6 +51,23 @@ function Inner({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [avatarReminderOpen, setAvatarReminderOpen] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
+
+  // Sluit of refresh de app niet stil terwijl een agenda-edit nog niet door
+  // Supabase is bevestigd. De lokale dirty-vlag blijft bestaan voor retry,
+  // maar een ander apparaat kan die cache niet zien; daarom moet de maker
+  // eerst weten dat de wijziging nog onderweg is.
+  useEffect(() => {
+    if (isDemoRoute) return
+    const warnForPendingBoardSave = (event: BeforeUnloadEvent) => {
+      const pending = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+        .some(key => key?.startsWith('yoko-board-') && key.endsWith('-dirty'))
+      if (!pending) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnForPendingBoardSave)
+    return () => window.removeEventListener('beforeunload', warnForPendingBoardSave)
+  }, [isDemoRoute])
 
   useEffect(() => {
     if (!authChecked || !isAuthenticated || !profile?.memberId || profile.photo) return
@@ -224,14 +240,13 @@ function Inner({ children }: { children: ReactNode }) {
       // Auto-plan Rewind-items voor huidige + volgende maand zodra de
       // boards zijn geladen. Idempotent (skipt bestaande).
       ensureRewindItems(2)
-      // Boards: pull + subscribe + first-time migrate from localStorage
+      // Boards: remote ophalen en daarna realtime volgen.
       for (const b of BOARD_NAMES) {
-        const ok = await pullBoardFromRemote(b)
-        if (!ok) {
-          // Remote empty — push current local snapshot so other devices can pull it
-          const local = loadGroups(b, [] as BoardGroup[])
-          if (local.length > 0) await pushBoardToRemote(b, local)
-        }
+        // Een mislukte pull betekent niet dat de online agenda leeg is. De
+        // oude fallback pushte dan blind de lokale cache omhoog en kon zo
+        // wijzigingen van een ander apparaat terugzetten. Nieuwe agenda's
+        // worden al expliciet aangemaakt; hier is remote altijd leidend.
+        await pullBoardFromRemote(b)
         unsubs.push(subscribeRemoteBoard(b))
       }
       // Server-side reparatie: bestaande Omdenken-meetings echt uit Yoko

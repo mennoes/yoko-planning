@@ -20,11 +20,13 @@ function same(a: unknown, b: unknown): boolean {
  * value. This prevents a harmless reorder or notes edit from restoring an old
  * timeline.
  */
-export function mergeBoardRowAgainstRemote(local: Row, baseline: Row, remote: Row): Row {
+export function mergeBoardRowAgainstRemote(local: Row, baseline: Row, remote: Row, remoteWinsConflicts = false): Row {
   const merged: Row = { ...local }
 
   for (const field of MERGE_FIELDS) {
-    if (same(local[field], baseline[field])) merged[field] = remote[field] ?? null
+    const localChanged = !same(local[field], baseline[field])
+    const remoteChanged = !same(remote[field], baseline[field])
+    if (!localChanged || (remoteWinsConflicts && remoteChanged)) merged[field] = remote[field] ?? null
   }
 
   const localExtra = (local.extra && typeof local.extra === 'object' ? local.extra : {}) as Row
@@ -33,7 +35,9 @@ export function mergeBoardRowAgainstRemote(local: Row, baseline: Row, remote: Ro
   const extra: Row = { ...localExtra }
   const keys = new Set([...Object.keys(localExtra), ...Object.keys(baselineExtra), ...Object.keys(remoteExtra)])
   for (const key of keys) {
-    if (!same(localExtra[key], baselineExtra[key])) continue
+    const localChanged = !same(localExtra[key], baselineExtra[key])
+    const remoteChanged = !same(remoteExtra[key], baselineExtra[key])
+    if (localChanged && !(remoteWinsConflicts && remoteChanged)) continue
     if (key in remoteExtra) extra[key] = remoteExtra[key]
     else delete extra[key]
   }
