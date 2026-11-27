@@ -69,6 +69,17 @@ test('idea cards keep one context line and only show an avatar after claiming', 
   assert.match(page, /memberId=\{idea\.claimedBy\} size=\{26\}/)
 })
 
+test('image and video links become visual previews on the ideas wall', () => {
+  assert.match(page, /function ideaMedia\(text: string\)/)
+  assert.match(page, /i\.ytimg\.com\/vi/)
+  assert.match(page, /vumbnail\.com/)
+  assert.match(page, /cdn\.loom\.com\/sessions\/thumbnails/)
+  assert.match(page, /kind: 'video'/)
+  assert.match(page, /<IdeaMediaPreview text=\{body\} compact \/>/)
+  assert.match(page, /<IdeaMediaPreview text=\{idea\.body\} \/>/)
+  assert.match(css, /\.mediaPreview/)
+})
+
 test('ideas are edited inside their post-it with title before a labelled goal', () => {
   assert.match(page, /className=\{styles\.inlineEditor\}/)
   assert.match(page, /aria-label="Titel van het idee"/)

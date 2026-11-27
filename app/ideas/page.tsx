@@ -24,9 +24,83 @@ type StatusFilter = 'active' | 'doing' | 'done'
 type NotePosition = { x: number; y: number }
 type NotePositions = Record<string, NotePosition>
 type CanvasView = { x: number; y: number; zoom: number }
+type IdeaMedia = {
+  href: string
+  previewUrl: string
+  kind: 'image' | 'video'
+  label: string
+  playable: boolean
+}
 const POSITIONS_KEY = 'yoko-ideas-positions-v1'
 const VIEW_KEY = 'yoko-ideas-canvas-view-v1'
 const DEFAULT_VIEW: CanvasView = { x: 0, y: 0, zoom: 1 }
+
+function ideaMedia(text: string): IdeaMedia | null {
+  const matches = text.match(/https?:\/\/[^\s<>"']+/gi) ?? []
+  for (const rawMatch of matches) {
+    const href = rawMatch.replace(/[),.;!?]+$/, '')
+    try {
+      const url = new URL(href)
+      const host = url.hostname.toLowerCase().replace(/^www\./, '')
+      const path = url.pathname
+
+      const youtubeId = host === 'youtu.be'
+        ? path.split('/').filter(Boolean)[0]
+        : host.endsWith('youtube.com')
+          ? url.searchParams.get('v') ?? path.match(/^\/(?:shorts|embed|live)\/([^/]+)/)?.[1]
+          : null
+      if (youtubeId && /^[\w-]{6,20}$/.test(youtubeId)) {
+        return { href, previewUrl: `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`, kind: 'image', label: 'YouTube', playable: true }
+      }
+
+      const vimeoId = host.endsWith('vimeo.com') ? path.match(/\/(?:video\/)?(\d+)/)?.[1] : null
+      if (vimeoId) {
+        return { href, previewUrl: `https://vumbnail.com/${vimeoId}.jpg`, kind: 'image', label: 'Vimeo', playable: true }
+      }
+
+      const loomId = host.endsWith('loom.com') ? path.match(/\/(?:share|embed)\/([\w-]+)/)?.[1] : null
+      if (loomId) {
+        return { href, previewUrl: `https://cdn.loom.com/sessions/thumbnails/${loomId}-with-play.gif`, kind: 'image', label: 'Loom', playable: true }
+      }
+
+      const driveId = host === 'drive.google.com' ? path.match(/\/file\/d\/([^/]+)/)?.[1] : null
+      if (driveId) {
+        return { href, previewUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w1000`, kind: 'image', label: 'Afbeelding', playable: false }
+      }
+
+      if (/\.(?:mp4|webm|mov|m4v)(?:$|[?#])/i.test(href)) {
+        return { href, previewUrl: href, kind: 'video', label: 'Video', playable: true }
+      }
+      if (/\.(?:avif|gif|jpe?g|png|svg|webp)(?:$|[?#])/i.test(href)
+        || /^(?:images\.unsplash\.com|i\.imgur\.com|images\.pexels\.com)$/.test(host)) {
+        return { href, previewUrl: href, kind: 'image', label: 'Afbeelding', playable: false }
+      }
+    } catch {}
+  }
+  return null
+}
+
+function IdeaMediaPreview({ text, compact = false }: { text: string; compact?: boolean }) {
+  const media = useMemo(() => ideaMedia(text), [text])
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  if (!media || failedUrl === media.previewUrl) return null
+  return (
+    <a className={`${styles.mediaPreview} ${compact ? styles.compactMediaPreview : ''}`}
+      href={media.href} target="_blank" rel="noopener noreferrer"
+      onClick={event => event.stopPropagation()} aria-label={`${media.label} openen`}>
+      {media.kind === 'video' ? (
+        <video src={media.previewUrl} muted playsInline preload="metadata" onError={() => setFailedUrl(media.previewUrl)} />
+      ) : (
+        // Externe ideeënlinks komen van veel verschillende hosts; een gewone
+        // img kan ze tonen zonder iedere host vooraf in Next te configureren.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={media.previewUrl} alt="" loading="lazy" onError={() => setFailedUrl(media.previewUrl)} />
+      )}
+      {media.playable && <span className={styles.mediaPlay} aria-hidden>▶</span>}
+      <span className={styles.mediaLabel}>{media.label} ↗</span>
+    </a>
+  )
+}
 
 function relativeDate(value: string) {
   const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000)
@@ -405,6 +479,7 @@ export default function IdeasPage() {
           <div className={styles.composerFields}>
             <input autoFocus value={title} onChange={event => setTitle(event.target.value)} placeholder="Wat is het idee?" maxLength={120} />
             <textarea value={body} onChange={event => setBody(event.target.value)} placeholder="Een gedachte, link of kleine toelichting (mag leeg)" rows={3} />
+            <IdeaMediaPreview text={body} compact />
           </div>
           <div className={styles.composerOptions}>
             <label className={styles.goalControl}>Draagt bij aan
@@ -533,6 +608,7 @@ export default function IdeasPage() {
                   <textarea value={editing.body} onChange={event => setEditing({ ...editing, body: event.target.value })}
                     placeholder="Eventuele extra context" rows={3} aria-label="Notitie bij het idee" />
                 </label>
+                <IdeaMediaPreview text={editing.body} compact />
                 <div className={styles.inlineMeta}>
                   <select value={editing.category} onChange={event => setEditing({ ...editing, category: event.target.value as IdeaCategory })} aria-label="Categorie">
                     {categoryOptions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -556,10 +632,13 @@ export default function IdeasPage() {
                 </div>
               </form>
             ) : (
-              <button className={styles.noteMain} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} in de post-it bewerken`}>
-                <h2>{idea.title}</h2>
-                {idea.goal && <div className={styles.noteGoal} title={`Doel: ${idea.goal}`}><span>Doel</span><strong>{idea.goal}</strong></div>}
-              </button>
+              <div className={styles.noteMain}>
+                <button className={styles.noteContent} type="button" onClick={() => { setDeleteArmed(false); setEditing({ ...idea }) }} aria-label={`${idea.title} in de post-it bewerken`}>
+                  <h2>{idea.title}</h2>
+                  {idea.goal && <div className={styles.noteGoal} title={`Doel: ${idea.goal}`}><span>Doel</span><strong>{idea.goal}</strong></div>}
+                </button>
+                <IdeaMediaPreview text={idea.body} />
+              </div>
             )}
             <footer className={styles.noteFooter}>
               <IdeaAuthor id={idea.authorId} name={idea.authorName} createdAt={idea.createdAt} />

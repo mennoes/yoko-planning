@@ -66,7 +66,8 @@
 .note { --note-color: #fff0a8; --tilt: 0deg; --note-x: 0px; --note-y: 0px; position: relative; min-height: 290px; display: flex; flex-direction: column; overflow: visible; background: var(--note-color); color: #29231b; border-radius: 2px 3px 16px 3px; box-shadow: 0 8px 18px rgba(43, 36, 18, .09), 0 2px 3px rgba(43, 36, 18, .08); transform: translate(var(--note-x), var(--note-y)) rotate(var(--tilt)); transition: transform .2s ease, box-shadow .2s ease, background-color .15s ease; z-index: 1; }
 .note:hover { transform: translate(var(--note-x), calc(var(--note-y) - 4px)) rotate(0); box-shadow: 0 16px 30px rgba(43,36,18,.14); z-index: 3; }
 .note.dragging { transform: translate(var(--note-x), var(--note-y)) rotate(1.2deg) scale(1.025); transition: none; box-shadow: 0 22px 45px rgba(43,36,18,.25); z-index: 20; }
-.noteMain { flex: 1; width: 100%; padding: 28px 22px 18px; border: 0; background: transparent; color: inherit; text-align: left; cursor: text; }
+.noteMain { flex: 1; width: 100%; padding: 28px 22px 18px; display: flex; flex-direction: column; gap: 16px; color: inherit; }
+.noteContent { width: 100%; flex: 1; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: text; }
 .noteGoal { max-width: calc(100% - 18px); margin: 23px 0 0; padding: 10px 0 1px 11px; border-left: 3px solid rgba(41,35,27,.44); }
 .noteGoal span { display: block; margin-bottom: 4px; color: rgba(41,35,27,.52); font-size: 10px; font-weight: 900; line-height: 1; letter-spacing: .11em; text-transform: uppercase; }
 .noteGoal strong { display: block; color: rgba(41,35,27,.78); font-size: 14px; line-height: 1.35; }
@@ -76,6 +77,15 @@
 .dragging .dragHandle { cursor: grabbing; opacity: 1; }
 .note h2 { margin: 24px 28px 0 0; font-size: 25px; line-height: 1.08; letter-spacing: -.025em; }
 .note p { margin: 0; color: rgba(41,35,27,.78); font-size: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mediaPreview { position: relative; width: 100%; min-height: 132px; display: block; overflow: hidden; border-radius: 9px; background: rgba(41,35,27,.12); color: white; box-shadow: 0 1px 0 rgba(255,255,255,.22) inset; isolation: isolate; }
+.mediaPreview img, .mediaPreview video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .2s ease; }
+.mediaPreview:hover img, .mediaPreview:hover video { transform: scale(1.025); }
+.mediaPreview::after { content: ''; position: absolute; inset: 55% 0 0; z-index: 1; background: linear-gradient(transparent, rgba(0,0,0,.62)); pointer-events: none; }
+.mediaPlay { position: absolute; z-index: 2; left: 50%; top: 50%; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: rgba(255,255,255,.9); color: #1d1b18; box-shadow: 0 4px 15px rgba(0,0,0,.24); font-size: 15px; transform: translate(-50%, -50%); }
+.mediaLabel { position: absolute; z-index: 2; left: 10px; bottom: 8px; padding: 4px 7px; border-radius: 5px; background: rgba(20,18,15,.72); color: white; font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+.compactMediaPreview { max-width: 420px; min-height: 118px; }
+.composer .compactMediaPreview { border: 1px solid rgba(41,35,27,.13); }
+.inlineEditor .compactMediaPreview { min-height: 105px; }
 .noteFooter { min-height: 58px; padding: 9px 12px 10px 18px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(41,35,27,.10); font-size: 12px; color: rgba(41,35,27,.58); }
 .noteAuthor { display: inline-flex; align-items: center; }
 .authorFallback { width: 22px; height: 22px; flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(41,35,27,.11); color: rgba(41,35,27,.72); font-size: 9px; font-weight: 900; }
