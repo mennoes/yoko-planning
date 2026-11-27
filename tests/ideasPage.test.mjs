@@ -70,7 +70,9 @@ test('post-its can be moved playfully without turning a drag into an edit', () =
 test('ideas live on a pannable and zoomable free canvas', () => {
   assert.match(page, /yoko-ideas-canvas-view-v1/)
   assert.match(page, /onPointerDown=\{startCanvasPan\}/)
-  assert.match(page, /onWheel=\{handleCanvasWheel\}/)
+  assert.doesNotMatch(page, /onWheel=\{handleCanvasWheel\}/)
+  assert.match(page, /addEventListener\('wheel', onWheel, \{ passive: false \}\)/)
+  assert.match(page, /event\.preventDefault\(\)/)
   assert.match(page, /scale\(\$\{canvasView\.zoom\}\)/)
   assert.match(page, /\/ canvasView\.zoom/)
   assert.match(page, /Math\.max\(\.45, Math\.min\(1\.8/)

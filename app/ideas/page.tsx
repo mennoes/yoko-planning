@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useProfile } from '@/components/ProfileContext'
 import { IconClose, IconIdea } from '@/components/Icon'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -72,8 +72,10 @@ export default function IdeasPage() {
   const [panning, setPanning] = useState(false)
   const [saving, setSaving] = useState(false)
   const boardRef = useRef<HTMLDivElement>(null)
+  const canvasViewRef = useRef<CanvasView>(DEFAULT_VIEW)
 
   function persistCanvasView(next: CanvasView) {
+    canvasViewRef.current = next
     setCanvasView(next)
     try { localStorage.setItem(VIEW_KEY, JSON.stringify(next)) } catch {}
   }
@@ -106,9 +108,41 @@ export default function IdeasPage() {
       if (stored && typeof stored === 'object') setPositions(stored)
       const savedView = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null') as CanvasView | null
       if (savedView && Number.isFinite(savedView.x) && Number.isFinite(savedView.y) && Number.isFinite(savedView.zoom)) {
-        setCanvasView({ x: savedView.x, y: savedView.y, zoom: Math.max(.45, Math.min(1.8, savedView.zoom)) })
+        const restored = { x: savedView.x, y: savedView.y, zoom: Math.max(.45, Math.min(1.8, savedView.zoom)) }
+        canvasViewRef.current = restored
+        setCanvasView(restored)
       }
     } catch {}
+  }, [])
+
+  // Chrome maakt trackpad-pinch tot een ctrl+wheel-event. React registreert
+  // wheel op sommige browsers passief, waardoor preventDefault niets doet en
+  // de hele site inzoomt. Deze expliciet niet-passieve listener houdt het
+  // gebaar binnen het ideeëncanvas en zoomt rond de aanwijzer.
+  useEffect(() => {
+    const viewport = boardRef.current
+    if (!viewport) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const current = canvasViewRef.current
+      if (event.ctrlKey || event.metaKey) {
+        const rect = viewport.getBoundingClientRect()
+        const pointerX = event.clientX - rect.left
+        const pointerY = event.clientY - rect.top
+        const nextZoom = Math.max(.45, Math.min(1.8, current.zoom * Math.exp(-event.deltaY * .005)))
+        const ratio = nextZoom / current.zoom
+        persistCanvasView({
+          x: pointerX - (pointerX - current.x) * ratio,
+          y: pointerY - (pointerY - current.y) * ratio,
+          zoom: nextZoom,
+        })
+        return
+      }
+      persistCanvasView({ ...current, x: current.x - event.deltaX, y: current.y - event.deltaY })
+    }
+    viewport.addEventListener('wheel', onWheel, { passive: false })
+    return () => viewport.removeEventListener('wheel', onWheel)
   }, [])
 
   // Een suggestie op Home kan rechtstreeks naar een specifiek idee linken.
@@ -244,24 +278,6 @@ export default function IdeasPage() {
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp, { once: true })
     window.addEventListener('pointercancel', onUp, { once: true })
-  }
-
-  function handleCanvasWheel(event: ReactWheelEvent<HTMLDivElement>) {
-    event.preventDefault()
-    if (event.ctrlKey || event.metaKey) {
-      const rect = event.currentTarget.getBoundingClientRect()
-      const pointerX = event.clientX - rect.left
-      const pointerY = event.clientY - rect.top
-      const nextZoom = Math.max(.45, Math.min(1.8, canvasView.zoom * Math.exp(-event.deltaY * .005)))
-      const ratio = nextZoom / canvasView.zoom
-      persistCanvasView({
-        x: pointerX - (pointerX - canvasView.x) * ratio,
-        y: pointerY - (pointerY - canvasView.y) * ratio,
-        zoom: nextZoom,
-      })
-      return
-    }
-    persistCanvasView({ ...canvasView, x: canvasView.x - event.deltaX, y: canvasView.y - event.deltaY })
   }
 
   function zoomCanvas(factor: number) {
@@ -413,7 +429,7 @@ export default function IdeasPage() {
       )}
 
       <div className={`${styles.canvasViewport} ${panning ? styles.panning : ''}`} ref={boardRef}
-        onPointerDown={startCanvasPan} onWheel={handleCanvasWheel}>
+        onPointerDown={startCanvasPan}>
         <div className={styles.canvasHint}>Sleep de lege ruimte om rond te kijken</div>
         {visible.length === 0 ? (
           <div className={styles.empty}>
