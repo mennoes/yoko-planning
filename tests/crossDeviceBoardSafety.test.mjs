@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 const store = readFileSync(new URL('../lib/boardStore.ts', import.meta.url), 'utf8')
 const shell = readFileSync(new URL('../components/AppShell.tsx', import.meta.url), 'utf8')
 const table = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
+const planning = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
 
 test('een apparaat zonder remote baseline overschrijft geen bestaande online rijen', () => {
   assert.match(store, /if \(!localStorage\.getItem\(pulledKey\(boardName\)\)\)/)
@@ -31,4 +32,19 @@ test('ook een Done-wijziging op een subitem komt in de herstelgeschiedenis', () 
   assert.match(table, /if \(before\.status !== after\.status\)/)
   assert.match(table, /field: 'status', boardId, itemName: `\$\{parent\.name\} › \$\{before\.name\}`/)
   assert.match(table, /before: before\.status, after: after\.status/)
+})
+
+test('een dirty cache uit een vorige mobiele sessie kan nieuwere remote velden niet terugzetten', () => {
+  assert.match(store, /function dirtySessionKey\(boardName: string\)/)
+  assert.match(store, /sessionStorage\.setItem\(dirtySessionKey\(boardName\), dirtyAt\)/)
+  assert.match(store, /preferRemoteConflicts: !dirtyFromCurrentSession/)
+  assert.match(store, /const remoteWinsConflicts = preferRemoteConflicts/)
+})
+
+test('Planning toont geen lokale cache voordat een geforceerde online refresh klaar is', () => {
+  assert.match(planning, /initialBoardSyncDone/)
+  assert.match(planning, /pullBoardFromRemote\(name, \{ force: true \}\)/)
+  assert.match(planning, /Planning bijwerken…/)
+  assert.match(planning, /addEventListener\('pageshow', onPageShow\)/)
+  assert.match(store, /if \(!force && typeof signature === 'string'/)
 })

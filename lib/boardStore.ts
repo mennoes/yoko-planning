@@ -71,6 +71,11 @@ function key(boardName: string)      { return `yoko-board-${boardName}` }
 // Supabase. Een pull mag deze NIET overschrijven, anders verlies je je
 // eigen wijzigingen na refresh als de push wegviel.
 function dirtyKey(boardName: string) { return `yoko-board-${boardName}-dirty` }
+// sessionStorage-stempel bij de dirty-write. Ontbreekt deze of wijkt hij af,
+// dan komt de pending cache uit een vorige browsersessie. Zo'n oude cache
+// mag alleen niet-conflicterende velden aanvullen en nooit een inmiddels
+// nieuwere remote Done-status/timeline terugzetten.
+function dirtySessionKey(boardName: string) { return `yoko-board-${boardName}-dirty-session` }
 // "Pulled" bewaart de laatste-geziene REMOTE state. Diff tegen deze
 // baseline is wat we daadwerkelijk gewijzigd hebben — alleen die items
 // pushen we omhoog, zodat we per ongeluk geen verse edits van andere
@@ -190,6 +195,7 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
         if (ok && localStorage.getItem(key(boardName)) === next) {
           localStorage.setItem(pulledKey(boardName), next)
           localStorage.removeItem(dirtyKey(boardName))
+          try { sessionStorage.removeItem(dirtySessionKey(boardName)) } catch {}
           emitBoardSaveStatus({ boardName, state: 'saved' })
         }
       }).catch(error => emitBoardSaveStatus({
@@ -201,7 +207,9 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
     return
   }
   localStorage.setItem(key(boardName), next)
-  localStorage.setItem(dirtyKey(boardName), Date.now().toString())
+  const dirtyAt = Date.now().toString()
+  localStorage.setItem(dirtyKey(boardName), dirtyAt)
+  try { sessionStorage.setItem(dirtySessionKey(boardName), dirtyAt) } catch {}
   lastLocalWriteAt[boardName] = Date.now()
   emitBoardSaveStatus({ boardName, state: 'saving' })
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
@@ -213,6 +221,7 @@ export function saveGroups(boardName: string, groups: BoardGroup[]): void {
     if (localStorage.getItem(key(boardName)) === next) {
       localStorage.setItem(pulledKey(boardName), next)
       localStorage.removeItem(dirtyKey(boardName))
+      try { sessionStorage.removeItem(dirtySessionKey(boardName)) } catch {}
       emitBoardSaveStatus({ boardName, state: 'saved' })
     }
   }).catch(error => emitBoardSaveStatus({
@@ -301,23 +310,30 @@ function rowToItem(r: Record<string, unknown>): BoardItem {
 const boardReads = new Map<string, Promise<boolean>>()
 const signatures = new Map<string, string>()
 
-export async function pullBoardFromRemote(boardName: string): Promise<boolean> {
+export async function pullBoardFromRemote(boardName: string, options: { force?: boolean } = {}): Promise<boolean> {
   if (!supabase) return false
   const userId = await getCurrentUserId()
   if (!userId) return false
   const scope = JSON.stringify([userId, boardName])
   const pending = boardReads.get(scope)
-  if (pending) return pending
-  const task = refreshBoard(boardName, userId, scope)
+  if (pending) {
+    const result = await pending
+    if (!options.force) return result
+    // Een geforceerde foreground-refresh die samenvalt met een gewone
+    // achtergrondpull doet na die eerste request nog één echte read. Zo kan
+    // de mobiele planning nooit blijven hangen op een signature-shortcut
+    // die nét vóór het openen begon.
+  }
+  const task = refreshBoard(boardName, userId, scope, options.force === true)
   boardReads.set(scope, task)
   try { return await task } finally { boardReads.delete(scope) }
 }
 
-async function refreshBoard(boardName: string, userId: string, scope: string): Promise<boolean> {
+async function refreshBoard(boardName: string, userId: string, scope: string, force: boolean): Promise<boolean> {
   if (!supabase) return false
   const { data: signature } = await supabase.rpc('planning_sync_signature', { board_name: boardName })
   const cached = localStorage.getItem(key(boardName))
-  if (typeof signature === 'string' && signatures.get(scope) === signature &&
+  if (!force && typeof signature === 'string' && signatures.get(scope) === signature &&
       !localStorage.getItem(dirtyKey(boardName)) && cached !== null &&
       cached === localStorage.getItem(pulledKey(boardName))) return true
   // Niet-bevestigde lokale wijzigingen mogen NOOIT worden overschreven door
@@ -326,6 +342,8 @@ async function refreshBoard(boardName: string, userId: string, scope: string): P
   if (typeof window !== 'undefined') {
     const dirtyRaw = localStorage.getItem(dirtyKey(boardName))
     if (dirtyRaw) {
+      let dirtyFromCurrentSession = false
+      try { dirtyFromCurrentSession = sessionStorage.getItem(dirtySessionKey(boardName)) === dirtyRaw } catch {}
       // Zonder laatst-geziene remote baseline weten we niet welke delen van
       // deze cache echte edits zijn. Dit komt vooral voor op een oud/tweede
       // apparaat. Nooit zo'n volledige cache omhoog sturen: haal eerst de
@@ -337,10 +355,15 @@ async function refreshBoard(boardName: string, userId: string, scope: string): P
         if (localRaw) {
           try {
             const localGroups = JSON.parse(localRaw) as BoardGroup[]
-            const ok = await pushBoardToRemote(boardName, localGroups)
+            const ok = await pushBoardToRemote(boardName, localGroups, {
+              // Oude mobiele caches blijven als drie-weg-merge behouden,
+              // maar bij een conflict is de actuele database leidend.
+              preferRemoteConflicts: !dirtyFromCurrentSession,
+            })
             if (!ok) return false  // push faalde, niet pullen want we zouden lokale changes verliezen
             if (localStorage.getItem(key(boardName)) === localRaw) {
               localStorage.removeItem(dirtyKey(boardName))
+              try { sessionStorage.removeItem(dirtySessionKey(boardName)) } catch {}
             }
           } catch { return false }
         }
@@ -516,14 +539,14 @@ function writeLastSync(board: string): void {
 }
 
 const boardPushQueue = new Map<string, Promise<boolean>>()
-export function pushBoardToRemote(boardName: string, groups: BoardGroup[]): Promise<boolean> {
+export function pushBoardToRemote(boardName: string, groups: BoardGroup[], options: { preferRemoteConflicts?: boolean } = {}): Promise<boolean> {
   const previous = boardPushQueue.get(boardName) ?? Promise.resolve(true)
   const task = previous.catch(() => false).then(async () => {
     // Queued callers may carry an old snapshot. Always send the newest
     // unconfirmed local state, including when retrying immediately after reload.
     const raw = localStorage.getItem(dirtyKey(boardName)) ? localStorage.getItem(key(boardName)) : null
     const latest = raw ? JSON.parse(raw) as BoardGroup[] : groups
-    const ok = await pushBoardSnapshot(boardName, latest)
+    const ok = await pushBoardSnapshot(boardName, latest, options.preferRemoteConflicts === true)
     // `latest` kan nieuwer zijn dan het snapshot van deze queued caller.
     // Als juist die nieuwste staat succesvol is opgeslagen, is de write
     // geslaagd. De saveGroups-caller wist dirty alleen wanneer zijn eigen
@@ -572,10 +595,11 @@ function discardRetiredBoardCache(boardName: string): void {
   localStorage.removeItem(key(boardName))
   localStorage.removeItem(pulledKey(boardName))
   localStorage.removeItem(dirtyKey(boardName))
+  try { sessionStorage.removeItem(dirtySessionKey(boardName)) } catch {}
   window.dispatchEvent(new CustomEvent('yoko-board-update', { detail: { boardName } }))
 }
 
-async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promise<boolean> {
+async function pushBoardSnapshot(boardName: string, groups: BoardGroup[], preferRemoteConflicts = false): Promise<boolean> {
   const fail = (message: string): false => {
     if (typeof window !== 'undefined') {
       emitBoardSaveStatus({ boardName, state: 'error', message })
@@ -745,7 +769,8 @@ async function pushBoardSnapshot(boardName: string, groups: BoardGroup[]): Promi
       // dan wint online uitsluitend bij velden die aan beide kanten zijn
       // veranderd. Een laptop van gisteren kan zo nooit een latere Done-
       // status of timeline van de werk-pc terugzetten.
-      const remoteWinsConflicts = Number.isFinite(remoteUpdatedAt) && pendingSince > 0 && remoteUpdatedAt > pendingSince
+      const remoteWinsConflicts = preferRemoteConflicts
+        || (Number.isFinite(remoteUpdatedAt) && pendingSince > 0 && remoteUpdatedAt > pendingSince)
       safeRows[index] = mergeBoardRowAgainstRemote(row, baselineRow, stored, remoteWinsConflicts)
     }
 

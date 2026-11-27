@@ -4644,6 +4644,7 @@ export default function PlanningPage() {
     return !!liveTeam.find(m => m.id === id)?.inactive
   }
   const [allGroups,    setAllGroups]    = useState<Record<string, BoardGroup[]>>({})
+  const [initialBoardSyncDone, setInitialBoardSyncDone] = useState(false)
   const [team,         setTeam]         = useState<TeamMember[]>(teamData.members)
   const [vacations,    setVacations]    = useState<Record<string, { from: string | null; until: string | null }>>({})
   // Persisted in localStorage zodat een refresh op dezelfde positie in
@@ -5156,6 +5157,7 @@ export default function PlanningPage() {
   }
 
   useEffect(() => {
+    let cancelled = false
     function refresh() {
       const loaded: Record<string, BoardGroup[]> = {}
       // Dynamische bord-lijst uit de registry. Vroeger hing hier een
@@ -5168,7 +5170,7 @@ export default function PlanningPage() {
       for (const name of BOARD_NAMES) loaded[name] = loadGroups(name, [])
       setAllGroups(loaded)
     }
-    refresh()
+    setInitialBoardSyncDone(false)
     function onBoardUpdate() {
       const w = window as unknown as { __yokoDragActive?: boolean; __yokoDetailOpen?: boolean }
       // Niet refreshen tijdens een drag of open detail-panel — anders
@@ -5187,9 +5189,18 @@ export default function PlanningPage() {
     // is voor mensen die net de tool open hebben gegooid.
     const boardUnsubs: Array<() => void> = []
     for (const name of BOARD_NAMES) {
-      pullBoardFromRemote(name).catch(() => {})
       boardUnsubs.push(subscribeRemoteBoard(name))
     }
+    // Toon niet eerst de mogelijk dagenoude mobiele localStorage. Haal alle
+    // agenda's geforceerd op en bouw daarna pas de planning. Bij een echt
+    // offline apparaat valt loadGroups alsnog terug op de lokale cache,
+    // maar nooit zonder dat de online poging eerst is afgerond.
+    void Promise.all([...BOARD_NAMES].map(name => pullBoardFromRemote(name, { force: true }).catch(() => false)))
+      .finally(() => {
+        if (cancelled) return
+        refresh()
+        setInitialBoardSyncDone(true)
+      })
     // Safety-net: als realtime een edit mist (verbinding gedropt,
     // postgres_changes-filter mismatch, etc.) pullen we elke 15s
     // alsnog opnieuw. Ook bij window-focus + tab-visibility-change
@@ -5204,7 +5215,7 @@ export default function PlanningPage() {
       // het project-prop terwijl de user net iets aan't typen was
       // (datums, uren, notes), waardoor invoer onzichtbaar verdween.
       if (w.__yokoDetailOpen) return
-      for (const name of BOARD_NAMES) pullBoardFromRemote(name).catch(() => {})
+      for (const name of BOARD_NAMES) pullBoardFromRemote(name, { force: true }).catch(() => {})
     }
     // Polling is alleen vangnet voor als de Supabase-realtime websocket
     // hapert; primair komen updates direct via subscribeRemoteBoard binnen.
@@ -5217,12 +5228,14 @@ export default function PlanningPage() {
     }, 5 * 60_000)
     function onFocus() { pullAll() }
     function onVisibility() { if (document.visibilityState === 'visible') pullAll() }
+    function onPageShow(event: PageTransitionEvent) { if (event.persisted) pullAll() }
     function onPushFail(e: Event) {
       const ce = e as CustomEvent<{ message?: string }>
       const msg = ce.detail?.message ?? 'Opslaan mislukt — wijziging blijft alleen lokaal staan.'
       showToast(msg, 8000)
     }
     window.addEventListener('focus', onFocus)
+    window.addEventListener('pageshow', onPageShow)
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('yoko-push-failed', onPushFail)
     // Vacation lookup for the palm-tree marker
@@ -5240,9 +5253,11 @@ export default function PlanningPage() {
       })
     }
     return () => {
+      cancelled = true
       window.removeEventListener('yoko-board-update', onBoardUpdate)
       window.removeEventListener('yoko-boards-registry-update', onBoardUpdate)
       window.removeEventListener('focus', onFocus)
+      window.removeEventListener('pageshow', onPageShow)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('yoko-push-failed', onPushFail)
       window.clearInterval(pollTimer)
@@ -6253,7 +6268,16 @@ export default function PlanningPage() {
   const todayLabel = today.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+
+      {!initialBoardSyncDone && (
+        <div role="status" aria-live="polite" style={{ position: 'absolute', inset: 0, zIndex: 80,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+          background: 'var(--bg-base)', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 700 }}>
+          <span aria-hidden style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 0 5px var(--accent-light)' }} />
+          Planning bijwerken…
+        </div>
+      )}
 
       {/* ── Fixed header — bevat alleen nog de toolbar. Titel + KPIs zijn
             naar de scrollable grid verhuisd zodat ze meescrollen i.p.v.
