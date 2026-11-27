@@ -57,6 +57,12 @@ test('an explicitly assigned subitem owner still wins in planning detail', () =>
   assert.deepEqual(JSON.parse(JSON.stringify(result.ownerHours)), { odette: 10 })
 })
 
+test('detail owner card uses the same subitem contributors as its distribution', () => {
+  const board = readFileSync(new URL('../components/BoardTable.tsx', import.meta.url), 'utf8')
+  assert.match(board, /ownerIds: Object\.keys\(volledig\.verdeling\)/)
+  assert.match(board, /readOnly=\{item\.__ownerHoursUitSubitems === true\}/)
+})
+
 test('parent rollup uses the stored distribution of relevant subitems', () => {
   const relevant = [
     sub({ ownerIds: ['menno', 'odette'], estHours: 24, ownerHours: { menno: 2.5, odette: 21.5 } }),

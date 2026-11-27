@@ -18,6 +18,10 @@ import { IconCheckList, IconHourglass, IconDocument, IconUsers, IconClock, IconA
 import { UserAvatar } from '@/components/UserAvatar'
 import { VacationButton } from '@/components/VacationButton'
 import { loadRecentPages, type PageDoc } from '@/lib/pagesStore'
+import {
+  loadIdeas, onIdeasChange, pullIdeas, subscribeRemoteIdeas,
+  type IdeaItem,
+} from '@/lib/ideasStore'
 import { saveDocs, loadDocs } from '@/lib/navStore'
 import todosData from '@/data/todos.json'
 import {
@@ -34,6 +38,7 @@ import teamData  from '@/data/team.json'
 import { loadGroups, saveGroups, pushBoardToRemote } from '@/lib/boardStore'
 import { getWeekStart, memberContributions, BOARD_COLORS, groupsToProjects, type Project } from '@/lib/workload'
 import { homeWeekTone } from '@/lib/homeWeekTone'
+import { isWorkWeekFinished } from '@/lib/homeWorkWeek'
 import { setVrijDaysFromProjects } from '@/lib/vrijDays'
 import {
   CAT_COLOR, CAT_LABEL,
@@ -124,13 +129,6 @@ function joinAnd(names: string[]): string {
   if (names.length === 2) return `${names[0]} en ${names[1]}`
   return `${names.slice(0, -1).join(', ')} en ${names[names.length - 1]}`
 }
-function helpHint({ slack, others }: { slack: number; others: { member: { name: string }; pct: number }[] }): string | null {
-  if (slack < 4 || others.length === 0) return null
-  const top   = others[0]
-  const first = top.member.name.split(' ')[0]
-  return `Je hebt deze week nog ~${Math.round(slack)}u ruimte — ${first} zit op ${top.pct}%, misschien iets oppakken? 🤝`
-}
-
 type WorkloadItem = { parentItemId?: string; subitemId?: string; id: string; rawItemId: string; name: string; board: string; hours: number; day: number; startDate: string | null; endDate: string | null; startTime?: string | null; endTime?: string | null; source?: 'manual' | 'google'; externalLink?: string; meetLink?: string; done: boolean; parentName?: string }
 
 type Category = WorkloadCategory
@@ -279,6 +277,8 @@ export default function HomePage() {
 
   const [recentPages,  setRecentPages]  = useState<PageDoc[]>([])
   const [myTodos,      setMyTodos]      = useState<TodoStoreItem[]>([])
+  const [todoSections, setTodoSections] = useState<TodoSection[]>([])
+  const [ideas,        setIdeas]        = useState<IdeaItem[]>([])
   const [newTodoText,  setNewTodoText]  = useState('')
   // Per-bucket-iso user-override voor de week-collapse op de home-widget.
   // false=expliciet ingeklapt, true=expliciet open, missing=default (open
@@ -350,6 +350,15 @@ export default function HomePage() {
   const memberId = profile?.memberId ?? ''
 
   useEffect(() => {
+    const refresh = () => setIdeas(loadIdeas())
+    refresh()
+    void pullIdeas().then(refresh)
+    const stopLocal = onIdeasChange(refresh)
+    const stopRemote = subscribeRemoteIdeas()
+    return () => { stopLocal(); stopRemote() }
+  }, [])
+
+  useEffect(() => {
     setCategoryOverrides(loadCategoryOverrides())
     setRecentPages(loadRecentPages().slice(0, 9))
 
@@ -367,6 +376,7 @@ export default function HomePage() {
     function loadMine() {
       const fallback: TodoSection[] = todosData.sections as TodoSection[]
       const sections = loadTodoSectionsStore(fallback)
+      setTodoSections(sections)
       const s = sections.find(x => x.id === memberId)
       const stored = (s?.items ?? []) as TodoStoreItem[]
       setMyTodos(mergeStoredWithProjects(stored))
@@ -377,6 +387,7 @@ export default function HomePage() {
         const fallback: TodoSection[] = todosData.sections as TodoSection[]
         const local = loadTodoSectionsStore(fallback)
         const merged = mergeTodoSections(local, remote)
+        setTodoSections(merged)
         const s = merged.find(x => x.id === memberId)
         const stored = (s?.items ?? []) as TodoStoreItem[]
         setMyTodos(mergeStoredWithProjects(stored))
@@ -854,39 +865,60 @@ export default function HomePage() {
     { name: c.project.name, hours: c.hours, source: c.project.source },
     categoryOverrides[c.project.id],
   )
-  const makenContribs = myThisContribs.filter(c => cat(c) === 'maken')
-
   // ── Day-aware partition: where are we in the week? ─────────────────────
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const todayDay  = (today.getDay() + 6) % 7  // Mon=0..Sun=6
   const isWeekend = todayDay >= 5
+
+  // Volg de persoonlijke werkdagen in plaats van alleen za/zo. De lokale
+  // instelling uit Team is leidend; remote profieldagen vullen die aan.
+  const memberNameForSchedule = liveTeam.find(m => m.id === memberId)?.name
+    ?? teamData.members.find(m => m.id === memberId)?.name
+    ?? profile?.name
+  const personalDaysOff = new Set(lookupDaysOff(memberId, memberNameForSchedule))
+  for (const code of profilesById[memberId]?.days_off ?? []) {
+    const dayIndex = NL_DAY_CODES.indexOf(code.toLowerCase())
+    if (dayIndex >= 0) personalDaysOff.add(dayIndex === 0 ? 7 : dayIndex)
+  }
+  const workWeekFinished = isWorkWeekFinished(new Date(), [...personalDaysOff])
 
   type GroupedProj = {
     name: string
     hours: number
     ownerIds: Set<string>
     startDay: number | null
+    href: string
   }
 
   // Combine contribs that share a project name (subitems / split bars) into
   // one entry. Track the earliest start day so we can place the project in
   // the past / today / future bucket.
-  const grouped = new Map<string, GroupedProj>()
-  for (const c of makenContribs) {
-    const key = c.project.name.trim().toLowerCase()
-    const sd  = c.project.startDate ? new Date(c.project.startDate) : null
-    const day = sd && !isNaN(sd.getTime()) ? (sd.getDay() + 6) % 7 : null
-    const cur = grouped.get(key)
-    if (cur) {
-      cur.hours += c.hours
-      for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
-      if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
-    } else {
-      grouped.set(key, { name: c.project.name, hours: c.hours,
-        ownerIds: new Set(c.project.ownerIds || []), startDay: day })
+  const groupProjects = (contribs: typeof myThisContribs): GroupedProj[] => {
+    const grouped = new Map<string, GroupedProj>()
+    for (const c of contribs.filter(entry => cat(entry) === 'maken')) {
+      const key = c.project.name.trim().toLowerCase()
+      const sd  = c.project.startDate ? new Date(c.project.startDate) : null
+      const day = sd && !isNaN(sd.getTime()) ? (sd.getDay() + 6) % 7 : null
+      const cur = grouped.get(key)
+      if (cur) {
+        cur.hours += c.hours
+        for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
+        if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
+      } else {
+        const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
+          ? c.project.id.slice(c.project.board.length + 2)
+          : c.project.id
+        const focusId = c.project.completionParentItemId ?? rawItemId
+        const subitem = c.project.completionSubitemId
+        grouped.set(key, { name: c.project.name, hours: c.hours,
+          ownerIds: new Set(c.project.ownerIds || []), startDay: day,
+          href: `/projects/${c.project.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${subitem ? `&subitem=${encodeURIComponent(subitem)}` : ''}` })
+      }
     }
+    return [...grouped.values()].sort((a, b) => b.hours - a.hours)
   }
-  const groupedArr = [...grouped.values()].sort((a, b) => b.hours - a.hours)
+  const groupedArr = groupProjects(myThisContribs)
+  const nextWeekProjects = groupProjects(myNextContribs).slice(0, 3)
 
   const withNamesOf = (p: GroupedProj) => [...p.ownerIds]
     .filter(id => id !== memberId)
@@ -923,8 +955,45 @@ export default function HomePage() {
   const tonePast    = weekCapacity > 0 ? homeWeekTone(myLastContribs, weekCapacity, 'past', categoryOverrides) : ''
   const toneNext    = weekCapacity > 0 ? homeWeekTone(myNextContribs, weekCapacity, 'next', categoryOverrides) : ''
   const tonePastCap = tonePast ? tonePast[0].toUpperCase() + tonePast.slice(1) : ''
-  const help        = memberId
-    ? helpHint({ slack: weekCapacity - myThisHours, others: overloaded.filter(o => o.member.id !== memberId) })
+  const slack = weekCapacity - myThisHours
+  const suggestedIdea = ideas
+    .filter(idea => idea.status === 'open')
+    .sort((a, b) => {
+      if (a.category === 'tussendoor' && b.category !== 'tussendoor') return -1
+      if (b.category === 'tussendoor' && a.category !== 'tussendoor') return 1
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    })[0]
+  const busyColleague = overloaded.find(person => person.member.id !== memberId)
+  const suggestedTodo = todoSections
+    .filter(section => section.id === 'ideeen' || section.id === 'socials'
+      || ['ideeën', 'socials'].includes(section.title.trim().toLowerCase()))
+    .flatMap(section => section.items
+      .filter(item => !item.done)
+      .map(item => ({ ...item, sectionId: section.id, sectionTitle: section.title })))[0]
+
+  const spaceSuggestion = !workWeekFinished && slack >= 4
+    ? suggestedIdea
+      ? <>
+          Je hebt deze week nog ongeveer {Math.round(slack)}u ruimte. Idee om op te pakken:{' '}
+          <Link href={`/ideas?idea=${encodeURIComponent(suggestedIdea.id)}`} style={{ color: '#000', fontWeight: 800 }}>
+            {suggestedIdea.title}
+          </Link>.
+        </>
+      : busyColleague
+        ? <>
+            Je hebt deze week nog ongeveer {Math.round(slack)}u ruimte.{' '}
+            <Link href="/planning" style={{ color: '#000', fontWeight: 800 }}>
+              {busyColleague.member.name.split(' ')[0]} zit op {busyColleague.pct}%
+            </Link>; misschien kun je daar iets overnemen.
+          </>
+        : suggestedTodo
+          ? <>
+              Je hebt deze week nog ongeveer {Math.round(slack)}u ruimte. In {suggestedTodo.sectionTitle} staat nog:{' '}
+              <Link href="/todos" style={{ color: '#000', fontWeight: 800 }}>
+                {(suggestedTodo.text ?? '').split('\n')[0]}
+              </Link>.
+            </>
+          : null
     : null
 
   // Render a comma/and-joined list of bold project names with collaborator hints.
@@ -933,7 +1002,7 @@ export default function HomePage() {
     return (
       <span key={p.name}>
         {i > 0 && (i === items.length - 1 ? ' en ' : ', ')}
-        <strong style={{ color: '#000' }}>{p.name}</strong>
+        <Link href={p.href} style={{ color: '#000', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>{p.name}</Link>
         {wn.length > 0 && <> (met {joinAnd(wn)})</>}
       </span>
     )
@@ -1464,7 +1533,14 @@ export default function HomePage() {
               zodat het bij langere tekst leesbaar blijft. */}
           <div style={{ fontSize: isMobile ? 14 : 15, color: '#1a1a1a', lineHeight: 1.6, maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <p style={{ margin: 0 }}>
-              {isWeekend ? (
+              {workWeekFinished ? (
+                <>
+                  Je werkweek zit erop.
+                  {groupedArr.length > 0 && (
+                    <> Deze week ging het vooral over {renderProjects(groupedArr.slice(0, 3))}.</>
+                  )}
+                </>
+              ) : isWeekend ? (
                 <>
                   Lekker weekend!
                   {weekendProjects.length > 0 && (
@@ -1493,25 +1569,39 @@ export default function HomePage() {
                 </>
               )}
             </p>
+            {workWeekFinished && (
+              <p style={{ margin: 0 }}>
+                {nextWeekProjects.length > 0 ? (
+                  <>Vooruitkijkend: volgende week staan {renderProjects(nextWeekProjects)} op de planning.</>
+                ) : (
+                  <>Vooruitkijkend: voor volgende week staat nog geen maakwerk ingepland.</>
+                )}
+              </p>
+            )}
             {otherInfo && (
               <p style={{ margin: 0 }}>Daarnaast staat er {otherInfo} op de planning.</p>
             )}
             {behindSchedule.length > 0 && (
               <p style={{ margin: 0 }}>
                 Check even:{' '}
-                {behindSchedule.map((p, i) => (
-                  <span key={p.id}>
-                    {i > 0 && (i === behindSchedule.length - 1 ? ' en ' : ', ')}
-                    <strong style={{ color: '#000' }}>{p.name}</strong>
-                  </span>
-                ))}
+                {behindSchedule.map((p, i) => {
+                  const rawItemId = p.id.startsWith(`${p.board}__`) ? p.id.slice(p.board.length + 2) : p.id
+                  const focusId = p.completionParentItemId ?? rawItemId
+                  const href = `/projects/${p.board}?focus=${encodeURIComponent(focusId)}&drawer=${encodeURIComponent(focusId)}${p.completionSubitemId ? `&subitem=${encodeURIComponent(p.completionSubitemId)}` : ''}`
+                  return (
+                    <span key={p.id}>
+                      {i > 0 && (i === behindSchedule.length - 1 ? ' en ' : ', ')}
+                      <Link href={href} style={{ color: '#000', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3 }}>{p.name}</Link>
+                    </span>
+                  )
+                })}
                 {' '}{behindSchedule.length === 1 ? 'staat' : 'staan'} nog op actief terwijl de einddatum al voorbij is — afronden? ⏳
               </p>
             )}
-            {(tonePast || help) && (
+            {(!workWeekFinished && (tonePast || spaceSuggestion)) && (
               <p style={{ margin: 0 }}>
                 {tonePast && <>{tonePastCap}, {toneNext}.</>}
-                {help && <> {help}</>}
+                {spaceSuggestion && <> {spaceSuggestion}</>}
               </p>
             )}
           </div>

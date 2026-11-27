@@ -1,13 +1,16 @@
 import { supabase } from './supabase'
 import { getCurrentUserId } from './sync'
 
-export type IdeaCategory = 'inspiratie' | 'tussendoor' | 'experiment' | 'verbetering'
+// De vier oorspronkelijke categorieën blijven de standaard, maar ideeën
+// mogen ook een zelfgekozen categorienaam bewaren.
+export type IdeaCategory = string
 export type IdeaStatus = 'open' | 'doing' | 'done'
 
 export type IdeaItem = {
   id: string
   title: string
   body: string
+  goal: string
   category: IdeaCategory
   color: string
   status: IdeaStatus
@@ -20,15 +23,16 @@ export type IdeaItem = {
 }
 
 const STORAGE_KEY = 'yoko-ideas-v1'
+const REMOTE_BOOTSTRAP_KEY = 'yoko-ideas-remote-bootstrap-v1'
 const UPDATE_EVENT = 'yoko-ideas-update'
 
-const CATEGORIES: IdeaCategory[] = ['inspiratie', 'tussendoor', 'experiment', 'verbetering']
 const STATUSES: IdeaStatus[] = ['open', 'doing', 'done']
 
 type IdeaRow = {
   id: string
   title: string
   body: string | null
+  goal: string | null
   category: string
   color: string
   status: string
@@ -45,7 +49,8 @@ function rowToIdea(row: IdeaRow): IdeaItem {
     id: row.id,
     title: row.title,
     body: row.body ?? '',
-    category: CATEGORIES.includes(row.category as IdeaCategory) ? row.category as IdeaCategory : 'inspiratie',
+    goal: row.goal?.trim() ?? '',
+    category: row.category?.trim() || 'inspiratie',
     color: row.color || '#fff0a8',
     status: STATUSES.includes(row.status as IdeaStatus) ? row.status as IdeaStatus : 'open',
     authorId: row.author_id,
@@ -62,6 +67,7 @@ function ideaToRow(item: IdeaItem): IdeaRow {
     id: item.id,
     title: item.title,
     body: item.body,
+    goal: item.goal,
     category: item.category,
     color: item.color,
     status: item.status,
@@ -78,7 +84,9 @@ function readCache(): IdeaItem[] {
   if (typeof window === 'undefined') return []
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed)
+      ? parsed.map(item => ({ ...item, goal: typeof item?.goal === 'string' ? item.goal : '' }))
+      : []
   } catch { return [] }
 }
 
@@ -105,13 +113,34 @@ export async function pullIdeas(): Promise<boolean> {
     .select('*')
     .order('updated_at', { ascending: false })
   if (error || !data) return false
-  writeCache((data as IdeaRow[]).map(rowToIdea))
+  const remote = (data as IdeaRow[]).map(rowToIdea)
+  const local = readCache()
+  // De ideeën-tabel is later toegevoegd dan de lokale ideeënmuur. Iedere
+  // browser mag daarom precies één keer eigen, nog niet gedeelde kaartjes
+  // naar remote meenemen. Daarna is remote leidend, zodat een echt verwijderd
+  // idee niet bij een volgende pull vanuit een oude cache terugkomt.
+  const needsBootstrap = localStorage.getItem(REMOTE_BOOTSTRAP_KEY) !== 'done'
+  if (needsBootstrap && local.length > 0) {
+    const remoteIds = new Set(remote.map(item => item.id))
+    const missing = local.filter(item => !remoteIds.has(item.id))
+    if (missing.length > 0) {
+      const { error: mergeError } = await supabase.from('ideas').upsert(missing.map(ideaToRow))
+      if (mergeError) return false
+    }
+    const combined = [...remote, ...missing]
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    writeCache(combined)
+  } else {
+    writeCache(remote)
+  }
+  localStorage.setItem(REMOTE_BOOTSTRAP_KEY, 'done')
   return true
 }
 
 export async function createIdea(input: {
   title: string
   body?: string
+  goal?: string
   category: IdeaCategory
   color: string
   authorId: string | null
@@ -122,7 +151,8 @@ export async function createIdea(input: {
     id: crypto.randomUUID(),
     title: input.title.trim(),
     body: input.body?.trim() ?? '',
-    category: input.category,
+    goal: input.goal?.trim() ?? '',
+    category: input.category.trim() || 'inspiratie',
     color: input.color,
     status: 'open',
     authorId: input.authorId,

@@ -345,7 +345,7 @@ async function refreshBoard(boardName: string, userId: string, scope: string): P
   const localAtReadStart = localStorage.getItem(key(boardName))
   // 'is.null'-syntax werkt via .is('deleted_at', null) in supabase-js.
   const { data: groupRows, error: gErr } = await supabase
-    .from('board_groups').select('*').eq('board_id', boardName).is('deleted_at', null).order('position')
+    .from('board_groups').select('id,name,color,collapsed,position').eq('board_id', boardName).is('deleted_at', null).order('position')
   if (gErr || !groupRows) return false
   const itemRows = await readBoardItems(supabase, boardName, userId)
   if (!itemRows) return false

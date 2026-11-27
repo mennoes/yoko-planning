@@ -9,8 +9,9 @@
 }
 
 .hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; max-width: 1480px; margin: 0 auto 34px; }
-.eyebrow { display: flex; align-items: center; gap: 8px; color: #8b6e00; font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.hero h1 { max-width: 760px; margin: 10px 0 10px; font-size: clamp(34px, 4vw, 58px); line-height: .98; letter-spacing: -.045em; font-weight: 900; }
+.titleRow { display: flex; align-items: center; gap: 13px; color: var(--text-primary); }
+.titleRow svg { color: #8b6e00; }
+.hero h1 { margin: 0 0 8px; font-size: clamp(36px, 3.2vw, 48px); line-height: 1; letter-spacing: -.04em; font-weight: 900; }
 .hero p { max-width: 690px; margin: 0; color: var(--text-secondary); font-size: 18px; line-height: 1.5; }
 .heroActions { display: flex; gap: 10px; flex-shrink: 0; }
 .heroActions button, .pinButton, .saveButton { min-height: 46px; border: 0; border-radius: 13px; padding: 0 18px; font: inherit; font-weight: 800; cursor: pointer; }
@@ -18,12 +19,15 @@
 .surpriseButton { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--surface-shadow); }
 .surpriseButton:disabled { opacity: .4; cursor: default; }
 
-.toolbar { max-width: 1480px; margin: 0 auto 28px; display: flex; gap: 7px; align-items: center; overflow-x: auto; padding: 3px 2px 8px; scrollbar-width: none; }
+.toolbar { max-width: 1480px; margin: 0 auto 28px; display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 3px 2px 8px; }
+.categoryFilters { display: flex; gap: 7px; align-items: center; overflow-x: auto; scrollbar-width: none; }
 .toolbar button { border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--bg-card) 88%, transparent); color: var(--text-secondary); padding: 9px 14px; white-space: nowrap; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .toolbar button span { margin-left: 5px; opacity: .55; }
 .toolbar .activeFilter { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-card); }
+.statusFilter { display: flex; align-items: center; gap: 9px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.statusFilter select { min-height: 40px; max-width: 210px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); color: var(--text-primary); padding: 0 34px 0 12px; font: inherit; font-size: 14px; font-weight: 700; text-transform: none; letter-spacing: 0; cursor: pointer; }
 
-.composer { position: relative; max-width: 1040px; margin: 0 auto 34px; padding: 24px; display: grid; grid-template-columns: 190px 1fr; gap: 22px; background: #fff0a8; color: #252019; box-shadow: 0 18px 50px rgba(54, 43, 14, .14); border-radius: 3px 3px 16px 3px; transform: rotate(-.2deg); }
+.composer { position: relative; max-width: 1160px; margin: 0 auto 34px; padding: 24px; display: grid; grid-template-columns: 190px 1fr; gap: 22px; background: #fff0a8; color: #252019; box-shadow: 0 18px 50px rgba(54, 43, 14, .14); border-radius: 3px 3px 16px 3px; transform: rotate(-.2deg); }
 .composerIntro { padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
 .composerIntro span { font-size: 21px; font-weight: 900; }
 .composerIntro small { font-size: 15px; line-height: 1.4; opacity: .64; }
@@ -33,27 +37,50 @@
 .composerOptions { grid-column: 2; display: flex; gap: 18px; align-items: flex-end; }
 .composerOptions label, .composerOptions fieldset { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; color: #514735; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .composerOptions select, .editOptions select { min-height: 40px; border: 1px solid rgba(30,25,15,.18); border-radius: 9px; background: rgba(255,255,255,.48); color: #252019; padding: 0 10px; font: inherit; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.categoryControl { min-width: 240px; }
+.goalControl { min-width: 250px; }
+.composerOptions .newCategoryInput { min-height: 40px; padding: 8px 10px; border: 1px solid rgba(30,25,15,.18); border-radius: 9px; background: rgba(255,255,255,.62); font-size: 15px; font-weight: 700; text-transform: none; letter-spacing: 0; }
 .composerOptions .pinButton { margin-left: auto; }
 .closeButton { position: absolute; top: 13px; right: 13px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255,255,255,.45); color: inherit; cursor: pointer; }
 .swatches { display: flex; gap: 7px; }
 .swatches button { width: 30px; height: 30px; border: 2px solid rgba(30,25,15,.11); border-radius: 50%; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
 .swatches .selectedSwatch { transform: scale(1.14); box-shadow: 0 0 0 2px #252019; }
 
-.board { max-width: 1480px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 30px 26px; align-items: start; }
-.note { --note-color: #fff0a8; --tilt: 0deg; min-height: 250px; display: flex; flex-direction: column; overflow: hidden; background: var(--note-color); color: #29231b; border-radius: 2px 3px 16px 3px; box-shadow: 0 8px 18px rgba(43, 36, 18, .09), 0 2px 3px rgba(43, 36, 18, .08); transform: rotate(var(--tilt)); transition: transform .2s ease, box-shadow .2s ease; }
-.note:hover { transform: rotate(0) translateY(-4px); box-shadow: 0 16px 30px rgba(43,36,18,.14); }
+.canvasViewport { position: relative; max-width: 1480px; height: max(560px, calc(100vh - 285px)); margin: 0 auto; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background-color: color-mix(in srgb, var(--bg-card) 58%, var(--bg-base)); background-image: radial-gradient(circle, color-mix(in srgb, var(--text-muted) 32%, transparent) 1px, transparent 1.2px); background-size: 24px 24px; cursor: grab; touch-action: none; user-select: none; }
+:global([data-theme="dark"]) .canvasViewport { border-color: color-mix(in srgb, var(--border) 52%, transparent); background-color: color-mix(in srgb, var(--bg-card) 38%, var(--bg-base)); background-image: radial-gradient(circle, rgba(255,255,255,.055) .8px, transparent 1px); }
+.canvasViewport.panning { cursor: grabbing; }
+.canvasHint { position: absolute; z-index: 30; top: 12px; left: 14px; padding: 6px 9px; border-radius: 8px; background: color-mix(in srgb, var(--bg-card) 86%, transparent); color: var(--text-muted); font-size: 12px; font-weight: 700; pointer-events: none; }
+.canvasControls { position: absolute; z-index: 30; left: 14px; bottom: 14px; display: flex; align-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); box-shadow: var(--surface-shadow); }
+.canvasControls button { width: 38px; height: 38px; border: 0; border-right: 1px solid var(--border); background: transparent; color: var(--text-primary); font: inherit; font-size: 20px; font-weight: 800; cursor: pointer; }
+.canvasControls button:last-child { border-right: 0; }
+.canvasControls .zoomValue { width: 58px; font-size: 12px; }
+.board { position: absolute; top: 0; left: 0; width: 2200px; min-height: 1600px; padding: 72px; display: grid; grid-template-columns: repeat(6, 280px); grid-auto-rows: min-content; gap: 30px 26px; align-items: start; transform-origin: 0 0; will-change: transform; }
+.note { --note-color: #fff0a8; --tilt: 0deg; --note-x: 0px; --note-y: 0px; position: relative; min-height: 250px; display: flex; flex-direction: column; overflow: visible; background: var(--note-color); color: #29231b; border-radius: 2px 3px 16px 3px; box-shadow: 0 8px 18px rgba(43, 36, 18, .09), 0 2px 3px rgba(43, 36, 18, .08); transform: translate(var(--note-x), var(--note-y)) rotate(var(--tilt)); transition: transform .2s ease, box-shadow .2s ease; z-index: 1; }
+.note:hover { transform: translate(var(--note-x), calc(var(--note-y) - 4px)) rotate(0); box-shadow: 0 16px 30px rgba(43,36,18,.14); z-index: 3; }
+.note.dragging { transform: translate(var(--note-x), var(--note-y)) rotate(1.2deg) scale(1.025); transition: none; box-shadow: 0 22px 45px rgba(43,36,18,.25); z-index: 20; }
 .noteMain { flex: 1; width: 100%; padding: 22px 22px 12px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.noteTop { display: flex; justify-content: space-between; align-items: center; color: rgba(41,35,27,.62); font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
-.notePin { width: 12px; height: 12px; border-radius: 50%; background: rgba(83,66,32,.24); box-shadow: inset 0 1px 2px rgba(255,255,255,.5); }
-.note h2 { margin: 21px 0 10px; font-size: 25px; line-height: 1.08; letter-spacing: -.025em; }
+.noteGoal { max-width: calc(100% - 30px); margin: -2px 0 14px; padding-left: 9px; border-left: 2px solid rgba(41,35,27,.45); }
+.noteGoal strong { display: block; color: rgba(41,35,27,.68); font-size: 13px; line-height: 1.25; }
+.dragHandle { position: absolute; top: 12px; right: 12px; z-index: 4; width: 28px; height: 28px; display: grid; grid-template-columns: repeat(2, 3px); grid-auto-rows: 3px; place-content: center; gap: 3px; border: 0; border-radius: 8px; background: rgba(255,255,255,.24); padding: 0; cursor: grab; touch-action: none; opacity: .48; transition: opacity .15s ease, background .15s ease; }
+.dragHandle span { width: 3px; height: 3px; border-radius: 50%; background: rgba(41,35,27,.72); }
+.note:hover .dragHandle, .dragHandle:focus-visible { opacity: 1; background: rgba(255,255,255,.5); outline: none; }
+.dragging .dragHandle { cursor: grabbing; opacity: 1; }
+.note h2 { margin: 24px 0 10px; font-size: 25px; line-height: 1.08; letter-spacing: -.025em; }
 .note p { margin: 0; color: rgba(41,35,27,.78); font-size: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .noteFooter { min-height: 54px; padding: 9px 13px 11px 20px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(41,35,27,.10); font-size: 12px; color: rgba(41,35,27,.58); }
+.noteAuthor { display: inline-flex; align-items: center; }
+.authorFallback { width: 22px; height: 22px; flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(41,35,27,.11); color: rgba(41,35,27,.72); font-size: 9px; font-weight: 900; }
 .noteFooter button { border: 0; border-radius: 999px; background: rgba(255,255,255,.48); color: #29231b; padding: 8px 11px; font: inherit; font-weight: 800; cursor: pointer; }
+.noteFooter .claimButton { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: rgba(255,255,255,.42); }
+.claimFallback { width: 24px; height: 24px; flex: 0 0 24px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(41,35,27,.35); border-radius: 50%; color: rgba(41,35,27,.65); font-weight: 900; }
+.claimedState { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(111,161,129,.20); }
+.noteFooter .claimedState button { width: 26px; height: 26px; padding: 0; background: rgba(255,255,255,.58); font-size: 14px; }
+.noteFooter .doneReturn { width: 32px; height: 32px; padding: 0; font-size: 17px; }
 .doing { box-shadow: 0 0 0 3px rgba(111,161,129,.42), 0 10px 22px rgba(43,36,18,.12); }
 .highlighted { animation: spotlight 1s ease 2; box-shadow: 0 0 0 5px #1d1b18, 0 25px 55px rgba(43,36,18,.25); }
 @keyframes spotlight { 50% { transform: rotate(0) scale(1.04); } }
 
-.empty { grid-column: 1 / -1; min-height: 390px; display: grid; place-items: center; align-content: center; text-align: center; }
+.empty { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; align-content: center; text-align: center; }
 .emptyNotes { height: 90px; display: flex; align-items: center; margin-bottom: 20px; }
 .emptyNotes span { width: 110px; height: 84px; display: grid; place-items: center; padding: 10px; background: #fff0a8; color: #6d5f35; box-shadow: 0 5px 12px rgba(0,0,0,.08); font-size: 12px; font-weight: 800; }
 .emptyNotes span:nth-child(1) { transform: rotate(-8deg); background: #dce5ff; }
@@ -67,6 +94,8 @@
 .editModal { --note-color: #fff0a8; position: relative; width: min(560px, 100%); display: grid; gap: 14px; padding: 34px; background: var(--note-color); color: #29231b; border-radius: 3px 3px 20px 3px; box-shadow: 0 30px 90px rgba(0,0,0,.28); }
 .editLabel { color: rgba(41,35,27,.58); font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
 .editModal input { font-size: 27px; font-weight: 900; }
+.editGoal { display: grid; gap: 6px; color: rgba(41,35,27,.62); font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.editModal .editGoal input { font-size: 15px; font-weight: 700; letter-spacing: 0; text-transform: none; }
 .editOptions { display: flex; justify-content: space-between; gap: 15px; align-items: center; }
 .modalActions { display: flex; justify-content: space-between; margin-top: 8px; }
 .deleteButton { border: 0; background: transparent; color: #a13c34; font: inherit; font-weight: 800; cursor: pointer; }
@@ -74,15 +103,21 @@
 @media (max-width: 800px) {
   .page { padding: 26px 16px 60px; }
   .hero { align-items: flex-start; flex-direction: column; gap: 22px; }
-  .hero h1 { font-size: 39px; }
+  .hero h1 { font-size: 36px; }
   .heroActions { width: 100%; }
   .heroActions button { flex: 1; }
+  .toolbar { align-items: stretch; flex-direction: column; gap: 12px; }
+  .categoryFilters { margin-right: -16px; padding-right: 16px; }
+  .statusFilter { justify-content: space-between; }
+  .statusFilter select { flex: 1; max-width: none; }
   .composer { grid-template-columns: 1fr; padding: 22px 18px; }
   .composerIntro, .composerOptions { grid-column: 1; }
   .composerOptions { align-items: stretch; flex-direction: column; }
   .composerOptions .pinButton { margin-left: 0; }
-  .board { grid-template-columns: 1fr; gap: 20px; }
-  .note { min-height: 225px; transform: none; }
+  .canvasViewport { height: max(520px, calc(100vh - 330px)); border-radius: 14px; }
+  .canvasHint { display: none; }
+  .board { width: 1500px; min-height: 1400px; padding: 56px; grid-template-columns: repeat(4, 270px); gap: 20px; }
+  .note { min-height: 225px; }
   .editModal { padding: 28px 20px 22px; }
   .editOptions { align-items: stretch; flex-direction: column; }
 }

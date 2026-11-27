@@ -23,6 +23,14 @@ export const IconSpark = ({ size = 18, style, className }: Props) => (
   </svg>
 )
 
+// Eenvoudig idee-icoon voor de ideeënpagina. Bewust een lijnicoon in
+// plaats van een sparkle: dit staat voor een idee, niet voor AI-generatie.
+export const IconIdea = (p: Props) => base({ ...p, children: <>
+  <path d="M9 18h6" />
+  <path d="M10 22h4" />
+  <path d="M8.2 14.8A7 7 0 1 1 15.8 14.8C14.7 15.7 14.2 16.6 14.2 18H9.8c0-1.4-.5-2.3-1.6-3.2z" />
+</> })
+
 export const IconMenu       = (p: Props) => base({ ...p, children: <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></> })
 export const IconBell       = (p: Props) => base({ ...p, children: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8" /><path d="M10 21a2 2 0 0 0 4 0" /></> })
 export const IconClose      = (p: Props) => base({ ...p, children: <><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></> })

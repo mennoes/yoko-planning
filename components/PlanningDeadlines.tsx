@@ -37,7 +37,7 @@ export default function PlanningDeadlines({projects,cols,zoom,onOpen,onChange,an
       const edge=Math.max(anchor.left,Math.min(flag.x,anchor.right))
       return <span key={flag.key}>
         {Math.abs(edge-flag.x)>12&&<span aria-hidden style={{position:'absolute',left:Math.min(edge,flag.x),top:top+16,width:Math.abs(edge-flag.x),borderTop:'1px dashed var(--yellow)',opacity:.65,pointerEvents:'none'}}/>}
-        <DraggableDeadline date={flag.date} subitem={flag.sub} label={`${flag.sub?'Subitemdeadline':'Projectdeadline'} ${flag.project.name}`} xForDate={date=>{const time=new Date(date+'T00:00:00').getTime();return zoom==='week'?dateToWeekPx(new Date(time),cols[0].rangeStart,cols[0].widthPx):(time-from)/(to-from)*width}} onChange={onChange ? date=>onChange(flag.project,date) : undefined} onOpen={()=>onOpen(flag.project)} style={{position:'absolute',left:flag.x,top,width:20,height:20,padding:1,border:0,borderRadius:4,background:'var(--bg-card)',color:'var(--yellow)',pointerEvents:'auto',zIndex:2,boxShadow:'0 1px 3px #0003'}}/>
+        <DraggableDeadline date={flag.date} subitem={flag.sub} label={`${flag.sub?'Subitemdeadline':'Projectdeadline'} ${flag.project.name}`} xForDate={date=>{const time=new Date(date+'T00:00:00').getTime();return zoom==='week'?dateToWeekPx(new Date(time),cols[0].rangeStart,cols[0].widthPx):(time-from)/(to-from)*width}} onChange={onChange ? date=>onChange(flag.project,date) : undefined} onOpen={()=>onOpen(flag.project)} style={{position:'absolute',left:flag.x,top,width:22,height:22,padding:2,border:0,background:'transparent',color:'var(--yellow)',pointerEvents:'auto',zIndex:2,filter:'drop-shadow(0 1px 1px rgba(0,0,0,.55))'}}/>
       </span>
     })}
   </div>

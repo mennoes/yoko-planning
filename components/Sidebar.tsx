@@ -29,7 +29,7 @@ import {
   IconHome, IconAgenda, IconCheckList, IconClose, IconSettings,
   IconArrowUp, IconArrowDown, IconSun, IconMoon, IconAuto, IconLogoutOutline,
   IconDocument, IconFolder, IconFolderOpen, IconSort, IconRefresh, IconActivity,
-  IconSearch, IconHourglass, IconSpark,
+  IconSearch, IconHourglass, IconIdea,
 } from './Icon'
 import { UserAvatar } from './UserAvatar'
 import { useUndo } from './UndoContext'
@@ -46,7 +46,7 @@ const MAIN_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   '/':         IconHome,
   '/planning': IconHourglass,
   '/todos':    IconCheckList,
-  '/ideas':    IconSpark,
+  '/ideas':    IconIdea,
 }
 const DEFAULT_MAIN = [
   { id: 'home',     href: '/',         label: 'Home' },
@@ -1431,6 +1431,7 @@ export default function Sidebar({
   const [folderName,    setFolderName]    = useState('')
   const [editOrder,     setEditOrder]     = useState(false)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
+  const [collapsedTip,  setCollapsedTip]  = useState<{ label: string; top: number } | null>(null)
   const resizingRef   = useRef(false)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -1541,11 +1542,17 @@ export default function Sidebar({
   }
 
   function toggleCollapsed() {
+    setCollapsedTip(null)
     setCollapsed(value => {
       const next = !value
       localStorage.setItem('sidebar-collapsed', String(next))
       return next
     })
+  }
+
+  function showCollapsedTip(e: React.MouseEvent<HTMLElement> | React.FocusEvent<HTMLElement>, label: string) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setCollapsedTip({ label, top: rect.top + rect.height / 2 })
   }
 
   function onResizeMouseDown(e: React.MouseEvent) {
@@ -1590,20 +1597,28 @@ export default function Sidebar({
       <div style={containerStyle}>
         <aside aria-label="Ingeklapt menu" style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100vh', overflow: 'hidden' }}>
           <div style={{ width: '100%', minHeight: 74, borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-            <button onClick={toggleCollapsed} aria-label="Menu uitklappen" title="Menu uitklappen"
+            <button onClick={toggleCollapsed} aria-label="Menu uitklappen"
+              onMouseEnter={e => showCollapsedTip(e, 'Menu uitklappen')} onMouseLeave={() => setCollapsedTip(null)}
+              onFocus={e => showCollapsedTip(e, 'Menu uitklappen')} onBlur={() => setCollapsedTip(null)}
               style={{ width: 38, height: 38, borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-hover)', color: 'var(--sup-yellow)', cursor: 'pointer', fontSize: 27, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
           </div>
           <nav aria-label="Hoofdnavigatie" style={{ width: '100%', padding: '8px 8px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 0', minHeight: 0, overflowY: 'auto' }}>
             {mainNav.map(item => {
               const active = navigationPathname === item.href
               const NavIcon = MAIN_ICONS[item.href]
-              return <Link key={item.id} href={item.href} aria-label={item.label} title={item.label}
-                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-primary)', background: active ? 'var(--control-active)' : 'transparent', textDecoration: 'none' }}>
-                {NavIcon ? <NavIcon size={22} /> : null}
+              return <Link key={item.id} href={item.href} aria-label={item.label}
+                className={`sidebar-collapsed-action${active ? ' is-active' : ''}`}
+                onMouseEnter={e => showCollapsedTip(e, item.label)} onMouseLeave={() => setCollapsedTip(null)}
+                onFocus={e => showCollapsedTip(e, item.label)} onBlur={() => setCollapsedTip(null)}
+                style={{ height: 44, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+                <span className="sidebar-collapsed-icon">{NavIcon ? <NavIcon size={22} /> : null}</span>
               </Link>
             })}
-            {onOpenSearch && <button onClick={onOpenSearch} aria-label="Zoeken" title="Zoeken (⌘K)"
-              style={{ height: 44, borderRadius: 9, border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconSearch size={20} /></button>}
+            {onOpenSearch && <button onClick={onOpenSearch} aria-label="Zoeken"
+              className="sidebar-collapsed-action"
+              onMouseEnter={e => showCollapsedTip(e, 'Zoeken (⌘K)')} onMouseLeave={() => setCollapsedTip(null)}
+              onFocus={e => showCollapsedTip(e, 'Zoeken (⌘K)')} onBlur={() => setCollapsedTip(null)}
+              style={{ height: 44, borderRadius: 9, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="sidebar-collapsed-icon"><IconSearch size={20} /></span></button>}
           </nav>
           <div style={{ width: '100%', padding: '10px 8px', boxSizing: 'border-box', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <NotificationBell />
@@ -1621,6 +1636,13 @@ export default function Sidebar({
         {settingsOpen && <SettingsPopup onClose={() => setSettingsOpen(false)} profile={profile}
           openEdit={() => { setSettingsOpen(false); openEdit() }} theme={theme}
           setTheme={(t) => { setTheme(t); setThemePreference(t) }} signOut={signOut} />}
+        {collapsedTip && typeof document !== 'undefined' && createPortal(
+          <div role="tooltip" className="sidebar-collapsed-tooltip"
+            style={{ left: COLLAPSED_SIDEBAR_W + 10, top: collapsedTip.top }}>
+            {collapsedTip.label}
+          </div>,
+          document.body,
+        )}
       </div>
     )
   }

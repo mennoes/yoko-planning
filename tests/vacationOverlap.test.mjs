@@ -27,6 +27,9 @@ function workload(overrides = {}) {
       './boardsRegistry': { getBoardColor: () => '#579bfc' },
       './workloadCategory': {
         isVrijItem: item => /vakantie|\bvrij\b/i.test(item.name) || /^vrij$/i.test(item.group ?? ''),
+        effectiveCategory: (item, override) => override === 'vrij' || /vakantie|\bvrij\b/i.test(item.name)
+          ? 'vrij'
+          : item.source === 'google' ? 'meeting' : 'maken',
         loadCategoryOverrides: () => overrides,
       },
       './freeCapacity': freeCapacity(),
@@ -112,11 +115,11 @@ test('een Google-item blijft de hele dag blokkeren', () => {
   assert.equal(memberTotalHours([vakantie], 'menno', week), 40)
 })
 
-test('Vrijheid in de groep Vrij blokkeert ook als Google-item de hele dag', () => {
+test('een gewone Google-afspraak in de groep Vrij wordt geen vrije werkdag', () => {
   const vrijheid = {
     ...project('vrijheid', 'Vrijheid', '2026-09-14', '2026-09-14', 0, 'Vrij'),
     source: 'google',
   }
   const { memberTotalHours } = workload()
-  assert.equal(memberTotalHours([vrijheid], 'menno', week), 8)
+  assert.equal(memberTotalHours([vrijheid], 'menno', week), 0)
 })

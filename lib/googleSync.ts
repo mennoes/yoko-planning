@@ -1094,9 +1094,15 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
         existingRow!.group_id === meetingsGid
       )
       void isFarFuture
-      const keepGroup = existingGroupAlive
-        ? (inAutoBucket ? fallbackGroup : existingRow!.group_id)
-        : fallbackGroup
+      // Een duidelijke afwezigheidstitel is sterker dan een oude handmatige
+      // groepsplaatsing: 'Vakantie', 'Vrij' of 'Verlof' hoort altijd in de
+      // Vrij-groep. Zo blijft de agenda logisch, ook wanneer een bestaand
+      // Google-item later zo wordt hernoemd.
+      const keepGroup = isVrij
+        ? fallbackGroup
+        : existingGroupAlive
+          ? (inAutoBucket ? fallbackGroup : existingRow!.group_id)
+          : fallbackGroup
       const eventOwners = ownersForEvent(ev)
       // Vervang owner_ids met de VERSE set Yoko-attendees uit Google,
       // TENZIJ de gebruiker handmatig owners heeft aangepast via de UI —
@@ -1370,9 +1376,11 @@ async function syncOneCalendar(admin: SupabaseClient, cal: GoogleCalRow): Promis
     const recInAutoBucket = recExistingAlive && (
       existingRow!.group_id === recMeetingsGid
     )
-    const keepGroup = recExistingAlive
-      ? (recInAutoBucket ? recFallback : existingRow!.group_id)
-      : recFallback
+    const keepGroup = isVrij
+      ? recFallback
+      : recExistingAlive
+        ? (recInAutoBucket ? recFallback : existingRow!.group_id)
+        : recFallback
     upserts.push({
       id,
       group_id:           keepGroup,

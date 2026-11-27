@@ -924,9 +924,13 @@ function DraggableBar({ project, memberId, team, left, width, colW, small, laneH
     : project.board
       ? (getBoardConfig(project.board)?.name ?? project.board)
       : ''
-  const secondLineMinHeight = gezichten.length > 0 ? 44 : 26
-  const showSecondLineContext = scaleByHours && !small && !!contextLabel && barH >= secondLineMinHeight
-  const showInlineContext = scaleByHours && !small && !!contextLabel && barH < secondLineMinHeight
+  // Alleen een werkelijk lage balk blijft één tekstregel. Zodra er
+  // verticaal plek is, staat de context bewust onder de titel — ook als
+  // er onderaan avatars staan. De oude, hogere drempel hield titel en
+  // context bij middelhoge balken onnodig naast elkaar.
+  const oneLineBar = small || barH < 24
+  const showSecondLineContext = scaleByHours && !oneLineBar && !!contextLabel
+  const showInlineContext = scaleByHours && oneLineBar && !small && !!contextLabel
   return (
     <>
       {ghost && <div style={{ position: 'absolute', top: barTop, left: ghost.left + 2, width: ghost.width, height: barH, background: color + '44', border: `2px dashed ${color}`, borderRadius: 4, pointerEvents: 'none', zIndex: 5 }} />}
@@ -2633,8 +2637,18 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
     <div>
     <div data-testid={`planning-timeline-${memberId}`} style={{
       position: 'relative', height, overflow: 'hidden', isolation: 'isolate',
+      // De tijdlijn schuift horizontaal achter de sticky personenkolom.
+      // Balken werden al op viewportStart ingekort, maar de kolomlijnen
+      // niet. Knip daarom de hele laag op exact dezelfde lokale x-grens af.
+      // Zo kunnen weeklijnen, deadlines en schaduwen nooit door de vaste
+      // sectie met naam/avatar heen tekenen.
+      // Gebruik de CSS-scrollwaarde die in dezelfde scroll-event direct op
+      // het raster wordt gezet. De React viewport-state loopt bij een harde
+      // trackpad-swipe bewust enkele pixels achter om renders te beperken;
+      // als masker gaf dat een kort flitsend lek onder de naamkolom.
+      clipPath: 'inset(0 0 0 var(--planner-scroll-left, 0px))',
       transition: 'height 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-      willChange: 'height',
+      willChange: 'height, clip-path',
     }}>
       <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}
         anchors={visibleBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:(barTops.get(b.p.id)??0)+meetingSummaryHeight,left:b.renderLeft,right:b.renderLeft+b.renderWidth}))}/>
@@ -5189,12 +5203,13 @@ export default function PlanningPage() {
     }
     // Polling is alleen vangnet voor als de Supabase-realtime websocket
     // hapert; primair komen updates direct via subscribeRemoteBoard binnen.
-    // 4 sec was egress-zwaar (~7200 calls/dag/user) — 60 sec is genoeg
-    // als safety-net en bespaart ~93% Supabase-bandwidth.
+    // Realtime is leidend. Elke vijf minuten controleren is alleen een
+    // vangnet voor een weggevallen websocket; focus/zichtbaarheid forceren
+    // daarnaast meteen een verse controle wanneer iemand terugkomt.
     const pollTimer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       pullAll()
-    }, 60000)
+    }, 5 * 60_000)
     function onFocus() { pullAll() }
     function onVisibility() { if (document.visibilityState === 'visible') pullAll() }
     function onPushFail(e: Event) {
@@ -7418,12 +7433,15 @@ export default function PlanningPage() {
                 <SmoothCollapse open={isExp}>
                   {memberProjects.length > 0 ? (
                   <div style={{ display: 'flex' }}>
-                    <div style={{
+                    <div data-testid={`planning-name-mask-${member.id}`} style={{
                       width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0,
                       // Balken hebben een verhoogde stacking-order voor
                       // hover/drag. Dit masker moet daar altijd boven liggen.
-                      zIndex: 7000, background: stickyBg,
+                      // Een eigen compositorlaag voorkomt dat snel inertieel
+                      // scrollen de balklaag één frame eerder tekent.
+                      zIndex: 10000, background: stickyBg,
                       borderRight: '1px solid var(--border)',
+                      transform: 'translateZ(0)', willChange: 'transform', contain: 'paint',
                     }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
                       <TimelineBars onDeadlineChange={handleDeadlineChange} memberId={member.id} projects={memberProjects} team={team} cols={cols} colW={colW} zoom={zoom} hideMeetings={hideMeetings}
@@ -7440,7 +7458,7 @@ export default function PlanningPage() {
                   </div>
                   ) : (
                   <div style={{ display: 'flex' }}>
-                    <div style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 7000, background: stickyBg, borderRight: '1px solid var(--border)' }} />
+                    <div data-testid={`planning-name-mask-${member.id}`} style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10000, background: stickyBg, borderRight: '1px solid var(--border)', transform: 'translateZ(0)', willChange: 'transform', contain: 'paint' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
                   )}

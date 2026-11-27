@@ -119,10 +119,12 @@ function Detail({ label, value }: { label: string; value: string }) {
   return <div><div style={detailLabelStyle}>{label}</div><div style={{ marginTop: 5, color: 'var(--text-primary)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{value}</div></div>
 }
 
-export function AgendaSnapshotPreview({ snapshot, onClose, onRestore }: {
+export function AgendaSnapshotPreview({ snapshot, onClose, onRestore, actionLabel = 'Deze versie herstellen', eyebrow = 'Recoveryvoorbeeld · niets kan hier worden gewijzigd' }: {
   snapshot: AgendaSnapshotSummary
   onClose: () => void
   onRestore: (snapshot: AgendaSnapshotSummary) => Promise<boolean>
+  actionLabel?: string
+  eyebrow?: string
 }) {
   const config = getBoardConfig(snapshot.board_id)
   const [groups, setGroups] = useState<BoardGroup[]>([])
@@ -171,8 +173,8 @@ export function AgendaSnapshotPreview({ snapshot, onClose, onRestore }: {
     <div role="dialog" aria-modal="true" aria-label={`Voorbeeld van ${config?.name ?? snapshot.board_id}`} style={{ position: 'fixed', inset: '20px', zIndex: 10041, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 30px 90px rgba(0,0,0,.38)' }}>
       <header style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
         <span style={{ width: 12, height: 42, borderRadius: 8, background: config?.color ?? '#579bfc' }} />
-        <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>Recoveryvoorbeeld · niets kan hier worden gewijzigd</div><h2 style={{ margin: '3px 0 0', color: 'var(--text-primary)', fontSize: 22 }}>{config?.name ?? snapshot.board_id} <span style={{ color: 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}>· {new Date(snapshot.snapshot_at).toLocaleString('nl-NL')}</span></h2></div>
-        <button disabled={restoring} onClick={async () => { setRestoring(true); const restored = await onRestore(snapshot); setRestoring(false); if (restored) onClose() }} style={{ ...actionButtonStyle, background: config?.color ?? 'var(--accent)', color: '#fff', borderColor: config?.color ?? 'var(--accent)' }}>{restoring ? 'Herstellen…' : 'Deze versie herstellen'}</button>
+        <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>{eyebrow}</div><h2 style={{ margin: '3px 0 0', color: 'var(--text-primary)', fontSize: 22 }}>{config?.name ?? snapshot.board_id} <span style={{ color: 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}>· {new Date(snapshot.snapshot_at).toLocaleString('nl-NL')}</span></h2></div>
+        <button disabled={restoring} onClick={async () => { setRestoring(true); const restored = await onRestore(snapshot); setRestoring(false); if (restored) onClose() }} style={{ ...actionButtonStyle, background: 'var(--accent)', color: '#172033', borderColor: 'var(--accent)' }}>{restoring ? 'Herstellen…' : actionLabel}</button>
         <button onClick={onClose} aria-label="Voorbeeld sluiten" style={closeButtonStyle}>×</button>
       </header>
       <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>

@@ -270,7 +270,7 @@ function Inner({ children }: { children: ReactNode }) {
     if (isDemoRoute) return
     let cancelled = false
     let lastSyncAt = 0
-    const MIN_VISIBILITY_INTERVAL_MS = 5 * 60 * 1000
+    const MIN_VISIBILITY_INTERVAL_MS = 15 * 60 * 1000
     async function tick(reason: 'mount' | 'interval' | 'visibility' = 'interval') {
       if (cancelled) return
       // Achtergrond-tabs slaan tick over: als niemand ernaar kijkt hoeven
@@ -321,10 +321,10 @@ function Inner({ children }: { children: ReactNode }) {
       } catch {}
     }
     tick('mount')
-    // Iedere 5 minuten verversen zolang de planner zichtbaar is. Google-
-    // wijzigingen zoals verplaatsen, annuleren of deelnemers aanpassen
-    // mogen niet een halfuur als oude planning blijven staan.
-    const id = setInterval(() => tick('interval'), 5 * 60 * 1000)
+    // Iedere 15 minuten verversen zolang de planner zichtbaar is. Bij mount
+    // en terugkeer na 15 minuten syncen we ook direct. Zo blijven externe
+    // Google-wijzigingen actueel zonder elke open tab onnodig te laten pompen.
+    const id = setInterval(() => tick('interval'), 15 * 60 * 1000)
     function onVisibility() {
       if (typeof document === 'undefined') return
       if (document.visibilityState === 'visible') tick('visibility')
