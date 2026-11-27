@@ -254,6 +254,11 @@ export function ItemPlanner({ boardName, groups, startGroupId, onCreate, onClose
     let teller = Date.now()
     const ownedPlan = tab === 'sjabloon' ? {...plan, ownerIds: projectOwners, subitems: plan.subitems.map((sub, index) => ({...sub, ownerIds: stepOwners[index] ?? projectOwners}))} : plan
     const item = applyClientMoments({ ...planToBoardItem(ownedPlan, () => String(teller++)), deadline },clientMoments,tab==='sjabloon'&&sjabloonId==='explainer')
+    // Ook wanneer de gebruiker het voorstel eerst controleert of bijwerkt,
+    // blijft zichtbaar dat ChatGPT de basis heeft gemaakt. Dit attribuut
+    // wordt alleen gebruikt voor de aanmaakregel in het logboek; ChatGPT
+    // wordt nadrukkelijk geen project-owner en telt dus nooit mee in uren.
+    if (tab === 'ai' || mailUitleg.startsWith('Het model las de mail')) item.auditActor = 'chatgpt'
     onCreate(groupId, item)
     onClose()
   }

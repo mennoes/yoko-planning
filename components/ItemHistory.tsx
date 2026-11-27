@@ -64,11 +64,14 @@ export function ItemHistory({ itemId, createdAt }: { itemId: string; createdAt?:
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {items.map(a => {
         const profile = a.user_id ? profiles[a.user_id] : null
-        const name = profile?.name ?? 'Iemand'
-        const memberId = profile?.member_id ?? null
+        const actorOverride = a.meta?.actorName ?? null
+        const name = actorOverride ?? profile?.name ?? (a.user_id ? 'Iemand' : 'Yoko automatisch')
+        const memberId = actorOverride ? null : profile?.member_id ?? null
         const photo = memberId ? getPhoto(memberId) : null
         const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-        const memberColor = teamData.members.find(m => m.id === memberId)?.color ?? '#888'
+        const systemActor = !!actorOverride
+        const memberColor = a.meta?.actorType === 'ai' ? '#d9b400'
+          : teamData.members.find(m => m.id === memberId)?.color ?? '#888'
         return (
           <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             {photo ? (
@@ -79,7 +82,7 @@ export function ItemHistory({ itemId, createdAt }: { itemId: string; createdAt?:
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 11, fontWeight: 700,
                 background: memberColor + '22', color: memberColor,
-              }}>{initials || '?'}</span>
+              }}>{systemActor && a.meta?.actorType === 'ai' ? '✦' : initials || '?'}</span>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>

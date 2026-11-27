@@ -9,6 +9,7 @@ import {
   todayInAmsterdam,
   topicFromItemName,
 } from '@/lib/masterPlanningSync'
+import { logSystemItemActivities, type SystemItemActivity } from '@/lib/systemItemActivity'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
   const updated: Array<{ name: string; fields: string[] }> = []
   const skipped: string[] = []
   const newRows: Record<string, unknown>[] = []
+  const activity: SystemItemActivity[] = []
   let nextPosition = Math.max(-1, ...(itemData as ExistingItem[]).map(item => Number(item.position ?? -1))) + 1
 
   for (const episode of episodes) {
@@ -97,20 +99,46 @@ export async function POST(req: NextRequest) {
     if (existing) {
       const patch: Record<string, unknown> = {}
       const fields: string[] = []
+      const itemActivity: SystemItemActivity[] = []
+      const logChange = (action: string, field: string | undefined, before: unknown, after: unknown) => {
+        itemActivity.push({
+          itemId: existing.id,
+          boardId: 'nederland',
+          itemName: (patch.name as string | undefined) ?? existing.name,
+          action,
+          detail: 'Nederland · automatische masterplanning',
+          field,
+          before,
+          after,
+          actor: 'chatgpt',
+          source: 'masterplanning',
+        })
+      }
       if (episode.topic) {
         const oldTopic = topicFromItemName(existing.name)
         const shouldRename = /onderwerp volgt/i.test(existing.name) || canonicalTopic(oldTopic) !== canonicalTopic(episode.topic)
-        if (shouldRename && existing.name !== episode.name) { patch.name = episode.name; fields.push('naam') }
+        if (shouldRename && existing.name !== episode.name) {
+          patch.name = episode.name; fields.push('naam')
+          logChange('wijzigde automatisch de naam', 'name', existing.name, episode.name)
+        }
       }
       if (episode.startDate && episode.endDate && (!same(existing.start_date, episode.startDate) || !same(existing.end_date, episode.endDate))) {
         patch.start_date = episode.startDate; patch.end_date = episode.endDate; fields.push('timeline')
+        logChange('wijzigde automatisch de timeline', 'startDate',
+          { startDate: existing.start_date, endDate: existing.end_date },
+          { startDate: episode.startDate, endDate: episode.endDate })
       }
-      if (episode.deadline && !same(existing.deadline, episode.deadline)) { patch.deadline = episode.deadline; fields.push('deadline') }
+      if (episode.deadline && !same(existing.deadline, episode.deadline)) {
+        patch.deadline = episode.deadline; fields.push('deadline')
+        logChange('wijzigde automatisch de deadline', 'deadline', existing.deadline, episode.deadline)
+      }
       if (episode.contactpersoon && !same(existing.contactpersoon, episode.contactpersoon)) {
         patch.contactpersoon = episode.contactpersoon; fields.push('contactpersoon')
+        logChange('wijzigde automatisch de contactpersoon', undefined, existing.contactpersoon, episode.contactpersoon)
       }
       if (Number(existing.est_hours ?? 0) !== episode.estHours) {
         patch.est_hours = episode.estHours; patch.dagen = episode.estHours / 8; fields.push('uren')
+        logChange('wijzigde automatisch de uren', 'estHours', Number(existing.est_hours ?? 0), episode.estHours)
       }
       const needsSourceMeta = existing.extra?.masterPlanningKey !== episode.key || existing.extra?.masterPlanningSource !== MASTER_PLANNING_CSV_URL
       if (fields.length > 0 || needsSourceMeta) {
@@ -119,7 +147,10 @@ export async function POST(req: NextRequest) {
         const { error } = await supabaseAdmin.from('board_items').update(patch).eq('id', existing.id).eq('board_id', 'nederland')
         if (error) return Response.json({ ok: false, error: `Bijwerken van '${existing.name}' mislukt: ${error.message}` }, { status: 500 })
       }
-      if (fields.length > 0) updated.push({ name: (patch.name as string | undefined) ?? existing.name, fields })
+      if (fields.length > 0) {
+        updated.push({ name: (patch.name as string | undefined) ?? existing.name, fields })
+        activity.push(...itemActivity.map(entry => ({ ...entry, itemName: (patch.name as string | undefined) ?? existing.name })))
+      }
       continue
     }
 
@@ -150,11 +181,34 @@ export async function POST(req: NextRequest) {
       updated_at: now,
     })
     added.push(episode.name)
+    activity.push({
+      itemId: `master_${episode.key}`,
+      boardId: 'nederland',
+      itemName: episode.name,
+      action: 'maakte automatisch dit item aan',
+      detail: 'Nederland · automatische masterplanning',
+      actor: 'chatgpt',
+      source: 'masterplanning',
+      before: null,
+      after: {
+        name: episode.name,
+        startDate: episode.startDate,
+        endDate: episode.endDate,
+        deadline: episode.deadline,
+        contactpersoon: episode.contactpersoon,
+        estHours: episode.estHours,
+      },
+    })
   }
 
   if (newRows.length > 0) {
     const { error } = await supabaseAdmin.from('board_items').insert(newRows)
     if (error) return Response.json({ ok: false, error: `Nieuwe afleveringen toevoegen mislukt: ${error.message}` }, { status: 500 })
+  }
+
+  const activityError = await logSystemItemActivities(supabaseAdmin, activity)
+  if (activityError) {
+    return Response.json({ ok: false, error: `De planning is bijgewerkt, maar het verplichte logboek kon niet worden opgeslagen: ${activityError}` }, { status: 500 })
   }
 
   return Response.json({

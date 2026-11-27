@@ -15,6 +15,9 @@ export type ActivityMeta = {
   after?:    unknown
   boardId?:  string
   itemName?: string
+  actorName?: string
+  actorType?: 'ai' | 'integration' | 'automation' | string
+  source?: string | null
 }
 
 export type ItemActivity = {
@@ -88,8 +91,13 @@ export async function loadItemActivity(itemId: string): Promise<ItemActivity[]> 
  *  over waar het vandaan kwam. Alleen voor items die een mens aanmaakt —
  *  wat de Google-sync binnenhaalt heeft geen maker en zou de lijst
  *  alleen maar vol zetten. */
-export async function logItemCreated(itemId: string, name: string, boardId?: string): Promise<void> {
-  await logItemActivity(itemId, 'maakte dit item aan', createdDetail(name), { itemName: name, boardId })
+export async function logItemCreated(
+  itemId: string,
+  name: string,
+  boardId?: string,
+  actor?: Pick<ActivityMeta, 'actorName' | 'actorType' | 'source'>,
+): Promise<void> {
+  await logItemActivity(itemId, 'maakte dit item aan', createdDetail(name), { itemName: name, boardId, ...actor })
 }
 
 /** Welke naam zetten we achter 'maakte dit item aan'? Een rij die je op

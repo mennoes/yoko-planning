@@ -5117,7 +5117,9 @@ export default function BoardTable({ boardId, title, emoji, color, columns, grou
     onChange(groups.map(groep => groep.id === groupId
       ? { ...groep, items: [...groep.items, item] }
       : groep))
-    void logItemCreated(item.id, item.name, boardId)
+    void logItemCreated(item.id, item.name, boardId, item.auditActor === 'chatgpt'
+      ? { actorName: 'ChatGPT', actorType: 'ai', source: 'item-planner' }
+      : undefined)
   }
 
   function addGroup() {

@@ -224,10 +224,13 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
             </p>
           ) : shown.map(e => {
             const p = e.user_id ? profiles[e.user_id] : null
-            const name = p?.name ?? 'Iemand'
-            const memberId = p?.member_id ?? null
+            const actorOverride = e.meta?.actorName ?? null
+            const name = actorOverride ?? p?.name ?? (e.user_id ? 'Iemand' : 'Yoko automatisch')
+            const memberId = actorOverride ? null : p?.member_id ?? null
             const photo = memberId ? getPhoto(memberId) : null
-            const memberColor = teamData.members.find(m => m.id === memberId)?.color ?? '#888'
+            const systemActor = !!actorOverride
+            const memberColor = e.meta?.actorType === 'ai' ? '#d9b400'
+              : teamData.members.find(m => m.id === memberId)?.color ?? '#888'
             const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
             const itemId   = itemIdFromTarget(e.target)
             // Fallback voor '(item zonder naam)' wanneer meta.itemName niet
@@ -266,7 +269,7 @@ export function BoardActivityDrawer({ boardId, boardTitle, open, onClose }: {
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 11, fontWeight: 700,
                     background: memberColor + '22', color: memberColor,
-                  }}>{initials || '?'}</span>
+                  }}>{systemActor && e.meta?.actorType === 'ai' ? '✦' : initials || '?'}</span>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {itemName && (
