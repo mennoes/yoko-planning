@@ -376,7 +376,8 @@ function Inner({ children }: { children: ReactNode }) {
 
       {isMobile && drawerOpen && (
         <div onClick={() => setDrawerOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 55 }} />
+          aria-hidden="true"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(2px)', zIndex: 9490 }} />
       )}
 
       {isMobile && !drawerOpen && (

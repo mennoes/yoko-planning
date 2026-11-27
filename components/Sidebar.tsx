@@ -1575,13 +1575,13 @@ export default function Sidebar({
 
   const containerStyle: React.CSSProperties = isMobile
     ? {
-        width: '100vw', minWidth: '100vw', maxWidth: '100vw',
+        width: 'min(88vw, 340px)', minWidth: 'min(88vw, 340px)', maxWidth: 'min(88vw, 340px)',
         position: 'fixed', top: 0, left: 0, height: '100dvh',
-        transform: open ? 'translateX(0)' : 'translateX(-100%)',
-        transition: 'transform 0.22s ease',
+        transform: open ? 'translateX(0)' : 'translateX(-105%)',
+        transition: 'transform 0.24s cubic-bezier(.22,.8,.24,1)',
         // Stay above planning overlays and floating action buttons while open.
         zIndex: 9500, display: 'flex', alignItems: 'stretch',
-        boxShadow: open ? '0 0 30px rgba(0,0,0,0.3)' : 'none',
+        boxShadow: open ? '14px 0 36px rgba(0,0,0,0.24)' : 'none',
       }
     : {
         width: collapsed ? COLLAPSED_SIDEBAR_W : width,
@@ -1649,7 +1649,7 @@ export default function Sidebar({
 
   return (
     <div style={containerStyle}>
-      <aside style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: isMobile ? 'none' : '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: isMobile ? '100dvh' : '100vh', overflow: 'hidden' }}
+      <aside aria-label={isMobile ? 'Mobiel menu' : undefined} style={{ flex: 1, minWidth: 0, background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)', borderRadius: isMobile ? '0 18px 18px 0' : undefined, display: 'flex', flexDirection: 'column', height: isMobile ? '100dvh' : '100vh', overflow: 'hidden' }}
         onClick={e => {
           if (!isMobile || !onClose || editOrder) return
           const target = e.target as HTMLElement

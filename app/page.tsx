@@ -1481,7 +1481,7 @@ export default function HomePage() {
             {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>
-        <div style={{ position: 'relative', flexShrink: 0 }}>
+        {!isMobile && <div style={{ position: 'relative', flexShrink: 0 }}>
           <button onClick={() => setHomeMenuOpen(o => !o)}
             title="Meer acties" aria-label="Meer acties"
             style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border)',
@@ -1503,21 +1503,10 @@ export default function HomePage() {
                     <VacationButton variant="row" />
                   </div>
                 )}
-                {isMobile && (
-                  <button onClick={() => { setEditOrder(o => !o); setHomeMenuOpen(false) }}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '8px 10px', borderRadius: 8, border: 'none',
-                      background: 'transparent', color: editOrder ? 'var(--accent)' : 'var(--text-primary)',
-                      fontSize: 13, fontWeight: editOrder ? 700 : 500,
-                      cursor: 'pointer', textAlign: 'left' }}>
-                    <span style={{ width: 14, textAlign: 'center' }}>↕</span>
-                    {editOrder ? 'Klaar met sorteren' : 'Kaarten herordenen'}
-                  </button>
-                )}
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* ── Yellow week summary card ── */}
