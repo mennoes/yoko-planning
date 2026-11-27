@@ -11,6 +11,14 @@ test('welcome summary opens mentioned agenda items inside Home', () => {
   assert.match(home, /setHomeDetail\(\{ boardId: p\.board, parentItemId: focusId, subitemId: p\.completionSubitemId \}\)/)
 })
 
+test('welcome summary names the main project beside a mentioned subitem', () => {
+  assert.match(home, /parentName\?: string/)
+  assert.match(home, /const parentName = c\.project\.parentName \?\? c\.project\.parentProject\?\.name/)
+  assert.match(home, /\[c\.project\.board, focusId, subitem \?\? c\.project\.name\.trim\(\)\.toLowerCase\(\)\]/)
+  assert.match(home, /p\.parentName && p\.parentName !== p\.name/)
+  assert.match(home, /↳ \{p\.parentName\}/)
+})
+
 test('overdue subitems name their main project', () => {
   assert.match(home, /const parentLabel = p\.parentName \?\? p\.parentProject\?\.name/)
   assert.match(home, /↳ \{parentLabel\}/)

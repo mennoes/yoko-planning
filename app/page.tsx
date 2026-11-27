@@ -884,6 +884,7 @@ export default function HomePage() {
 
   type GroupedProj = {
     name: string
+    parentName?: string
     hours: number
     ownerIds: Set<string>
     startDay: number | null
@@ -892,27 +893,30 @@ export default function HomePage() {
     subitemId?: string
   }
 
-  // Combine contribs that share a project name (subitems / split bars) into
-  // one entry. Track the earliest start day so we can place the project in
-  // the past / today / future bucket.
+  // Combine alleen bijdragen van hetzelfde achterliggende item. Alleen op
+  // naam groeperen mengde bijvoorbeeld identieke subitems van twee
+  // verschillende hoofdprojecten en verborg precies de context die je in
+  // het welkomstbericht nodig hebt.
   const groupProjects = (contribs: typeof myThisContribs): GroupedProj[] => {
     const grouped = new Map<string, GroupedProj>()
     for (const c of contribs.filter(entry => cat(entry) === 'maken')) {
-      const key = c.project.name.trim().toLowerCase()
       const sd  = c.project.startDate ? new Date(c.project.startDate) : null
       const day = sd && !isNaN(sd.getTime()) ? (sd.getDay() + 6) % 7 : null
+      const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
+        ? c.project.id.slice(c.project.board.length + 2)
+        : c.project.id
+      const focusId = c.project.completionParentItemId ?? rawItemId
+      const subitem = c.project.completionSubitemId
+      const parentName = c.project.parentName ?? c.project.parentProject?.name
+      const key = [c.project.board, focusId, subitem ?? c.project.name.trim().toLowerCase()].join('::')
       const cur = grouped.get(key)
       if (cur) {
         cur.hours += c.hours
         for (const id of c.project.ownerIds || []) cur.ownerIds.add(id)
+        if (!cur.parentName && parentName) cur.parentName = parentName
         if (day !== null && (cur.startDay === null || day < cur.startDay)) cur.startDay = day
       } else {
-        const rawItemId = c.project.id.startsWith(`${c.project.board}__`)
-          ? c.project.id.slice(c.project.board.length + 2)
-          : c.project.id
-        const focusId = c.project.completionParentItemId ?? rawItemId
-        const subitem = c.project.completionSubitemId
-        grouped.set(key, { name: c.project.name, hours: c.hours,
+        grouped.set(key, { name: c.project.name, parentName, hours: c.hours,
           ownerIds: new Set(c.project.ownerIds || []), startDay: day,
           boardId: c.project.board, parentItemId: focusId, subitemId: subitem })
       }
@@ -1008,6 +1012,9 @@ export default function HomePage() {
           onClick={() => setHomeDetail({ boardId: p.boardId, parentItemId: p.parentItemId, subitemId: p.subitemId })}
           style={{ border: 0, padding: 0, background: 'transparent', color: '#000', font: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>
           {p.name}
+          {p.parentName && p.parentName !== p.name && (
+            <span style={{ fontWeight: 600, opacity: .72 }}> ↳ {p.parentName}</span>
+          )}
         </button>
         {wn.length > 0 && <> (met {joinAnd(wn)})</>}
       </span>
