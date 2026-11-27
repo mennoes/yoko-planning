@@ -2478,17 +2478,22 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   // aan de verticale stapeling. Een balk die links achter de sticky
   // gebruikerskolom is verdwenen mag dus ook geen onzichtbare rijhoogte
   // meer reserveren.
-  // Bewaar uitsluitend de werkelijk zichtbare geometrie in React. Een balk
-  // die deels achter de sticky persoonskolom ligt krijgt dus niet alleen een
-  // masker: zijn DOM-breedte wordt echt ingekort. Daardoor verdwijnen titel,
-  // hit-area en schaduw tegelijk met het verborgen deel.
+  // Bewaar voor de layout de werkelijk zichtbare geometrie, maar laat de DOM-
+  // balk zelf op zijn natuurlijke positie en breedte staan. Eerder kortten we
+  // een deels zichtbare balk eerst in tot de scrollrand en knipten we hem
+  // daarna nogmaals af met het naamkolommasker. Dat maakte bij iedere swipe
+  // een nieuwe halve ronde rand/schaduw pal naast de naamkolom. Nu schuift de
+  // echte balk rustig achter het vaste naamvlak; alleen packing en rijhoogte
+  // rekenen met het zichtbare stuk.
   const visibleBars = bars.map(b => {
-    const renderLeft = Math.max(viewportStart, b.left)
-    const renderRight = Math.min(viewportEnd, b.left + b.width)
+    const visibleLeft = Math.max(viewportStart, b.left)
+    const visibleRight = Math.min(viewportEnd, b.left + b.width)
     return {
       ...b,
-      renderLeft,
-      renderWidth: Math.max(1, renderRight - renderLeft),
+      renderLeft: b.left,
+      renderWidth: b.width,
+      visibleLeft,
+      visibleWidth: Math.max(1, visibleRight - visibleLeft),
       clippedStart: b.left < viewportStart,
       clippedEnd: b.left + b.width > viewportEnd,
     }
@@ -2500,7 +2505,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   const layoutStart = todayPx > viewportStart && todayPx < viewportEnd
     ? todayPx
     : viewportStart
-  const layoutBars = visibleBars.filter(b => b.renderLeft + b.renderWidth > layoutStart)
+  const layoutBars = visibleBars.filter(b => b.visibleLeft + b.visibleWidth > layoutStart)
   const naturalHeights = new Map<string, number>(
     visibleBars.map(b => [b.p.id, planningBarPixelHeight(BASELINE_AVAIL_H, hoursScaleRatio(b.p, memberId))]),
   )
@@ -2569,9 +2574,9 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
   for (const b of placementBars) {
     // Clamp de plaatsingsrechthoek tot het viewport. Alleen het zichtbare
     // stuk kan daar immers met een andere zichtbare balk botsen.
-    const bStart = b.renderLeft
-    const bVisualStart = b.renderLeft
-    const bVisualEnd = b.renderLeft + b.renderWidth
+    const bStart = b.visibleLeft
+    const bVisualStart = b.visibleLeft
+    const bVisualEnd = b.visibleLeft + b.visibleWidth
     const bEnd = Math.max(bStart + 1, Math.min(bVisualEnd, b.left + (b.packWidth || b.width)))
     const h = naturalHeights.get(b.p.id) ?? BASELINE_AVAIL_H
     const blockers = placed
@@ -2651,7 +2656,7 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
       willChange: 'height, clip-path',
     }}>
       <PlanningDeadlines projects={owned} cols={cols} zoom={zoom} onOpen={onBarClick} onChange={onDeadlineChange}
-        anchors={visibleBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:(barTops.get(b.p.id)??0)+meetingSummaryHeight,left:b.renderLeft,right:b.renderLeft+b.renderWidth}))}/>
+        anchors={visibleBars.map(b=>({id:b.p.id,parentId:b.p.parentProjectId,top:(barTops.get(b.p.id)??0)+meetingSummaryHeight,left:b.visibleLeft,right:b.visibleLeft+b.visibleWidth}))}/>
       {cols.map((col, i) => (
         <div key={col.key} style={{ position: 'absolute', left: cols.slice(0,i).reduce((s,c)=>s+c.widthPx,0), top: 0, bottom: 0, width: col.widthPx, borderLeft: '1px solid var(--border-strong)', pointerEvents: 'none' }} />
       ))}
@@ -2754,9 +2759,6 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
           window.addEventListener('mousemove', onMove)
           window.addEventListener('mouseup', onUp)
         }
-        const renderLeft = Math.max(viewportStart, b.left)
-        const renderRight = Math.min(viewportEnd, b.left + b.width)
-        const renderWidth = Math.max(1, renderRight - renderLeft)
         return (
           <div key={`vrij_${b.p.id}`}
             onPointerEnter={() => setHoveredBarId(b.p.id)}
@@ -2775,7 +2777,10 @@ function TimelineBars({ onDeadlineChange, memberId, projects, team, cols, colW, 
               // dag ineens hoger ogen dan op een rustige dag.
                position: 'absolute', top: 2 + meetingSummaryHeight,
               height: Math.max(20, BASELINE_AVAIL_H),
-              left: renderLeft + 2, width: Math.max(1, renderWidth - 4),
+              // Laat ook Vrij-balken met hun echte geometrie achter de
+              // sticky naamkolom schuiven. Een viewport-clamp maakte hier
+              // anders opnieuw een zichtbare nep-rand bij iedere scroll.
+              left: b.left + 2, width: Math.max(1, b.width - 4),
               background: 'repeating-linear-gradient(135deg, rgba(95,160,110,0.92) 0 10px, rgba(72,130,82,0.85) 10px 20px)',
               border: '2px solid rgba(72,130,82,1)',
               borderRadius: 10,
@@ -7441,6 +7446,7 @@ export default function PlanningPage() {
                       // scrollen de balklaag één frame eerder tekent.
                       zIndex: 10000, background: stickyBg,
                       borderRight: '1px solid var(--border)',
+                      boxShadow: '4px 0 0 var(--bg-base)',
                       transform: 'translateZ(0)', willChange: 'transform', contain: 'paint',
                     }} />
                     <div style={{ width: cols.reduce((s, c) => s + c.widthPx, 0), overflow: 'visible', flexShrink: 0 }}>
@@ -7458,7 +7464,7 @@ export default function PlanningPage() {
                   </div>
                   ) : (
                   <div style={{ display: 'flex' }}>
-                    <div data-testid={`planning-name-mask-${member.id}`} style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10000, background: stickyBg, borderRight: '1px solid var(--border)', transform: 'translateZ(0)', willChange: 'transform', contain: 'paint' }} />
+                    <div data-testid={`planning-name-mask-${member.id}`} style={{ width: nameW + namePad, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10000, background: stickyBg, borderRight: '1px solid var(--border)', boxShadow: '4px 0 0 var(--bg-base)', transform: 'translateZ(0)', willChange: 'transform', contain: 'paint' }} />
                     <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Geen items met datums gevonden</div>
                   </div>
                   )}

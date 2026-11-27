@@ -7,9 +7,11 @@ const source = readFileSync(new URL('../app/planning/page.tsx', import.meta.url)
 test('planning row height only counts bars inside the current viewport', () => {
   assert.match(source, /const viewportBars = rawBars\.filter\(b => b\.left < viewportEnd && b\.left \+ b\.width > viewportStart\)/)
   assert.match(source, /const visibleBars = bars\.map\(b => \{/)
-  assert.match(source, /renderWidth: Math\.max\(1, renderRight - renderLeft\)/)
+  assert.match(source, /renderLeft: b\.left/)
+  assert.match(source, /renderWidth: b\.width/)
+  assert.match(source, /visibleWidth: Math\.max\(1, visibleRight - visibleLeft\)/)
   assert.match(source, /const placementBars = \[\.\.\.layoutBars\]/)
-  assert.match(source, /const bStart = b\.renderLeft/)
+  assert.match(source, /const bStart = b\.visibleLeft/)
   assert.match(source, /const emptyViewportHeight = Math\.max\(8, Math\.round\(10 \* RS\)\)/)
   assert.match(source, /: Math\.max\(emptyViewportHeight, meetingSummaryHeight \+ BAR_GAP_S \* 2\)/)
   assert.doesNotMatch(source, /WINDOW_DAYS/)
@@ -18,13 +20,14 @@ test('planning row height only counts bars inside the current viewport', () => {
 
 test('past bars stop reserving height as soon as today is visible', () => {
   assert.match(source, /const layoutStart = todayPx > viewportStart && todayPx < viewportEnd/)
-  assert.match(source, /const layoutBars = visibleBars\.filter\(b => b\.renderLeft \+ b\.renderWidth > layoutStart\)/)
+  assert.match(source, /const layoutBars = visibleBars\.filter\(b => b\.visibleLeft \+ b\.visibleWidth > layoutStart\)/)
   assert.match(source, /const placementBars = \[\.\.\.layoutBars\]/)
 })
 
 test('sticky member mask stays above bars and row height animates smoothly', () => {
   assert.match(source, /data-testid=\{`planning-name-mask-\$\{member\.id\}`\}/)
   assert.match(source, /zIndex: 10000, background: stickyBg/)
+  assert.match(source, /boxShadow: '4px 0 0 var\(--bg-base\)'/)
   assert.match(source, /clipPath: 'inset\(0 0 0 var\(--planner-scroll-left, 0px\)\)'/)
   assert.match(source, /transform: 'translateZ\(0\)'/)
   assert.match(source, /gridTemplateRows: visuallyOpen \? '1fr' : '0fr'/)
@@ -59,9 +62,12 @@ test('horizontal scrolling refreshes the height in small steps and settles exact
   assert.match(source, /data-testid=\{`planning-timeline-\$\{memberId\}`\}/)
 })
 
-test('off-screen bars are not rendered and partial bars use clipped geometry', () => {
+test('off-screen bars are culled while partial bars slide naturally behind the name mask', () => {
   assert.match(source, /\{visibleBars\.map\(b => \{/)
   assert.match(source, /left=\{b\.renderLeft\} width=\{b\.renderWidth\}/)
+  assert.match(source, /renderLeft: b\.left/)
+  assert.match(source, /renderWidth: b\.width/)
+  assert.match(source, /const bStart = b\.visibleLeft/)
   assert.match(source, /hideStartHandle=\{b\.clippedStart\}/)
   assert.match(source, /vrijBars\.filter\(b => b\.left < viewportEnd && b\.left \+ b\.width > viewportStart\)/)
 })
