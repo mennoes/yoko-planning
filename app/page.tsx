@@ -926,10 +926,12 @@ export default function HomePage() {
   const groupedArr = groupProjects(myThisContribs)
   const nextWeekProjects = groupProjects(myNextContribs).slice(0, 3)
 
-  const withNamesOf = (p: GroupedProj) => [...p.ownerIds]
+  const collaboratorNames = (ownerIds: Iterable<string>) => [...new Set(ownerIds)]
     .filter(id => id !== memberId)
     .map(firstNameOf)
     .filter((n): n is string => Boolean(n))
+
+  const withNamesOf = (p: GroupedProj) => collaboratorNames(p.ownerIds)
 
   const pastProjects   = groupedArr.filter(p => p.startDay !== null && p.startDay <  todayDay).slice(0, 2)
   const todayProjects  = groupedArr.filter(p => p.startDay === todayDay).slice(0, 2)
@@ -1002,20 +1004,74 @@ export default function HomePage() {
           : null
     : null
 
-  // Render a comma/and-joined list of bold project names with collaborator hints.
-  const renderProjects = (items: GroupedProj[], showCollabs = true) => items.map((p, i) => {
-    const wn = showCollabs ? withNamesOf(p) : []
+  type ProjectMentionGroup = {
+    key: string
+    parentName?: string
+    boardId: string
+    parentItemId: string
+    items: GroupedProj[]
+  }
+
+  // Zet subitems van hetzelfde hoofditem bij elkaar. Zo noemen we het
+  // hoofditem eerst en slechts een keer: "Project: subitem A en subitem B".
+  const groupProjectMentions = (items: GroupedProj[]): ProjectMentionGroup[] => {
+    const groups: ProjectMentionGroup[] = []
+    const byKey = new Map<string, ProjectMentionGroup>()
+    for (const item of items) {
+      const hasParent = Boolean(item.parentName && item.parentName !== item.name)
+      const key = hasParent
+        ? `parent:${item.boardId}:${item.parentItemId}`
+        : `item:${item.boardId}:${item.parentItemId}:${item.subitemId ?? item.name}`
+      let group = byKey.get(key)
+      if (!group) {
+        group = {
+          key,
+          parentName: hasParent ? item.parentName : undefined,
+          boardId: item.boardId,
+          parentItemId: item.parentItemId,
+          items: [],
+        }
+        byKey.set(key, group)
+        groups.push(group)
+      }
+      group.items.push(item)
+    }
+    return groups
+  }
+
+  // Render een komma/en-lijst, met per hoofditem de bijbehorende subitems.
+  const renderProjects = (items: GroupedProj[], showCollabs = true) => groupProjectMentions(items).map((group, groupIndex, groups) => {
+    const ownerIds = group.items.flatMap(item => [...item.ownerIds])
+    const wn = showCollabs ? collaboratorNames(ownerIds) : []
     return (
-      <span key={p.name}>
-        {i > 0 && (i === items.length - 1 ? ' en ' : ', ')}
-        <button type="button"
-          onClick={() => setHomeDetail({ boardId: p.boardId, parentItemId: p.parentItemId, subitemId: p.subitemId })}
-          style={{ border: 0, padding: 0, background: 'transparent', color: '#000', font: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>
-          {p.name}
-          {p.parentName && p.parentName !== p.name && (
-            <span style={{ fontWeight: 600, opacity: .72 }}> ↳ {p.parentName}</span>
-          )}
-        </button>
+      <span key={group.key}>
+        {groupIndex > 0 && (groupIndex === groups.length - 1 ? ' en ' : ', ')}
+        {group.parentName ? (
+          <>
+            <button type="button"
+              onClick={() => setHomeDetail({ boardId: group.boardId, parentItemId: group.parentItemId })}
+              style={{ border: 0, padding: 0, background: 'transparent', color: '#000', font: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>
+              {group.parentName}
+            </button>
+            {': '}
+            {group.items.map((item, itemIndex) => (
+              <span key={`${group.key}:${item.subitemId ?? item.name}`}>
+                {itemIndex > 0 && (itemIndex === group.items.length - 1 ? ' en ' : ', ')}
+                <button type="button"
+                  onClick={() => setHomeDetail({ boardId: item.boardId, parentItemId: item.parentItemId, subitemId: item.subitemId })}
+                  style={{ border: 0, padding: 0, background: 'transparent', color: '#000', font: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>
+                  {item.name}
+                </button>
+              </span>
+            ))}
+          </>
+        ) : (
+          <button type="button"
+            onClick={() => setHomeDetail({ boardId: group.boardId, parentItemId: group.parentItemId, subitemId: group.items[0]?.subitemId })}
+            style={{ border: 0, padding: 0, background: 'transparent', color: '#000', font: 'inherit', fontWeight: 800, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}>
+            {group.items[0]?.name}
+          </button>
+        )}
         {wn.length > 0 && <> (met {joinAnd(wn)})</>}
       </span>
     )
